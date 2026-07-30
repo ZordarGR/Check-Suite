@@ -1,0 +1,11 @@
+{
+  "name": "reccheck",
+  "productName": "RecCheck",
+  "version": "1.0.0",
+  "description": "Nightly POS receipt audit — protel checkcharge1",
+  "main": "main.js",
+  "dependencies": {
+    "pe-library": "^2.0.1",
+    "resedit": "^3.0.2"
+  }
+}

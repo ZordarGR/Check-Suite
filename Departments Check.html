@@ -1,0 +1,1486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REC CHECK — Nightly Receipt Audit</title>
+<style>
+:root{
+  --bg:#0a0e14;
+  --bg2:#0f1520;
+  --panel:#131b29;
+  --panel2:#182234;
+  --line:#233047;
+  --txt:#dbe4f0;
+  --dim:#9fb0c9;
+  --faint:#7484a0;
+  --amber:#f5b453;
+  --amber-dim:#8a6528;
+  --green:#4ade80;
+  --green-dim:#1d5c36;
+  --red:#f87171;
+  --red-dim:#6b2323;
+  --mono:"Consolas","Cascadia Mono","Courier New",monospace;
+  --sans:"Segoe UI","Segoe UI Variable",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:15px}
+body{min-height:100vh;background:
+  radial-gradient(1200px 500px at 70% -10%, rgba(245,180,83,.05), transparent 60%),
+  radial-gradient(900px 600px at -10% 110%, rgba(74,222,128,.04), transparent 55%),
+  var(--bg)}
+::selection{background:var(--amber);color:#000}
+
+/* ---------- header ---------- */
+header{position:sticky;top:0;z-index:50;background:rgba(10,14,20,.92);backdrop-filter:blur(6px);
+  border-bottom:1px solid var(--line);padding:10px 18px;display:flex;align-items:center;gap:14px}
+header h1{font-size:16px;letter-spacing:.18em;font-weight:600;color:var(--amber);font-family:var(--mono);white-space:nowrap}
+header h1 span{color:var(--dim);font-weight:400}
+#reportMeta{font-family:var(--mono);font-size:12.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#reportMeta b{color:var(--txt);font-weight:600}
+header .spacer{flex:1}
+.btn{background:var(--panel2);border:1px solid var(--line);color:var(--txt);padding:7px 14px;border-radius:8px;
+  cursor:pointer;font-family:var(--sans);font-size:13.5px;transition:border-color .15s, background .15s;white-space:nowrap}
+.btn:hover{border-color:var(--amber);background:#1c2942}
+.btn.amber{border-color:var(--amber-dim);color:var(--amber)}
+.btn.small{padding:4px 10px;font-size:12.5px;border-radius:6px}
+.kebab{position:relative}
+.kebab>button{font-size:18px;line-height:1;padding:6px 11px}
+.kebab-menu{display:none;position:absolute;right:0;top:110%;background:var(--panel);border:1px solid var(--line);
+  border-radius:10px;min-width:220px;box-shadow:0 12px 32px rgba(0,0,0,.55);overflow:hidden}
+.kebab-menu.open{display:block}
+.kebab-menu button{display:block;width:100%;text-align:left;background:none;border:none;color:var(--txt);
+  padding:11px 15px;font-size:13.5px;cursor:pointer}
+.kebab-menu button:hover{background:var(--panel2)}
+.kebab-menu button.danger{color:var(--red)}
+
+/* ---------- landing ---------- */
+#landing{max-width:640px;margin:9vh auto;padding:0 20px;text-align:center}
+#landing .logo{font-family:var(--mono);font-size:34px;letter-spacing:.22em;color:var(--amber);margin-bottom:6px}
+#landing .logo span{color:var(--faint)}
+#landing p.sub{color:var(--dim);margin-bottom:34px;font-size:14px}
+#drop{border:1.5px dashed var(--line);border-radius:16px;padding:56px 30px;cursor:pointer;
+  transition:border-color .2s, background .2s;background:rgba(19,27,41,.5)}
+#drop:hover,#drop.over{border-color:var(--amber);background:rgba(245,180,83,.05)}
+#drop .big{font-size:17px;margin-bottom:8px}
+#drop .hint{color:var(--faint);font-size:13px;font-family:var(--mono)}
+#landing .err{color:var(--red);margin-top:18px;font-size:13.5px;min-height:1.2em}
+
+/* ---------- summary strip ---------- */
+main{max-width:1060px;margin:0 auto;padding:16px 18px 90px}
+#summary{display:none;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.card .lbl{font-size:11px;letter-spacing:.12em;color:var(--dim);text-transform:uppercase;margin-bottom:5px}
+.card .val{font-family:var(--mono);font-size:19px;font-weight:600}
+.card .sub{font-family:var(--mono);font-size:13.5px;color:#c3cfe2;margin-top:5px}
+.card .sub b{font-size:16px;color:var(--dim)}
+.card.part .sub b{color:var(--amber)}
+.card.done .sub b{color:var(--green)}
+.card.done{border-color:var(--green-dim)}
+.card.done .val{color:var(--green)}
+.tick{color:var(--green);font-weight:700;margin-left:6px}
+.card.grand{border-color:var(--amber-dim)}
+.card.grand .val{color:var(--amber)}
+#parseWarn{display:none;background:rgba(248,113,113,.08);border:1px solid var(--red-dim);color:var(--red);
+  border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:14px;font-family:var(--mono)}
+#parseOk{display:none;color:var(--green);font-size:12px;font-family:var(--mono);margin:-6px 0 12px 2px}
+
+/* ---------- search ---------- */
+#searchWrap{display:none;position:sticky;top:52px;z-index:40;background:rgba(10,14,20,.95);backdrop-filter:blur(6px);
+  padding:10px 0 12px;margin-bottom:6px;border-bottom:1px solid var(--line)}
+#searchRow{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+#snInput{flex:0 0 220px;background:var(--panel);border:1.5px solid var(--line);border-radius:10px;color:var(--txt);
+  font-family:var(--mono);font-size:20px;letter-spacing:.08em;padding:10px 14px;outline:none;transition:border-color .15s}
+#snInput:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(245,180,83,.12)}
+#snInput.nomatch{color:var(--red);border-color:var(--red-dim)}
+#snInput::placeholder{color:var(--faint);font-size:14px;letter-spacing:0}
+#notThereBtn{display:none}
+#matches{display:flex;flex-direction:column;gap:6px;flex:1;min-width:280px}
+.match{display:flex;align-items:center;gap:12px;background:var(--panel2);border:1px solid var(--amber-dim);
+  border-radius:10px;padding:8px 12px;font-family:var(--mono);font-size:14px;animation:pop .12s ease-out}
+@keyframes pop{from{transform:scale(.97);opacity:.4}to{transform:scale(1);opacity:1}}
+.match .dept{color:var(--amber);font-size:12px;letter-spacing:.08em;min-width:86px}
+.match .room{color:#fff;font-weight:800;font-size:16px;min-width:56px}
+.match .msn{color:var(--amber)}
+.match .name{color:var(--dim);font-size:12.5px;max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.match .amt{font-weight:800;margin-left:auto;font-size:16px;color:#fff}
+.match .split{color:#c3cfe2;font-size:13px}
+.match input[type=checkbox]{width:22px;height:22px;accent-color:var(--green);cursor:pointer;flex:0 0 auto}
+.match .state{font-size:11px;padding:2px 7px;border-radius:5px}
+.match .state.ok{background:var(--green-dim);color:var(--green)}
+.match .state.missing,.match .state.extra{background:var(--red-dim);color:var(--red)}
+.match .state.corr{background:#4a3a12;color:var(--amber)}
+.match .state.cancelled{background:#2a3040;color:var(--dim)}
+#searchHint{font-size:11.5px;color:var(--faint);margin-top:6px;font-family:var(--mono)}
+
+/* ---------- accordions ---------- */
+.acc{background:var(--panel);border:1px solid var(--line);border-radius:12px;margin-bottom:10px;overflow:hidden}
+.acc>.head{display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;user-select:none}
+.acc>.head:hover{background:var(--panel2)}
+.acc>.head .bar{width:4px;height:26px;border-radius:2px;background:var(--amber);flex:0 0 auto}
+.acc.extraAcc>.head .bar{background:var(--red)}
+.acc>.head .name{font-weight:600;letter-spacing:.06em;font-size:15px}
+.acc>.head .cnt{font-family:var(--mono);font-size:14px;color:var(--dim)}
+.acc>.head .cnt b{font-size:16.5px;color:var(--txt)}
+.acc.done>.head .bar{background:var(--green)}
+.acc.done>.head .tot{color:var(--green)}
+.acc.done>.head .cnt b{color:var(--green)}
+.acc>.head .prog{font-family:var(--mono);font-size:13.5px;margin-left:auto;color:var(--dim)}
+.acc>.head .prog b{color:var(--dim);font-weight:700;font-size:15px}
+.acc.part>.head .prog b{color:var(--amber)}
+.acc.done>.head .prog b{color:var(--green)}
+.acc>.head .tot{font-family:var(--mono);font-size:16px;font-weight:700;min-width:110px;text-align:right}
+.acc>.head .chev{color:var(--faint);transition:transform .15s;font-size:12px}
+.acc.open>.head .chev{transform:rotate(90deg)}
+.acc>.body{display:none;border-top:1px solid var(--line)}
+.roomSearchWrap{display:flex;align-items:center;gap:10px;padding:9px 16px 3px}
+.roomSearch{background:var(--bg2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:6px 10px;font-family:var(--mono);font-size:13.5px;width:110px}
+.roomSearch:focus{outline:none;border-color:var(--amber-dim)}
+.rsHint{color:var(--faint);font-size:11.5px}
+.rrow.khl{background:var(--panel2);box-shadow:inset 3px 0 0 var(--amber)}
+.rrow.khl.act-ok .rowck{outline:2px solid var(--green);outline-offset:2px;border-radius:4px}
+.rrow.khl.act-warn .warnBtn{outline:2px solid var(--amber);outline-offset:1px}
+.acc.open>.body{display:block}
+.rrow{display:flex;align-items:center;gap:12px;padding:9px 16px;border-bottom:1px solid rgba(35,48,71,.5);
+  font-family:var(--mono);font-size:14px}
+.rrow:last-child{border-bottom:none}
+.rrow:hover{background:rgba(24,34,52,.5)}
+.rrow .room{min-width:64px;font-weight:800;font-size:15.5px;color:#fff}
+.rrow .room .adj{color:var(--faint);font-size:11px;font-weight:400}
+.rrow .sn{min-width:78px;color:var(--amber)}
+.rrow .name{color:var(--dim);font-size:12.5px;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rrow .split{color:#c3cfe2;font-size:13px;flex:1}
+.rrow .amt{font-weight:800;min-width:96px;text-align:right;font-size:15.5px;color:#fff}
+.rrow .old{color:var(--red);text-decoration:line-through;margin-right:7px;font-weight:400}
+.rrow.st-ok .amt,.rrow.st-ok .room,.rrow.st-ok .sn,.rrow.st-ok .split{color:var(--green)}
+.rrow.st-missing .amt,.rrow.st-missing .room,.rrow.st-missing .sn,.rrow.st-missing .split{color:var(--red)}
+.rrow.st-corrected .amt,.rrow.st-corrected .room{color:#fff}
+.rrow.st-extra .amt,.rrow.st-extra .room,.rrow.st-extra .sn{color:var(--red)}
+.rrow.st-cancelled{opacity:.45}
+.rrow.st-cancelled .amt,.rrow.st-cancelled .room,.rrow.st-cancelled .sn{color:var(--dim)}
+.rrow .tag{font-size:10.5px;padding:2px 7px;border-radius:5px;letter-spacing:.05em}
+.rrow .tag.ok{background:var(--green-dim);color:var(--green)}
+.rrow .tag.missing{background:var(--red-dim);color:var(--red)}
+.rrow .tag.corr{background:#4a3a12;color:var(--amber)}
+.rrow .tag.extra{background:var(--red-dim);color:var(--red)}
+.rrow .tag.cancelled{background:#232b3b;color:var(--dim)}
+.warnBtn{background:none;border:1px solid var(--line);border-radius:7px;color:var(--amber);cursor:pointer;
+  font-size:14px;padding:3px 9px;flex:0 0 auto;transition:border-color .15s}
+.warnBtn:hover{border-color:var(--amber)}
+.rowck{width:20px;height:20px;accent-color:var(--green);cursor:pointer;flex:0 0 auto}
+.rrow .tag.merged{background:#16324d;color:#7cc4ff}
+.rrow .tag.paid,.match .state.paid{background:#0f3a36;color:#4fd1c5}
+.rowMenu{position:absolute;background:var(--panel);border:1px solid var(--line);border-radius:10px;z-index:60;
+  box-shadow:0 12px 30px rgba(0,0,0,.6);min-width:300px;overflow:hidden}
+.rowMenu button{display:block;width:100%;background:none;border:none;text-align:left;color:var(--txt);
+  padding:12px 15px;font-size:13.5px;cursor:pointer;border-bottom:1px solid rgba(35,48,71,.5)}
+.rowMenu button:last-child{border-bottom:none}
+.rowMenu button:hover{background:var(--panel2)}
+.rowMenu button .k{color:var(--amber);font-family:var(--mono);margin-right:8px}
+.otherPost{padding:6px 16px 12px}
+.otherPost summary{cursor:pointer;color:var(--faint);font-size:12px;font-family:var(--mono);padding:6px 0}
+.otherPost .rrow{padding:6px 0;font-size:13px;color:#9fb0c9}
+.otherPost .rrow .amt{color:var(--dim)}
+
+/* ---------- modal ---------- */
+#modalBg{display:none;position:fixed;inset:0;background:rgba(4,6,10,.72);z-index:100;align-items:center;justify-content:center}
+#modalBg.open{display:flex}
+#modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 24px;width:min(420px,92vw);
+  box-shadow:0 24px 60px rgba(0,0,0,.7)}
+#modal h3{font-size:15px;letter-spacing:.08em;color:var(--amber);margin-bottom:16px;font-family:var(--mono)}
+#modal label{display:block;font-size:12px;color:var(--dim);margin:12px 0 4px;letter-spacing:.06em}
+#modal input,#modal select{width:100%;background:var(--bg2);border:1.5px solid var(--line);border-radius:8px;
+  color:var(--txt);font-family:var(--mono);font-size:16px;padding:9px 12px;outline:none}
+#modal input:focus,#modal select:focus{border-color:var(--amber)}
+#modal .mrow{display:flex;gap:10px}
+#modal .mrow>div{flex:1}
+#modal .actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+#modal .err{color:var(--red);font-size:12.5px;margin-top:10px;min-height:1em}
+
+/* toast */
+#toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--panel2);
+  border:1px solid var(--green-dim);color:var(--green);font-family:var(--mono);font-size:14.5px;padding:12px 22px;
+  border-radius:10px;opacity:0;pointer-events:none;transition:opacity .5s ease,transform .5s ease;z-index:120}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.red{border-color:var(--red-dim);color:var(--red)}
+#toast.match{display:flex;align-items:center;gap:12px;font-family:var(--sans);max-width:min(92vw,680px)}
+#toast .tick{color:var(--green);font-weight:800;font-size:17px}
+
+#printSheet{display:none}
+@media print{
+  html,body{height:auto !important;min-height:0 !important;overflow:visible !important}
+  body{background:#fff !important;margin:0;padding:0}
+  @page{margin:12mm}
+  header,main,#landing,#modalBg,#toast{display:none !important}
+  #printSheet{display:block !important;color:#000;font-family:"Segoe UI",Arial,sans-serif;padding:0;font-size:12px}
+  #printSheet h1{font-size:16px;letter-spacing:.06em;margin:0 0 2px;font-weight:700}
+  #printSheet .meta{font-size:11px;margin-bottom:14px;color:#000}
+  #printSheet h2{font-size:12.5px;margin:16px 0 6px;font-weight:700;border-bottom:1.2px solid #000;padding-bottom:3px}
+  #printSheet table{width:100%;border-collapse:collapse;font-size:11.5px}
+  #printSheet th,#printSheet td{border:0.6px solid #000;padding:4px 7px;text-align:left;vertical-align:top}
+  #printSheet th{font-weight:700}
+  #printSheet td.num,#printSheet th.num{text-align:right;font-family:Consolas,monospace}
+  #printSheet .none{font-style:italic;margin:4px 0 0}
+  #printSheet .old{text-decoration:line-through}
+}
+@media(max-width:640px){
+  #snInput{flex:1 1 100%}
+  .rrow .split{display:none}
+  .rrow .name{max-width:110px}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>REC<span>·</span>CHECK</h1>
+  <div id="reportMeta"></div>
+  <div class="spacer"></div>
+  <button class="btn small" id="printBtn" style="display:none">🖨 Διορθώσεις</button>
+  <button class="btn small" id="openAnother" style="display:none">Open file…</button>
+  <div class="kebab" id="kebab" style="display:none">
+    <button class="btn small" id="kebabBtn">⋮</button>
+    <div class="kebab-menu" id="kebabMenu">
+      <button id="expandAll">Expand all departments</button>
+      <button id="collapseAll">Collapse all departments</button>
+      <button class="danger" id="resetDay">Reset checks for this day…</button>
+    </div>
+  </div>
+</header>
+
+<div id="landing">
+  <div class="logo">REC<span>·</span>CHECK</div>
+  <p class="sub">Nightly POS receipt audit — protel checkcharge1 (.oxps)</p>
+  <div id="drop">
+    <div class="big">Drop the checkcharge report here, or click to browse</div>
+    <div class="hint">.oxps / .xps — parsed locally, nothing leaves this machine</div>
+  </div>
+  <input type="file" id="fileInput" accept=".oxps,.xps" style="display:none">
+  <div class="err" id="landErr"></div>
+</div>
+
+<main>
+  <div id="parseWarn"></div>
+  <div id="parseOk"></div>
+  <div id="summary"></div>
+
+  <div id="searchWrap">
+    <div id="searchRow">
+      <input id="snInput" placeholder="serial number…" autocomplete="off" inputmode="numeric">
+      <button class="btn amber" id="notThereBtn">Receipt isn't there?</button>
+      <div id="matches"></div>
+    </div>
+    <div id="searchHint">Type a receipt SN · exact or last ≥3 digits · Enter confirms a single match</div>
+  </div>
+
+  <div id="accordions"></div>
+</main>
+
+<div id="printSheet"></div>
+<div id="modalBg"><div id="modal"></div></div>
+<div id="toast"></div>
+
+<script id="parser">
+/* ================= PARSER (DOM-free) ================= */
+"use strict";
+
+const TARGET_DEPTS = ["RESTAURANT","CAFETERIA","TAVERNAKI","KAFENIO","BAR"];
+const INTERFACE_USER = "IFC";   // POS interface — its negatives are voids; a human's negatives mean the receipt was PAID
+const MONEY_RE = /^-?\d{1,3}(?:\.\d{3})*,\d{2}$/;
+
+function moneyToNum(s){ return Math.round(parseFloat(s.replace(/\./g,"").replace(",","."))*100)/100; }
+function numToMoney(n){
+  const neg = n < -0.004;
+  n = Math.abs(n);
+  const [i,d] = n.toFixed(2).split(".");
+  return (neg?"-":"") + i.replace(/\B(?=(\d{3})+(?!\d))/g,".") + "," + d;
+}
+
+/* ---- ZIP reading (EOCD → central dir → deflate-raw) ---- */
+async function unzipFpages(buf){
+  const dv = new DataView(buf);
+  const len = buf.byteLength;
+  let eocd = -1;
+  const stop = Math.max(0, len - 22 - 65557);
+  for(let i = len - 22; i >= stop; i--){
+    if(dv.getUint32(i, true) === 0x06054b50){ eocd = i; break; }
+  }
+  if(eocd < 0) throw new Error("Not a valid OXPS/ZIP file (no central directory).");
+  const count = dv.getUint16(eocd + 10, true);
+  let p = dv.getUint32(eocd + 16, true);
+  const td = new TextDecoder("utf-8");
+  const entries = [];
+  for(let i = 0; i < count; i++){
+    if(dv.getUint32(p, true) !== 0x02014b50) break;
+    const method   = dv.getUint16(p + 10, true);
+    const csize    = dv.getUint32(p + 20, true);
+    const nameLen  = dv.getUint16(p + 28, true);
+    const extraLen = dv.getUint16(p + 30, true);
+    const cmtLen   = dv.getUint16(p + 32, true);
+    const lho      = dv.getUint32(p + 42, true);
+    const name = td.decode(new Uint8Array(buf, p + 46, nameLen));
+    entries.push({name, method, csize, lho});
+    p += 46 + nameLen + extraLen + cmtLen;
+  }
+  const fpages = entries
+    .filter(e => /Documents\/1\/Pages\/\d+\.fpage$/i.test(e.name))
+    .sort((a,b) => parseInt(a.name.match(/(\d+)\.fpage/i)[1]) - parseInt(b.name.match(/(\d+)\.fpage/i)[1]));
+  if(!fpages.length) throw new Error("No page content (.fpage) found — is this a protel OXPS report?");
+  const xmls = [];
+  for(const e of fpages){
+    const nl = dv.getUint16(e.lho + 26, true);
+    const xl = dv.getUint16(e.lho + 28, true);
+    const start = e.lho + 30 + nl + xl;
+    const bytes = new Uint8Array(buf, start, e.csize);
+    let out;
+    if(e.method === 0){
+      out = bytes;
+    }else if(e.method === 8){
+      const ds = new DecompressionStream("deflate-raw");
+      const stream = new Blob([bytes]).stream().pipeThrough(ds);
+      out = new Uint8Array(await new Response(stream).arrayBuffer());
+    }else{
+      throw new Error("Unsupported ZIP compression method: " + e.method);
+    }
+    xmls.push(td.decode(out));
+  }
+  return xmls;
+}
+
+/* ---- XML entity decode ---- */
+function xmlDecode(s){
+  return s.replace(/&(amp|lt|gt|quot|apos|#x[0-9a-fA-F]+|#\d+);/g, (m, e) => {
+    if(e === "amp") return "&";
+    if(e === "lt") return "<";
+    if(e === "gt") return ">";
+    if(e === "quot") return '"';
+    if(e === "apos") return "'";
+    if(e[0] === "#") return String.fromCodePoint(e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2),16) : parseInt(e.slice(1),10));
+    return m;
+  });
+}
+
+/* ---- Glyphs → tokens (advance-gap splitting) ---- */
+const SPLIT_GAP = 130;      // 1/100 em units — column gaps are 300+, intra-word ≤ ~60
+const DEFAULT_ADV = 55;
+
+function parseIndices(str, n){
+  const advs = new Array(n).fill(null);
+  if(!str) return advs;
+  const parts = str.split(";");
+  for(let i = 0; i < parts.length && i < n; i++){
+    const e = parts[i].replace(/^\(\d+:\d+\)/, "");
+    const f = e.split(",");
+    if(f.length >= 2 && f[1] !== ""){
+      const a = parseFloat(f[1]);
+      if(!isNaN(a)) advs[i] = a;
+    }
+  }
+  return advs;
+}
+
+function pageTokens(xml){
+  const toks = [];
+  const re = /<Glyphs\b[^>]*?\/>/g;
+  let m;
+  while((m = re.exec(xml))){
+    const tag = m[0];
+    const attr = n => { const mm = tag.match(new RegExp(n + '="([^"]*)"')); return mm ? mm[1] : null; };
+    const us = attr("UnicodeString");
+    const ox = attr("OriginX"), oy = attr("OriginY");
+    if(us === null || ox === null || oy === null) continue;
+    const text = xmlDecode(us);
+    if(!text) continue;
+    const em = parseFloat(attr("FontRenderingEmSize") || "10") || 10;
+    const advs = parseIndices(attr("Indices"), text.length);
+    let x = parseFloat(ox), y = parseFloat(oy);
+    let cur = "", curX = x;
+    for(let i = 0; i < text.length; i++){
+      const a = advs[i] === null ? DEFAULT_ADV : advs[i];
+      if(cur === "") curX = x;
+      cur += text[i];
+      if(a > SPLIT_GAP){ toks.push({x: curX, y, t: cur}); cur = ""; }
+      x += a * em / 100;
+    }
+    if(cur) toks.push({x: curX, y, t: cur});
+  }
+  return toks;
+}
+
+function pageRows(xml){
+  const toks = pageTokens(xml).sort((a,b) => a.y - b.y || a.x - b.x);
+  const rows = [];
+  const TOL = 3;
+  for(const g of toks){
+    if(rows.length && Math.abs(rows[rows.length-1].y - g.y) < TOL) rows[rows.length-1].toks.push(g);
+    else rows.push({y: g.y, toks: [g]});
+  }
+  for(const r of rows) r.toks.sort((a,b) => a.x - b.x);
+  return rows;
+}
+
+/* ---- semantic parse ---- */
+const SEC_RE = /^[A-ZΑ-ΩΆΈΉΊΌΎΏΪΫ0-9][A-ZΑ-ΩΆΈΉΊΌΎΏΪΫ0-9 %&\/.\-]*$/;
+const FOLIO_ROOMS = new Set(["9601","9604","9605","9608"]);
+
+function baseDept(section){ return section.replace(/\s+\d+%$/, "").trim(); }
+function rateOf(section){ const m = section.match(/(\d+)%$/); return m ? m[1] + "%" : "base"; }
+function mainRoom(raw){ const m = raw.match(/^(\d+)-\d*/); return m ? m[1] : raw; }
+
+function parseReport(xmls){
+  let section = null;
+  const sections = {};          // name -> {rows:[], reported:null, group:null}
+  let reportDate = null, printMeta = "", reportId = null, title = null;
+
+  for(const xml of xmls){
+    for(const row of pageRows(xml)){
+      const toks = row.toks;
+      const joined = toks.map(t => t.t).join(" ").trim();
+
+      if(!reportDate){
+        const dm = toks.find(t => /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(t.t.trim()));
+        if(dm && toks.some(t => t.t.includes("protel"))) reportDate = dm.t.trim();
+      }
+      if(!printMeta && joined.includes("List of postings")) printMeta = joined;
+      if(!reportId && toks.some(t => t.t.trim() === "protel")){
+        const idTok = toks.find(t => t.t.trim() !== "protel"
+                                  && !/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(t.t.trim())
+                                  && /[A-Za-z]/.test(t.t));
+        if(idTok) reportId = idTok.t.trim();
+      }
+      if(!title && joined.includes("ΕΛΕΓΧΟΣ ΤΜΗΜΑΤΩΝ")) title = joined;
+
+      // section header: single token, left margin
+      if(toks.length === 1 && toks[0].x < 60 && SEC_RE.test(joined) && !joined.startsWith("Date/time")){
+        section = joined;
+        if(!sections[section]) sections[section] = {rows: [], reported: null, group: null};
+        continue;
+      }
+      if(!section) continue;
+      const S = sections[section];
+
+      const timeTok = toks.find(t => t.x >= 78 && t.x < 120 && /^\d{2}:\d{2}$/.test(t.t.trim()));
+      if(timeTok){
+        // detail row
+        const dateTok  = toks.find(t => t.x < 78 && /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(t.t.trim()));
+        const userTok  = toks.find(t => t.x >= 115 && t.x < 152);
+        const roomTok  = toks.find(t => t.x >= 152 && t.x < 236);
+        const guest    = toks.filter(t => t.x >= 236 && t.x < 402).map(t => t.t.trim()).join(" ").trim();
+        let qty = null, amt = null;
+        for(const t of toks){
+          const s = t.t.trim();
+          if(t.x >= 388 && t.x < 424 && /^-?\d+$/.test(s)) qty = parseInt(s, 10);
+          if(t.x > 600 && MONEY_RE.test(s)) amt = moneyToNum(s);
+        }
+        const textStr = toks.filter(t => t.x >= 405 && t.x < 700 && !/^-?\d+$/.test(t.t.trim()))
+                            .map(t => t.t).join(" ");
+        const recM = textStr.match(/Rec:\s*(\d+)/);
+        if(!reportDate && dateTok) reportDate = dateTok.t.trim();
+        S.rows.push({
+          time: timeTok.t.trim(),
+          user: userTok ? userTok.t.trim() : "",
+          room: roomTok ? roomTok.t.trim() : "",
+          guest, qty: qty === null ? 1 : qty,
+          amount: amt === null ? 0 : amt,
+          sn: recM ? recM[1] : null,
+          text: textStr.trim()
+        });
+        continue;
+      }
+
+      // section reported total: [groupLabel, money], label starts right of centre
+      if(toks.length === 2 && toks[0].x > 300 && MONEY_RE.test(toks[1].t.trim())
+         && toks[0].t.trim() !== "Total" && !joined.includes("TOTAL")){
+        if(S.reported === null){
+          S.reported = moneyToNum(toks[1].t.trim());
+          S.group = toks[0].t.trim();
+        }
+      }
+    }
+  }
+  return {sections, reportDate: reportDate || "?", printMeta, reportId, title};
+}
+
+function isCheckcharge(parsed){
+  return /checkcharge/i.test(parsed.reportId || "") || /ΕΛΕΓΧΟΣ ΤΜΗΜΑΤΩΝ/.test(parsed.title || "");
+}
+
+/* ---- receipt model ---- */
+function buildModel(parsed){
+  const {sections, reportDate} = parsed;
+  const validation = [];         // {section, parsed, reported, ok}
+  const depts = {};              // base -> {receipts: Map(sn -> receipt), other: [], sections: [names]}
+  for(const b of TARGET_DEPTS) depts[b] = {receipts: new Map(), other: [], sections: []};
+
+  for(const [name, S] of Object.entries(sections)){
+    const base = baseDept(name);
+    let sum = 0;
+    for(const r of S.rows) sum += r.amount;
+    sum = Math.round(sum * 100) / 100;
+    const ok = S.reported === null ? null : Math.abs(sum - S.reported) < 0.005;
+    validation.push({section: name, parsed: sum, reported: S.reported, ok});
+
+    if(!TARGET_DEPTS.includes(base)) continue;
+    const D = depts[base];
+    D.sections.push(name);
+    const rate = rateOf(name);
+    for(const r of S.rows){
+      if(!r.sn || FOLIO_ROOMS.has(r.room)){
+        D.other.push({...r, section: name, rate});
+        continue;
+      }
+      const rk = r.sn + "|" + mainRoom(r.room);
+      let rec = D.receipts.get(rk);
+      if(!rec){
+        rec = {dept: base, sn: r.sn, room: r.room, roomMain: mainRoom(r.room), guest: r.guest,
+               rates: {}, total: 0, entries: []};
+        D.receipts.set(rk, rec);
+      }
+      rec.rates[rate] = Math.round(((rec.rates[rate] || 0) + r.amount) * 100) / 100;
+      rec.total = Math.round((rec.total + r.amount) * 100) / 100;
+      rec.entries.push({...r, section: name, rate});
+      if(!rec.room && r.room){ rec.room = r.room; rec.roomMain = mainRoom(r.room); }
+    }
+  }
+
+  // cross-department consolidation: same SN + same main room = one physical
+  // receipt split across departments by user error at the POS -> show only one
+  const byKey = new Map();
+  for(const b of TARGET_DEPTS){
+    for(const r of depts[b].receipts.values()){
+      const k = r.sn + "|" + r.roomMain;
+      if(!byKey.has(k)) byKey.set(k, []);
+      byKey.get(k).push(r);
+    }
+  }
+  for(const group of byKey.values()){
+    if(group.length < 2) continue;
+    group.sort((a,c) => Math.abs(c.total) - Math.abs(a.total));   // primary = largest share
+    const prim = group[0];
+    prim.mergedFrom = group.map(g => g.dept);
+    for(const dup of group.slice(1)){
+      for(const [rate, v] of Object.entries(dup.rates)){
+        prim.rates[rate] = Math.round(((prim.rates[rate] || 0) + v) * 100) / 100;
+      }
+      prim.total = Math.round((prim.total + dup.total) * 100) / 100;
+      prim.entries.push(...dup.entries);
+      depts[dup.dept].receipts.delete(dup.sn + "|" + dup.roomMain);
+    }
+  }
+
+  // flatten + cancelled detection
+  const receipts = [];
+  for(const b of TARGET_DEPTS){
+    const list = [...depts[b].receipts.values()];
+    list.sort((a,c) => (parseInt(a.roomMain)||0) - (parseInt(c.roomMain)||0) || a.sn.localeCompare(c.sn, undefined, {numeric:true}));
+    for(const r of list){
+      let pos = 0; const posRates = {};
+      let paidSum = 0; const paidBy = new Set();
+      for(const e of r.entries){
+        if(e.amount > 0){
+          pos += e.amount;
+          posRates[e.rate] = Math.round(((posRates[e.rate] || 0) + e.amount) * 100) / 100;
+        }else if(e.amount < 0 && e.user !== INTERFACE_USER){
+          paidSum += -e.amount;
+          paidBy.add(e.user);
+        }
+      }
+      r.posTotal = Math.round(pos * 100) / 100;
+      r.posRates = posRates;
+      r.paidAmount = Math.round(paidSum * 100) / 100;
+      r.paidBy = [...paidBy];
+      const net0 = Math.abs(r.total) < 0.005;
+      r.paid = net0 && r.paidBy.length > 0;       // settled by a person — real receipt, show it
+      r.cancelled = net0 && r.paidBy.length === 0; // voided by the interface — hide it
+      receipts.push(r);
+    }
+    depts[b].list = list;
+  }
+  return {reportDate, depts, receipts, validation};
+}
+
+/* node-test hook */
+if(typeof module !== "undefined" && module.exports){
+  module.exports = {unzipFpages, parseReport, buildModel, numToMoney, moneyToNum, mainRoom, TARGET_DEPTS, isCheckcharge};
+}
+</script>
+
+<script id="app">
+/* ================= UI ================= */
+(function(){
+"use strict";
+if(typeof document === "undefined") return;   // node test guard
+
+const $ = s => document.querySelector(s);
+const el = (tag, cls, txt) => { const e = document.createElement(tag); if(cls) e.className = cls; if(txt !== undefined) e.textContent = txt; return e; };
+
+let MODEL = null;         // parsed model
+let STATE = null;         // per-day check state
+let stateKey = null;
+
+/* ---------- state ---------- */
+function blankState(date){
+  return {date, receipts: {}, extras: []};   // receipts: "DEPT|SN" -> {status, corr:{sn,v24,v13}|null}
+}
+function rKey(r){ return r.dept + "|" + r.sn + "|" + r.roomMain; }
+function rState(r){ return STATE.receipts[rKey(r)] || {status: "pending", corr: null}; }
+function setRState(r, st){ STATE.receipts[rKey(r)] = st; saveState(); }
+function saveState(){
+  try{ localStorage.setItem(stateKey, JSON.stringify(STATE)); }catch(e){}
+}
+function loadState(date){
+  stateKey = "reccheck_" + date;
+  try{
+    const raw = localStorage.getItem(stateKey);
+    if(raw){ const s = JSON.parse(raw); if(s && s.date === date) return s; }
+  }catch(e){}
+  return blankState(date);
+}
+
+/* ---------- helpers ---------- */
+function effSN(r){ const st = rState(r); return (st.corr && st.corr.sn) ? st.corr.sn : r.sn; }
+function effRoom(r){ const st = rState(r); return (st.corr && st.corr.room) ? st.corr.room : r.roomMain; }
+function corrHasValues(st){ return !!(st.corr && (st.corr.v24 !== undefined || st.corr.v13 !== undefined)); }
+function effRates(r){
+  const st = rState(r);
+  if(corrHasValues(st)) return {"24%": st.corr.v24, "13%": st.corr.v13};
+  return r.rates;
+}
+function effTotal(r){
+  const rates = effRates(r);
+  let t = 0; for(const v of Object.values(rates)) if(typeof v === "number") t += v;
+  return Math.round(t * 100) / 100;
+}
+function rateSplitStr(rates){
+  const order = ["24%","13%","6%","base"];
+  const parts = [];
+  for(const k of order){
+    if(rates[k] === undefined || rates[k] === null) continue;
+    parts.push((k === "base" ? "βασ" : k) + " " + numToMoney(rates[k]));
+  }
+  return parts.join(" · ");
+}
+function statusOf(r){
+  if(r.cancelled) return "cancelled";
+  return rState(r).status;
+}
+function toast(msg, red){
+  const t = $("#toast");
+  t.textContent = msg;
+  t.className = red ? "show red" : "show";
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.className = "", 3400);
+}
+function toastReceipt(r){
+  const t = $("#toast");
+  t.innerHTML = "";
+  const card = matchCard(r);                              // single source of truth for card content
+  card.querySelectorAll("button,input").forEach(x => x.remove());
+  const tick = document.createElement("span"); tick.className = "tick"; tick.textContent = "✓";
+  t.append(tick, ...card.childNodes);
+  t.className = "show match";
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.className = "", 3400);
+}
+
+/* ---------- file load ---------- */
+async function loadFile(file){
+  $("#landErr").textContent = "";
+  try{
+    const buf = await file.arrayBuffer();
+    const xmls = await unzipFpages(buf);
+    const parsed = parseReport(xmls);
+    if(!isCheckcharge(parsed)){
+      throw new Error("Wrong report — this is not checkcharge1 (ΕΛΕΓΧΟΣ ΤΜΗΜΑΤΩΝ BY ROOM)." +
+        (parsed.reportId ? " The file identifies as: \u201C" + parsed.reportId + "\u201D." : " No protel report id found in it."));
+    }
+    MODEL = buildModel(parsed);
+    STATE = loadState(MODEL.reportDate);
+    renderAll(file.name);
+    if(!MODEL.receipts.length){
+      const w = $("#parseWarn");
+      w.style.display = "block";
+      w.textContent = "⚠ checkcharge recognized, but no receipts found in the target departments for this night.";
+    }
+  }catch(err){
+    const msg = "✗ " + (err.message || err);
+    if($("#landing").style.display !== "none") $("#landErr").textContent = msg;
+    else toast(msg, true);
+  }
+}
+
+/* ---------- render ---------- */
+function renderAll(fname){
+  $("#landing").style.display = "none";
+  $("#openAnother").style.display = "";
+  $("#printBtn").style.display = "";
+  $("#kebab").style.display = "";
+  $("#reportMeta").innerHTML = "";
+  const meta = $("#reportMeta");
+  meta.append("checkcharge · night of ");
+  const b = el("b","", MODEL.reportDate); meta.append(b);
+  const dm = MODEL.reportDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(dm){
+    // pre-EOD check: business day = calendar today (pulled before midnight)
+    // or calendar yesterday (pulled after midnight, EOD not yet run) — both fine
+    const sameDay = (d) => +dm[1] === d.getDate() && +dm[2] === d.getMonth() + 1 && +dm[3] === d.getFullYear();
+    const today = new Date();
+    const yest = new Date(); yest.setDate(yest.getDate() - 1);
+    if(!sameDay(today) && !sameDay(yest)){
+      const w = el("span","", "  ⚠ older report");
+      w.style.color = "var(--amber)";
+      meta.append(w);
+    }
+  }
+  meta.append("  ·  " + fname);
+
+  renderValidation();
+  renderSummary();
+  $("#searchWrap").style.display = "block";
+  renderAccordions();
+  const inp = $("#snInput");
+  inp.value = ""; inp.classList.remove("nomatch");
+  setTimeout(() => inp.focus(), 50);
+}
+
+function renderValidation(){
+  const warn = $("#parseWarn"), ok = $("#parseOk");
+  const target = MODEL.validation.filter(v => TARGET_DEPTS.includes(v.section.replace(/\s+\d+%$/,"").trim()));
+  const bad = target.filter(v => v.ok === false);
+  if(bad.length){
+    warn.style.display = "block";
+    warn.textContent = "⚠ PARSE MISMATCH — " + bad.map(v =>
+      `${v.section}: parsed ${numToMoney(v.parsed)} ≠ report ${numToMoney(v.reported)}`).join("  |  ") +
+      " — totals below may be unreliable, check the printed report.";
+    ok.style.display = "none";
+  }else{
+    warn.style.display = "none";
+    ok.style.display = "block";
+    ok.textContent = "✓ parse verified — every department sum matches the report's own totals (" + target.length + " sections)";
+  }
+}
+
+function checkableList(){
+  return MODEL.receipts.filter(r => !r.cancelled);
+}
+
+function renderSummary(){
+  const s = $("#summary");
+  s.style.display = "grid";
+  s.innerHTML = "";
+  const list = checkableList();
+  const grand = list.reduce((a,r) => a + effTotal(r), 0);
+  const done = list.filter(r => ["ok"].includes(rState(r).status)).length;
+  const flags = list.filter(r => rState(r).status === "missing").length
+              + list.filter(r => rState(r).status === "corrected").length
+              + STATE.extras.length;
+
+  const stCls = (dn, n) => (n && dn === n) ? " done" : (dn > 0 ? " part" : "");
+
+  const g = el("div","card grand" + stCls(done, list.length));
+  const gl = el("div","lbl","Receipts to check — grand total");
+  if(list.length && done === list.length) gl.append(el("span","tick","✓"));
+  g.append(gl);
+  g.append(el("div","val", numToMoney(Math.round(grand*100)/100)));
+  const gs = el("div","sub");
+  gs.append(el("b","", String(done)));
+  gs.append(` / ${list.length} checked` + (flags ? ` · ${flags} flagged` : ""));
+  g.append(gs);
+  s.append(g);
+
+  for(const b of TARGET_DEPTS){
+    const dl = (MODEL.depts[b].list || []).filter(r => !r.cancelled);
+    if(!dl.length && !STATE.extras.some(x => x.dept === b)) continue;
+    const tot = dl.reduce((a,r) => a + effTotal(r), 0);
+    const dn = dl.filter(r => rState(r).status === "ok").length;
+    const c = el("div","card" + stCls(dn, dl.length));
+    const cl = el("div","lbl", b);
+    if(dl.length && dn === dl.length) cl.append(el("span","tick","✓"));
+    c.append(cl);
+    c.append(el("div","val", numToMoney(Math.round(tot*100)/100)));
+    const cs = el("div","sub");
+    cs.append(el("b","", String(dn)));
+    cs.append(` / ${dl.length} · `);
+    cs.append(el("b","", String(dl.length)));
+    cs.append(" rec.");
+    c.append(cs);
+    s.append(c);
+  }
+}
+
+function tagFor(status){
+  switch(status){
+    case "ok": return ["ok","OK"];
+    case "missing": return ["missing","MISSING"];
+    case "corrected": return ["corr","CORRECTED — verify"];
+    case "cancelled": return ["cancelled","REVERSED 0,00"];
+    case "extra": return ["extra","NOT IN REPORT"];
+    default: return null;
+  }
+}
+
+function renderAccordions(){
+  const wrap = $("#accordions");
+  const openSet = new Set([...wrap.querySelectorAll(".acc.open")].map(a => a.dataset.dept));
+  wrap.innerHTML = "";
+
+  for(const b of TARGET_DEPTS){
+    const D = MODEL.depts[b];
+    const list = (D.list || []);
+    const extras = STATE.extras.filter(x => x.dept === b);
+    if(!list.length && !extras.length) continue;
+    wrap.append(buildAcc(b, list, extras, D.other, openSet.has(b)));
+  }
+  const unass = STATE.extras.filter(x => !TARGET_DEPTS.includes(x.dept));
+  if(unass.length) wrap.append(buildAcc("UNASSIGNED — not in report", [], unass, [], true, true));
+  for(const a of wrap.querySelectorAll(".acc")) applyRoomFilter(a, a.dataset.dept);
+  knavPaint();
+  if(RS_FOCUS){ const f = wrap.querySelector(`.roomSearch[data-dept="${CSS.escape(RS_FOCUS)}"]`); if(f) f.focus(); RS_FOCUS = null; }
+}
+
+function buildAcc(name, list, extras, other, open, isExtraAcc){
+  const checkable = list.filter(r => !r.cancelled);
+  const done = checkable.filter(r => rState(r).status === "ok").length;
+  const tot = checkable.reduce((a,r) => a + effTotal(r), 0);
+
+  const dyn = isExtraAcc ? "" :
+    (checkable.length && done === checkable.length) ? " done" : (done > 0 ? " part" : "");
+  const acc = el("div","acc" + (open ? " open" : "") + (isExtraAcc ? " extraAcc" : "") + dyn);
+  acc.dataset.dept = name;
+  const head = el("div","head");
+  head.append(el("div","bar"));
+  const nm = el("div","name", name);
+  if(dyn === " done") nm.append(el("span","tick","✓"));
+  head.append(nm);
+  const cnt = el("div","cnt");
+  cnt.append(el("b","", String(checkable.length)));
+  cnt.append(" rec." + (extras.length ? ` + ${extras.length} extra` : ""));
+  head.append(cnt);
+  const prog = el("div","prog");
+  const pb = el("b","", String(done)); prog.append(pb); prog.append(` / ${checkable.length}`);
+  head.append(prog);
+  head.append(el("div","tot", numToMoney(Math.round(tot*100)/100)));
+  head.append(el("div","chev","▶"));
+  head.onclick = () => acc.classList.toggle("open");
+  acc.append(head);
+
+  const body = el("div","body");
+  if(!isExtraAcc && checkable.length){
+    const sw = el("div","roomSearchWrap");
+    const rs = document.createElement("input");
+    rs.className = "roomSearch"; rs.placeholder = "room…";
+    rs.autocomplete = "off"; rs.inputMode = "numeric";
+    rs.dataset.dept = name;
+    rs.value = ROOMF[name] || "";
+    rs.oninput = () => { rs.value = rs.value.replace(/\D/g,""); ROOMF[name] = rs.value; applyRoomFilter(acc, name); };
+    rs.onkeydown = e => roomSearchKeys(e, acc, name, rs);
+    sw.append(rs, el("span","rsHint","room № · Enter = OK · ↑↓ rows · ←→ OK/⚠ · Esc"));
+    body.append(sw);
+  }
+  for(const r of list){
+    if(r.cancelled) continue;              // voided at the POS — hidden from lists
+    body.append(receiptRow(r));
+  }
+  for(const x of extras) body.append(extraRow(x));
+  if(other && other.length){
+    const det = document.createElement("details");
+    det.className = "otherPost";
+    const sm = document.createElement("summary");
+    sm.textContent = `▸ ${other.length} folio posting(s) excluded — ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ / CREDIT CARDS — informational`;
+    det.append(sm);
+    for(const o of other){
+      const rr = el("div","rrow");
+      rr.append(el("div","room", o.room || "—"));
+      rr.append(el("div","sn", o.rate === "base" ? "" : o.rate));
+      rr.append(el("div","split", (o.guest || "") + " " + o.time));
+      rr.append(el("div","amt", numToMoney(o.amount)));
+      det.append(rr);
+    }
+    body.append(det);
+  }
+  acc.append(body);
+  return acc;
+}
+
+function receiptRow(r){
+  const st = rState(r);
+  const status = statusOf(r);
+  const row = el("div","rrow st-" + status);
+  row.dataset.key = rKey(r);
+  row.dataset.room = effRoom(r);
+  row.onclick = () => { KNAV.key = rKey(r); KNAV.act = "ok"; knavPaint(); };
+
+  const room = el("div","room");
+  if(st.corr && st.corr.room){
+    const old = el("span","old", r.roomMain); room.append(old);
+    room.append(document.createTextNode(" " + st.corr.room));
+  }else{
+    room.textContent = r.roomMain;
+    if(r.roomMain !== r.room) room.append(el("span","adj"," (" + r.room + ")"));
+  }
+  row.append(room);
+
+  const sn = el("div","sn");
+  if(st.corr && st.corr.sn){
+    const old = el("span","old", r.sn); sn.append(old);
+    sn.append(document.createTextNode(" " + st.corr.sn));
+  }else sn.textContent = r.sn;
+  row.append(sn);
+
+  const nm = el("div","name", r.guest || "");
+  nm.title = r.guest || "";
+  row.append(nm);
+
+  const split = el("div","split");
+  if(corrHasValues(st)){
+    const old = el("span","old", rateSplitStr(r.rates)); split.append(old);
+    split.append(document.createTextNode(" " + rateSplitStr(effRates(r))));
+  }else{
+    split.textContent = rateSplitStr(r.paid ? r.posRates : r.rates);
+    if(!r.paid && r.paidAmount > 0)
+      split.textContent += " · paid −" + numToMoney(r.paidAmount);
+  }
+  row.append(split);
+
+  if(r.mergedFrom && r.mergedFrom.length > 1)
+    row.append(el("span","tag merged","MERGED: " + r.mergedFrom.join("+")));
+  if(r.paid) row.append(el("span","tag paid","PAID · " + r.paidBy.join("+")));
+  const t = tagFor(status);
+  if(t) row.append(Object.assign(el("span","tag " + t[0], t[1])));
+
+  const amt = el("div","amt");
+  if(corrHasValues(st)){
+    const old = el("span","old", numToMoney(r.total)); amt.append(old);
+    amt.append(document.createTextNode(numToMoney(effTotal(r))));
+  }else amt.textContent = numToMoney(r.paid ? r.posTotal : r.total);
+  row.append(amt);
+
+  if(!r.cancelled){
+    const wb = el("button","warnBtn","⚠");
+    wb.title = "Flag a problem with this receipt";
+    wb.onclick = e => { e.stopPropagation(); openRowMenu(wb, r); };
+    row.append(wb);
+
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.className = "rowck";
+    cb.checked = st.status === "ok";
+    cb.title = "Checked by eye";
+    cb.onclick = e => e.stopPropagation();
+    cb.onchange = () => {
+      const cur = rState(r);
+      if(cb.checked){
+        setRState(r, {status: "ok", corr: cur.corr || null});
+        toastReceipt(r);
+      }else{
+        setRState(r, {status: cur.corr ? "corrected" : "pending", corr: cur.corr || null});
+      }
+      refresh();
+    };
+    row.append(cb);
+  }
+  return row;
+}
+
+function extraRow(x){
+  const row = el("div","rrow st-extra");
+  if(x.room) row.dataset.room = String(x.room);
+  row.append(el("div","room", x.room || "—"));
+  row.append(el("div","sn", x.sn));
+  row.append(el("div","split", rateSplitStr({"24%": x.v24, "13%": x.v13})));
+  row.append(el("span","tag extra","NOT IN REPORT"));
+  row.append(el("div","amt", numToMoney(Math.round(((x.v24||0)+(x.v13||0))*100)/100)));
+  const del = el("button","warnBtn","✕");
+  del.title = "Remove this manual entry";
+  del.onclick = () => {
+    STATE.extras = STATE.extras.filter(e => e !== x && !(e.sn === x.sn && e.dept === x.dept && e.room === x.room));
+    saveState(); refresh();
+  };
+  row.append(del);
+  return row;
+}
+
+/* ---------- row ⚠ menu ---------- */
+let menuEl = null;
+function closeMenu(){ if(menuEl){ menuEl.remove(); menuEl = null; } }
+document.addEventListener("click", e => { if(menuEl && !menuEl.contains(e.target)) closeMenu(); });
+
+/* ---------- keyboard navigation (room search · arrows · Enter) ---------- */
+const ROOMF = {};                       // per-department room filter text
+let KNAV = {key: null, act: "ok"};      // highlighted row + selected action
+let RS_FOCUS = null;                    // room input to refocus after a refresh
+
+function applyRoomFilter(acc, dept){
+  const q = ROOMF[dept] || "";
+  for(const row of acc.querySelectorAll(".body .rrow")){
+    if(!("room" in row.dataset)) continue;
+    row.style.display = (!q || String(row.dataset.room).startsWith(q)) ? "" : "none";
+  }
+  if(KNAV.key){
+    const hl = acc.querySelector(`.rrow[data-key="${CSS.escape(KNAV.key)}"]`);
+    if(hl && hl.style.display === "none"){ KNAV.key = null; knavPaint(); }
+  }
+}
+function navRows(root){
+  const rows = root ? root.querySelectorAll(".body .rrow") : document.querySelectorAll(".acc.open .body .rrow");
+  return [...rows].filter(r => r.style.display !== "none" && r.querySelector(".rowck") && r.offsetParent !== null);
+}
+function knavPaint(){
+  document.querySelectorAll(".rrow.khl").forEach(r => r.classList.remove("khl","act-ok","act-warn"));
+  if(!KNAV.key) return;
+  const row = document.querySelector(`.rrow[data-key="${CSS.escape(KNAV.key)}"]`);
+  if(!row){ KNAV.key = null; return; }
+  row.classList.add("khl","act-" + KNAV.act);
+}
+function knavMove(dir, root){
+  const rows = navRows(root); if(!rows.length) return;
+  let i = rows.findIndex(r => r.dataset.key === KNAV.key);
+  i = i === -1 ? (dir > 0 ? 0 : rows.length - 1) : Math.min(rows.length - 1, Math.max(0, i + dir));
+  KNAV.key = rows[i].dataset.key; KNAV.act = "ok"; knavPaint();
+  rows[i].scrollIntoView({block: "nearest"});
+}
+function knavCommit(){
+  if(!KNAV.key) return false;
+  const row = document.querySelector(`.rrow[data-key="${CSS.escape(KNAV.key)}"]`);
+  if(!row) return false;
+  if(KNAV.act === "warn"){ const wb = row.querySelector(".warnBtn"); if(wb){ wb.click(); return true; } return false; }
+  const cb = row.querySelector(".rowck"); if(!cb) return false;
+  const rows = navRows(); const i = rows.indexOf(row);
+  const nextKey = (!cb.checked && i > -1 && i < rows.length - 1) ? rows[i + 1].dataset.key : KNAV.key;
+  cb.click();                                        // reuses the checkbox logic: state, toast, refresh
+  KNAV.key = nextKey; KNAV.act = "ok"; knavPaint();
+  return true;
+}
+function receiptByKey(key){
+  for(const b of TARGET_DEPTS){
+    const D = MODEL.depts[b]; if(!D || !D.list) continue;
+    for(const r of D.list) if(rKey(r) === key) return r;
+  }
+  return null;
+}
+function roomSearchKeys(e, acc, dept, rs){
+  if(e.key === "ArrowDown"){ knavMove(1, acc); e.preventDefault(); return; }
+  if(e.key === "ArrowUp"){ knavMove(-1, acc); e.preventDefault(); return; }
+  if(e.key === "Escape"){ rs.value = ""; ROOMF[dept] = ""; applyRoomFilter(acc, dept); rs.blur(); e.preventDefault(); return; }
+  if(e.key !== "Enter") return;
+  e.preventDefault();
+  const rows = navRows(acc); if(!rows.length) return;
+  const q = rs.value.trim();
+  let target = KNAV.key ? rows.find(r => r.dataset.key === KNAV.key) : null;
+  if(!target && q) target = rows.find(r => r.dataset.room === q);
+  if(!target) target = rows[0];
+  ROOMF[dept] = ""; RS_FOCUS = dept; KNAV.key = null;
+  const cb = target.querySelector(".rowck");
+  if(cb && !cb.checked) cb.click();                  // confirm only — Enter never un-checks
+  else {
+    const r = receiptByKey(target.dataset.key);
+    if(r) toastReceipt(r);
+    rs.value = ""; applyRoomFilter(acc, dept); knavPaint();
+  }
+}
+document.addEventListener("keydown", e => {
+  if(menuEl){ if(e.key === "Escape"){ closeMenu(); e.preventDefault(); } return; }
+  if($("#modalBg").classList.contains("open")) return;
+  const tag = (e.target.tagName || "").toLowerCase();
+  if(e.target.classList && e.target.classList.contains("roomSearch")) return;   // handled by the field itself
+  if(tag === "input" || tag === "textarea" || tag === "select") return;
+  switch(e.key){
+    case "ArrowDown": knavMove(1); e.preventDefault(); break;
+    case "ArrowUp":   knavMove(-1); e.preventDefault(); break;
+    case "ArrowLeft":  if(KNAV.key){ KNAV.act = "warn"; knavPaint(); e.preventDefault(); } break;
+    case "ArrowRight": if(KNAV.key){ KNAV.act = "ok";   knavPaint(); e.preventDefault(); } break;
+    case "Enter":  if(knavCommit()) e.preventDefault(); break;
+    case "Escape": KNAV.key = null; knavPaint(); break;
+  }
+});
+
+function openRowMenu(anchor, r){
+  closeMenu();
+  const m = el("div","rowMenu");
+  const st = rState(r);
+
+  const b1 = el("button");
+  b1.innerHTML = '<span class="k">1</span> Receipt is on the list but I have <b>not received it</b>';
+  b1.onclick = () => { setRState(r, {status: "missing", corr: st.corr || null}); closeMenu(); refresh(); toast("Marked MISSING — " + r.dept + " " + r.sn, true); };
+  m.append(b1);
+
+  const b2 = el("button");
+  b2.innerHTML = '<span class="k">2</span> The receipt\'s <b>serial number is wrong</b> — enter correction';
+  b2.onclick = () => { closeMenu(); openCorrectionModal(r); };
+  m.append(b2);
+
+  const b2b = el("button");
+  b2b.innerHTML = '<span class="k">3</span> Receipt is correct but the <b>room number is wrong</b> — enter correct room';
+  b2b.onclick = () => { closeMenu(); openRoomModal(r); };
+  m.append(b2b);
+
+  if(st.status !== "pending" || st.corr){
+    const b3 = el("button");
+    b3.innerHTML = '<span class="k">↺</span> Clear flag / reset this receipt to unchecked';
+    b3.onclick = () => { delete STATE.receipts[rKey(r)]; saveState(); closeMenu(); refresh(); };
+    m.append(b3);
+  }
+  if(st.status === "corrected"){
+    const b4 = el("button");
+    b4.innerHTML = '<span class="k">✓</span> Correction verified — mark as passing';
+    b4.onclick = () => { setRState(r, {status: "ok", corr: st.corr}); closeMenu(); refresh(); toast("✓ " + r.dept + " " + effSN(r) + " passing"); };
+    m.append(b4);
+  }
+  document.body.append(m);
+  const rect = anchor.getBoundingClientRect();
+  m.style.top = (rect.bottom + window.scrollY + 6) + "px";
+  m.style.left = Math.max(10, rect.right + window.scrollX - m.offsetWidth) + "px";
+  menuEl = m;
+}
+
+/* ---------- modal ---------- */
+function openModal(html){ const bg = $("#modalBg"); $("#modal").innerHTML = html; bg.classList.add("open"); }
+function closeModal(){ $("#modalBg").classList.remove("open"); $("#snInput").focus(); }
+$("#modalBg").addEventListener("click", e => { if(e.target.id === "modalBg") closeModal(); });
+document.addEventListener("keydown", e => { if(e.key === "Escape"){ closeModal(); closeMenu(); } });
+
+function moneyField(v){ return (v === undefined || v === null || v === "") ? "" : String(v).replace(".", ","); }
+function readMoney(s){
+  s = (s || "").trim();
+  if(s === "") return 0;
+  if(!/^-?\d+(?:[.,]\d{1,2})?$/.test(s)) return null;
+  return Math.round(parseFloat(s.replace(",", ".")) * 100) / 100;
+}
+
+function openCorrectionModal(r){
+  openModal(`
+    <h3>WRONG SERIAL — ${r.dept} · room ${r.roomMain} · was ${r.sn}</h3>
+    <label>Correct serial number</label>
+    <input id="cSN" inputmode="numeric" autocomplete="off">
+    <div class="mrow">
+      <div><label>Value 24% (or base)</label><input id="cV24" inputmode="decimal" value="${moneyField(r.rates["24%"] ?? r.rates["base"])}"></div>
+      <div><label>Value 13%</label><input id="cV13" inputmode="decimal" value="${moneyField(r.rates["13%"])}"></div>
+    </div>
+    <div class="err" id="cErr"></div>
+    <div class="actions">
+      <button class="btn" id="cCancel">Cancel</button>
+      <button class="btn amber" id="cSave">Save correction</button>
+    </div>`);
+  $("#cCancel").onclick = closeModal;
+  $("#cSave").onclick = () => {
+    const sn = $("#cSN").value.trim();
+    const v24 = readMoney($("#cV24").value), v13 = readMoney($("#cV13").value);
+    if(!/^\d+$/.test(sn)){ $("#cErr").textContent = "Serial number must be digits."; return; }
+    if(v24 === null || v13 === null){ $("#cErr").textContent = "Values must be numbers like 12,50."; return; }
+    const cur = rState(r);
+    const corr = Object.assign({}, cur.corr || {}, {sn, v24, v13});
+    setRState(r, {status: "corrected", corr});
+    closeModal(); refresh();
+    toast("Correction saved — old values in red until verified");
+  };
+  setTimeout(() => $("#cSN").focus(), 40);
+}
+
+function openRoomModal(r){
+  openModal(`
+    <h3>WRONG ROOM — ${r.dept} · SN ${effSN(r)} · was room ${r.roomMain}</h3>
+    <label>Correct room number</label>
+    <input id="cRoom" inputmode="numeric" autocomplete="off">
+    <div class="err" id="cErr"></div>
+    <div class="actions">
+      <button class="btn" id="cCancel">Cancel</button>
+      <button class="btn amber" id="cSave">Save correction</button>
+    </div>`);
+  $("#cCancel").onclick = closeModal;
+  $("#cSave").onclick = () => {
+    const room = $("#cRoom").value.trim();
+    if(!room){ $("#cErr").textContent = "Room number is required."; return; }
+    const cur = rState(r);
+    const corr = Object.assign({}, cur.corr || {}, {room});
+    setRState(r, {status: "corrected", corr});
+    closeModal(); refresh();
+    toast("Room correction saved — verify to mark passing");
+  };
+  setTimeout(() => $("#cRoom").focus(), 40);
+}
+
+function openExtraModal(prefillSN){
+  const opts = TARGET_DEPTS.map(d => `<option>${d}</option>`).join("");
+  openModal(`
+    <h3>RECEIPT NOT IN REPORT</h3>
+    <label>Serial number</label>
+    <input id="xSN" inputmode="numeric" autocomplete="off" value="${prefillSN || ""}">
+    <div class="mrow">
+      <div><label>Value 24%</label><input id="xV24" inputmode="decimal"></div>
+      <div><label>Value 13%</label><input id="xV13" inputmode="decimal"></div>
+    </div>
+    <label>Room number</label>
+    <input id="xRoom" inputmode="numeric" autocomplete="off">
+    <label>Department (optional)</label>
+    <select id="xDept"><option value="">— unassigned —</option>${opts}</select>
+    <div class="err" id="xErr"></div>
+    <div class="actions">
+      <button class="btn" id="xCancel">Cancel</button>
+      <button class="btn amber" id="xSave">Add as discrepancy</button>
+    </div>`);
+  $("#xCancel").onclick = closeModal;
+  $("#xSave").onclick = () => {
+    const sn = $("#xSN").value.trim();
+    const v24 = readMoney($("#xV24").value), v13 = readMoney($("#xV13").value);
+    const room = $("#xRoom").value.trim();
+    if(!/^\d+$/.test(sn)){ $("#xErr").textContent = "Serial number must be digits."; return; }
+    if(v24 === null || v13 === null){ $("#xErr").textContent = "Values must be numbers like 12,50."; return; }
+    if(!room){ $("#xErr").textContent = "Room number is required."; return; }
+    STATE.extras.push({sn, v24, v13, room, dept: $("#xDept").value || "UNASSIGNED"});
+    saveState(); closeModal(); refresh();
+    $("#snInput").value = ""; searchInput();
+    toast("Added as NOT IN REPORT — " + sn, true);
+  };
+  setTimeout(() => ($("#xSN").value ? $("#xV24") : $("#xSN")).focus(), 40);
+}
+
+/* ---------- search ---------- */
+const inp = () => $("#snInput");
+let ntTimer = null;
+let currentMatches = [];
+
+function findMatches(q){
+  if(!q) return [];
+  const out = [];
+  for(const r of MODEL.receipts){
+    const sn = effSN(r);
+    if(sn === q) out.push({r, exact: true});
+  }
+  if(!out.length && q.length >= 3){
+    for(const r of MODEL.receipts){
+      const sn = effSN(r);
+      if(sn.endsWith(q)) out.push({r, exact: false});
+    }
+  }
+  return out;
+}
+
+function searchInput(){
+  const f = inp();
+  const clean = f.value.replace(/\D/g, "");
+  if(clean !== f.value) f.value = clean;
+  const q = clean;
+  clearTimeout(ntTimer);
+  $("#notThereBtn").style.display = "none";
+  const box = $("#matches");
+  box.innerHTML = "";
+  currentMatches = [];
+  inp().classList.remove("nomatch");
+  if(!q) return;
+
+  const ms = findMatches(q);
+  currentMatches = ms;
+  if(!ms.length){
+    inp().classList.add("nomatch");
+    ntTimer = setTimeout(() => { if(inp().value.trim() === q) $("#notThereBtn").style.display = ""; }, 900);
+    return;
+  }
+  for(const m of ms) box.append(matchCard(m.r));
+}
+
+function matchCard(r){
+  const c = el("div","match");
+  c.append(el("span","dept", r.dept));
+  c.append(el("span","room", effRoom(r) + (r.roomMain !== r.room && !(rState(r).corr && rState(r).corr.room) ? " ⧉" : "")));
+  c.append(el("span","msn", effSN(r)));
+  const nm = el("span","name", r.guest || "");
+  nm.title = r.guest || "";
+  c.append(nm);
+  c.append(el("span","split", rateSplitStr(r.paid ? r.posRates : effRates(r))));
+  c.append(el("span","amt", numToMoney(r.paid ? r.posTotal : effTotal(r))));
+
+  if(r.paid) c.append(el("span","state paid","PAID · " + r.paidBy.join("+")));
+  if(r.mergedFrom && r.mergedFrom.length > 1)
+    c.append(el("span","state corr","MERGED: " + r.mergedFrom.join("+")));
+  const status = statusOf(r);
+  if(status !== "pending" && status !== "corrected"){
+    const t = tagFor(status);
+    c.append(el("span","state " + t[0], t[1]));
+  }
+  if(status === "corrected") c.append(el("span","state corr","CORRECTED"));
+
+  if(!r.cancelled){
+    const wb = el("button","warnBtn","⚠");
+    wb.title = "Flag a problem with this receipt";
+    wb.onclick = e => { e.stopPropagation(); openRowMenu(wb, r); };
+    c.append(wb);
+  }
+  if(status !== "cancelled"){
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = status === "ok";
+    cb.onchange = () => confirmReceipt(r, cb.checked);
+    c.append(cb);
+  }
+  return c;
+}
+
+function confirmReceipt(r, on){
+  const st = rState(r);
+  if(on){
+    setRState(r, {status: "ok", corr: st.corr || null});
+    refresh();
+    inp().value = "";
+    searchInput();
+    inp().focus();
+    toastReceipt(r);
+  }else{
+    setRState(r, {status: st.corr ? "corrected" : "pending", corr: st.corr || null});
+    refresh();
+  }
+}
+
+document.addEventListener("keydown", e => {
+  if(e.key === "Enter" && document.activeElement === inp()){
+    if(currentMatches.length === 1){
+      if(currentMatches[0].r.cancelled){ toast("REVERSED at the POS — nothing to check", true); return; }
+      confirmReceipt(currentMatches[0].r, true);
+    }else if(currentMatches.length > 1){
+      toast(currentMatches.length + " matches — pick one with its checkbox", true);
+    }
+  }
+});
+
+/* ---------- refresh ---------- */
+function refresh(){
+  renderSummary();
+  renderAccordions();
+  const q = inp().value.trim();
+  if(q) searchInput();
+}
+
+/* ---------- print (Greek, corrections only) ---------- */
+function pad2(n){ return (n < 10 ? "0" : "") + n; }
+function nowStamp(){
+  const d = new Date();
+  return pad2(d.getDate()) + "/" + pad2(d.getMonth() + 1) + "/" + d.getFullYear() +
+         " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+}
+function grSplit(rates){
+  const order = ["24%","13%","6%","base"];
+  const parts = [];
+  for(const k of order){
+    if(rates[k] === undefined || rates[k] === null) continue;
+    parts.push((k === "base" ? "βασικό" : k) + ": " + numToMoney(rates[k]));
+  }
+  return parts.join("  ·  ");
+}
+function buildPrintSheet(force){
+  const missing = [], corrected = [];
+  for(const r of MODEL.receipts){
+    if(r.cancelled || r.paid) continue;      // settled receipts don't go on paper
+    const st = rState(r);
+    if(st.status === "missing") missing.push(r);
+    if(st.corr) corrected.push({r, st});
+  }
+  const extras = STATE.extras.slice();
+  if(!missing.length && !extras.length && !corrected.length && !force) return null;
+
+  const sheet = $("#printSheet");
+  sheet.innerHTML = "";
+  const esc = t => { const d = document.createElement("div"); d.textContent = t; return d.innerHTML; };
+
+  let h = `<h1>ΕΛΕΓΧΟΣ ΑΠΟΔΕΙΞΕΩΝ — ΔΙΟΡΘΩΣΕΙΣ</h1>
+  <div class="meta">Βραδιά: ${esc(MODEL.reportDate)} &nbsp;·&nbsp; Εκτυπώθηκε: ${nowStamp()} &nbsp;·&nbsp; Kernos Hotel</div>`;
+
+  h += `<h2>1. ΔΕΝ ΠΑΡΕΛΗΦΘΗΣΑΝ — καταχωρημένες στο protel, χωρίς φυσική απόδειξη (${missing.length})</h2>`;
+  if(missing.length){
+    h += `<table><tr><th>ΤΜΗΜΑ</th><th>ΔΩΜ.</th><th>Σ.Ν.</th><th>ΑΝΑΛΥΣΗ</th><th class="num">ΠΟΣΟ</th></tr>`;
+    for(const r of missing){
+      h += `<tr><td>${esc(r.dept)}</td><td>${esc(r.roomMain)}</td><td>${esc(r.sn)}</td>
+            <td>${esc(grSplit(r.rates))}</td>
+            <td class="num">${numToMoney(r.total)}</td></tr>`;
+    }
+    h += `</table>`;
+  }else h += `<div class="none">— καμία —</div>`;
+
+  h += `<h2>2. ΕΚΤΟΣ ΑΝΑΦΟΡΑΣ — αποδείξεις που δεν βρέθηκαν στο protel, χειροκίνητη καταχώρηση (${extras.length})</h2>`;
+  if(extras.length){
+    h += `<table><tr><th>ΤΜΗΜΑ</th><th>ΔΩΜ.</th><th>Σ.Ν.</th><th class="num">24%</th><th class="num">13%</th><th class="num">ΣΥΝΟΛΟ</th></tr>`;
+    for(const x of extras){
+      h += `<tr><td>${esc(x.dept === "UNASSIGNED" ? "ΑΤΑΞΙΝΟΜΗΤΟ" : x.dept)}</td><td>${esc(x.room)}</td><td>${esc(x.sn)}</td>
+            <td class="num">${numToMoney(x.v24 || 0)}</td><td class="num">${numToMoney(x.v13 || 0)}</td>
+            <td class="num">${numToMoney(Math.round(((x.v24 || 0) + (x.v13 || 0)) * 100) / 100)}</td></tr>`;
+    }
+    h += `</table>`;
+  }else h += `<div class="none">— καμία —</div>`;
+
+  h += `<h2>3. ΔΙΟΡΘΩΣΕΙΣ — Σ.Ν. / ΔΩΜΑΤΙΟ / ΠΟΣΑ (${corrected.length})</h2>`;
+  if(corrected.length){
+    h += `<table><tr><th>ΤΜΗΜΑ</th><th>ΔΩΜΑΤΙΟ</th><th>Σ.Ν.</th><th>ΠΟΣΑ</th><th>ΚΑΤΑΣΤΑΣΗ</th></tr>`;
+    const arrow = (oldV, newV) => `<span class="old">${esc(oldV)}</span> → ${esc(newV)}`;
+    for(const {r, st} of corrected){
+      const roomCell = st.corr.room ? arrow(r.roomMain, st.corr.room) : esc(r.roomMain);
+      const snCell   = st.corr.sn ? arrow(r.sn, st.corr.sn) : esc(r.sn);
+      const valCell  = (st.corr.v24 !== undefined || st.corr.v13 !== undefined)
+        ? arrow(grSplit(r.rates), grSplit({"24%": st.corr.v24, "13%": st.corr.v13}))
+        : esc(grSplit(r.rates));
+      h += `<tr><td>${esc(r.dept)}</td><td>${roomCell}</td><td>${snCell}</td><td>${valCell}</td>
+            <td>${st.status === "ok" ? "ΕΠΙΒΕΒΑΙΩΘΗΚΕ ✓" : "ΕΚΚΡΕΜΕΙ"}</td></tr>`;
+    }
+    h += `</table>`;
+  }else h += `<div class="none">— καμία —</div>`;
+
+  sheet.innerHTML = h;
+  return sheet;
+}
+
+/* ---------- wiring ---------- */
+$("#drop").onclick = () => $("#fileInput").click();
+$("#openAnother").onclick = () => $("#fileInput").click();
+$("#fileInput").onchange = e => { if(e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ""; };
+$("#drop").ondragover = e => { e.preventDefault(); $("#drop").classList.add("over"); };
+$("#drop").ondragleave = () => $("#drop").classList.remove("over");
+$("#drop").ondrop = e => {
+  e.preventDefault(); $("#drop").classList.remove("over");
+  if(e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+};
+function printCorrections(){
+  if(!MODEL) return;
+  if(!buildPrintSheet()){ toast("Καμία διόρθωση για εκτύπωση", true); return; }
+  window.print();
+}
+$("#printBtn").onclick = printCorrections;
+window.addEventListener("beforeprint", () => { if(MODEL) buildPrintSheet(true); });
+document.addEventListener("keydown", e => {
+  if((e.ctrlKey || e.metaKey) && (e.key === "p" || e.key === "P")){
+    e.preventDefault();
+    printCorrections();
+  }
+});
+$("#snInput").addEventListener("input", searchInput);
+$("#notThereBtn").onclick = () => openExtraModal(inp().value.trim());
+
+$("#kebabBtn").onclick = e => { e.stopPropagation(); $("#kebabMenu").classList.toggle("open"); };
+document.addEventListener("click", e => { if(!$("#kebab").contains(e.target)) $("#kebabMenu").classList.remove("open"); });
+$("#expandAll").onclick = () => { document.querySelectorAll(".acc").forEach(a => a.classList.add("open")); $("#kebabMenu").classList.remove("open"); };
+$("#collapseAll").onclick = () => { document.querySelectorAll(".acc").forEach(a => a.classList.remove("open")); $("#kebabMenu").classList.remove("open"); };
+$("#resetDay").onclick = () => {
+  $("#kebabMenu").classList.remove("open");
+  if(!MODEL) return;
+  openModal(`
+    <h3>RESET DAY</h3>
+    <div style="font-size:14px;line-height:1.55">Clear <b>all</b> checks, flags, corrections and manual entries for
+      <b style="font-family:var(--mono);color:var(--amber)">${MODEL.reportDate}</b>?</div>
+    <div class="actions">
+      <button class="btn" id="rCancel">Cancel</button>
+      <button class="btn" id="rGo" style="border-color:var(--red-dim);color:var(--red)">Reset everything</button>
+    </div>`);
+  $("#rCancel").onclick = closeModal;
+  $("#rGo").onclick = () => {
+    STATE = blankState(MODEL.reportDate);
+    saveState();
+    closeModal();
+    const i = $("#snInput");
+    i.value = ""; i.classList.remove("nomatch");
+    $("#matches").innerHTML = "";
+    $("#notThereBtn").style.display = "none";
+    renderSummary();
+    renderAccordions();
+    toast("Day reset — all zeroes", true);
+  };
+};
+})();
+</script>
+</body>
+</html>
