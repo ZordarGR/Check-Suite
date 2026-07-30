@@ -79,11 +79,16 @@ main{max-width:1060px;margin:0 auto;padding:16px 18px 90px}
 .card.done{border-color:var(--green-dim)}
 .card.done .val{color:var(--green)}
 .tick{color:var(--green);font-weight:700;margin-left:6px}
+.openPill{display:inline-block;font-size:10px;letter-spacing:.1em;padding:2px 8px;border-radius:999px;margin-left:8px;
+  background:rgba(245,180,83,.13);border:1px solid var(--amber-dim);color:var(--amber);
+  font-family:var(--mono);font-weight:600;animation:pillPulse 1.8s ease-in-out infinite;vertical-align:1px}
+@keyframes pillPulse{0%,100%{opacity:1}50%{opacity:.4}}
 .card.grand{border-color:var(--amber-dim)}
 .card.grand .val{color:var(--amber)}
 #parseWarn{display:none;background:rgba(248,113,113,.08);border:1px solid var(--red-dim);color:var(--red);
   border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:14px;font-family:var(--mono)}
 #parseOk{display:none;color:var(--green);font-size:12px;font-family:var(--mono);margin:-6px 0 12px 2px}
+#parseNote{display:none;color:var(--amber-dim);font-size:12px;font-family:var(--mono);margin:-6px 0 12px 2px}
 
 /* ---------- search ---------- */
 #searchWrap{display:none;position:sticky;top:52px;z-index:40;background:rgba(10,14,20,.95);backdrop-filter:blur(6px);
@@ -102,7 +107,7 @@ main{max-width:1060px;margin:0 auto;padding:16px 18px 90px}
 .match .dept{color:var(--amber);font-size:12px;letter-spacing:.08em;min-width:86px}
 .match .room{color:#fff;font-weight:800;font-size:16px;min-width:56px}
 .match .msn{color:var(--amber)}
-.match .name{color:var(--dim);font-size:12.5px;max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.match .name{color:var(--dim);font-size:12.5px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .match .amt{font-weight:800;margin-left:auto;font-size:16px;color:#fff}
 .match .split{color:#c3cfe2;font-size:13px}
 .match input[type=checkbox]{width:22px;height:22px;accent-color:var(--green);cursor:pointer;flex:0 0 auto}
@@ -148,7 +153,7 @@ main{max-width:1060px;margin:0 auto;padding:16px 18px 90px}
 .rrow .room{min-width:64px;font-weight:800;font-size:15.5px;color:#fff}
 .rrow .room .adj{color:var(--faint);font-size:11px;font-weight:400}
 .rrow .sn{min-width:78px;color:var(--amber)}
-.rrow .name{color:var(--dim);font-size:12.5px;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rrow .name{color:var(--dim);font-size:12.5px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rrow .split{color:#c3cfe2;font-size:13px;flex:1}
 .rrow .amt{font-weight:800;min-width:96px;text-align:right;font-size:15.5px;color:#fff}
 .rrow .old{color:var(--red);text-decoration:line-through;margin-right:7px;font-weight:400}
@@ -169,7 +174,9 @@ main{max-width:1060px;margin:0 auto;padding:16px 18px 90px}
 .warnBtn:hover{border-color:var(--amber)}
 .rowck{width:20px;height:20px;accent-color:var(--green);cursor:pointer;flex:0 0 auto}
 .rrow .tag.merged{background:#16324d;color:#7cc4ff}
-.rrow .tag.paid,.match .state.paid{background:#0f3a36;color:#4fd1c5}
+.rrow .tag.void,.match .state.void{background:#2a3040;color:var(--dim)}
+.rrow.st-void{opacity:.55}
+.rrow.st-void .amt,.rrow.st-void .room,.rrow.st-void .sn,.rrow.st-void .split{color:var(--dim)}
 .rowMenu{position:absolute;background:var(--panel);border:1px solid var(--line);border-radius:10px;z-index:60;
   box-shadow:0 12px 30px rgba(0,0,0,.6);min-width:300px;overflow:hidden}
 .rowMenu button{display:block;width:100%;background:none;border:none;text-align:left;color:var(--txt);
@@ -206,12 +213,23 @@ main{max-width:1060px;margin:0 auto;padding:16px 18px 90px}
 #toast.match{display:flex;align-items:center;gap:12px;font-family:var(--sans);max-width:min(92vw,680px)}
 #toast .tick{color:var(--green);font-weight:800;font-size:17px}
 
+/* ---------- update button (Electron only) ---------- */
+#updateBtn{position:fixed;right:22px;bottom:22px;z-index:90;width:50px;height:50px;border-radius:50%;
+  background:#101d33;border:1.5px solid #2f5f9e;cursor:pointer;padding:0;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 6px 22px rgba(40,110,220,.35);
+  animation:updIn .3s ease-out;transition:transform .15s, box-shadow .15s, opacity .15s}
+#updateBtn:hover{transform:translateY(-2px);box-shadow:0 10px 30px rgba(40,110,220,.55)}
+#updateBtn.busy{opacity:.55;pointer-events:none}
+#updateBtn svg{display:block}
+@keyframes updIn{from{transform:scale(.5);opacity:0}to{transform:scale(1);opacity:1}}
+
 #printSheet{display:none}
 @media print{
   html,body{height:auto !important;min-height:0 !important;overflow:visible !important}
   body{background:#fff !important;margin:0;padding:0}
   @page{margin:12mm}
-  header,main,#landing,#modalBg,#toast{display:none !important}
+  header,main,#landing,#modalBg,#toast,#updateBtn{display:none !important}
   #printSheet{display:block !important;color:#000;font-family:"Segoe UI",Arial,sans-serif;padding:0;font-size:12px}
   #printSheet h1{font-size:16px;letter-spacing:.06em;margin:0 0 2px;font-weight:700}
   #printSheet .meta{font-size:11px;margin-bottom:14px;color:#000}
@@ -250,7 +268,7 @@ main{max-width:1060px;margin:0 auto;padding:16px 18px 90px}
 
 <div id="landing">
   <div class="logo">REC<span>·</span>CHECK</div>
-  <p class="sub">Nightly POS receipt audit — protel checkcharge1 (.oxps)</p>
+  <p class="sub">Nightly POS receipt audit — protel checkcharge1 (.oxps) · <span id="appVer"></span></p>
   <div id="drop">
     <div class="big">Drop the checkcharge report here, or click to browse</div>
     <div class="hint">.oxps / .xps — parsed locally, nothing leaves this machine</div>
@@ -262,6 +280,7 @@ main{max-width:1060px;margin:0 auto;padding:16px 18px 90px}
 <main>
   <div id="parseWarn"></div>
   <div id="parseOk"></div>
+  <div id="parseNote"></div>
   <div id="summary"></div>
 
   <div id="searchWrap">
@@ -285,7 +304,7 @@ main{max-width:1060px;margin:0 auto;padding:16px 18px 90px}
 "use strict";
 
 const TARGET_DEPTS = ["RESTAURANT","CAFETERIA","TAVERNAKI","KAFENIO","BAR"];
-const INTERFACE_USER = "IFC";   // POS interface — its negatives are voids; a human's negatives mean the receipt was PAID
+const INTERFACE_USER = "IFC";   // POS interface — its negatives are voids; a human's negatives = consolidation → VOID
 const MONEY_RE = /^-?\d{1,3}(?:\.\d{3})*,\d{2}$/;
 
 function moneyToNum(s){ return Math.round(parseFloat(s.replace(/\./g,"").replace(",","."))*100)/100; }
@@ -410,7 +429,10 @@ function pageTokens(xml){
 function pageRows(xml){
   const toks = pageTokens(xml).sort((a,b) => a.y - b.y || a.x - b.x);
   const rows = [];
-  const TOL = 3;
+  // TOL must sit between the baseline jitter WITHIN one printed line (up to ~3.3
+  // when a wrapped Descr: line offsets the layout) and the spacing BETWEEN lines
+  // (>=10.7 in real reports). At 3 a row could split in two, orphaning its amount.
+  const TOL = 6;
   for(const g of toks){
     if(rows.length && Math.abs(rows[rows.length-1].y - g.y) < TOL) rows[rows.length-1].toks.push(g);
     else rows.push({y: g.y, toks: [g]});
@@ -465,6 +487,11 @@ function parseReport(xmls){
         const dateTok  = toks.find(t => t.x < 78 && /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(t.t.trim()));
         const userTok  = toks.find(t => t.x >= 115 && t.x < 152);
         const roomTok  = toks.find(t => t.x >= 152 && t.x < 236);
+        // guest name: single token drawn at x≈240; protel itself truncates it to
+        // the column width (~24 chars), so a longer name simply isn't in the file.
+        // NOTE: article text can start slightly LEFT of the qty token (seen at
+        // x≈406 vs qty at x≈409), so the 402 boundary must stay fixed — do not
+        // anchor it to the qty position.
         const guest    = toks.filter(t => t.x >= 236 && t.x < 402).map(t => t.t.trim()).join(" ").trim();
         let qty = null, amt = null;
         for(const t of toks){
@@ -472,7 +499,7 @@ function parseReport(xmls){
           if(t.x >= 388 && t.x < 424 && /^-?\d+$/.test(s)) qty = parseInt(s, 10);
           if(t.x > 600 && MONEY_RE.test(s)) amt = moneyToNum(s);
         }
-        const textStr = toks.filter(t => t.x >= 405 && t.x < 700 && !/^-?\d+$/.test(t.t.trim()))
+        const textStr = toks.filter(t => t.x >= 402 && t.x < 700 && !/^-?\d+$/.test(t.t.trim()))
                             .map(t => t.t).join(" ");
         const recM = textStr.match(/Rec:\s*(\d+)/);
         if(!reportDate && dateTok) reportDate = dateTok.t.trim();
@@ -590,11 +617,20 @@ function buildModel(parsed){
       r.paidAmount = Math.round(paidSum * 100) / 100;
       r.paidBy = [...paidBy];
       const net0 = Math.abs(r.total) < 0.005;
-      r.paid = net0 && r.paidBy.length > 0;       // settled by a person — real receipt, show it
+      r.voided = net0 && r.paidBy.length > 0;      // consolidated by a person — VOID, excluded from totals
       r.cancelled = net0 && r.paidBy.length === 0; // voided by the interface — hide it
       receipts.push(r);
     }
     depts[b].list = list;
+  }
+
+  // still-open detection: the ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ consolidation posting (folio 9601)
+  // is written when the POS department closes for the night; until it appears the
+  // department may still add receipts while the check is underway.
+  for(const b of TARGET_DEPTS){
+    const D = depts[b];
+    const hasActivity = (D.list && D.list.length) || D.other.length;
+    D.stillOpen = !!hasActivity && !D.other.some(o => /ΜΕΤΡΗΤΑ/.test(o.guest || "") || o.room === "9601");
   }
   return {reportDate, depts, receipts, validation};
 }
@@ -611,6 +647,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
+const APP_VERSION = "1.1.0";
 const $ = s => document.querySelector(s);
 const el = (tag, cls, txt) => { const e = document.createElement(tag); if(cls) e.className = cls; if(txt !== undefined) e.textContent = txt; return e; };
 
@@ -662,6 +699,7 @@ function rateSplitStr(rates){
 }
 function statusOf(r){
   if(r.cancelled) return "cancelled";
+  if(r.voided) return "void";
   return rState(r).status;
 }
 function toast(msg, red){
@@ -744,24 +782,26 @@ function renderAll(fname){
 }
 
 function renderValidation(){
-  const warn = $("#parseWarn"), ok = $("#parseOk");
+  const warn = $("#parseWarn"), ok = $("#parseOk"), note = $("#parseNote");
+  warn.style.display = "none";
   const target = MODEL.validation.filter(v => TARGET_DEPTS.includes(v.section.replace(/\s+\d+%$/,"").trim()));
   const bad = target.filter(v => v.ok === false);
   if(bad.length){
-    warn.style.display = "block";
-    warn.textContent = "⚠ PARSE MISMATCH — " + bad.map(v =>
-      `${v.section}: parsed ${numToMoney(v.parsed)} ≠ report ${numToMoney(v.reported)}`).join("  |  ") +
-      " — totals below may be unreliable, check the printed report.";
+    // section totals include the cash/card (folio) rows, which are checked by
+    // hand outside this tool — a small difference there is informational only
     ok.style.display = "none";
+    note.style.display = "block";
+    note.textContent = "ⓘ report-total difference (usually the cash/card side, checked by hand): " +
+      bad.map(v => `${v.section} ${numToMoney(v.parsed)} vs ${numToMoney(v.reported)} (Δ ${numToMoney(Math.round((v.reported - v.parsed)*100)/100)})`).join("  ·  ");
   }else{
-    warn.style.display = "none";
+    note.style.display = "none";
     ok.style.display = "block";
     ok.textContent = "✓ parse verified — every department sum matches the report's own totals (" + target.length + " sections)";
   }
 }
 
 function checkableList(){
-  return MODEL.receipts.filter(r => !r.cancelled);
+  return MODEL.receipts.filter(r => !r.cancelled && !r.voided);
 }
 
 function renderSummary(){
@@ -789,13 +829,18 @@ function renderSummary(){
   s.append(g);
 
   for(const b of TARGET_DEPTS){
-    const dl = (MODEL.depts[b].list || []).filter(r => !r.cancelled);
+    const dl = (MODEL.depts[b].list || []).filter(r => !r.cancelled && !r.voided);
     if(!dl.length && !STATE.extras.some(x => x.dept === b)) continue;
     const tot = dl.reduce((a,r) => a + effTotal(r), 0);
     const dn = dl.filter(r => rState(r).status === "ok").length;
     const c = el("div","card" + stCls(dn, dl.length));
     const cl = el("div","lbl", b);
     if(dl.length && dn === dl.length) cl.append(el("span","tick","✓"));
+    if(MODEL.depts[b].stillOpen){
+      const op = el("span","openPill","OPEN");
+      op.title = "No ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ close-out posting in the report — this department had not closed when the report was pulled and may still add receipts. Re-pull the report after it closes.";
+      cl.append(op);
+    }
     c.append(cl);
     c.append(el("div","val", numToMoney(Math.round(tot*100)/100)));
     const cs = el("div","sub");
@@ -814,6 +859,7 @@ function tagFor(status){
     case "missing": return ["missing","MISSING"];
     case "corrected": return ["corr","CORRECTED — verify"];
     case "cancelled": return ["cancelled","REVERSED 0,00"];
+    case "void": return ["void","VOID"];
     case "extra": return ["extra","NOT IN REPORT"];
     default: return null;
   }
@@ -839,7 +885,7 @@ function renderAccordions(){
 }
 
 function buildAcc(name, list, extras, other, open, isExtraAcc){
-  const checkable = list.filter(r => !r.cancelled);
+  const checkable = list.filter(r => !r.cancelled && !r.voided);
   const done = checkable.filter(r => rState(r).status === "ok").length;
   const tot = checkable.reduce((a,r) => a + effTotal(r), 0);
 
@@ -851,10 +897,17 @@ function buildAcc(name, list, extras, other, open, isExtraAcc){
   head.append(el("div","bar"));
   const nm = el("div","name", name);
   if(dyn === " done") nm.append(el("span","tick","✓"));
+  const DD = MODEL.depts[name];
+  if(DD && DD.stillOpen){
+    const op = el("span","openPill","OPEN");
+    op.title = "No ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ close-out posting in the report — this department had not closed when the report was pulled and may still add receipts. Re-pull the report after it closes.";
+    nm.append(op);
+  }
   head.append(nm);
   const cnt = el("div","cnt");
+  const voidCnt = list.filter(r => r.voided).length;
   cnt.append(el("b","", String(checkable.length)));
-  cnt.append(" rec." + (extras.length ? ` + ${extras.length} extra` : ""));
+  cnt.append(" rec." + (voidCnt ? ` · ${voidCnt} void` : "") + (extras.length ? ` + ${extras.length} extra` : ""));
   head.append(cnt);
   const prog = el("div","prog");
   const pb = el("b","", String(done)); prog.append(pb); prog.append(` / ${checkable.length}`);
@@ -936,26 +989,29 @@ function receiptRow(r){
     const old = el("span","old", rateSplitStr(r.rates)); split.append(old);
     split.append(document.createTextNode(" " + rateSplitStr(effRates(r))));
   }else{
-    split.textContent = rateSplitStr(r.paid ? r.posRates : r.rates);
-    if(!r.paid && r.paidAmount > 0)
+    split.textContent = rateSplitStr(r.voided ? r.posRates : r.rates);
+    if(!r.voided && r.paidAmount > 0)
       split.textContent += " · paid −" + numToMoney(r.paidAmount);
   }
   row.append(split);
 
   if(r.mergedFrom && r.mergedFrom.length > 1)
     row.append(el("span","tag merged","MERGED: " + r.mergedFrom.join("+")));
-  if(r.paid) row.append(el("span","tag paid","PAID · " + r.paidBy.join("+")));
-  const t = tagFor(status);
-  if(t) row.append(Object.assign(el("span","tag " + t[0], t[1])));
+  if(r.voided){
+    row.append(el("span","tag void","VOID · " + r.paidBy.join("+")));
+  }else{
+    const t = tagFor(status);
+    if(t) row.append(Object.assign(el("span","tag " + t[0], t[1])));
+  }
 
   const amt = el("div","amt");
   if(corrHasValues(st)){
     const old = el("span","old", numToMoney(r.total)); amt.append(old);
     amt.append(document.createTextNode(numToMoney(effTotal(r))));
-  }else amt.textContent = numToMoney(r.paid ? r.posTotal : r.total);
+  }else amt.textContent = numToMoney(r.voided ? r.posTotal : r.total);
   row.append(amt);
 
-  if(!r.cancelled){
+  if(!r.cancelled && !r.voided){
     const wb = el("button","warnBtn","⚠");
     wb.title = "Flag a problem with this receipt";
     wb.onclick = e => { e.stopPropagation(); openRowMenu(wb, r); };
@@ -1286,26 +1342,26 @@ function matchCard(r){
   const nm = el("span","name", r.guest || "");
   nm.title = r.guest || "";
   c.append(nm);
-  c.append(el("span","split", rateSplitStr(r.paid ? r.posRates : effRates(r))));
-  c.append(el("span","amt", numToMoney(r.paid ? r.posTotal : effTotal(r))));
+  c.append(el("span","split", rateSplitStr(r.voided ? r.posRates : effRates(r))));
+  c.append(el("span","amt", numToMoney(r.voided ? r.posTotal : effTotal(r))));
 
-  if(r.paid) c.append(el("span","state paid","PAID · " + r.paidBy.join("+")));
+  if(r.voided) c.append(el("span","state void","VOID · " + r.paidBy.join("+")));
   if(r.mergedFrom && r.mergedFrom.length > 1)
     c.append(el("span","state corr","MERGED: " + r.mergedFrom.join("+")));
   const status = statusOf(r);
-  if(status !== "pending" && status !== "corrected"){
+  if(status !== "pending" && status !== "corrected" && status !== "void"){
     const t = tagFor(status);
     c.append(el("span","state " + t[0], t[1]));
   }
   if(status === "corrected") c.append(el("span","state corr","CORRECTED"));
 
-  if(!r.cancelled){
+  if(!r.cancelled && !r.voided){
     const wb = el("button","warnBtn","⚠");
     wb.title = "Flag a problem with this receipt";
     wb.onclick = e => { e.stopPropagation(); openRowMenu(wb, r); };
     c.append(wb);
   }
-  if(status !== "cancelled"){
+  if(status !== "cancelled" && status !== "void"){
     const cb = document.createElement("input");
     cb.type = "checkbox";
     cb.checked = status === "ok";
@@ -1333,8 +1389,10 @@ function confirmReceipt(r, on){
 document.addEventListener("keydown", e => {
   if(e.key === "Enter" && document.activeElement === inp()){
     if(currentMatches.length === 1){
-      if(currentMatches[0].r.cancelled){ toast("REVERSED at the POS — nothing to check", true); return; }
-      confirmReceipt(currentMatches[0].r, true);
+      const mr = currentMatches[0].r;
+      if(mr.cancelled){ toast("REVERSED at the POS — nothing to check", true); return; }
+      if(mr.voided){ toast("VOID — consolidated by " + mr.paidBy.join("+") + ", not counted", true); return; }
+      confirmReceipt(mr, true);
     }else if(currentMatches.length > 1){
       toast(currentMatches.length + " matches — pick one with its checkbox", true);
     }
@@ -1368,7 +1426,7 @@ function grSplit(rates){
 function buildPrintSheet(force){
   const missing = [], corrected = [];
   for(const r of MODEL.receipts){
-    if(r.cancelled || r.paid) continue;      // settled receipts don't go on paper
+    if(r.cancelled || r.voided) continue;    // void / settled receipts don't go on paper
     const st = rState(r);
     if(st.status === "missing") missing.push(r);
     if(st.corr) corrected.push({r, st});
@@ -1416,7 +1474,7 @@ function buildPrintSheet(force){
         ? arrow(grSplit(r.rates), grSplit({"24%": st.corr.v24, "13%": st.corr.v13}))
         : esc(grSplit(r.rates));
       h += `<tr><td>${esc(r.dept)}</td><td>${roomCell}</td><td>${snCell}</td><td>${valCell}</td>
-            <td>${st.status === "ok" ? "ΕΠΙΒΕΒΑΙΩΘΗΚΕ ✓" : "ΕΚΚΡΕΜΕΙ"}</td></tr>`;
+            <td>${st.status === "ok" ? "ΔΙΟΡΘΩΘΗΚΕ ✓" : "ΕΚΚΡΕΜΕΙ"}</td></tr>`;
     }
     h += `</table>`;
   }else h += `<div class="none">— καμία —</div>`;
@@ -1480,6 +1538,29 @@ $("#resetDay").onclick = () => {
     toast("Day reset — all zeroes", true);
   };
 };
+/* ---------- auto-update (active only inside the desktop app) ---------- */
+(function(){
+  const ver = $("#appVer");
+  if(ver) ver.textContent = "v" + APP_VERSION;
+  if(!window.reccheckUpdate) return;             // plain browser — nothing to do
+  window.reccheckUpdate.version().then(v => { if(ver && v) ver.textContent = "v" + v; }).catch(() => {});
+  window.reccheckUpdate.onReady(info => {
+    if(document.getElementById("updateBtn")) return;
+    const b = document.createElement("button");
+    b.id = "updateBtn";
+    b.title = info.full
+      ? "Version " + info.version + " needs a full reinstall — click to open the download page"
+      : "Update v" + info.version + " downloaded — click to install and restart";
+    b.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none">' +
+      '<path d="M12 20V5.5 M5.5 12 L12 5.5 L18.5 12" stroke="#4da6ff" stroke-width="2.8" ' +
+      'stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    b.onclick = () => {
+      b.classList.add("busy");
+      window.reccheckUpdate.apply().then(ok => { if(!ok) b.classList.remove("busy"); });
+    };
+    document.body.append(b);
+  });
+})();
 })();
 </script>
 </body>

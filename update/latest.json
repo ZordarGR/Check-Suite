@@ -1,0 +1,7 @@
+{
+  "version": "1.1.0",
+  "type": "html",
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/app/index.html",
+  "sha256": "d44f516332d7ae407b3ca8b477f0108f0e592a647ddec95f46802befe41f33d6",
+  "notes": "Auto-update support: the app now checks this repo on launch and offers one-click updates."
+}

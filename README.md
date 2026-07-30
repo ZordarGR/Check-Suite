@@ -22,6 +22,14 @@ GitHub caps files at 100 MB, so the app zip is stored in two parts.
    First run: Windows SmartScreen may warn about an unrecognized app → *More info → Run anyway*
    (the build is unsigned).
 
+### Updates
+
+The app checks `update/latest.json` in this repo on every launch. When a newer version of the
+tool is available it downloads in the background (~70 KB — only the tool itself, never the
+whole app) and a blue ↑ button appears at the bottom-right; clicking it installs the update
+and restarts. Releases marked `"type": "full"` instead point the button at the release page
+for a manual reinstall of the shell.
+
 ### No-install fallback
 
 [`Departments Check.html`](Departments%20Check.html) is the identical tool as a single
