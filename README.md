@@ -2,42 +2,36 @@
 
 Tools for the nightly audit at Kernos Hotel.
 
-## REC CHECK
+## RecCheck — nightly receipt audit
 
-Nightly POS receipt audit against the protel **checkcharge1** report (`.oxps`).
-Parses the report locally (nothing leaves the machine), lists room-charge receipts per
-department, and tracks the check with per-day state: OK / missing / corrections, VOID
-detection for consolidated receipts, an OPEN pill for departments that have not closed
-yet, and a printable Greek corrections sheet.
+Checks the physical POS receipts against the protel **checkcharge1** report (`.oxps`).
+Everything is parsed locally on your machine — nothing is uploaded anywhere.
 
-### Get the Windows app
+### ⬇ Install (Windows)
 
-GitHub caps files at 100 MB, so the app zip is stored in two parts.
+**[Download RecCheck-Setup.exe](https://github.com/ZordarGR/Check-Suite/raw/main/dist-win64/RecCheck-Setup.exe)** — then open the downloaded file. That's all: it installs itself in a few seconds (no administrator password needed), puts **RecCheck** on your Desktop and in the Start Menu, and starts the app.
 
-1. Click **Code → Download ZIP** (top right of this page) and extract it, or download the
-   three files inside [`dist-win64/`](dist-win64/) individually.
-2. Double-click **`JOIN-ME-FIRST.bat`** in `dist-win64/` — it joins the parts into
-   `RecCheck-win64.zip`.
-3. Right-click `RecCheck-win64.zip` → **Extract All**, open the folder, run **`RecCheck.exe`**.
-   First run: Windows SmartScreen may warn about an unrecognized app → *More info → Run anyway*
-   (the build is unsigned).
+> If Windows shows a blue *"Windows protected your PC"* screen the first time, click **More info → Run anyway** — the app is simply unsigned, not harmful.
 
 ### Updates
 
-The app checks `update/latest.json` in this repo on every launch. When a newer version of the
-tool is available it downloads in the background (~70 KB — only the tool itself, never the
-whole app) and a blue ↑ button appears at the bottom-right; clicking it installs the update
-and restarts. Releases marked `"type": "full"` instead point the button at the release page
-for a manual reinstall of the shell.
+The app checks this repository every time it opens. When a new version of the tool exists it downloads quietly in the background, and a **blue ↑ button** appears at the bottom-right — one click installs it and restarts the app. You never download the installer again.
+
+### Uninstall
+
+Windows Settings → Apps → RecCheck → Uninstall. Your saved work (check history, watchlist, room nicknames) is kept in case you reinstall.
 
 ### No-install fallback
 
-[`Departments Check.html`](Departments%20Check.html) is the identical tool as a single
-HTML file — download it and open it in any browser.
+[`Departments Check.html`](Departments%20Check.html) is the identical tool as a single HTML file — download it and open it in any browser.
+
+### Features
+
+Per-department receipt lists with per-day check state (OK / missing / corrections) · VOID detection for consolidated receipts · OPEN pill for departments that had not closed when the report was pulled · receipt search by serial number · watchlist with yellow highlighting for rooms that need a closer look · persistent room database with searchable nicknames that reset automatically when a room's guests change · printable Greek corrections sheet · parse self-verification against the report's own totals on every load.
 
 ### Repo layout
 
-- `dist-win64/` — the packaged Windows app (split zip + join script)
-- `app/` — the Electron app source (`index.html` is the tool itself, plus `main.js`,
-  `package.json`, and the icon)
+- `dist-win64/RecCheck-Setup.exe` — the Windows installer
+- `app/` — application source (`index.html` is the tool itself, plus the Electron shell: `main.js`, `preload.js`, `updater.js`)
+- `update/latest.json` — the auto-update manifest the installed app checks
 - `Departments Check.html` — standalone browser version
