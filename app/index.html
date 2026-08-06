@@ -32,7 +32,7 @@ body{min-height:100vh;background:
 ::selection{background:var(--amber);color:#000}
 
 /* ---------- header ---------- */
-header{position:sticky;top:0;z-index:50;background:rgba(10,14,20,.92);backdrop-filter:blur(6px);
+header{position:sticky;top:0;z-index:80;background:rgba(10,14,20,.92);backdrop-filter:blur(6px);
   border-bottom:1px solid var(--line);padding:10px 18px;display:flex;align-items:center;gap:14px}
 header h1{font-size:16px;letter-spacing:.18em;font-weight:600;color:var(--amber);font-family:var(--mono);white-space:nowrap}
 header h1 span{color:var(--dim);font-weight:400}
@@ -213,6 +213,52 @@ main{max-width:1060px;margin:0 auto;padding:16px 18px 90px}
 #toast.match{display:flex;align-items:center;gap:12px;font-family:var(--sans);max-width:min(92vw,680px)}
 #toast .tick{color:var(--green);font-weight:800;font-size:17px}
 
+/* ---------- side rail + drawer ---------- */
+#rail{position:fixed;right:12px;top:66px;z-index:70;display:none;flex-direction:column;gap:8px;transition:right .18s ease}
+body.drawerOpen #rail{right:342px}
+.railBtn{width:44px;height:44px;border-radius:12px;background:var(--panel);border:1px solid var(--line);
+  color:var(--dim);cursor:pointer;position:relative;display:flex;align-items:center;justify-content:center;
+  transition:border-color .15s,color .15s,background .15s}
+.railBtn:hover{border-color:var(--amber);color:var(--amber)}
+.railBtn.active{border-color:var(--amber);color:var(--amber);background:#1c2942}
+.railBtn .cnt{position:absolute;top:-6px;right:-6px;background:var(--amber);color:#000;font-size:10.5px;
+  font-weight:700;font-family:var(--mono);border-radius:999px;padding:1px 6px;display:none}
+#drawer{position:fixed;right:0;top:52px;bottom:0;width:330px;background:var(--bg2);border-left:1px solid var(--line);
+  z-index:65;transform:translateX(100%);transition:transform .18s ease;display:flex;flex-direction:column}
+body.drawerOpen #drawer{transform:none}
+main{transition:margin-right .18s ease}
+@media(min-width:900px){ body.drawerOpen main{margin-right:350px} }
+.dHead{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;flex:0 0 auto;
+  border-bottom:1px solid var(--line);font-family:var(--mono);letter-spacing:.14em;color:var(--amber);font-size:13px}
+.dPanel{overflow-y:auto;flex:1}
+.wForm{padding:14px;border-bottom:1px solid var(--line)}
+.wForm .wFormRow{display:flex;gap:8px}
+.wForm input{width:100%;background:var(--panel);border:1.5px solid var(--line);border-radius:8px;color:var(--txt);
+  font-family:var(--mono);font-size:14px;padding:8px 10px;outline:none;margin-bottom:8px}
+.wForm input:focus{border-color:var(--amber)}
+.wForm .btn{width:100%}
+.wErr{color:var(--red);font-size:12px;min-height:1.1em;margin-top:6px;font-family:var(--mono)}
+.wAcc .wHead{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;user-select:none;
+  font-size:11.5px;letter-spacing:.12em;color:var(--dim);font-family:var(--mono)}
+.wAcc .wHead b{color:#ffd98a;font-size:13px}
+.wAcc .wHead .chev{color:var(--faint);transition:transform .15s;font-size:11px;margin-left:auto}
+.wAcc.open .wHead .chev{transform:rotate(90deg)}
+.wAcc .wBody{display:none}
+.wAcc.open .wBody{display:block}
+.wRow{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid rgba(35,48,71,.5);
+  font-family:var(--mono);font-size:13.5px;cursor:pointer}
+.wRow:hover{background:var(--panel2)}
+.wRow .room{font-weight:800;color:#ffd98a;min-width:46px}
+.wRow .sn{color:var(--amber);min-width:64px}
+.wRow .name{color:var(--dim);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wEmpty{color:var(--faint);font-size:12.5px;padding:16px 14px;font-family:var(--mono)}
+
+/* watch highlighting — yellow container to compare the signature closely */
+.match.watch{background:rgba(245,180,83,.16);border-color:var(--amber);
+  box-shadow:0 0 0 1px var(--amber),0 4px 20px rgba(245,180,83,.28)}
+.match .state.watch,.rrow .tag.watch{background:#4a3a12;color:#ffd98a;border:1px solid var(--amber-dim)}
+.rrow.watch{background:linear-gradient(90deg,rgba(245,180,83,.13),rgba(245,180,83,.03) 70%)}
+
 /* ---------- update button (Electron only) ---------- */
 #updateBtn{position:fixed;right:22px;bottom:22px;z-index:90;width:50px;height:50px;border-radius:50%;
   background:#101d33;border:1.5px solid #2f5f9e;cursor:pointer;padding:0;
@@ -229,7 +275,7 @@ main{max-width:1060px;margin:0 auto;padding:16px 18px 90px}
   html,body{height:auto !important;min-height:0 !important;overflow:visible !important}
   body{background:#fff !important;margin:0;padding:0}
   @page{margin:12mm}
-  header,main,#landing,#modalBg,#toast,#updateBtn{display:none !important}
+  header,main,#landing,#modalBg,#toast,#updateBtn,#rail,#drawer{display:none !important}
   #printSheet{display:block !important;color:#000;font-family:"Segoe UI",Arial,sans-serif;padding:0;font-size:12px}
   #printSheet h1{font-size:16px;letter-spacing:.06em;margin:0 0 2px;font-weight:700}
   #printSheet .meta{font-size:11px;margin-bottom:14px;color:#000}
@@ -294,6 +340,31 @@ main{max-width:1060px;margin:0 auto;padding:16px 18px 90px}
 
   <div id="accordions"></div>
 </main>
+
+<div id="rail">
+  <button class="railBtn" id="railWatch" title="Watchlist — receipts to compare closely">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M2 12s3.5-6.2 10-6.2S22 12 22 12s-3.5 6.2-10 6.2S2 12 2 12z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.7" stroke="currentColor" stroke-width="1.8"/></svg>
+    <span class="cnt"></span>
+  </button>
+</div>
+<div id="drawer">
+  <div class="dHead"><span>WATCHLIST</span><button class="btn small" id="dClose">✕</button></div>
+  <div class="dPanel" id="panelWatch">
+    <div class="wForm">
+      <div class="wFormRow">
+        <input id="wSN" placeholder="serial №" inputmode="numeric" autocomplete="off">
+        <input id="wRoom" placeholder="room №" inputmode="numeric" autocomplete="off">
+      </div>
+      <input id="wName" placeholder="name on the signature" autocomplete="off">
+      <button class="btn amber" id="wAdd">Add to watchlist</button>
+      <div class="wErr" id="wErr"></div>
+    </div>
+    <div class="wAcc open" id="wAcc">
+      <div class="wHead">WATCHED RECEIPTS <b id="wCnt">0</b><span class="chev">▶</span></div>
+      <div class="wBody" id="wBody"></div>
+    </div>
+  </div>
+</div>
 
 <div id="printSheet"></div>
 <div id="modalBg"><div id="modal"></div></div>
@@ -647,13 +718,27 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.1.0";
+const APP_VERSION = "1.2.0";
 const $ = s => document.querySelector(s);
 const el = (tag, cls, txt) => { const e = document.createElement(tag); if(cls) e.className = cls; if(txt !== undefined) e.textContent = txt; return e; };
 
 let MODEL = null;         // parsed model
 let STATE = null;         // per-day check state
 let stateKey = null;
+let WATCH = [];           // persistent watchlist [{sn, room, name}] — survives days & restarts
+
+const WATCH_KEY = "reccheck_watchlist";
+function loadWatch(){
+  try{
+    const raw = localStorage.getItem(WATCH_KEY);
+    const a = raw ? JSON.parse(raw) : [];
+    WATCH = Array.isArray(a) ? a.filter(w => w && w.room) : [];
+  }catch(e){ WATCH = []; }
+}
+function saveWatch(){
+  try{ localStorage.setItem(WATCH_KEY, JSON.stringify(WATCH)); }catch(e){}
+}
+function watchFor(room){ return WATCH.filter(w => String(w.room) === String(room)); }
 
 /* ---------- state ---------- */
 function blankState(date){
@@ -734,6 +819,7 @@ async function loadFile(file){
     }
     MODEL = buildModel(parsed);
     STATE = loadState(MODEL.reportDate);
+    loadWatch();
     renderAll(file.name);
     if(!MODEL.receipts.length){
       const w = $("#parseWarn");
@@ -776,6 +862,8 @@ function renderAll(fname){
   renderSummary();
   $("#searchWrap").style.display = "block";
   renderAccordions();
+  $("#rail").style.display = "flex";
+  renderWatch();
   const inp = $("#snInput");
   inp.value = ""; inp.classList.remove("nomatch");
   setTimeout(() => inp.focus(), 50);
@@ -995,6 +1083,13 @@ function receiptRow(r){
   }
   row.append(split);
 
+  const ws = watchFor(effRoom(r));
+  if(ws.length){
+    row.classList.add("watch");
+    const wt = el("span","tag watch","WATCH");
+    wt.title = ws.map(w => (w.name || "?") + (w.sn ? " · SN " + w.sn : "")).join("  |  ");
+    row.append(wt);
+  }
   if(r.mergedFrom && r.mergedFrom.length > 1)
     row.append(el("span","tag merged","MERGED: " + r.mergedFrom.join("+")));
   if(r.voided){
@@ -1345,6 +1440,13 @@ function matchCard(r){
   c.append(el("span","split", rateSplitStr(r.voided ? r.posRates : effRates(r))));
   c.append(el("span","amt", numToMoney(r.voided ? r.posTotal : effTotal(r))));
 
+  const ws = watchFor(effRoom(r));
+  if(ws.length){
+    c.classList.add("watch");
+    const wt = el("span","state watch","WATCH · " + ws.map(w => w.name || ("SN " + w.sn)).join(" / "));
+    wt.title = "Room " + effRoom(r) + " is on the watchlist — compare the signature closely";
+    c.append(wt);
+  }
   if(r.voided) c.append(el("span","state void","VOID · " + r.paidBy.join("+")));
   if(r.mergedFrom && r.mergedFrom.length > 1)
     c.append(el("span","state corr","MERGED: " + r.mergedFrom.join("+")));
@@ -1399,10 +1501,51 @@ document.addEventListener("keydown", e => {
   }
 });
 
+/* ---------- watchlist ---------- */
+function renderWatch(){
+  const cnt = document.querySelector("#railWatch .cnt");
+  cnt.style.display = WATCH.length ? "" : "none";
+  cnt.textContent = WATCH.length;
+  $("#wCnt").textContent = WATCH.length;
+  const body = $("#wBody");
+  body.innerHTML = "";
+  if(!WATCH.length){
+    body.append(el("div","wEmpty","— empty — note a receipt's serial, room and the signed name to watch for it"));
+    return;
+  }
+  for(const w of WATCH){
+    const row = el("div","wRow");
+    row.title = "Click to search this serial" + (w.name ? " · " + w.name : "");
+    row.append(el("span","room", w.room));
+    row.append(el("span","sn", w.sn || "—"));
+    row.append(el("span","name", w.name || ""));
+    const del = el("button","warnBtn","✕");
+    del.title = "Remove from watchlist";
+    del.onclick = e => { e.stopPropagation(); WATCH = WATCH.filter(x => x !== w); saveWatch(); refresh(); };
+    row.append(del);
+    row.onclick = () => { if(w.sn){ inp().value = w.sn; searchInput(); inp().focus(); } };
+    body.append(row);
+  }
+}
+function addWatch(){
+  const sn = $("#wSN").value.trim(), room = $("#wRoom").value.trim(), name = $("#wName").value.trim();
+  const err = $("#wErr");
+  if(!/^\d+$/.test(room)){ err.textContent = "Room number (digits) is required."; return; }
+  if(sn && !/^\d+$/.test(sn)){ err.textContent = "Serial number must be digits."; return; }
+  if(!sn && !name){ err.textContent = "Add the serial number and/or the signed name."; return; }
+  err.textContent = "";
+  WATCH.push({sn, room, name});
+  saveWatch();
+  $("#wSN").value = ""; $("#wRoom").value = ""; $("#wName").value = "";
+  refresh();
+  $("#wSN").focus();
+}
+
 /* ---------- refresh ---------- */
 function refresh(){
   renderSummary();
   renderAccordions();
+  renderWatch();
   const q = inp().value.trim();
   if(q) searchInput();
 }
@@ -1508,6 +1651,21 @@ document.addEventListener("keydown", e => {
 });
 $("#snInput").addEventListener("input", searchInput);
 $("#notThereBtn").onclick = () => openExtraModal(inp().value.trim());
+
+function setDrawer(open){
+  document.body.classList.toggle("drawerOpen", open);
+  $("#railWatch").classList.toggle("active", open);
+}
+$("#railWatch").onclick = () => setDrawer(!document.body.classList.contains("drawerOpen"));
+$("#dClose").onclick = () => setDrawer(false);
+$("#wAdd").onclick = addWatch;
+for(const id of ["wSN","wRoom","wName"]){
+  $("#" + id).addEventListener("keydown", e => { if(e.key === "Enter"){ addWatch(); e.preventDefault(); } });
+}
+for(const id of ["wSN","wRoom"]){
+  $("#" + id).addEventListener("input", e => { e.target.value = e.target.value.replace(/\D/g,""); });
+}
+document.querySelector("#wAcc .wHead").onclick = () => $("#wAcc").classList.toggle("open");
 
 $("#kebabBtn").onclick = e => { e.stopPropagation(); $("#kebabMenu").classList.toggle("open"); };
 document.addEventListener("click", e => { if(!$("#kebab").contains(e.target)) $("#kebabMenu").classList.remove("open"); });
