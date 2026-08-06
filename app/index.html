@@ -230,7 +230,20 @@ main{transition:margin-right .18s ease}
 @media(min-width:900px){ body.drawerOpen main{margin-right:350px} }
 .dHead{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;flex:0 0 auto;
   border-bottom:1px solid var(--line);font-family:var(--mono);letter-spacing:.14em;color:var(--amber);font-size:13px}
-.dPanel{overflow-y:auto;flex:1}
+.dPanel{display:none}
+.dPanel.active{display:block;overflow-y:auto;flex:1}
+.nHint{font-size:11.5px;color:var(--faint);font-family:var(--mono);min-height:1.2em;margin:-2px 0 6px 2px}
+.nHint b{color:var(--dim);font-weight:400}
+.match .name.nick,.rrow .name.nick{color:#4fd1c5}
+.nWho{font-family:var(--mono);font-size:13px;color:var(--dim);margin:2px 0 8px}
+.nWho b{color:#ffd98a;font-size:15px}
+.nWho span{color:var(--faint);font-size:12px}
+.nBtns{display:flex;gap:8px}
+.nBtns .btn{flex:1}
+.wRow.sel{background:var(--panel2);box-shadow:inset 3px 0 0 var(--amber)}
+.wRow .name .base{color:var(--faint);font-size:11px}
+#nList{border-bottom:1px solid var(--line)}
+.nMore{color:var(--faint);font-size:11.5px;padding:8px 14px;font-family:var(--mono)}
 .wForm{padding:14px;border-bottom:1px solid var(--line)}
 .wForm .wFormRow{display:flex;gap:8px}
 .wForm input{width:100%;background:var(--panel);border:1.5px solid var(--line);border-radius:8px;color:var(--txt);
@@ -346,9 +359,13 @@ main{transition:margin-right .18s ease}
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M2 12s3.5-6.2 10-6.2S22 12 22 12s-3.5 6.2-10 6.2S2 12 2 12z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.7" stroke="currentColor" stroke-width="1.8"/></svg>
     <span class="cnt"></span>
   </button>
+  <button class="railBtn" id="railNick" title="Room nicknames — persistent names for rooms">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3.5 11.5 L11.5 3.5 H17 a3.5 3.5 0 0 1 3.5 3.5 V12.5 L12.5 20.5 a1.6 1.6 0 0 1-2.3 0 L3.5 13.8 a1.6 1.6 0 0 1 0-2.3z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="16" cy="8" r="1.7" stroke="currentColor" stroke-width="1.6"/></svg>
+    <span class="cnt"></span>
+  </button>
 </div>
 <div id="drawer">
-  <div class="dHead"><span>WATCHLIST</span><button class="btn small" id="dClose">✕</button></div>
+  <div class="dHead"><span id="dTitle">WATCHLIST</span><button class="btn small" id="dClose">✕</button></div>
   <div class="dPanel" id="panelWatch">
     <div class="wForm">
       <div class="wFormRow">
@@ -362,6 +379,26 @@ main{transition:margin-right .18s ease}
     <div class="wAcc open" id="wAcc">
       <div class="wHead">WATCHED RECEIPTS <b id="wCnt">0</b><span class="chev">▶</span></div>
       <div class="wBody" id="wBody"></div>
+    </div>
+  </div>
+  <div class="dPanel" id="panelNick">
+    <div class="wForm">
+      <input id="nSearch" placeholder="search room № / guest / nickname…" autocomplete="off">
+      <div class="nHint" id="nHint"></div>
+      <div id="nEdit" style="display:none">
+        <div class="nWho">Room <b id="nEditRoom"></b> <span id="nEditGuest"></span></div>
+        <input id="nNick" placeholder="nickname" autocomplete="off">
+        <div class="nBtns">
+          <button class="btn amber" id="nSave">Save</button>
+          <button class="btn" id="nRemove">Remove</button>
+        </div>
+        <div class="wErr" id="nErr"></div>
+      </div>
+    </div>
+    <div id="nList"></div>
+    <div class="wAcc" id="nAcc">
+      <div class="wHead">NICKNAMED ROOMS <b id="nCnt">0</b><span class="chev">▶</span></div>
+      <div class="wBody" id="nBody"></div>
     </div>
   </div>
 </div>
@@ -718,7 +755,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.2.0";
+const APP_VERSION = "1.3.0";
 const $ = s => document.querySelector(s);
 const el = (tag, cls, txt) => { const e = document.createElement(tag); if(cls) e.className = cls; if(txt !== undefined) e.textContent = txt; return e; };
 
@@ -739,6 +776,40 @@ function saveWatch(){
   try{ localStorage.setItem(WATCH_KEY, JSON.stringify(WATCH)); }catch(e){}
 }
 function watchFor(room){ return WATCH.filter(w => String(w.room) === String(room)); }
+
+let ROOMS = {};           // persistent room database: room -> {guest, nick, seen}
+const ROOMS_KEY = "reccheck_rooms";
+function loadRooms(){
+  try{
+    const o = JSON.parse(localStorage.getItem(ROOMS_KEY) || "{}");
+    ROOMS = (o && typeof o === "object" && !Array.isArray(o)) ? o : {};
+  }catch(e){ ROOMS = {}; }
+}
+function saveRooms(){
+  try{ localStorage.setItem(ROOMS_KEY, JSON.stringify(ROOMS)); }catch(e){}
+}
+/* feed tonight's report into the DB: rooms are the stable keys, guest names the
+   changing part — a changed guest resets that room's nickname */
+function syncRooms(){
+  const dropped = [];
+  const gm = {};
+  for(const r of MODEL.receipts)
+    if(r.roomMain && r.guest && gm[r.roomMain] === undefined) gm[r.roomMain] = r.guest.trim();
+  for(const [room, g] of Object.entries(gm)){
+    const e = ROOMS[room];
+    if(!e){ ROOMS[room] = {guest: g, seen: MODEL.reportDate}; continue; }
+    if(e.guest && e.guest !== g && e.nick){
+      dropped.push(room + " (" + e.nick + ")");
+      delete e.nick;
+    }
+    e.guest = g;
+    e.seen = MODEL.reportDate;
+  }
+  saveRooms();
+  if(dropped.length)
+    setTimeout(() => toast("Nickname reset — new guests in room " + dropped.join(" · "), true), 700);
+}
+function nickFor(room){ const e = ROOMS[String(room)]; return (e && e.nick) ? e.nick : null; }
 
 /* ---------- state ---------- */
 function blankState(date){
@@ -820,6 +891,8 @@ async function loadFile(file){
     MODEL = buildModel(parsed);
     STATE = loadState(MODEL.reportDate);
     loadWatch();
+    loadRooms();
+    syncRooms();
     renderAll(file.name);
     if(!MODEL.receipts.length){
       const w = $("#parseWarn");
@@ -864,6 +937,7 @@ function renderAll(fname){
   renderAccordions();
   $("#rail").style.display = "flex";
   renderWatch();
+  renderNickPanel();
   const inp = $("#snInput");
   inp.value = ""; inp.classList.remove("nomatch");
   setTimeout(() => inp.focus(), 50);
@@ -1068,8 +1142,9 @@ function receiptRow(r){
   }else sn.textContent = r.sn;
   row.append(sn);
 
-  const nm = el("div","name", r.guest || "");
-  nm.title = r.guest || "";
+  const nick = nickFor(effRoom(r));
+  const nm = el("div","name" + (nick ? " nick" : ""), nick || r.guest || "");
+  nm.title = nick ? ((r.guest || "") + " — nicknamed room") : (r.guest || "");
   row.append(nm);
 
   const split = el("div","split");
@@ -1434,8 +1509,9 @@ function matchCard(r){
   c.append(el("span","dept", r.dept));
   c.append(el("span","room", effRoom(r) + (r.roomMain !== r.room && !(rState(r).corr && rState(r).corr.room) ? " ⧉" : "")));
   c.append(el("span","msn", effSN(r)));
-  const nm = el("span","name", r.guest || "");
-  nm.title = r.guest || "";
+  const nick = nickFor(effRoom(r));
+  const nm = el("span","name" + (nick ? " nick" : ""), nick || r.guest || "");
+  nm.title = nick ? ((r.guest || "") + " — nicknamed room") : (r.guest || "");
   c.append(nm);
   c.append(el("span","split", rateSplitStr(r.voided ? r.posRates : effRates(r))));
   c.append(el("span","amt", numToMoney(r.voided ? r.posTotal : effTotal(r))));
@@ -1541,11 +1617,100 @@ function addWatch(){
   $("#wSN").focus();
 }
 
+/* ---------- room nicknames panel ---------- */
+let NSEL = null;          // room selected in the editor
+function nickCount(){ return Object.values(ROOMS).filter(e => e.nick).length; }
+function renderNickEditor(){
+  const ed = $("#nEdit");
+  if(!NSEL){ ed.style.display = "none"; return; }
+  const e = ROOMS[NSEL];
+  ed.style.display = "block";
+  $("#nEditRoom").textContent = NSEL;
+  $("#nEditGuest").textContent = e && e.guest ? "— " + e.guest : "— not seen in a report yet";
+  $("#nNick").value = (e && e.nick) || "";
+  $("#nRemove").style.display = (e && e.nick) ? "" : "none";
+  $("#nErr").textContent = "";
+}
+function nickRow(room, e, showBase){
+  const row = el("div","wRow" + (NSEL === room ? " sel" : ""));
+  row.append(el("span","room", room));
+  const nm = el("span","name");
+  if(e && e.nick){
+    const nk = el("span","", e.nick); nk.style.color = "#4fd1c5"; nm.append(nk);
+    if(showBase && e.guest) nm.append(el("span","base", "  " + e.guest));
+  }else{
+    nm.append(document.createTextNode(e && e.guest ? e.guest : "—"));
+    nm.style.color = "var(--dim)";
+  }
+  nm.title = (e && e.guest) || "";
+  row.append(nm);
+  row.onclick = () => { NSEL = room; renderNickPanel(); setTimeout(() => $("#nNick").focus(), 30); };
+  return row;
+}
+function renderNickPanel(){
+  const cnt = document.querySelector("#railNick .cnt");
+  const n = nickCount();
+  cnt.style.display = n ? "" : "none";
+  cnt.textContent = n;
+  $("#nCnt").textContent = n;
+
+  const q = $("#nSearch").value.trim().toLowerCase();
+  const list = $("#nList");
+  list.innerHTML = "";
+  const rooms = Object.keys(ROOMS).sort((a,b) => (parseInt(a)||0) - (parseInt(b)||0));
+  const hits = rooms.filter(room => {
+    if(!q) return true;
+    const e = ROOMS[room];
+    return room.startsWith(q)
+        || (e.guest && e.guest.toLowerCase().includes(q))
+        || (e.nick && e.nick.toLowerCase().includes(q));
+  });
+  const CAP = 40;
+  for(const room of hits.slice(0, CAP)) list.append(nickRow(room, ROOMS[room], false));
+  if(hits.length > CAP) list.append(el("div","nMore","… " + (hits.length - CAP) + " more — narrow the search"));
+  if(!hits.length){
+    if(/^\d+$/.test(q)){
+      const mk = el("div","wRow");
+      mk.append(el("span","room", q));
+      const t = el("span","name","not in the database yet — click to name it anyway");
+      t.style.color = "var(--faint)";
+      mk.append(t);
+      mk.onclick = () => { if(!ROOMS[q]) ROOMS[q] = {guest: null, seen: null}; NSEL = q; renderNickPanel(); setTimeout(() => $("#nNick").focus(), 30); };
+      list.append(mk);
+    }else{
+      list.append(el("div","wEmpty","no matching room — the database fills from each night's report"));
+    }
+  }
+  const body = $("#nBody");
+  body.innerHTML = "";
+  const nicked = rooms.filter(r => ROOMS[r].nick);
+  if(!nicked.length) body.append(el("div","wEmpty","— none yet —"));
+  for(const room of nicked) body.append(nickRow(room, ROOMS[room], true));
+  renderNickEditor();
+}
+function saveNick(){
+  if(!NSEL) return;
+  const v = $("#nNick").value.trim();
+  if(!v){ $("#nErr").textContent = "Type a nickname (or use Remove)."; return; }
+  if(!ROOMS[NSEL]) ROOMS[NSEL] = {guest: null, seen: null};
+  ROOMS[NSEL].nick = v;
+  saveRooms();
+  toast("Room " + NSEL + " → “" + v + "”");
+  refresh();
+}
+function removeNick(){
+  if(!NSEL || !ROOMS[NSEL]) return;
+  delete ROOMS[NSEL].nick;
+  saveRooms();
+  refresh();
+}
+
 /* ---------- refresh ---------- */
 function refresh(){
   renderSummary();
   renderAccordions();
   renderWatch();
+  renderNickPanel();
   const q = inp().value.trim();
   if(q) searchInput();
 }
@@ -1652,12 +1817,26 @@ document.addEventListener("keydown", e => {
 $("#snInput").addEventListener("input", searchInput);
 $("#notThereBtn").onclick = () => openExtraModal(inp().value.trim());
 
-function setDrawer(open){
-  document.body.classList.toggle("drawerOpen", open);
-  $("#railWatch").classList.toggle("active", open);
+let PANEL = null;
+function openPanel(name){
+  PANEL = name;
+  document.body.classList.add("drawerOpen");
+  $("#dTitle").textContent = name === "watch" ? "WATCHLIST" : "ROOM NICKNAMES";
+  $("#panelWatch").classList.toggle("active", name === "watch");
+  $("#panelNick").classList.toggle("active", name === "nick");
+  $("#railWatch").classList.toggle("active", name === "watch");
+  $("#railNick").classList.toggle("active", name === "nick");
+  if(name === "nick") setTimeout(() => $("#nSearch").focus(), 30);
 }
-$("#railWatch").onclick = () => setDrawer(!document.body.classList.contains("drawerOpen"));
-$("#dClose").onclick = () => setDrawer(false);
+function closeDrawer(){
+  PANEL = null;
+  document.body.classList.remove("drawerOpen");
+  $("#railWatch").classList.remove("active");
+  $("#railNick").classList.remove("active");
+}
+$("#railWatch").onclick = () => (PANEL === "watch" ? closeDrawer() : openPanel("watch"));
+$("#railNick").onclick = () => (PANEL === "nick" ? closeDrawer() : openPanel("nick"));
+$("#dClose").onclick = closeDrawer;
 $("#wAdd").onclick = addWatch;
 for(const id of ["wSN","wRoom","wName"]){
   $("#" + id).addEventListener("keydown", e => { if(e.key === "Enter"){ addWatch(); e.preventDefault(); } });
@@ -1666,6 +1845,11 @@ for(const id of ["wSN","wRoom"]){
   $("#" + id).addEventListener("input", e => { e.target.value = e.target.value.replace(/\D/g,""); });
 }
 document.querySelector("#wAcc .wHead").onclick = () => $("#wAcc").classList.toggle("open");
+document.querySelector("#nAcc .wHead").onclick = () => $("#nAcc").classList.toggle("open");
+$("#nSearch").addEventListener("input", () => { NSEL = null; renderNickPanel(); });
+$("#nSave").onclick = saveNick;
+$("#nRemove").onclick = removeNick;
+$("#nNick").addEventListener("keydown", e => { if(e.key === "Enter"){ saveNick(); e.preventDefault(); } });
 
 $("#kebabBtn").onclick = e => { e.stopPropagation(); $("#kebabMenu").classList.toggle("open"); };
 document.addEventListener("click", e => { if(!$("#kebab").contains(e.target)) $("#kebabMenu").classList.remove("open"); });
