@@ -1,0 +1,31 @@
+name: Publish RecCheck release
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "dist-win64/parts/**"
+      - ".github/workflows/release.yml"
+permissions:
+  contents: write
+env:
+  VERSION: v1.0.0
+  SETUP_SHA256: 03e1f9c71a35377ad3d80c48ef5ae35c0ca0e74a58845f4672fa7c9de5efe772
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble installer from parts
+        run: |
+          cat dist-win64/parts/RecCheck-Setup.exe.* > RecCheck-Setup.exe
+          echo "$SETUP_SHA256  RecCheck-Setup.exe" | sha256sum -c -
+      - name: Publish release with installer asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete "$VERSION" --yes || true
+          git push --delete origin "refs/tags/$VERSION" || true
+          gh release create "$VERSION" RecCheck-Setup.exe \
+            --title "RecCheck 1.0 — Windows" \
+            --notes-file .github/release-notes.md \
+            --latest
