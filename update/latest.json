@@ -1,7 +1,7 @@
 {
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "html",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/app/index.html",
-  "sha256": "efbeb28d5ea326dd07098959789a88c32e36358659640bb881024e4f970f70ea",
-  "notes": "RecCheck 1.0 — public release."
+  "sha256": "6b02e71a44a3304ab51f05ab3c46b3f56f02f01d607cce902e77ff23aa444662",
+  "notes": "Export/Import data: move your saved history (checks, watchlist, room names) between the browser file and the installed app; also works as a backup."
 }
