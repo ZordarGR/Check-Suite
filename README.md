@@ -9,7 +9,7 @@ Everything is parsed locally on your machine — nothing is uploaded anywhere.
 
 ### ⬇ Install (Windows)
 
-**[Download RecCheck-Setup.exe](https://github.com/ZordarGR/Check-Suite/raw/main/dist-win64/RecCheck-Setup.exe)** — then open the downloaded file. That's all: it installs itself in a few seconds (no administrator password needed), puts **RecCheck** on your Desktop and in the Start Menu, and starts the app.
+**[Download RecCheck-Setup.exe](https://github.com/ZordarGR/Check-Suite/releases/latest/download/RecCheck-Setup.exe)** — then open the downloaded file. That's all: it installs itself in a few seconds (no administrator password needed), puts **RecCheck** on your Desktop and in the Start Menu, and starts the app.
 
 > If Windows shows a blue *"Windows protected your PC"* screen the first time, click **More info → Run anyway** — the app is simply unsigned, not harmful.
 
@@ -31,7 +31,7 @@ Per-department receipt lists with per-day check state (OK / missing / correction
 
 ### Repo layout
 
-- `dist-win64/RecCheck-Setup.exe` — the Windows installer
+- `dist-win64/parts/` — the installer, chunked; a GitHub Action assembles it and publishes each release
 - `app/` — application source (`index.html` is the tool itself, plus the Electron shell: `main.js`, `preload.js`, `updater.js`)
 - `update/latest.json` — the auto-update manifest the installed app checks
 - `Departments Check.html` — standalone browser version
