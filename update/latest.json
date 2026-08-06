@@ -1,7 +1,7 @@
 {
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "html",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/app/index.html",
-  "sha256": "6b02e71a44a3304ab51f05ab3c46b3f56f02f01d607cce902e77ff23aa444662",
-  "notes": "Export/Import data: move your saved history (checks, watchlist, room names) between the browser file and the installed app; also works as a backup."
+  "sha256": "6f7fee17bbeb0d41a7daa09b3afc7dd8cdf102e1b5bfc4cf73969c9f1b8ae3ea",
+  "notes": "Watchlist quality-of-life: typing a serial autofills the room and name from the report (nickname preferred), with a hint line; fields stay editable and manual typing is never overwritten; partial serials store the full number."
 }
