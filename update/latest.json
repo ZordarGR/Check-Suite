@@ -1,7 +1,7 @@
 {
-  "version": "1.0.2",
+  "version": "1.1.0",
   "type": "html",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/app/index.html",
-  "sha256": "6f7fee17bbeb0d41a7daa09b3afc7dd8cdf102e1b5bfc4cf73969c9f1b8ae3ea",
-  "notes": "Watchlist quality-of-life: typing a serial autofills the room and name from the report (nickname preferred), with a hint line; fields stay editable and manual typing is never overwritten; partial serials store the full number."
+  "sha256": "27ed529345945a0e227966eb6ed9714b84cdb6b238714d6925ed3790c3b9a439",
+  "notes": "Main menu (Compare / Language EN·GR / Change Directory / Help), full Greek translation, and — with the v1.1 installer — a reports-folder browser with list/tile views and live change detection."
 }

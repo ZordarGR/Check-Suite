@@ -34,7 +34,8 @@ body{min-height:100vh;background:
 /* ---------- header ---------- */
 header{position:sticky;top:0;z-index:80;background:rgba(10,14,20,.92);backdrop-filter:blur(6px);
   border-bottom:1px solid var(--line);padding:10px 18px;display:flex;align-items:center;gap:14px}
-header h1{font-size:16px;letter-spacing:.18em;font-weight:600;color:var(--amber);font-family:var(--mono);white-space:nowrap}
+header h1{font-size:16px;letter-spacing:.18em;font-weight:600;color:var(--amber);font-family:var(--mono);white-space:nowrap;cursor:pointer}
+#reportMeta.clickable{cursor:pointer}
 header h1 span{color:var(--dim);font-weight:400}
 #reportMeta{font-family:var(--mono);font-size:12.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #reportMeta b{color:var(--txt);font-weight:600}
@@ -54,8 +55,40 @@ header .spacer{flex:1}
 .kebab-menu button:hover{background:var(--panel2)}
 .kebab-menu button.danger{color:var(--red)}
 
-/* ---------- landing ---------- */
-#landing{max-width:640px;margin:9vh auto;padding:0 20px;text-align:center}
+/* ---------- landing: menu + files ---------- */
+#landing{max-width:900px;margin:7vh auto;padding:0 20px;text-align:center}
+#homeLogo{cursor:pointer}
+#menuScreen{margin-top:34px}
+.mNav{display:flex;flex-direction:column;gap:10px;max-width:430px;margin:0 auto}
+.mItem{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;background:var(--panel);
+  border:1px solid var(--line);border-radius:14px;padding:15px 20px;cursor:pointer;color:var(--txt);
+  transition:border-color .15s, background .15s, transform .12s}
+.mItem:hover{border-color:var(--amber);background:var(--panel2);transform:translateX(4px)}
+.mItem .mLabel{font-family:var(--mono);letter-spacing:.16em;font-size:15px;font-weight:600}
+.mItem .mSub{font-size:12px;color:var(--faint);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mItem.primary{border-color:var(--amber-dim)}
+.mItem.primary .mLabel{color:var(--amber)}
+#filesScreen{text-align:left;margin-top:26px}
+#fbHead{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+#fbDir{font-family:var(--mono);font-size:12px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:1}
+.vbtn.active{border-color:var(--amber);color:var(--amber)}
+#fbList.list{display:flex;flex-direction:column;gap:6px}
+#fbList.list .fbItem{display:flex;align-items:center;gap:12px;padding:10px 14px}
+#fbList.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(172px,1fr));gap:10px}
+#fbList.tiles .fbItem{display:flex;flex-direction:column;align-items:center;gap:8px;padding:20px 12px;text-align:center}
+.fbItem{background:var(--panel);border:1px solid var(--line);border-radius:12px;cursor:pointer;transition:border-color .12s, background .12s}
+.fbItem:hover{border-color:var(--amber);background:var(--panel2)}
+.fbItem.open{border-color:var(--amber-dim);background:#1a2438}
+.fbIcon{font-size:20px;color:var(--amber)}
+#fbList.tiles .fbIcon{font-size:34px}
+.fbMeta{min-width:0}
+.fbName{font-family:var(--mono);font-size:13.5px;color:var(--txt);word-break:break-all}
+.fbSub{font-size:11.5px;color:var(--faint);font-family:var(--mono);margin-top:2px}
+#fbEmpty{color:var(--faint);font-family:var(--mono);font-size:12.5px;padding:30px;text-align:center;border:1.5px dashed var(--line);border-radius:12px}
+#staleChip{display:none;background:#4a3a12;border:1px solid var(--amber-dim);color:var(--amber);border-radius:999px;
+  padding:3px 10px;font-size:11.5px;font-family:var(--mono);cursor:pointer;white-space:nowrap}
+/* ---------- landing (legacy bits) ---------- */
+#unused-landing-old{max-width:640px;margin:9vh auto;padding:0 20px;text-align:center}
 #landing .logo{font-family:var(--mono);font-size:34px;letter-spacing:.22em;color:var(--amber);margin-bottom:6px}
 #landing .logo span{color:var(--faint)}
 #landing p.sub{color:var(--dim);margin-bottom:34px;font-size:14px}
@@ -65,7 +98,7 @@ header .spacer{flex:1}
 #drop .big{font-size:17px;margin-bottom:8px}
 #drop .hint{color:var(--faint);font-size:13px;font-family:var(--mono)}
 #landing .err{color:var(--red);margin-top:18px;font-size:13.5px;min-height:1.2em}
-#landData{margin-top:22px}
+#landData{margin-top:30px}
 #landData .hint2{color:var(--faint);font-size:11.5px;margin-top:8px;font-family:var(--mono)}
 
 /* ---------- summary strip ---------- */
@@ -312,8 +345,9 @@ main{transition:margin-right .18s ease}
 <body>
 
 <header>
-  <h1>REC<span>·</span>CHECK</h1>
+  <h1 id="hdrLogo">REC<span>·</span>CHECK</h1>
   <div id="reportMeta"></div>
+  <button id="staleChip"></button>
   <div class="spacer"></div>
   <button class="btn small" id="printBtn" style="display:none">🖨 Διορθώσεις</button>
   <button class="btn small" id="openAnother" style="display:none">Open file…</button>
@@ -330,20 +364,42 @@ main{transition:margin-right .18s ease}
 </header>
 
 <div id="landing">
-  <div class="logo">REC<span>·</span>CHECK</div>
-  <p class="sub">Nightly POS receipt audit — protel checkcharge1 (.oxps) · <span id="appVer"></span></p>
-  <div id="drop">
-    <div class="big">Drop the checkcharge report here, or click to browse</div>
-    <div class="hint">.oxps / .xps — parsed locally, nothing leaves this machine</div>
+  <div class="logo" id="homeLogo" title="">REC<span>·</span>CHECK</div>
+  <p class="sub"><span id="subTag"></span> · <span id="appVer"></span></p>
+
+  <div id="menuScreen">
+    <div class="mNav">
+      <button class="mItem primary" id="mCompare"><span class="mLabel"></span><span class="mSub"></span></button>
+      <button class="mItem" id="mLang"><span class="mLabel"></span><span class="mSub"></span></button>
+      <button class="mItem" id="mDir"><span class="mLabel"></span><span class="mSub" id="mDirSub"></span></button>
+      <button class="mItem" id="mHelp"><span class="mLabel"></span><span class="mSub"></span></button>
+    </div>
+    <div id="landData">
+      <button class="btn small" id="landExport"></button>
+      <button class="btn small" id="landImport"></button>
+      <div class="hint2" id="landDataHint"></div>
+    </div>
   </div>
+
+  <div id="filesScreen" style="display:none">
+    <div id="fbHead">
+      <button class="btn small" id="fbBack"></button>
+      <span id="fbDir" title=""></span>
+      <div class="spacer"></div>
+      <button class="btn small vbtn" id="fbViewList">≡</button>
+      <button class="btn small vbtn" id="fbViewTiles">▦</button>
+    </div>
+    <div id="fbList" class="list"></div>
+    <div id="fbEmpty" style="display:none"></div>
+    <div id="drop" style="display:none">
+      <div class="big" id="dropBig"></div>
+      <div class="hint">.oxps / .xps — parsed locally, nothing leaves this machine</div>
+    </div>
+  </div>
+
   <input type="file" id="fileInput" accept=".oxps,.xps" style="display:none">
   <input type="file" id="importFile" accept=".json,application/json" style="display:none">
   <div class="err" id="landErr"></div>
-  <div id="landData">
-    <button class="btn small" id="landExport">⇅ Export data</button>
-    <button class="btn small" id="landImport">Import data…</button>
-    <div class="hint2">moves your saved history (checks · watchlist · room names) between the browser file and the installed app</div>
-  </div>
 </div>
 
 <main>
@@ -388,7 +444,7 @@ main{transition:margin-right .18s ease}
       <div class="wErr" id="wErr"></div>
     </div>
     <div class="wAcc open" id="wAcc">
-      <div class="wHead">WATCHED RECEIPTS <b id="wCnt">0</b><span class="chev">▶</span></div>
+      <div class="wHead"><span id="wHeadLbl">WATCHED RECEIPTS</span> <b id="wCnt">0</b><span class="chev">▶</span></div>
       <div class="wBody" id="wBody"></div>
     </div>
   </div>
@@ -408,7 +464,7 @@ main{transition:margin-right .18s ease}
     </div>
     <div id="nList"></div>
     <div class="wAcc" id="nAcc">
-      <div class="wHead">NICKNAMED ROOMS <b id="nCnt">0</b><span class="chev">▶</span></div>
+      <div class="wHead"><span id="nHeadLbl">NICKNAMED ROOMS</span> <b id="nCnt">0</b><span class="chev">▶</span></div>
       <div class="wBody" id="nBody"></div>
     </div>
   </div>
@@ -766,8 +822,216 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.0.2";
+const APP_VERSION = "1.1.0";
 const $ = s => document.querySelector(s);
+const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
+
+/* ================= i18n ================= */
+let LANG = (function(){ try{ return localStorage.getItem("reccheck_lang") || "en"; }catch(e){ return "en"; } })();
+const T = {
+en: {
+  subTag: "Nightly POS receipt audit — protel checkcharge1 (.oxps)",
+  "menu.compare": "COMPARE", "menu.compareSub": "open tonight's reports and check the receipts",
+  "menu.lang": "LANGUAGE — ENGLISH", "menu.langSub": "αλλαγή σε ΕΛΛΗΝΙΚΑ",
+  "menu.dir": "CHANGE DIRECTORY", "menu.dirNone": "no reports folder chosen yet",
+  "menu.help": "HELP", "menu.helpSub": "opens the support page (GitHub)",
+  "menu.title": "Menu",
+  "land.export": "⇅ Export data", "land.import": "Import data…",
+  "land.dataHint": "moves your saved history (checks · watchlist · room names) between the browser file and the installed app",
+  "fb.back": "← Menu", "fb.empty": "no report files in this folder yet — new .oxps pulls appear here automatically",
+  "fb.today": "today", "fb.viewList": "List view", "fb.viewTiles": "Tile view",
+  "drop.big": "Drop the checkcharge report here, or click to browse",
+  "meta.night": "checkcharge · night of ", "meta.older": "  ⚠ older report",
+  "chip.stale": "⟳ newer on disk", "chip.staleTitle": "The open report changed on disk — click to load the live version",
+  "live.title": "REPORT CHANGED ON DISK",
+  "live.body": "{name} was modified ({when}) — probably a fresh pull from protel. Load the live version, or keep working with the one you have open? Your checks are saved per business day either way.",
+  "live.keep": "Keep the cached one", "live.load": "Load the live version",
+  "hdr.files": "Files", "hdr.open": "Open file…",
+  "ok.parse": "✓ parse verified — every department sum matches the report's own totals ({n} sections)",
+  "note.parse": "ⓘ report-total difference (usually the cash/card side, checked by hand): ",
+  "warn.noreceipts": "⚠ checkcharge recognized, but no receipts found in the target departments for this night.",
+  "err.wrongreport": "Wrong report — this is not checkcharge1 (ΕΛΕΓΧΟΣ ΤΜΗΜΑΤΩΝ BY ROOM).",
+  "sum.grand": "Receipts to check — grand total", "sum.checked": " checked", "sum.flagged": " flagged", "sum.rec": " rec.",
+  "search.ph": "serial number…", "search.notThere": "Receipt isn't there?",
+  "search.hint": "Type a receipt SN · exact or last ≥3 digits · Enter confirms a single match",
+  "search.many": " matches — pick one with its checkbox", "search.reversed": "REVERSED at the POS — nothing to check",
+  "search.void": "VOID — consolidated by {by}, not counted",
+  "room.ph": "room…", "room.hint": "room № · Enter = OK · ↑↓ rows · ←→ OK/⚠ · Esc",
+  "acc.extra": " + {n} extra", "acc.void": " · {n} void",
+  "acc.other": "▸ {n} folio posting(s) excluded — ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ / CREDIT CARDS — informational",
+  "tag.ok": "OK", "tag.missing": "MISSING", "tag.corr": "CORRECTED — verify", "tag.corr2": "CORRECTED",
+  "tag.cancelled": "REVERSED 0,00", "tag.extra": "NOT IN REPORT", "tag.void": "VOID", "tag.merged": "MERGED: ",
+  "tag.watch": "WATCH", "tag.open": "OPEN",
+  "open.title": "No ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ close-out posting in the report — this department had not closed when the report was pulled and may still add receipts. Re-pull the report after it closes.",
+  "watch.compare": "Room {room} is on the watchlist — compare the signature closely",
+  "menu1": "1</span> Receipt is on the list but I have <b>not received it</b>",
+  "menu2": "2</span> The receipt\u2019s <b>serial number is wrong</b> — enter correction",
+  "menu3": "3</span> Receipt is correct but the <b>room number is wrong</b> — enter correct room",
+  "menuClear": "↺</span> Clear flag / reset this receipt to unchecked",
+  "menuVerified": "✓</span> Correction verified — mark as passing",
+  "toast.missing": "Marked MISSING — ", "toast.passing": " passing",
+  "corr.title": "WRONG SERIAL", "corr.room": "room", "corr.was": "was",
+  "corr.sn": "Correct serial number", "corr.v24": "Value 24% (or base)", "corr.v13": "Value 13%",
+  "corr.errSn": "Serial number must be digits.", "corr.errVal": "Values must be numbers like 12,50.",
+  "corr.cancel": "Cancel", "corr.save": "Save correction",
+  "corr.toast": "Correction saved — old values in red until verified",
+  "roomM.title": "WRONG ROOM", "roomM.label": "Correct room number", "roomM.err": "Room number is required.",
+  "roomM.toast": "Room correction saved — verify to mark passing",
+  "extra.title": "RECEIPT NOT IN REPORT", "extra.sn": "Serial number", "extra.v24": "Value 24%", "extra.v13": "Value 13%",
+  "extra.room": "Room number", "extra.dept": "Department (optional)", "extra.unassigned": "— unassigned —",
+  "extra.add": "Add as discrepancy", "extra.toast": "Added as NOT IN REPORT — ",
+  "kebab.expand": "Expand all departments", "kebab.collapse": "Collapse all departments",
+  "kebab.export": "Export data (backup)…", "kebab.import": "Import data…", "kebab.reset": "Reset checks for this day…",
+  "reset.title": "RESET DAY", "reset.body": "Clear <b>all</b> checks, flags, corrections and manual entries for",
+  "reset.cancel": "Cancel", "reset.go": "Reset everything", "reset.toast": "Day reset — all zeroes",
+  "drawer.watch": "WATCHLIST", "drawer.nick": "ROOM NICKNAMES",
+  "w.sn": "serial №", "w.room": "room №", "w.name": "name on the signature", "w.add": "Add to watchlist",
+  "w.head": "WATCHED RECEIPTS", "w.empty": "— empty — note a receipt's serial, room and the signed name to watch for it",
+  "w.remove": "Remove from watchlist", "w.rowTitle": "Click to search this serial",
+  "w.errRoom": "Room number (digits) is required.", "w.errSn": "Serial number must be digits.",
+  "w.errNeed": "Add the serial number and/or the signed name.",
+  "n.search": "search room № / guest / nickname…", "n.nick": "nickname", "n.save": "Save", "n.remove": "Remove",
+  "n.head": "NICKNAMED ROOMS", "n.none": "— none yet —", "n.room": "Room",
+  "n.notSeen": "— not seen in a report yet", "n.more": "… {n} more — narrow the search",
+  "n.create": "not in the database yet — click to name it anyway",
+  "n.noMatch": "no matching room — the database fills from each night's report",
+  "n.errEmpty": "Type a nickname (or use Remove).", "n.reset": "Nickname reset — new guests in room ",
+  "n.nickedTitle": " — nicknamed room",
+  "upd.ready": "Update v{v} downloaded — click to install and restart",
+  "upd.full": "Version {v} needs a full reinstall — click to open the download page",
+  "exp.none": "Nothing to export yet", "exp.done": "Exported {n} saved item(s)",
+  "imp.done": "✓ Imported {n} saved item(s)", "imp.loadhint": " — they will appear when you load a report",
+  "imp.fail": "✗ Import failed: ", "imp.notours": "this is not a RecCheck data file", "imp.nodata": "the file contained no usable data", "imp.noread": "✗ Could not read the file"
+},
+gr: {
+  subTag: "Νυχτερινός έλεγχος αποδείξεων POS — protel checkcharge1 (.oxps)",
+  "menu.compare": "ΣΥΓΚΡΙΣΗ", "menu.compareSub": "άνοιγμα των αναφορών της βραδιάς και έλεγχος αποδείξεων",
+  "menu.lang": "ΓΛΩΣΣΑ — ΕΛΛΗΝΙΚΑ", "menu.langSub": "switch to ENGLISH",
+  "menu.dir": "ΑΛΛΑΓΗ ΦΑΚΕΛΟΥ", "menu.dirNone": "δεν έχει οριστεί φάκελος αναφορών",
+  "menu.help": "ΒΟΗΘΕΙΑ", "menu.helpSub": "ανοίγει τη σελίδα υποστήριξης (GitHub)",
+  "menu.title": "Μενού",
+  "land.export": "⇅ Εξαγωγή δεδομένων", "land.import": "Εισαγωγή δεδομένων…",
+  "land.dataHint": "μεταφέρει το ιστορικό σας (έλεγχοι · λίστα παρακολούθησης · ονόματα δωματίων) μεταξύ του αρχείου browser και της εφαρμογής",
+  "fb.back": "← Μενού", "fb.empty": "δεν υπάρχουν αναφορές στον φάκελο — τα νέα .oxps εμφανίζονται εδώ αυτόματα",
+  "fb.today": "σήμερα", "fb.viewList": "Προβολή λίστας", "fb.viewTiles": "Προβολή πλακιδίων",
+  "drop.big": "Σύρετε εδώ την αναφορά checkcharge, ή κάντε κλικ για αναζήτηση",
+  "meta.night": "checkcharge · βραδιά ", "meta.older": "  ⚠ παλαιότερη αναφορά",
+  "chip.stale": "⟳ νεότερη στον δίσκο", "chip.staleTitle": "Η ανοιχτή αναφορά άλλαξε στον δίσκο — κλικ για φόρτωση της νέας έκδοσης",
+  "live.title": "Η ΑΝΑΦΟΡΑ ΑΛΛΑΞΕ ΣΤΟΝ ΔΙΣΚΟ",
+  "live.body": "Το {name} τροποποιήθηκε ({when}) — πιθανότατα νέο τράβηγμα από το protel. Να φορτωθεί η νέα έκδοση, ή να συνεχίσετε με αυτήν που έχετε ανοιχτή; Οι έλεγχοί σας αποθηκεύονται ανά ημέρα έτσι κι αλλιώς.",
+  "live.keep": "Συνέχεια με την τρέχουσα", "live.load": "Φόρτωση της νέας",
+  "hdr.files": "Αρχεία", "hdr.open": "Άνοιγμα αρχείου…",
+  "ok.parse": "✓ επαλήθευση ανάγνωσης — όλα τα αθροίσματα τμημάτων συμφωνούν με την αναφορά ({n} ενότητες)",
+  "note.parse": "ⓘ διαφορά από τα σύνολα της αναφοράς (συνήθως μετρητά/κάρτες — ελέγχονται χειροκίνητα): ",
+  "warn.noreceipts": "⚠ αναγνωρίστηκε checkcharge, αλλά δεν βρέθηκαν αποδείξεις στα τμήματα για τη βραδιά.",
+  "err.wrongreport": "Λάθος αναφορά — δεν είναι checkcharge1 (ΕΛΕΓΧΟΣ ΤΜΗΜΑΤΩΝ BY ROOM).",
+  "sum.grand": "Αποδείξεις για έλεγχο — γενικό σύνολο", "sum.checked": " ελεγμένες", "sum.flagged": " σημειωμένες", "sum.rec": " αποδ.",
+  "search.ph": "σειριακός αριθμός…", "search.notThere": "Δεν υπάρχει η απόδειξη;",
+  "search.hint": "Πληκτρολογήστε Σ.Ν. · ακριβής ή τελευταία ≥3 ψηφία · Enter επιβεβαιώνει μοναδικό ταίριασμα",
+  "search.many": " ταιριάσματα — επιλέξτε ένα με το κουτάκι του", "search.reversed": "ΑΚΥΡΩΜΕΝΗ στο POS — δεν χρειάζεται έλεγχο",
+  "search.void": "ΑΚΥΡΗ — ενοποιήθηκε από {by}, δεν μετράει",
+  "room.ph": "δωμ…", "room.hint": "№ δωματίου · Enter = OK · ↑↓ γραμμές · ←→ OK/⚠ · Esc",
+  "acc.extra": " + {n} επιπλέον", "acc.void": " · {n} άκυρες",
+  "acc.other": "▸ {n} καταχωρήσεις folio εκτός — ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ / CREDIT CARDS — ενημερωτικά",
+  "tag.ok": "OK", "tag.missing": "ΛΕΙΠΕΙ", "tag.corr": "ΔΙΟΡΘΩΘΗΚΕ — επιβεβαίωση", "tag.corr2": "ΔΙΟΡΘΩΘΗΚΕ",
+  "tag.cancelled": "ΑΚΥΡΩΜΕΝΗ 0,00", "tag.extra": "ΕΚΤΟΣ ΑΝΑΦΟΡΑΣ", "tag.void": "ΑΚΥΡΗ", "tag.merged": "ΣΥΓΧΩΝΕΥΣΗ: ",
+  "tag.watch": "ΠΡΟΣΟΧΗ", "tag.open": "ΑΝΟΙΧΤΟ",
+  "open.title": "Δεν υπάρχει καταχώρηση ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ στην αναφορά — το τμήμα δεν είχε κλείσει όταν τραβήχτηκε η αναφορά και μπορεί να προσθέσει κι άλλες αποδείξεις. Ξανατραβήξτε την αναφορά όταν κλείσει.",
+  "watch.compare": "Το δωμάτιο {room} είναι στη λίστα παρακολούθησης — συγκρίνετε προσεκτικά την υπογραφή",
+  "menu1": "1</span> Η απόδειξη είναι στη λίστα αλλά <b>δεν την παρέλαβα</b>",
+  "menu2": "2</span> Ο <b>σειριακός αριθμός είναι λάθος</b> — καταχώρηση διόρθωσης",
+  "menu3": "3</span> Η απόδειξη είναι σωστή αλλά το <b>δωμάτιο είναι λάθος</b> — σωστό δωμάτιο",
+  "menuClear": "↺</span> Καθαρισμός σήμανσης / επαναφορά σε ανέλεγκτη",
+  "menuVerified": "✓</span> Η διόρθωση επιβεβαιώθηκε — σήμανση ως σωστή",
+  "toast.missing": "Σημειώθηκε ΛΕΙΠΕΙ — ", "toast.passing": " εντάξει",
+  "corr.title": "ΛΑΘΟΣ ΣΕΙΡΙΑΚΟΣ", "corr.room": "δωμ.", "corr.was": "ήταν",
+  "corr.sn": "Σωστός σειριακός αριθμός", "corr.v24": "Αξία 24% (ή βασικό)", "corr.v13": "Αξία 13%",
+  "corr.errSn": "Ο σειριακός πρέπει να είναι ψηφία.", "corr.errVal": "Οι αξίες πρέπει να είναι αριθμοί π.χ. 12,50.",
+  "corr.cancel": "Άκυρο", "corr.save": "Αποθήκευση διόρθωσης",
+  "corr.toast": "Η διόρθωση αποθηκεύτηκε — οι παλιές τιμές με κόκκινο μέχρι την επιβεβαίωση",
+  "roomM.title": "ΛΑΘΟΣ ΔΩΜΑΤΙΟ", "roomM.label": "Σωστός αριθμός δωματίου", "roomM.err": "Ο αριθμός δωματίου είναι υποχρεωτικός.",
+  "roomM.toast": "Η διόρθωση δωματίου αποθηκεύτηκε — επιβεβαιώστε για να περάσει",
+  "extra.title": "ΑΠΟΔΕΙΞΗ ΕΚΤΟΣ ΑΝΑΦΟΡΑΣ", "extra.sn": "Σειριακός αριθμός", "extra.v24": "Αξία 24%", "extra.v13": "Αξία 13%",
+  "extra.room": "Αριθμός δωματίου", "extra.dept": "Τμήμα (προαιρετικό)", "extra.unassigned": "— αταξινόμητο —",
+  "extra.add": "Καταχώρηση διαφοράς", "extra.toast": "Καταχωρήθηκε ΕΚΤΟΣ ΑΝΑΦΟΡΑΣ — ",
+  "kebab.expand": "Άνοιγμα όλων των τμημάτων", "kebab.collapse": "Κλείσιμο όλων των τμημάτων",
+  "kebab.export": "Εξαγωγή δεδομένων (backup)…", "kebab.import": "Εισαγωγή δεδομένων…", "kebab.reset": "Μηδενισμός ελέγχων ημέρας…",
+  "reset.title": "ΜΗΔΕΝΙΣΜΟΣ ΗΜΕΡΑΣ", "reset.body": "Διαγραφή <b>όλων</b> των ελέγχων, σημάνσεων, διορθώσεων και χειροκίνητων καταχωρήσεων για",
+  "reset.cancel": "Άκυρο", "reset.go": "Μηδενισμός όλων", "reset.toast": "Η ημέρα μηδενίστηκε",
+  "drawer.watch": "ΛΙΣΤΑ ΠΑΡΑΚΟΛΟΥΘΗΣΗΣ", "drawer.nick": "ΨΕΥΔΩΝΥΜΑ ΔΩΜΑΤΙΩΝ",
+  "w.sn": "σειριακός №", "w.room": "δωμάτιο №", "w.name": "όνομα στην υπογραφή", "w.add": "Προσθήκη στη λίστα",
+  "w.head": "ΥΠΟ ΠΑΡΑΚΟΛΟΥΘΗΣΗ", "w.empty": "— κενή — σημειώστε σειριακό, δωμάτιο και το όνομα της υπογραφής για παρακολούθηση",
+  "w.remove": "Αφαίρεση από τη λίστα", "w.rowTitle": "Κλικ για αναζήτηση του σειριακού",
+  "w.errRoom": "Ο αριθμός δωματίου (ψηφία) είναι υποχρεωτικός.", "w.errSn": "Ο σειριακός πρέπει να είναι ψηφία.",
+  "w.errNeed": "Συμπληρώστε σειριακό ή/και το όνομα της υπογραφής.",
+  "n.search": "αναζήτηση δωματίου / ονόματος / ψευδωνύμου…", "n.nick": "ψευδώνυμο", "n.save": "Αποθήκευση", "n.remove": "Αφαίρεση",
+  "n.head": "ΔΩΜΑΤΙΑ ΜΕ ΨΕΥΔΩΝΥΜΟ", "n.none": "— κανένα ακόμη —", "n.room": "Δωμάτιο",
+  "n.notSeen": "— δεν έχει εμφανιστεί σε αναφορά ακόμη", "n.more": "… {n} ακόμη — περιορίστε την αναζήτηση",
+  "n.create": "δεν είναι στη βάση ακόμη — κλικ για ονομασία", 
+  "n.noMatch": "κανένα δωμάτιο — η βάση γεμίζει από την αναφορά κάθε βραδιάς",
+  "n.errEmpty": "Γράψτε ένα ψευδώνυμο (ή πατήστε Αφαίρεση).", "n.reset": "Ψευδώνυμο μηδενίστηκε — νέοι επισκέπτες στο δωμάτιο ",
+  "n.nickedTitle": " — δωμάτιο με ψευδώνυμο",
+  "upd.ready": "Η ενημέρωση v{v} κατέβηκε — κλικ για εγκατάσταση και επανεκκίνηση",
+  "upd.full": "Η έκδοση {v} χρειάζεται πλήρη επανεγκατάσταση — κλικ για τη σελίδα λήψης",
+  "exp.none": "Δεν υπάρχει τίποτα για εξαγωγή ακόμη", "exp.done": "Εξήχθησαν {n} στοιχεία",
+  "imp.done": "✓ Εισήχθησαν {n} στοιχεία", "imp.loadhint": " — θα εμφανιστούν όταν φορτώσετε αναφορά",
+  "imp.fail": "✗ Η εισαγωγή απέτυχε: ", "imp.notours": "δεν είναι αρχείο δεδομένων RecCheck", "imp.nodata": "το αρχείο δεν είχε αξιοποιήσιμα δεδομένα", "imp.noread": "✗ Δεν ήταν δυνατή η ανάγνωση του αρχείου"
+}
+};
+function t(key, vars){
+  let str = (T[LANG] && T[LANG][key] !== undefined) ? T[LANG][key] : (T.en[key] !== undefined ? T.en[key] : key);
+  if(vars) for(const k of Object.keys(vars)) str = str.split("{" + k + "}").join(String(vars[k]));
+  return str;
+}
+function setLang(l){
+  LANG = l;
+  try{ localStorage.setItem("reccheck_lang", l); }catch(e){}
+  applyLang();
+  const cur = SCREEN;
+  if(MODEL) renderAll(LASTFNAME || "");   // re-render app strings (forces app screen)
+  showScreen(cur);                        // …then return to wherever we were
+}
+function applyLang(){
+  $("#subTag").textContent = t("subTag");
+  $("#homeLogo").title = t("menu.title");
+  const mi = (id, l, sub) => { const b = $(id); b.querySelector(".mLabel").textContent = t(l); if(sub !== null) b.querySelector(".mSub").textContent = t(sub); };
+  mi("#mCompare", "menu.compare", "menu.compareSub");
+  mi("#mLang", "menu.lang", "menu.langSub");
+  mi("#mDir", "menu.dir", null);
+  mi("#mHelp", "menu.help", "menu.helpSub");
+  paintDirSub();
+  $("#landExport").textContent = t("land.export");
+  $("#landImport").textContent = t("land.import");
+  $("#landDataHint").textContent = t("land.dataHint");
+  $("#fbBack").textContent = t("fb.back");
+  $("#fbEmpty").textContent = t("fb.empty");
+  $("#fbViewList").title = t("fb.viewList");
+  $("#fbViewTiles").title = t("fb.viewTiles");
+  $("#dropBig").textContent = t("drop.big");
+  $("#snInput").placeholder = t("search.ph");
+  $("#notThereBtn").textContent = t("search.notThere");
+  $("#searchHint").textContent = t("search.hint");
+  $("#staleChip").textContent = t("chip.stale");
+  $("#staleChip").title = t("chip.staleTitle");
+  $("#openAnother").textContent = (window.reccheckFiles && FB.dir) ? t("hdr.files") : t("hdr.open");
+  $("#expandAll").textContent = t("kebab.expand");
+  $("#collapseAll").textContent = t("kebab.collapse");
+  $("#exportData").textContent = t("kebab.export");
+  $("#importData").textContent = t("kebab.import");
+  $("#resetDay").textContent = t("kebab.reset");
+  $("#wSN").placeholder = t("w.sn");
+  $("#wRoom").placeholder = t("w.room");
+  $("#wName").placeholder = t("w.name");
+  $("#wAdd").textContent = t("w.add");
+  $("#wHeadLbl").textContent = t("w.head");
+  $("#nSearch").placeholder = t("n.search");
+  $("#nNick").placeholder = t("n.nick");
+  $("#nSave").textContent = t("n.save");
+  $("#nRemove").textContent = t("n.remove");
+  $("#nHeadLbl").textContent = t("n.head");
+  if(document.body.classList.contains("drawerOpen"))
+    $("#dTitle").textContent = PANEL === "nick" ? t("drawer.nick") : t("drawer.watch");
+}
 const el = (tag, cls, txt) => { const e = document.createElement(tag); if(cls) e.className = cls; if(txt !== undefined) e.textContent = txt; return e; };
 
 let MODEL = null;         // parsed model
@@ -818,7 +1082,7 @@ function syncRooms(){
   }
   saveRooms();
   if(dropped.length)
-    setTimeout(() => toast("Nickname reset — new guests in room " + dropped.join(" · "), true), 700);
+    setTimeout(() => toast(t("n.reset") + dropped.join(" · "), true), 700);
 }
 function nickFor(room){ const e = ROOMS[String(room)]; return (e && e.nick) ? e.nick : null; }
 
@@ -888,15 +1152,128 @@ function toastReceipt(r){
   t._h = setTimeout(() => t.className = "", 3400);
 }
 
+/* ---------- screens + reports-folder browser ---------- */
+let SCREEN = "menu";
+let LASTFNAME = "";
+const FB = {dir: null, view: (function(){ try{ return localStorage.getItem("reccheck_fbview") || "list"; }catch(e){ return "list"; } })(), open: null, stale: false};
+
+function showScreen(which){
+  SCREEN = which;
+  const mainEl = document.querySelector("main");
+  if(which === "app"){
+    $("#landing").style.display = "none";
+    mainEl.style.display = "";
+    return;
+  }
+  $("#landing").style.display = "";
+  mainEl.style.display = "none";
+  $("#menuScreen").style.display = which === "menu" ? "" : "none";
+  $("#filesScreen").style.display = which === "files" ? "" : "none";
+  if(which === "files") fbRefresh();
+  window.scrollTo(0, 0);
+}
+function paintDirSub(){
+  const el2 = $("#mDirSub");
+  if(!window.reccheckFiles){ $("#mDir").style.display = "none"; return; }
+  el2.textContent = FB.dir || t("menu.dirNone");
+}
+function escapeHtml(x){ const d = document.createElement("div"); d.textContent = x; return d.innerHTML; }
+function fmtWhen(ms){
+  const d = new Date(ms), now = new Date();
+  const hm = pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+  if(d.toDateString() === now.toDateString()) return t("fb.today") + " " + hm;
+  return pad2(d.getDate()) + "/" + pad2(d.getMonth() + 1) + "/" + d.getFullYear() + " " + hm;
+}
+function fmtSize(b){ return b > 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB"; }
+
+function fbPaintChrome(){
+  const hasHub = !!window.reccheckFiles;
+  $("#fbDir").style.display = hasHub ? "" : "none";
+  $("#fbViewList").style.display = hasHub ? "" : "none";
+  $("#fbViewTiles").style.display = hasHub ? "" : "none";
+  $("#fbList").style.display = hasHub ? "" : "none";
+  $("#drop").style.display = hasHub ? "none" : "";
+  if(!hasHub){ $("#fbEmpty").style.display = "none"; return; }
+  $("#fbDir").textContent = FB.dir || "";
+  $("#fbDir").title = FB.dir || "";
+  $("#fbViewList").classList.toggle("active", FB.view === "list");
+  $("#fbViewTiles").classList.toggle("active", FB.view === "tiles");
+  $("#fbList").className = FB.view;
+}
+async function fbRefresh(){
+  fbPaintChrome();
+  if(!window.reccheckFiles || !FB.dir) return;
+  let res;
+  try{ res = await window.reccheckFiles.list(); }catch(e){ return; }
+  if(res.dir !== FB.dir){ FB.dir = res.dir; paintDirSub(); fbPaintChrome(); }
+  const box = $("#fbList");
+  box.innerHTML = "";
+  $("#fbEmpty").style.display = res.files.length ? "none" : "";
+  for(const f of res.files){
+    const it = el("div", "fbItem" + (FB.open && FB.open.path === f.path ? " open" : ""));
+    it.append(el("div", "fbIcon", "▤"));
+    const meta = el("div", "fbMeta");
+    meta.append(el("div", "fbName", f.name));
+    meta.append(el("div", "fbSub", fmtWhen(f.mtimeMs) + " · " + fmtSize(f.size)));
+    it.append(meta);
+    it.onclick = () => fbOpen(f);
+    box.append(it);
+  }
+  checkOpenChanged(res.files);
+}
+async function fbOpen(f){
+  try{
+    const raw = await window.reccheckFiles.read(f.path);
+    const u8 = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
+    const buf = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
+    FB.open = {path: f.path, name: f.name, mtimeMs: f.mtimeMs};
+    FB.stale = false;
+    paintStaleChip();
+    await loadReport(buf, f.name);
+  }catch(err){
+    toast("✗ " + (err.message || err), true);
+  }
+}
+function paintStaleChip(){ $("#staleChip").style.display = (FB.stale && MODEL) ? "inline-block" : "none"; }
+function checkOpenChanged(files){
+  if(!FB.open) return;
+  const cur = files.find(x => x.path === FB.open.path);
+  if(!cur || cur.mtimeMs <= FB.open.mtimeMs + 500) return;
+  FB.open.mtimeMs = cur.mtimeMs;          // one prompt per change
+  FB.stale = true;
+  paintStaleChip();
+  if(SCREEN !== "app") return;            // browsing — the list refresh is enough
+  showLivePrompt(cur);
+}
+function showLivePrompt(cur){
+  openModal(`
+    <h3>${t("live.title")}</h3>
+    <div style="font-size:14px;line-height:1.65">${t("live.body", {name: "<b style=\"font-family:var(--mono)\">" + escapeHtml(FB.open.name) + "</b>", when: escapeHtml(fmtWhen(cur.mtimeMs))})}</div>
+    <div class="actions">
+      <button class="btn" id="chKeep">${t("live.keep")}</button>
+      <button class="btn amber" id="chLive">${t("live.load")}</button>
+    </div>`);
+  $("#chKeep").onclick = () => { closeModal(); paintStaleChip(); };
+  $("#chLive").onclick = () => { closeModal(); fbOpen(cur); };
+}
+async function fbPickDir(){
+  if(!window.reccheckFiles) return;
+  const dir = await window.reccheckFiles.pickDir();
+  if(dir){ FB.dir = dir; paintDirSub(); if(SCREEN === "files") fbRefresh(); }
+}
+
 /* ---------- file load ---------- */
 async function loadFile(file){
+  const buf = await file.arrayBuffer();
+  return loadReport(buf, file.name);
+}
+async function loadReport(buf, fname){
   $("#landErr").textContent = "";
   try{
-    const buf = await file.arrayBuffer();
     const xmls = await unzipFpages(buf);
     const parsed = parseReport(xmls);
     if(!isCheckcharge(parsed)){
-      throw new Error("Wrong report — this is not checkcharge1 (ΕΛΕΓΧΟΣ ΤΜΗΜΑΤΩΝ BY ROOM)." +
+      throw new Error(t("err.wrongreport") +
         (parsed.reportId ? " The file identifies as: \u201C" + parsed.reportId + "\u201D." : " No protel report id found in it."));
     }
     MODEL = buildModel(parsed);
@@ -904,11 +1281,11 @@ async function loadFile(file){
     loadWatch();
     loadRooms();
     syncRooms();
-    renderAll(file.name);
+    renderAll(fname);
     if(!MODEL.receipts.length){
       const w = $("#parseWarn");
       w.style.display = "block";
-      w.textContent = "⚠ checkcharge recognized, but no receipts found in the target departments for this night.";
+      w.textContent = t("warn.noreceipts");
     }
   }catch(err){
     const msg = "✗ " + (err.message || err);
@@ -919,13 +1296,17 @@ async function loadFile(file){
 
 /* ---------- render ---------- */
 function renderAll(fname){
-  $("#landing").style.display = "none";
+  LASTFNAME = fname;
+  showScreen("app");
+  $("#reportMeta").classList.add("clickable");
+  $("#hdrLogo").title = t("menu.title");
   $("#openAnother").style.display = "";
+  $("#openAnother").textContent = (window.reccheckFiles && FB.dir) ? t("hdr.files") : t("hdr.open");
   $("#printBtn").style.display = "";
   $("#kebab").style.display = "";
   $("#reportMeta").innerHTML = "";
   const meta = $("#reportMeta");
-  meta.append("checkcharge · night of ");
+  meta.append(t("meta.night"));
   const b = el("b","", MODEL.reportDate); meta.append(b);
   const dm = MODEL.reportDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if(dm){
@@ -935,7 +1316,7 @@ function renderAll(fname){
     const today = new Date();
     const yest = new Date(); yest.setDate(yest.getDate() - 1);
     if(!sameDay(today) && !sameDay(yest)){
-      const w = el("span","", "  ⚠ older report");
+      const w = el("span","", t("meta.older"));
       w.style.color = "var(--amber)";
       meta.append(w);
     }
@@ -964,12 +1345,12 @@ function renderValidation(){
     // hand outside this tool — a small difference there is informational only
     ok.style.display = "none";
     note.style.display = "block";
-    note.textContent = "ⓘ report-total difference (usually the cash/card side, checked by hand): " +
+    note.textContent = t("note.parse") +
       bad.map(v => `${v.section} ${numToMoney(v.parsed)} vs ${numToMoney(v.reported)} (Δ ${numToMoney(Math.round((v.reported - v.parsed)*100)/100)})`).join("  ·  ");
   }else{
     note.style.display = "none";
     ok.style.display = "block";
-    ok.textContent = "✓ parse verified — every department sum matches the report's own totals (" + target.length + " sections)";
+    ok.textContent = t("ok.parse", {n: target.length});
   }
 }
 
@@ -991,13 +1372,13 @@ function renderSummary(){
   const stCls = (dn, n) => (n && dn === n) ? " done" : (dn > 0 ? " part" : "");
 
   const g = el("div","card grand" + stCls(done, list.length));
-  const gl = el("div","lbl","Receipts to check — grand total");
+  const gl = el("div","lbl", t("sum.grand"));
   if(list.length && done === list.length) gl.append(el("span","tick","✓"));
   g.append(gl);
   g.append(el("div","val", numToMoney(Math.round(grand*100)/100)));
   const gs = el("div","sub");
   gs.append(el("b","", String(done)));
-  gs.append(` / ${list.length} checked` + (flags ? ` · ${flags} flagged` : ""));
+  gs.append(` / ${list.length}` + t("sum.checked") + (flags ? ` · ${flags}` + t("sum.flagged") : ""));
   g.append(gs);
   s.append(g);
 
@@ -1010,7 +1391,7 @@ function renderSummary(){
     const cl = el("div","lbl", b);
     if(dl.length && dn === dl.length) cl.append(el("span","tick","✓"));
     if(MODEL.depts[b].stillOpen){
-      const op = el("span","openPill","OPEN");
+      const op = el("span","openPill", t("tag.open"));
       op.title = "No ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ close-out posting in the report — this department had not closed when the report was pulled and may still add receipts. Re-pull the report after it closes.";
       cl.append(op);
     }
@@ -1020,7 +1401,7 @@ function renderSummary(){
     cs.append(el("b","", String(dn)));
     cs.append(` / ${dl.length} · `);
     cs.append(el("b","", String(dl.length)));
-    cs.append(" rec.");
+    cs.append(t("sum.rec"));
     c.append(cs);
     s.append(c);
   }
@@ -1028,12 +1409,12 @@ function renderSummary(){
 
 function tagFor(status){
   switch(status){
-    case "ok": return ["ok","OK"];
-    case "missing": return ["missing","MISSING"];
-    case "corrected": return ["corr","CORRECTED — verify"];
-    case "cancelled": return ["cancelled","REVERSED 0,00"];
-    case "void": return ["void","VOID"];
-    case "extra": return ["extra","NOT IN REPORT"];
+    case "ok": return ["ok", t("tag.ok")];
+    case "missing": return ["missing", t("tag.missing")];
+    case "corrected": return ["corr", t("tag.corr")];
+    case "cancelled": return ["cancelled", t("tag.cancelled")];
+    case "void": return ["void", t("tag.void")];
+    case "extra": return ["extra", t("tag.extra")];
     default: return null;
   }
 }
@@ -1072,15 +1453,15 @@ function buildAcc(name, list, extras, other, open, isExtraAcc){
   if(dyn === " done") nm.append(el("span","tick","✓"));
   const DD = MODEL.depts[name];
   if(DD && DD.stillOpen){
-    const op = el("span","openPill","OPEN");
-    op.title = "No ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ close-out posting in the report — this department had not closed when the report was pulled and may still add receipts. Re-pull the report after it closes.";
+    const op = el("span","openPill", t("tag.open"));
+    op.title = t("open.title");
     nm.append(op);
   }
   head.append(nm);
   const cnt = el("div","cnt");
   const voidCnt = list.filter(r => r.voided).length;
   cnt.append(el("b","", String(checkable.length)));
-  cnt.append(" rec." + (voidCnt ? ` · ${voidCnt} void` : "") + (extras.length ? ` + ${extras.length} extra` : ""));
+  cnt.append(t("sum.rec") + (voidCnt ? t("acc.void", {n: voidCnt}) : "") + (extras.length ? t("acc.extra", {n: extras.length}) : ""));
   head.append(cnt);
   const prog = el("div","prog");
   const pb = el("b","", String(done)); prog.append(pb); prog.append(` / ${checkable.length}`);
@@ -1094,13 +1475,13 @@ function buildAcc(name, list, extras, other, open, isExtraAcc){
   if(!isExtraAcc && checkable.length){
     const sw = el("div","roomSearchWrap");
     const rs = document.createElement("input");
-    rs.className = "roomSearch"; rs.placeholder = "room…";
+    rs.className = "roomSearch"; rs.placeholder = t("room.ph");
     rs.autocomplete = "off"; rs.inputMode = "numeric";
     rs.dataset.dept = name;
     rs.value = ROOMF[name] || "";
     rs.oninput = () => { rs.value = rs.value.replace(/\D/g,""); ROOMF[name] = rs.value; applyRoomFilter(acc, name); };
     rs.onkeydown = e => roomSearchKeys(e, acc, name, rs);
-    sw.append(rs, el("span","rsHint","room № · Enter = OK · ↑↓ rows · ←→ OK/⚠ · Esc"));
+    sw.append(rs, el("span","rsHint", t("room.hint")));
     body.append(sw);
   }
   for(const r of list){
@@ -1112,7 +1493,7 @@ function buildAcc(name, list, extras, other, open, isExtraAcc){
     const det = document.createElement("details");
     det.className = "otherPost";
     const sm = document.createElement("summary");
-    sm.textContent = `▸ ${other.length} folio posting(s) excluded — ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ / CREDIT CARDS — informational`;
+    sm.textContent = t("acc.other", {n: other.length});
     det.append(sm);
     for(const o of other){
       const rr = el("div","rrow");
@@ -1155,7 +1536,7 @@ function receiptRow(r){
 
   const nick = nickFor(effRoom(r));
   const nm = el("div","name" + (nick ? " nick" : ""), nick || r.guest || "");
-  nm.title = nick ? ((r.guest || "") + " — nicknamed room") : (r.guest || "");
+  nm.title = nick ? ((r.guest || "") + t("n.nickedTitle")) : (r.guest || "");
   row.append(nm);
 
   const split = el("div","split");
@@ -1172,14 +1553,14 @@ function receiptRow(r){
   const ws = watchFor(effRoom(r));
   if(ws.length){
     row.classList.add("watch");
-    const wt = el("span","tag watch","WATCH");
+    const wt = el("span","tag watch", t("tag.watch"));
     wt.title = ws.map(w => (w.name || "?") + (w.sn ? " · SN " + w.sn : "")).join("  |  ");
     row.append(wt);
   }
   if(r.mergedFrom && r.mergedFrom.length > 1)
-    row.append(el("span","tag merged","MERGED: " + r.mergedFrom.join("+")));
+    row.append(el("span","tag merged", t("tag.merged") + r.mergedFrom.join("+")));
   if(r.voided){
-    row.append(el("span","tag void","VOID · " + r.paidBy.join("+")));
+    row.append(el("span","tag void", t("tag.void") + " · " + r.paidBy.join("+")));
   }else{
     const t = tagFor(status);
     if(t) row.append(Object.assign(el("span","tag " + t[0], t[1])));
@@ -1337,30 +1718,30 @@ function openRowMenu(anchor, r){
   const st = rState(r);
 
   const b1 = el("button");
-  b1.innerHTML = '<span class="k">1</span> Receipt is on the list but I have <b>not received it</b>';
-  b1.onclick = () => { setRState(r, {status: "missing", corr: st.corr || null}); closeMenu(); refresh(); toast("Marked MISSING — " + r.dept + " " + r.sn, true); };
+  b1.innerHTML = '<span class="k">' + t("menu1");
+  b1.onclick = () => { setRState(r, {status: "missing", corr: st.corr || null}); closeMenu(); refresh(); toast(t("toast.missing") + r.dept + " " + r.sn, true); };
   m.append(b1);
 
   const b2 = el("button");
-  b2.innerHTML = '<span class="k">2</span> The receipt\'s <b>serial number is wrong</b> — enter correction';
+  b2.innerHTML = '<span class="k">' + t("menu2");
   b2.onclick = () => { closeMenu(); openCorrectionModal(r); };
   m.append(b2);
 
   const b2b = el("button");
-  b2b.innerHTML = '<span class="k">3</span> Receipt is correct but the <b>room number is wrong</b> — enter correct room';
+  b2b.innerHTML = '<span class="k">' + t("menu3");
   b2b.onclick = () => { closeMenu(); openRoomModal(r); };
   m.append(b2b);
 
   if(st.status !== "pending" || st.corr){
     const b3 = el("button");
-    b3.innerHTML = '<span class="k">↺</span> Clear flag / reset this receipt to unchecked';
+    b3.innerHTML = '<span class="k">' + t("menuClear");
     b3.onclick = () => { delete STATE.receipts[rKey(r)]; saveState(); closeMenu(); refresh(); };
     m.append(b3);
   }
   if(st.status === "corrected"){
     const b4 = el("button");
-    b4.innerHTML = '<span class="k">✓</span> Correction verified — mark as passing';
-    b4.onclick = () => { setRState(r, {status: "ok", corr: st.corr}); closeMenu(); refresh(); toast("✓ " + r.dept + " " + effSN(r) + " passing"); };
+    b4.innerHTML = '<span class="k">' + t("menuVerified");
+    b4.onclick = () => { setRState(r, {status: "ok", corr: st.corr}); closeMenu(); refresh(); toast("✓ " + r.dept + " " + effSN(r) + t("toast.passing")); };
     m.append(b4);
   }
   document.body.append(m);
@@ -1386,52 +1767,52 @@ function readMoney(s){
 
 function openCorrectionModal(r){
   openModal(`
-    <h3>WRONG SERIAL — ${r.dept} · room ${r.roomMain} · was ${r.sn}</h3>
-    <label>Correct serial number</label>
+    <h3>${t("corr.title")} — ${r.dept} · ${t("corr.room")} ${r.roomMain} · ${t("corr.was")} ${r.sn}</h3>
+    <label>${t("corr.sn")}</label>
     <input id="cSN" inputmode="numeric" autocomplete="off">
     <div class="mrow">
-      <div><label>Value 24% (or base)</label><input id="cV24" inputmode="decimal" value="${moneyField(r.rates["24%"] ?? r.rates["base"])}"></div>
-      <div><label>Value 13%</label><input id="cV13" inputmode="decimal" value="${moneyField(r.rates["13%"])}"></div>
+      <div><label>${t("corr.v24")}</label><input id="cV24" inputmode="decimal" value="${moneyField(r.rates["24%"] ?? r.rates["base"])}"></div>
+      <div><label>${t("corr.v13")}</label><input id="cV13" inputmode="decimal" value="${moneyField(r.rates["13%"])}"></div>
     </div>
     <div class="err" id="cErr"></div>
     <div class="actions">
-      <button class="btn" id="cCancel">Cancel</button>
-      <button class="btn amber" id="cSave">Save correction</button>
+      <button class="btn" id="cCancel">${t("corr.cancel")}</button>
+      <button class="btn amber" id="cSave">${t("corr.save")}</button>
     </div>`);
   $("#cCancel").onclick = closeModal;
   $("#cSave").onclick = () => {
     const sn = $("#cSN").value.trim();
     const v24 = readMoney($("#cV24").value), v13 = readMoney($("#cV13").value);
-    if(!/^\d+$/.test(sn)){ $("#cErr").textContent = "Serial number must be digits."; return; }
-    if(v24 === null || v13 === null){ $("#cErr").textContent = "Values must be numbers like 12,50."; return; }
+    if(!/^\d+$/.test(sn)){ $("#cErr").textContent = t("corr.errSn"); return; }
+    if(v24 === null || v13 === null){ $("#cErr").textContent = t("corr.errVal"); return; }
     const cur = rState(r);
     const corr = Object.assign({}, cur.corr || {}, {sn, v24, v13});
     setRState(r, {status: "corrected", corr});
     closeModal(); refresh();
-    toast("Correction saved — old values in red until verified");
+    toast(t("corr.toast"));
   };
   setTimeout(() => $("#cSN").focus(), 40);
 }
 
 function openRoomModal(r){
   openModal(`
-    <h3>WRONG ROOM — ${r.dept} · SN ${effSN(r)} · was room ${r.roomMain}</h3>
-    <label>Correct room number</label>
+    <h3>${t("roomM.title")} — ${r.dept} · SN ${effSN(r)} · ${t("corr.was")} ${r.roomMain}</h3>
+    <label>${t("roomM.label")}</label>
     <input id="cRoom" inputmode="numeric" autocomplete="off">
     <div class="err" id="cErr"></div>
     <div class="actions">
-      <button class="btn" id="cCancel">Cancel</button>
-      <button class="btn amber" id="cSave">Save correction</button>
+      <button class="btn" id="cCancel">${t("corr.cancel")}</button>
+      <button class="btn amber" id="cSave">${t("corr.save")}</button>
     </div>`);
   $("#cCancel").onclick = closeModal;
   $("#cSave").onclick = () => {
     const room = $("#cRoom").value.trim();
-    if(!room){ $("#cErr").textContent = "Room number is required."; return; }
+    if(!room){ $("#cErr").textContent = t("roomM.err"); return; }
     const cur = rState(r);
     const corr = Object.assign({}, cur.corr || {}, {room});
     setRState(r, {status: "corrected", corr});
     closeModal(); refresh();
-    toast("Room correction saved — verify to mark passing");
+    toast(t("roomM.toast"));
   };
   setTimeout(() => $("#cRoom").focus(), 40);
 }
@@ -1439,34 +1820,34 @@ function openRoomModal(r){
 function openExtraModal(prefillSN){
   const opts = TARGET_DEPTS.map(d => `<option>${d}</option>`).join("");
   openModal(`
-    <h3>RECEIPT NOT IN REPORT</h3>
-    <label>Serial number</label>
+    <h3>${t("extra.title")}</h3>
+    <label>${t("extra.sn")}</label>
     <input id="xSN" inputmode="numeric" autocomplete="off" value="${prefillSN || ""}">
     <div class="mrow">
-      <div><label>Value 24%</label><input id="xV24" inputmode="decimal"></div>
-      <div><label>Value 13%</label><input id="xV13" inputmode="decimal"></div>
+      <div><label>${t("extra.v24")}</label><input id="xV24" inputmode="decimal"></div>
+      <div><label>${t("extra.v13")}</label><input id="xV13" inputmode="decimal"></div>
     </div>
-    <label>Room number</label>
+    <label>${t("extra.room")}</label>
     <input id="xRoom" inputmode="numeric" autocomplete="off">
-    <label>Department (optional)</label>
-    <select id="xDept"><option value="">— unassigned —</option>${opts}</select>
+    <label>${t("extra.dept")}</label>
+    <select id="xDept"><option value="">${t("extra.unassigned")}</option>${opts}</select>
     <div class="err" id="xErr"></div>
     <div class="actions">
-      <button class="btn" id="xCancel">Cancel</button>
-      <button class="btn amber" id="xSave">Add as discrepancy</button>
+      <button class="btn" id="xCancel">${t("corr.cancel")}</button>
+      <button class="btn amber" id="xSave">${t("extra.add")}</button>
     </div>`);
   $("#xCancel").onclick = closeModal;
   $("#xSave").onclick = () => {
     const sn = $("#xSN").value.trim();
     const v24 = readMoney($("#xV24").value), v13 = readMoney($("#xV13").value);
     const room = $("#xRoom").value.trim();
-    if(!/^\d+$/.test(sn)){ $("#xErr").textContent = "Serial number must be digits."; return; }
-    if(v24 === null || v13 === null){ $("#xErr").textContent = "Values must be numbers like 12,50."; return; }
-    if(!room){ $("#xErr").textContent = "Room number is required."; return; }
+    if(!/^\d+$/.test(sn)){ $("#xErr").textContent = t("corr.errSn"); return; }
+    if(v24 === null || v13 === null){ $("#xErr").textContent = t("corr.errVal"); return; }
+    if(!room){ $("#xErr").textContent = t("roomM.err"); return; }
     STATE.extras.push({sn, v24, v13, room, dept: $("#xDept").value || "UNASSIGNED"});
     saveState(); closeModal(); refresh();
     $("#snInput").value = ""; searchInput();
-    toast("Added as NOT IN REPORT — " + sn, true);
+    toast(t("extra.toast") + sn, true);
   };
   setTimeout(() => ($("#xSN").value ? $("#xV24") : $("#xSN")).focus(), 40);
 }
@@ -1522,7 +1903,7 @@ function matchCard(r){
   c.append(el("span","msn", effSN(r)));
   const nick = nickFor(effRoom(r));
   const nm = el("span","name" + (nick ? " nick" : ""), nick || r.guest || "");
-  nm.title = nick ? ((r.guest || "") + " — nicknamed room") : (r.guest || "");
+  nm.title = nick ? ((r.guest || "") + t("n.nickedTitle")) : (r.guest || "");
   c.append(nm);
   c.append(el("span","split", rateSplitStr(r.voided ? r.posRates : effRates(r))));
   c.append(el("span","amt", numToMoney(r.voided ? r.posTotal : effTotal(r))));
@@ -1530,19 +1911,19 @@ function matchCard(r){
   const ws = watchFor(effRoom(r));
   if(ws.length){
     c.classList.add("watch");
-    const wt = el("span","state watch","WATCH · " + ws.map(w => w.name || ("SN " + w.sn)).join(" / "));
-    wt.title = "Room " + effRoom(r) + " is on the watchlist — compare the signature closely";
+    const wt = el("span","state watch", t("tag.watch") + " · " + ws.map(w => w.name || ("SN " + w.sn)).join(" / "));
+    wt.title = t("watch.compare", {room: effRoom(r)});
     c.append(wt);
   }
-  if(r.voided) c.append(el("span","state void","VOID · " + r.paidBy.join("+")));
+  if(r.voided) c.append(el("span","state void", t("tag.void") + " · " + r.paidBy.join("+")));
   if(r.mergedFrom && r.mergedFrom.length > 1)
-    c.append(el("span","state corr","MERGED: " + r.mergedFrom.join("+")));
+    c.append(el("span","state corr", t("tag.merged") + r.mergedFrom.join("+")));
   const status = statusOf(r);
   if(status !== "pending" && status !== "corrected" && status !== "void"){
     const t = tagFor(status);
     c.append(el("span","state " + t[0], t[1]));
   }
-  if(status === "corrected") c.append(el("span","state corr","CORRECTED"));
+  if(status === "corrected") c.append(el("span","state corr", t("tag.corr2")));
 
   if(!r.cancelled && !r.voided){
     const wb = el("button","warnBtn","⚠");
@@ -1579,11 +1960,11 @@ document.addEventListener("keydown", e => {
   if(e.key === "Enter" && document.activeElement === inp()){
     if(currentMatches.length === 1){
       const mr = currentMatches[0].r;
-      if(mr.cancelled){ toast("REVERSED at the POS — nothing to check", true); return; }
-      if(mr.voided){ toast("VOID — consolidated by " + mr.paidBy.join("+") + ", not counted", true); return; }
+      if(mr.cancelled){ toast(t("search.reversed"), true); return; }
+      if(mr.voided){ toast(t("search.void", {by: mr.paidBy.join("+")}), true); return; }
       confirmReceipt(mr, true);
     }else if(currentMatches.length > 1){
-      toast(currentMatches.length + " matches — pick one with its checkbox", true);
+      toast(currentMatches.length + t("search.many"), true);
     }
   }
 });
@@ -1597,17 +1978,17 @@ function renderWatch(){
   const body = $("#wBody");
   body.innerHTML = "";
   if(!WATCH.length){
-    body.append(el("div","wEmpty","— empty — note a receipt's serial, room and the signed name to watch for it"));
+    body.append(el("div","wEmpty", t("w.empty")));
     return;
   }
   for(const w of WATCH){
     const row = el("div","wRow");
-    row.title = "Click to search this serial" + (w.name ? " · " + w.name : "");
+    row.title = t("w.rowTitle") + (w.name ? " · " + w.name : "");
     row.append(el("span","room", w.room));
     row.append(el("span","sn", w.sn || "—"));
     row.append(el("span","name", w.name || ""));
     const del = el("button","warnBtn","✕");
-    del.title = "Remove from watchlist";
+    del.title = t("w.remove");
     del.onclick = e => { e.stopPropagation(); WATCH = WATCH.filter(x => x !== w); saveWatch(); refresh(); };
     row.append(del);
     row.onclick = () => { if(w.sn){ inp().value = w.sn; searchInput(); inp().focus(); } };
@@ -1644,9 +2025,9 @@ function watchAutofill(){
 function addWatch(){
   const sn = $("#wSN").value.trim(), room = $("#wRoom").value.trim(), name = $("#wName").value.trim();
   const err = $("#wErr");
-  if(!/^\d+$/.test(room)){ err.textContent = "Room number (digits) is required."; return; }
-  if(sn && !/^\d+$/.test(sn)){ err.textContent = "Serial number must be digits."; return; }
-  if(!sn && !name){ err.textContent = "Add the serial number and/or the signed name."; return; }
+  if(!/^\d+$/.test(room)){ err.textContent = t("w.errRoom"); return; }
+  if(sn && !/^\d+$/.test(sn)){ err.textContent = t("w.errSn"); return; }
+  if(!sn && !name){ err.textContent = t("w.errNeed"); return; }
   err.textContent = "";
   let snFinal = sn;
   if(sn && MODEL){
@@ -1673,7 +2054,8 @@ function renderNickEditor(){
   const e = ROOMS[NSEL];
   ed.style.display = "block";
   $("#nEditRoom").textContent = NSEL;
-  $("#nEditGuest").textContent = e && e.guest ? "— " + e.guest : "— not seen in a report yet";
+  document.querySelector("#nEdit .nWho").childNodes[0].textContent = t("n.room") + " ";
+  $("#nEditGuest").textContent = e && e.guest ? "— " + e.guest : t("n.notSeen");
   $("#nNick").value = (e && e.nick) || "";
   $("#nRemove").style.display = (e && e.nick) ? "" : "none";
   $("#nErr").textContent = "";
@@ -1714,35 +2096,35 @@ function renderNickPanel(){
   });
   const CAP = 40;
   for(const room of hits.slice(0, CAP)) list.append(nickRow(room, ROOMS[room], false));
-  if(hits.length > CAP) list.append(el("div","nMore","… " + (hits.length - CAP) + " more — narrow the search"));
+  if(hits.length > CAP) list.append(el("div","nMore", t("n.more", {n: hits.length - CAP})));
   if(!hits.length){
     if(/^\d+$/.test(q)){
       const mk = el("div","wRow");
       mk.append(el("span","room", q));
-      const t = el("span","name","not in the database yet — click to name it anyway");
-      t.style.color = "var(--faint)";
-      mk.append(t);
+      const tt = el("span","name", t("n.create"));
+      tt.style.color = "var(--faint)";
+      mk.append(tt);
       mk.onclick = () => { if(!ROOMS[q]) ROOMS[q] = {guest: null, seen: null}; NSEL = q; renderNickPanel(); setTimeout(() => $("#nNick").focus(), 30); };
       list.append(mk);
     }else{
-      list.append(el("div","wEmpty","no matching room — the database fills from each night's report"));
+      list.append(el("div","wEmpty", t("n.noMatch")));
     }
   }
   const body = $("#nBody");
   body.innerHTML = "";
   const nicked = rooms.filter(r => ROOMS[r].nick);
-  if(!nicked.length) body.append(el("div","wEmpty","— none yet —"));
+  if(!nicked.length) body.append(el("div","wEmpty", t("n.none")));
   for(const room of nicked) body.append(nickRow(room, ROOMS[room], true));
   renderNickEditor();
 }
 function saveNick(){
   if(!NSEL) return;
   const v = $("#nNick").value.trim();
-  if(!v){ $("#nErr").textContent = "Type a nickname (or use Remove)."; return; }
+  if(!v){ $("#nErr").textContent = t("n.errEmpty"); return; }
   if(!ROOMS[NSEL]) ROOMS[NSEL] = {guest: null, seen: null};
   ROOMS[NSEL].nick = v;
   saveRooms();
-  toast("Room " + NSEL + " → “" + v + "”");
+  toast(t("n.room") + " " + NSEL + " → “" + v + "”");
   refresh();
 }
 function removeNick(){
@@ -1760,7 +2142,7 @@ function exportData(){
     if(k && k.indexOf("reccheck") === 0) out.data[k] = localStorage.getItem(k);
   }
   const n = Object.keys(out.data).length;
-  if(!n){ toast("Nothing to export yet", true); return; }
+  if(!n){ toast(t("exp.none"), true); return; }
   const blob = new Blob([JSON.stringify(out, null, 1)], {type: "application/json"});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
@@ -1768,7 +2150,7 @@ function exportData(){
   a.download = "reccheck-data-" + d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) + ".json";
   document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  toast("Exported " + n + " saved item(s)");
+  toast(t("exp.done", {n}));
 }
 function importData(file){
   const rd = new FileReader();
@@ -1776,7 +2158,7 @@ function importData(file){
     try{
       const j = JSON.parse(rd.result);
       const data = (j && j.app === "reccheck" && j.data && typeof j.data === "object" && !Array.isArray(j.data)) ? j.data : null;
-      if(!data) throw new Error("this is not a RecCheck data file");
+      if(!data) throw new Error(t("imp.notours"));
       let n = 0;
       for(const k of Object.keys(data)){
         const v = data[k];
@@ -1784,19 +2166,19 @@ function importData(file){
         try{ JSON.parse(v); }catch(e){ continue; }        // only well-formed entries
         localStorage.setItem(k, v); n++;
       }
-      if(!n) throw new Error("the file contained no usable data");
+      if(!n) throw new Error(t("imp.nodata"));
       loadWatch(); loadRooms();
       if(MODEL){
         STATE = loadState(MODEL.reportDate);
         syncRooms();
         refresh();
       }
-      toast("✓ Imported " + n + " saved item(s)" + (MODEL ? "" : " — they will appear when you load a report"));
+      toast(t("imp.done", {n}) + (MODEL ? "" : t("imp.loadhint")));
     }catch(err){
-      toast("✗ Import failed: " + (err.message || err), true);
+      toast(t("imp.fail") + (err.message || err), true);
     }
   };
-  rd.onerror = () => toast("✗ Could not read the file", true);
+  rd.onerror = () => toast(t("imp.noread"), true);
   rd.readAsText(file);
 }
 
@@ -1888,7 +2270,41 @@ function buildPrintSheet(force){
 
 /* ---------- wiring ---------- */
 $("#drop").onclick = () => $("#fileInput").click();
-$("#openAnother").onclick = () => $("#fileInput").click();
+$("#openAnother").onclick = () => {
+  if(window.reccheckFiles && FB.dir) showScreen("files");
+  else $("#fileInput").click();
+};
+$("#homeLogo").onclick = () => showScreen("menu");
+$("#hdrLogo").onclick = () => showScreen("menu");
+$("#reportMeta").onclick = () => { if(MODEL && SCREEN !== "app") showScreen("app"); };
+$("#mCompare").onclick = async () => {
+  if(!window.reccheckFiles){ showScreen("files"); return; }
+  if(!FB.dir) await fbPickDir();
+  if(FB.dir) showScreen("files");
+};
+$("#mLang").onclick = () => setLang(LANG === "en" ? "gr" : "en");
+$("#mDir").onclick = fbPickDir;
+$("#mHelp").onclick = () => {
+  if(window.reccheckHelp) window.reccheckHelp.open();
+  else window.open(ISSUES_URL, "_blank");
+};
+$("#fbBack").onclick = () => showScreen("menu");
+$("#fbViewList").onclick = () => { FB.view = "list"; try{ localStorage.setItem("reccheck_fbview","list"); }catch(e){} fbPaintChrome(); };
+$("#fbViewTiles").onclick = () => { FB.view = "tiles"; try{ localStorage.setItem("reccheck_fbview","tiles"); }catch(e){} fbPaintChrome(); };
+$("#staleChip").onclick = async () => {
+  if(!window.reccheckFiles || !FB.open) return;
+  try{
+    const res = await window.reccheckFiles.list();
+    const cur = res.files.find(x => x.path === FB.open.path);
+    if(cur) fbOpen(cur); 
+  }catch(e){}
+};
+if(window.reccheckFiles){
+  window.reccheckFiles.onDirEvent(() => {
+    if(SCREEN === "files") fbRefresh();
+    else if(FB.open) window.reccheckFiles.list().then(res => checkOpenChanged(res.files)).catch(() => {});
+  });
+}
 $("#fileInput").onchange = e => { if(e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ""; };
 $("#drop").ondragover = e => { e.preventDefault(); $("#drop").classList.add("over"); };
 $("#drop").ondragleave = () => $("#drop").classList.remove("over");
@@ -1916,7 +2332,7 @@ let PANEL = null;
 function openPanel(name){
   PANEL = name;
   document.body.classList.add("drawerOpen");
-  $("#dTitle").textContent = name === "watch" ? "WATCHLIST" : "ROOM NICKNAMES";
+  $("#dTitle").textContent = name === "watch" ? t("drawer.watch") : t("drawer.nick");
   $("#panelWatch").classList.toggle("active", name === "watch");
   $("#panelNick").classList.toggle("active", name === "nick");
   $("#railWatch").classList.toggle("active", name === "watch");
@@ -1960,12 +2376,12 @@ $("#resetDay").onclick = () => {
   $("#kebabMenu").classList.remove("open");
   if(!MODEL) return;
   openModal(`
-    <h3>RESET DAY</h3>
-    <div style="font-size:14px;line-height:1.55">Clear <b>all</b> checks, flags, corrections and manual entries for
+    <h3>${t("reset.title")}</h3>
+    <div style="font-size:14px;line-height:1.55">${t("reset.body")}
       <b style="font-family:var(--mono);color:var(--amber)">${MODEL.reportDate}</b>?</div>
     <div class="actions">
-      <button class="btn" id="rCancel">Cancel</button>
-      <button class="btn" id="rGo" style="border-color:var(--red-dim);color:var(--red)">Reset everything</button>
+      <button class="btn" id="rCancel">${t("reset.cancel")}</button>
+      <button class="btn" id="rGo" style="border-color:var(--red-dim);color:var(--red)">${t("reset.go")}</button>
     </div>`);
   $("#rCancel").onclick = closeModal;
   $("#rGo").onclick = () => {
@@ -1978,11 +2394,16 @@ $("#resetDay").onclick = () => {
     $("#notThereBtn").style.display = "none";
     renderSummary();
     renderAccordions();
-    toast("Day reset — all zeroes", true);
+    toast(t("reset.toast"), true);
   };
 };
 /* ---------- auto-update (active only inside the desktop app) ---------- */
-(function(){
+(async function(){
+  if(window.reccheckFiles){
+    try{ FB.dir = await window.reccheckFiles.getDir(); }catch(e){}
+  }
+  applyLang();
+  showScreen("menu");
   const ver = $("#appVer");
   if(ver) ver.textContent = "v" + APP_VERSION;
   if(!window.reccheckUpdate) return;             // plain browser — nothing to do
@@ -1991,9 +2412,7 @@ $("#resetDay").onclick = () => {
     if(document.getElementById("updateBtn")) return;
     const b = document.createElement("button");
     b.id = "updateBtn";
-    b.title = info.full
-      ? "Version " + info.version + " needs a full reinstall — click to open the download page"
-      : "Update v" + info.version + " downloaded — click to install and restart";
+    b.title = info.full ? t("upd.full", {v: info.version}) : t("upd.ready", {v: info.version});
     b.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none">' +
       '<path d="M12 20V5.5 M5.5 12 L12 5.5 L18.5 12" stroke="#4da6ff" stroke-width="2.8" ' +
       'stroke-linecap="round" stroke-linejoin="round"/></svg>';
