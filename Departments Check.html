@@ -1388,6 +1388,18 @@ function syncRooms(){
     setTimeout(() => toast(t("n.reset") + dropped.join(" · "), true), 700);
 }
 function nickFor(room){ const e = ROOMS[String(room)]; return (e && e.nick) ? e.nick : null; }
+function guestFor(room){
+  if(MODEL){
+    if(!MODEL._gm){
+      const m = {};
+      for(const r of MODEL.receipts) if(r.roomMain && r.guest && m[r.roomMain] === undefined) m[r.roomMain] = r.guest;
+      MODEL._gm = m;
+    }
+    if(MODEL._gm[String(room)]) return MODEL._gm[String(room)];
+  }
+  const e = ROOMS[String(room)];
+  return (e && e.guest) || null;
+}
 
 /* ---------- state ---------- */
 function blankState(date){
@@ -2031,9 +2043,12 @@ function receiptRow(r){
   }else sn.textContent = r.sn;
   row.append(sn);
 
+  const roomFixed = !!(st.corr && st.corr.room);
+  const gname = roomFixed ? (guestFor(effRoom(r)) || r.guest || "") : (r.guest || "");
   const nick = nickFor(effRoom(r));
-  const nm = el("div","name" + (nick ? " nick" : ""), nick || r.guest || "");
-  nm.title = nick ? ((r.guest || "") + t("n.nickedTitle")) : (r.guest || "");
+  const nm = el("div","name" + (nick ? " nick" : ""), nick || gname);
+  nm.title = (nick ? gname + t("n.nickedTitle") : gname) +
+             (roomFixed && r.guest && gname !== r.guest ? "  ·  ⌫ " + r.guest : "");
   row.append(nm);
 
   const split = el("div","split");
@@ -2277,6 +2292,8 @@ function openCorrectionModal(r){
       <button class="btn amber" id="cSave">${t("corr.save")}</button>
     </div>`);
   $("#cCancel").onclick = closeModal;
+  for(const id of ["cSN","cV24","cV13"])
+    $("#" + id).addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); e.stopPropagation(); $("#cSave").click(); } });
   $("#cSave").onclick = () => {
     const sn = $("#cSN").value.trim();
     const v24 = readMoney($("#cV24").value), v13 = readMoney($("#cV13").value);
@@ -2302,6 +2319,7 @@ function openRoomModal(r){
       <button class="btn amber" id="cSave">${t("corr.save")}</button>
     </div>`);
   $("#cCancel").onclick = closeModal;
+  $("#cRoom").addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); e.stopPropagation(); $("#cSave").click(); } });
   $("#cSave").onclick = () => {
     const room = $("#cRoom").value.trim();
     if(!room){ $("#cErr").textContent = t("roomM.err"); return; }
@@ -2334,6 +2352,8 @@ function openExtraModal(prefillSN){
       <button class="btn amber" id="xSave">${t("extra.add")}</button>
     </div>`);
   $("#xCancel").onclick = closeModal;
+  for(const id of ["xSN","xV24","xV13","xRoom"])
+    $("#" + id).addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); e.stopPropagation(); $("#xSave").click(); } });
   $("#xSave").onclick = () => {
     const sn = $("#xSN").value.trim();
     const v24 = readMoney($("#xV24").value), v13 = readMoney($("#xV13").value);
@@ -2398,9 +2418,13 @@ function matchCard(r){
   c.append(el("span","dept", r.dept));
   c.append(el("span","room", effRoom(r) + (r.roomMain !== r.room && !(rState(r).corr && rState(r).corr.room) ? " ⧉" : "")));
   c.append(el("span","msn", effSN(r)));
+  const stc = rState(r);
+  const roomFixed = !!(stc.corr && stc.corr.room);
+  const gname = roomFixed ? (guestFor(effRoom(r)) || r.guest || "") : (r.guest || "");
   const nick = nickFor(effRoom(r));
-  const nm = el("span","name" + (nick ? " nick" : ""), nick || r.guest || "");
-  nm.title = nick ? ((r.guest || "") + t("n.nickedTitle")) : (r.guest || "");
+  const nm = el("span","name" + (nick ? " nick" : ""), nick || gname);
+  nm.title = (nick ? gname + t("n.nickedTitle") : gname) +
+             (roomFixed && r.guest && gname !== r.guest ? "  ·  ⌫ " + r.guest : "");
   c.append(nm);
   c.append(el("span","split", rateSplitStr(r.voided ? r.posRates : effRates(r))));
   c.append(el("span","amt", numToMoney(r.voided ? r.posTotal : effTotal(r))));
