@@ -29,8 +29,19 @@ class Updater {
       curHtml:  path.join(d, "current.html"),
       curMeta:  path.join(d, "current.json"),
       pendHtml: path.join(d, "pending.html"),
-      pendMeta: path.join(d, "pending.json")
+      pendMeta: path.join(d, "pending.json"),
+      setupExe: path.join(d, "pending-setup.exe"),
+      setupMeta: path.join(d, "pending-setup.json")
     };
+  }
+  /* drop a downloaded installer that is no longer newer than what runs */
+  cleanupSetup(){
+    const P = this.paths();
+    const m = this.readJson(P.setupMeta);
+    if(m && !vNewer(m.version, this.o.pkgVersion)){
+      try{ fs.unlinkSync(P.setupExe); }catch(e){}
+      try{ fs.unlinkSync(P.setupMeta); }catch(e){}
+    }
   }
   readJson(p){ try{ return JSON.parse(fs.readFileSync(p, "utf8")); }catch(e){ return null; } }
 
@@ -52,6 +63,7 @@ class Updater {
   /* background check + download; resolves to pending info or null; never throws */
   async check(){
     try{
+      this.cleanupSetup();
       const eff = this.effective();
       const r = await fetch(this.o.updateUrl, {cache: "no-store"});
       if(!r.ok) return null;
@@ -60,8 +72,27 @@ class Updater {
       if(!vNewer(latest.version, eff.version)) return null;
 
       if(latest.type === "full"){
-        this.pending = {version: latest.version, full: true,
-                        url: latest.url || this.o.fallbackReleaseUrl};
+        // with a "setup" url we self-download the installer and the arrow click
+        // runs it silently; without one we fall back to opening the release page
+        if(!latest.setup){
+          this.pending = {version: latest.version, full: true,
+                          url: latest.url || this.o.fallbackReleaseUrl};
+          return this.pending;
+        }
+        const P = this.paths();
+        const have = this.readJson(P.setupMeta);
+        if(!(have && have.version === latest.version && fs.existsSync(P.setupExe))){
+          const sr = await fetch(latest.setup, {cache: "no-store", redirect: "follow"});
+          if(!sr.ok) return null;
+          const sbuf = Buffer.from(await sr.arrayBuffer());
+          const ssha = crypto.createHash("sha256").update(sbuf).digest("hex");
+          if(latest.setupSha256 && ssha.toLowerCase() !== String(latest.setupSha256).toLowerCase()) return null;
+          if(sbuf.length < 1048576 || sbuf.slice(0, 2).toString("latin1") !== "MZ") return null;
+          fs.writeFileSync(P.setupExe + ".tmp", sbuf);
+          fs.renameSync(P.setupExe + ".tmp", P.setupExe);
+          fs.writeFileSync(P.setupMeta, JSON.stringify({version: latest.version, sha256: ssha}));
+        }
+        this.pending = {version: latest.version, full: true, downloaded: true, setupPath: P.setupExe};
         return this.pending;
       }
       const P = this.paths();

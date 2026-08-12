@@ -1,4 +1,5 @@
 const {app, BrowserWindow, ipcMain, shell, dialog} = require("electron");
+const {spawn} = require("child_process");
 const path = require("path");
 const {pathToFileURL} = require("url");
 const {Updater} = require("./updater.js");
@@ -52,7 +53,19 @@ app.whenReady().then(() => {
 
 ipcMain.handle("reccheck-apply-update", () => {
   if(!updater || !updater.pending) return false;
-  if(updater.pending.full){ shell.openExternal(updater.pending.url); return true; }
+  if(updater.pending.full){
+    if(updater.pending.downloaded && updater.pending.setupPath){
+      // run the downloaded installer silently; it relaunches the app when done
+      try{
+        const child = spawn(updater.pending.setupPath, ["/S"], {detached: true, stdio: "ignore"});
+        child.unref();
+      }catch(e){ return false; }
+      setTimeout(() => app.exit(0), 300);
+      return true;
+    }
+    shell.openExternal(updater.pending.url);
+    return true;
+  }
   if(!updater.promote()) return false;
   app.relaunch();
   app.exit(0);

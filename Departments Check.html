@@ -822,7 +822,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.1.0";
+const APP_VERSION = "1.1.1";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -2412,7 +2412,7 @@ $("#resetDay").onclick = () => {
     if(document.getElementById("updateBtn")) return;
     const b = document.createElement("button");
     b.id = "updateBtn";
-    b.title = info.full ? t("upd.full", {v: info.version}) : t("upd.ready", {v: info.version});
+    b.title = (info.full && !info.downloaded) ? t("upd.full", {v: info.version}) : t("upd.ready", {v: info.version});
     b.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none">' +
       '<path d="M12 20V5.5 M5.5 12 L12 5.5 L18.5 12" stroke="#4da6ff" stroke-width="2.8" ' +
       'stroke-linecap="round" stroke-linejoin="round"/></svg>';
