@@ -1,7 +1,10 @@
 {
-  "version": "1.2.1",
-  "type": "html",
+  "version": "1.3.0",
+  "type": "full",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.3.0/RecCheck-Setup.exe",
+  "setupSha256": "3e72fc8c98a0ae78cedd2df3e273316fc10d59c83539b08caa331abf5ce90684",
+  "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/app/index.html",
-  "sha256": "a75e815e6eaa38aac82153b745a61c8135ec064cf7dd562330e1701c6878d395",
-  "notes": "Sense of time (working night = 07:00→07:00): checklist ticks reset each night, home shows the working night and clock, tonight's pull is badged in the file list, report age shown when opening, and the Tax Check warns when fed a past night's report."
+  "sha256": "76f49f50c0fd35496824602d4ba0353a797d6ca43ff5b72db7447cf5c70ba504",
+  "notes": "RecCheck 1.3.0 — desktop checklist overlay (transparent, click-through, always on top), Enter submits correction dialogs, corrected rooms show their guest, ghost-confirm bug fixed."
 }
