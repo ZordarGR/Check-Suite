@@ -80,6 +80,8 @@ header .spacer{flex:1}
 .fbItem:hover{border-color:var(--amber);background:var(--panel2)}
 .fbItem.open{border-color:var(--amber-dim);background:#1a2438}
 .fbIcon{font-size:20px;color:var(--amber)}
+.fbItem.dir .fbIcon,.fbItem.up .fbIcon{color:var(--dim)}
+.fbItem.dir:hover .fbIcon{color:var(--amber)}
 #fbList.tiles .fbIcon{font-size:34px}
 .fbMeta{min-width:0}
 .fbName{font-family:var(--mono);font-size:13.5px;color:var(--txt);word-break:break-all}
@@ -822,7 +824,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.1.2";
+const APP_VERSION = "1.1.3";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -840,6 +842,7 @@ en: {
   "land.dataHint": "moves your saved history (checks · watchlist · room names) between the browser file and the installed app",
   "fb.back": "← Menu", "fb.empty": "no report files in this folder yet — new .oxps pulls appear here automatically",
   "fb.today": "today", "fb.viewList": "List view", "fb.viewTiles": "Tile view",
+  "fb.up": "up one level", "fb.folder": "folder",
   "drop.big": "Drop the checkcharge report here, or click to browse",
   "meta.night": "checkcharge · night of ", "meta.older": "  ⚠ older report",
   "chip.stale": "⟳ newer on disk", "chip.staleTitle": "The open report changed on disk — click to load the live version",
@@ -914,6 +917,7 @@ gr: {
   "land.dataHint": "μεταφέρει το ιστορικό σας (έλεγχοι · λίστα παρακολούθησης · ονόματα δωματίων) μεταξύ του αρχείου browser και της εφαρμογής",
   "fb.back": "← Μενού", "fb.empty": "δεν υπάρχουν αναφορές στον φάκελο — τα νέα .oxps εμφανίζονται εδώ αυτόματα",
   "fb.today": "σήμερα", "fb.viewList": "Προβολή λίστας", "fb.viewTiles": "Προβολή πλακιδίων",
+  "fb.up": "ένα επίπεδο πάνω", "fb.folder": "φάκελος",
   "drop.big": "Σύρετε εδώ την αναφορά checkcharge, ή κάντε κλικ για αναζήτηση",
   "meta.night": "checkcharge · βραδιά ", "meta.older": "  ⚠ παλαιότερη αναφορά",
   "chip.stale": "⟳ νεότερη στον δίσκο", "chip.staleTitle": "Η ανοιχτή αναφορά άλλαξε στον δίσκο — κλικ για φόρτωση της νέας έκδοσης",
@@ -1170,7 +1174,19 @@ function toastReceipt(r){
 /* ---------- screens + reports-folder browser ---------- */
 let SCREEN = "menu";
 let LASTFNAME = "";
-const FB = {dir: null, view: (function(){ try{ return localStorage.getItem("reccheck_fbview") || "list"; }catch(e){ return "list"; } })(), open: null, stale: false};
+const FB = {dir: null, view: (function(){ try{ return localStorage.getItem("reccheck_fbview") || "list"; }catch(e){ return "list"; } })(),
+            rel: (function(){ try{ return localStorage.getItem("reccheck_fbrel") || ""; }catch(e){ return ""; } })(),
+            open: null, stale: false};
+function fbGo(rel){
+  FB.rel = rel || "";
+  try{ localStorage.setItem("reccheck_fbrel", FB.rel); }catch(e){}
+  fbRefresh();
+}
+function fbUpRel(){
+  const parts = FB.rel.split(/[\\/]/).filter(Boolean);
+  parts.pop();
+  return parts.join("/");
+}
 
 function showScreen(which){
   SCREEN = which;
@@ -1219,11 +1235,35 @@ async function fbRefresh(){
   fbPaintChrome();
   if(!window.reccheckFiles || !FB.dir) return;
   let res;
-  try{ res = await window.reccheckFiles.list(); }catch(e){ return; }
+  try{ res = await window.reccheckFiles.list(FB.rel); }catch(e){ return; }
+  if(res.error && FB.rel){ fbGo(""); return; }          // folder vanished — back to the root
   if(res.dir !== FB.dir){ FB.dir = res.dir; paintDirSub(); fbPaintChrome(); }
+  if(typeof res.rel === "string") FB.rel = res.rel.split("\\").join("/");
+  $("#fbDir").textContent = FB.dir + (FB.rel ? " / " + FB.rel : "");
+  $("#fbDir").title = $("#fbDir").textContent;
+  const dirs = res.dirs || [];                           // old engines send no dirs
   const box = $("#fbList");
   box.innerHTML = "";
-  $("#fbEmpty").style.display = res.files.length ? "none" : "";
+  $("#fbEmpty").style.display = (res.files.length || dirs.length || FB.rel) ? "none" : "";
+  if(FB.rel){
+    const up = el("div", "fbItem up");
+    up.append(el("div", "fbIcon", "↰"));
+    const meta = el("div", "fbMeta");
+    meta.append(el("div", "fbName", t("fb.up")));
+    up.append(meta);
+    up.onclick = () => fbGo(fbUpRel());
+    box.append(up);
+  }
+  for(const d of dirs){
+    const it = el("div", "fbItem dir");
+    it.append(el("div", "fbIcon", "▣"));
+    const meta = el("div", "fbMeta");
+    meta.append(el("div", "fbName", d.name));
+    meta.append(el("div", "fbSub", t("fb.folder")));
+    it.append(meta);
+    it.onclick = () => fbGo(String(d.rel).split("\\").join("/"));
+    box.append(it);
+  }
   for(const f of res.files){
     const it = el("div", "fbItem" + (FB.open && FB.open.path === f.path ? " open" : ""));
     it.append(el("div", "fbIcon", "▤"));
@@ -1235,6 +1275,18 @@ async function fbRefresh(){
     box.append(it);
   }
   checkOpenChanged(res.files);
+}
+/* the open file may live in another folder than the one on screen — stat it directly */
+async function checkOpenByStat(){
+  if(!FB.open || !window.reccheckFiles) return;
+  if(window.reccheckFiles.stat){
+    try{
+      const st = await window.reccheckFiles.stat(FB.open.path);
+      if(st) checkOpenChanged([{path: FB.open.path, mtimeMs: st.mtimeMs}]);
+    }catch(e){}
+  }else{
+    try{ checkOpenChanged((await window.reccheckFiles.list()).files || []); }catch(e){}
+  }
 }
 async function fbOpen(f){
   try{
@@ -2306,18 +2358,14 @@ $("#mHelp").onclick = () => {
 $("#fbBack").onclick = () => showScreen("menu");
 $("#fbViewList").onclick = () => { FB.view = "list"; try{ localStorage.setItem("reccheck_fbview","list"); }catch(e){} fbPaintChrome(); };
 $("#fbViewTiles").onclick = () => { FB.view = "tiles"; try{ localStorage.setItem("reccheck_fbview","tiles"); }catch(e){} fbPaintChrome(); };
-$("#staleChip").onclick = async () => {
+$("#staleChip").onclick = () => {
   if(!window.reccheckFiles || !FB.open) return;
-  try{
-    const res = await window.reccheckFiles.list();
-    const cur = res.files.find(x => x.path === FB.open.path);
-    if(cur) fbOpen(cur); 
-  }catch(e){}
+  fbOpen({path: FB.open.path, name: FB.open.name, mtimeMs: Date.now()});
 };
 if(window.reccheckFiles){
   window.reccheckFiles.onDirEvent(() => {
     if(SCREEN === "files") fbRefresh();
-    else if(FB.open) window.reccheckFiles.list().then(res => checkOpenChanged(res.files)).catch(() => {});
+    checkOpenByStat();
   });
 }
 $("#fileInput").onchange = e => { if(e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ""; };

@@ -82,8 +82,9 @@ ipcMain.handle("files-pick-dir", async () => {
   if(r.canceled || !r.filePaths[0]) return hub.getDir();
   return hub.setDir(r.filePaths[0]);
 });
-ipcMain.handle("files-list", () => hub ? hub.list() : {dir: null, files: []});
+ipcMain.handle("files-list", (_e, rel) => hub ? hub.list(rel) : {dir: null, rel: "", dirs: [], files: []});
 ipcMain.handle("files-read", (_e, p) => hub.read(p));
+ipcMain.handle("files-stat", (_e, p) => hub ? hub.stat(p) : null);
 ipcMain.handle("open-help", () => { shell.openExternal(ISSUES_URL); return true; });
 
 app.on("window-all-closed", () => app.quit());

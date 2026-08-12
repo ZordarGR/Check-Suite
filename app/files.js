@@ -28,36 +28,62 @@ class FileHub {
     this.startWatch();
     return dir;
   }
-  list(){
-    const dir = this.getDir();
-    if(!dir) return {dir: null, files: []};
-    let names;
-    try{ names = fs.readdirSync(dir); }catch(e){ return {dir, files: [], error: String(e.message || e)}; }
-    const files = [];
-    for(const n of names){
-      if(!REPORT_RE.test(n)) continue;
+  /* a path is usable only inside the configured folder tree */
+  contained(p){
+    const base = this.getDir();
+    if(!base) return null;
+    const rbase = path.resolve(base);
+    const full = path.resolve(p);
+    if(full !== rbase && !full.startsWith(rbase + path.sep)) return null;
+    return full;
+  }
+  /* list one level of the tree: sub-folders plus the report files in `rel` */
+  list(rel){
+    const base = this.getDir();
+    if(!base) return {dir: null, rel: "", dirs: [], files: []};
+    const target = this.contained(path.resolve(base, String(rel || "")));
+    if(!target) return {dir: base, rel: "", dirs: [], files: [], error: "outside the reports folder"};
+    let entries;
+    try{ entries = fs.readdirSync(target, {withFileTypes: true}); }
+    catch(e){ return {dir: base, rel: String(rel || ""), dirs: [], files: [], error: String(e.message || e)}; }
+    const dirs = [], files = [];
+    for(const d of entries){
+      if(d.isDirectory()){
+        dirs.push({name: d.name, rel: path.relative(base, path.join(target, d.name))});
+        continue;
+      }
+      if(!d.isFile() || !REPORT_RE.test(d.name)) continue;
       try{
-        const st = fs.statSync(path.join(dir, n));
-        if(st.isFile()) files.push({name: n, path: path.join(dir, n), size: st.size, mtimeMs: st.mtimeMs});
+        const st = fs.statSync(path.join(target, d.name));
+        files.push({name: d.name, path: path.join(target, d.name), size: st.size, mtimeMs: st.mtimeMs});
       }catch(e){}
     }
+    dirs.sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true}));
     files.sort((a, b) => b.mtimeMs - a.mtimeMs);
-    return {dir, files};
+    return {dir: base, rel: path.relative(base, target), dirs, files};
   }
   read(p){
-    const dir = this.getDir();
-    if(!dir) throw new Error("no reports folder configured");
-    const full = path.resolve(p);
-    if(path.dirname(full) !== path.resolve(dir)) throw new Error("file is outside the reports folder");
+    const full = this.contained(p);
+    if(!full) throw new Error("file is outside the reports folder");
     if(!REPORT_RE.test(full)) throw new Error("not a report file");
     return fs.readFileSync(full);
+  }
+  stat(p){
+    const full = this.contained(p);
+    if(!full) return null;
+    try{
+      const st = fs.statSync(full);
+      return {mtimeMs: st.mtimeMs, size: st.size};
+    }catch(e){ return null; }
   }
   startWatch(){
     this.stopWatch();
     const dir = this.getDir();
     if(!dir) return;
     try{
-      this.watcher = fs.watch(dir, () => {
+      let opts = {};
+      try{ opts = {recursive: true}; }catch(e){}
+      this.watcher = fs.watch(dir, opts, () => {
         clearTimeout(this.debounce);
         this.debounce = setTimeout(() => { try{ this.o.onDirEvent(); }catch(e){} }, 800);
       });

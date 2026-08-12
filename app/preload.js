@@ -7,8 +7,9 @@ contextBridge.exposeInMainWorld("reccheckUpdate", {
 contextBridge.exposeInMainWorld("reccheckFiles", {
   getDir: () => ipcRenderer.invoke("files-get-dir"),
   pickDir: () => ipcRenderer.invoke("files-pick-dir"),
-  list: () => ipcRenderer.invoke("files-list"),
+  list: (rel) => ipcRenderer.invoke("files-list", rel),
   read: (p) => ipcRenderer.invoke("files-read", p),
+  stat: (p) => ipcRenderer.invoke("files-stat", p),
   onDirEvent: (cb) => ipcRenderer.on("reccheck-dir-event", () => cb())
 });
 contextBridge.exposeInMainWorld("reccheckHelp", {
