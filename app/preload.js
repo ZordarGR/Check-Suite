@@ -12,6 +12,11 @@ contextBridge.exposeInMainWorld("reccheckFiles", {
   stat: (p) => ipcRenderer.invoke("files-stat", p),
   onDirEvent: (cb) => ipcRenderer.on("reccheck-dir-event", () => cb())
 });
+contextBridge.exposeInMainWorld("reccheckOverlay", {
+  toggle: () => ipcRenderer.invoke("overlay-toggle"),
+  state: () => ipcRenderer.invoke("overlay-state"),
+  setData: (d) => ipcRenderer.invoke("overlay-data", d)
+});
 contextBridge.exposeInMainWorld("reccheckHelp", {
   open: () => ipcRenderer.invoke("open-help")
 });

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+html,body{margin:0;background:transparent;overflow:hidden;-webkit-user-select:none;pointer-events:none}
+#box{opacity:.5;font:600 14px "Segoe UI","Segoe UI Variable",system-ui,sans-serif;padding:8px 12px;text-align:right}
+.t{margin:6px 0;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.95),0 0 2px rgba(0,0,0,.95);line-height:1.3;word-wrap:break-word}
+.t.done{color:#4ade80}
+.t .b{display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:8px;vertical-align:1px;
+  box-shadow:0 1px 2px rgba(0,0,0,.8)}
+.b.low{background:#2e9e57}.b.med{background:#e08a2e}.b.high{background:#e04747}
+.t.done .b{background:#4ade80}
+</style>
+</head>
+<body><div id="box"></div>
+<script>
+window.overlayBridge.onData(function(d){
+  var box = document.getElementById("box");
+  box.innerHTML = "";
+  (d.tasks || []).forEach(function(t){
+    var div = document.createElement("div");
+    div.className = "t" + (t.done ? " done" : "");
+    div.textContent = (t.done ? "✓ " : "") + t.text;
+    var b = document.createElement("span");
+    b.className = "b " + (t.tier || "low");
+    div.appendChild(b);
+    box.appendChild(div);
+  });
+});
+</script>
+</body>
+</html>

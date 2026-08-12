@@ -1,4 +1,4 @@
-const {app, BrowserWindow, ipcMain, shell, dialog} = require("electron");
+const {app, BrowserWindow, ipcMain, shell, dialog, screen} = require("electron");
 const {spawn} = require("child_process");
 const path = require("path");
 const {pathToFileURL} = require("url");
@@ -10,6 +10,33 @@ const REPO_RAW = "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main";
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
 let win = null, updater = null, hub = null;
+let overlayWin = null, overlayData = null;
+
+/* ---- desktop checklist overlay: transparent, click-through, always on top ---- */
+function overlayBounds(count){
+  const wa = screen.getPrimaryDisplay().workArea;
+  const W = 340;
+  const H = Math.min(Math.max(60, 24 + count * 27), Math.round(wa.height * 0.6));
+  return {x: wa.x + wa.width - W - 12, y: wa.y + 12, width: W, height: H};
+}
+function createOverlay(){
+  if(overlayWin) return;
+  overlayWin = new BrowserWindow(Object.assign(overlayBounds((overlayData && overlayData.tasks || []).length), {
+    transparent: true, frame: false, alwaysOnTop: true, skipTaskbar: true,
+    focusable: false, resizable: false, movable: false, hasShadow: false, show: true,
+    webPreferences: {contextIsolation: true, preload: path.join(__dirname, "overlay-preload.js")}
+  }));
+  overlayWin.setIgnoreMouseEvents(true);
+  overlayWin.setAlwaysOnTop(true, "screen-saver");
+  overlayWin.loadURL(pathToFileURL(path.join(__dirname, "overlay.html")).toString());
+  overlayWin.webContents.once("did-finish-load", () => {
+    if(overlayData && overlayWin) overlayWin.webContents.send("overlay-data", overlayData);
+  });
+  overlayWin.on("closed", () => { overlayWin = null; });
+}
+function destroyOverlay(){
+  if(overlayWin){ try{ overlayWin.destroy(); }catch(e){} overlayWin = null; }
+}
 
 function createWindow(file){
   win = new BrowserWindow({
@@ -28,6 +55,7 @@ function createWindow(file){
     if(updater && updater.pending)
       win.webContents.send("reccheck-update-ready", updater.pending);
   });
+  win.on("closed", () => { destroyOverlay(); });   // the overlay lives only while the app does
 }
 
 app.whenReady().then(() => {
@@ -45,6 +73,7 @@ app.whenReady().then(() => {
   hub.startWatch();
   const eff = updater.effective();
   createWindow(eff.file);
+  try{ if(hub.readConfig().overlayOn) createOverlay(); }catch(e){}
   updater.check().then(info => {
     if(info && win && !win.isDestroyed())
       win.webContents.send("reccheck-update-ready", info);
@@ -86,5 +115,21 @@ ipcMain.handle("files-list", (_e, rel) => hub ? hub.list(rel) : {dir: null, rel:
 ipcMain.handle("files-read", (_e, p) => hub.read(p));
 ipcMain.handle("files-stat", (_e, p) => hub ? hub.stat(p) : null);
 ipcMain.handle("open-help", () => { shell.openExternal(ISSUES_URL); return true; });
+
+ipcMain.handle("overlay-toggle", () => {
+  const on = !overlayWin;
+  if(on) createOverlay(); else destroyOverlay();
+  try{ const c = hub.readConfig(); c.overlayOn = on; hub.writeConfig(c); }catch(e){}
+  return on;
+});
+ipcMain.handle("overlay-state", () => !!overlayWin);
+ipcMain.handle("overlay-data", (_e, d) => {
+  overlayData = d;
+  if(overlayWin){
+    try{ overlayWin.setBounds(overlayBounds((d && d.tasks || []).length)); }catch(e){}
+    overlayWin.webContents.send("overlay-data", d);
+  }
+  return true;
+});
 
 app.on("window-all-closed", () => app.quit());
