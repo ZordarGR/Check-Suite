@@ -1,7 +1,7 @@
 {
-  "version": "1.2.0",
+  "version": "1.2.1",
   "type": "html",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/app/index.html",
-  "sha256": "319689b83f2af417926ece312ec9a5142b563f6a0d072f16e5e813a0029dae44",
-  "notes": "Home redesign: welcome + editable checklist with importance tiers, cascading Options / Edit-home-screen menus, Audit hub. Tax Check (TA audit) integrated as a second tool with the same folder-fed loading."
+  "sha256": "a75e815e6eaa38aac82153b745a61c8135ec064cf7dd562330e1701c6878d395",
+  "notes": "Sense of time (working night = 07:00→07:00): checklist ticks reset each night, home shows the working night and clock, tonight's pull is badged in the file list, report age shown when opening, and the Tax Check warns when fed a past night's report."
 }

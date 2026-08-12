@@ -127,6 +127,8 @@ header .spacer{flex:1}
 .fbIcon{font-size:20px;color:var(--amber)}
 .fbItem.dir .fbIcon,.fbItem.up .fbIcon{color:var(--dim)}
 .fbItem.dir:hover .fbIcon{color:var(--amber)}
+.fbTonight{display:inline-block;margin-left:8px;background:var(--green-dim);color:var(--green);border-radius:999px;
+  padding:1px 8px;font-size:10.5px;letter-spacing:.06em;vertical-align:1px}
 #fbList.tiles .fbIcon{font-size:34px}
 .fbMeta{min-width:0}
 .fbName{font-family:var(--mono);font-size:13.5px;color:var(--txt);word-break:break-all}
@@ -1059,7 +1061,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.2.0";
+const APP_VERSION = "1.2.1";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1078,6 +1080,10 @@ en: {
   "cl.add": "Add task", "cl.save": "Save", "cl.doneEditing": "Done editing", "cl.edit": "edit", "cl.del": "delete",
   "cl.ph": "what needs to happen tonight…", "cl.tierLow": "low importance", "cl.tierMed": "medium importance", "cl.tierHigh": "extremely important",
   "welcome": "Welcome — here's what tonight looks like.",
+  "welcome.night": "working night of {d} · {t}",
+  "meta.tonight": "tonight's report ✓", "meta.lastnight": "⚠ last night's report", "meta.ago": "⚠ report from {n} nights ago",
+  "fb.tonight": "tonight",
+  "rel.tonight": "tonight", "rel.lastnight": "last night", "rel.ago": "{n} nights ago",
   "pick.title": "pick a report for the Tax Check slot — click a file",
   "menu.compare": "COMPARE", "menu.compareSub": "open tonight's reports and check the receipts",
   "menu.lang": "LANGUAGE — ENGLISH", "menu.langSub": "αλλαγή σε ΕΛΛΗΝΙΚΑ",
@@ -1164,6 +1170,10 @@ gr: {
   "cl.add": "Προσθήκη", "cl.save": "Αποθήκευση", "cl.doneEditing": "Τέλος επεξεργασίας", "cl.edit": "αλλαγή", "cl.del": "διαγραφή",
   "cl.ph": "τι πρέπει να γίνει απόψε…", "cl.tierLow": "χαμηλή σημασία", "cl.tierMed": "μεσαία σημασία", "cl.tierHigh": "εξαιρετικά σημαντικό",
   "welcome": "Καλώς ήρθες — έτσι δείχνει η αποψινή βραδιά.",
+  "welcome.night": "νύχτα εργασίας {d} · {t}",
+  "meta.tonight": "αποψινή αναφορά ✓", "meta.lastnight": "⚠ χθεσινή αναφορά", "meta.ago": "⚠ αναφορά πριν από {n} νύχτες",
+  "fb.tonight": "αποψινό",
+  "rel.tonight": "απόψε", "rel.lastnight": "χθες βράδυ", "rel.ago": "πριν {n} νύχτες",
   "pick.title": "διάλεξε αναφορά για τη θέση του Ελέγχου ΤΑ — κλικ σε αρχείο",
   "menu.compare": "ΣΥΓΚΡΙΣΗ", "menu.compareSub": "άνοιγμα των αναφορών της βραδιάς και έλεγχος αποδείξεων",
   "menu.lang": "ΓΛΩΣΣΑ — ΕΛΛΗΝΙΚΑ", "menu.langSub": "switch to ENGLISH",
@@ -1269,7 +1279,7 @@ function applyLang(){
   mi("#aDept", "audit.dept", "audit.deptSub");
   mi("#aTax", "audit.tax", "audit.taxSub");
   $("#aBack").textContent = t("audit.back");
-  $("#welcomeLine").textContent = t("welcome");
+  paintClock();
   $("#clTitle").textContent = t("cl.title");
   $("#clText").placeholder = t("cl.ph");
   $("#clAdd").textContent = CLEDITID ? t("cl.save") : t("cl.add");
@@ -1443,6 +1453,33 @@ function toastReceipt(r){
   t._h = setTimeout(() => t.className = "", 3400);
 }
 
+/* ---------- sense of time: the working night runs 07:00 → 07:00 ---------- */
+const NIGHT_ROLLOVER_H = 7;
+function businessNightDate(){ return new Date(Date.now() - NIGHT_ROLLOVER_H * 3600e3); }
+function bnKey(){ const d = businessNightDate(); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); }
+function bnKeyOf(ms){ const d = new Date(ms - NIGHT_ROLLOVER_H * 3600e3); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); }
+function nightsAgoKey(key){                       // how many nights before the current working night
+  if(!key) return null;
+  const b = businessNightDate();
+  const cur = new Date(b.getFullYear(), b.getMonth(), b.getDate());
+  const that = new Date(Math.floor(key / 10000), Math.floor(key / 100) % 100 - 1, key % 100);
+  return Math.round((cur - that) / 86400e3);
+}
+function relNight(key){
+  const ago = nightsAgoKey(key);
+  if(ago === null) return "";
+  if(ago === 0) return t("rel.tonight");
+  if(ago === 1) return t("rel.lastnight");
+  return t("rel.ago", {n: ago});
+}
+function paintClock(){
+  const wl = $("#welcomeLine");
+  if(!wl) return;
+  const b = businessNightDate(), now = new Date();
+  wl.textContent = t("welcome") + "  ·  " + t("welcome.night",
+    {d: pad2(b.getDate()) + "/" + pad2(b.getMonth() + 1), t: pad2(now.getHours()) + ":" + pad2(now.getMinutes())});
+}
+
 /* ---------- home checklist ---------- */
 let CL = (function(){ try{ const a = JSON.parse(localStorage.getItem("reccheck_checklist") || "[]"); return Array.isArray(a) ? a : []; }catch(e){ return []; } })();
 let CLEDIT = false;        // edit mode on/off
@@ -1489,6 +1526,19 @@ function renderChecklist(){
 }
 function paintTierSel(){
   document.querySelectorAll(".tierBtn").forEach(b => b.classList.toggle("sel", b.dataset.tier === CLTIER));
+}
+function clNightCheck(){
+  const k = String(bnKey());
+  let stored = null;
+  try{ stored = localStorage.getItem("reccheck_cl_night"); }catch(e){}
+  if(stored !== k){
+    try{ localStorage.setItem("reccheck_cl_night", k); }catch(e){}
+    if(stored !== null && CL.some(x => x.done)){   // a new working night began — fresh ticks
+      CL.forEach(x => { x.done = false; });
+      saveCL();
+      renderChecklist();
+    }
+  }
 }
 function clSubmit(){
   const txt = $("#clText").value.trim();
@@ -1625,7 +1675,9 @@ async function fbRefresh(){
     const it = el("div", "fbItem" + (FB.open && FB.open.path === f.path ? " open" : ""));
     it.append(el("div", "fbIcon", "▤"));
     const meta = el("div", "fbMeta");
-    meta.append(el("div", "fbName", f.name));
+    const nmRow = el("div", "fbName", f.name);
+    if(bnKeyOf(f.mtimeMs) === bnKey()) nmRow.append(el("span", "fbTonight", t("fb.tonight")));
+    meta.append(nmRow);
     meta.append(el("div", "fbSub", fmtWhen(f.mtimeMs) + " · " + fmtSize(f.size)));
     it.append(meta);
     it.onclick = () => fbOpen(f);
@@ -1739,18 +1791,12 @@ function renderAll(fname){
   const meta = $("#reportMeta");
   meta.append(t("meta.night"));
   const b = el("b","", MODEL.reportDate); meta.append(b);
-  const dm = MODEL.reportDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if(dm){
-    // pre-EOD check: business day = calendar today (pulled before midnight)
-    // or calendar yesterday (pulled after midnight, EOD not yet run) — both fine
-    const sameDay = (d) => +dm[1] === d.getDate() && +dm[2] === d.getMonth() + 1 && +dm[3] === d.getFullYear();
-    const today = new Date();
-    const yest = new Date(); yest.setDate(yest.getDate() - 1);
-    if(!sameDay(today) && !sameDay(yest)){
-      const w = el("span","", t("meta.older"));
-      w.style.color = "var(--amber)";
-      meta.append(w);
-    }
+  const ago = nightsAgoKey(dateNum(MODEL.reportDate));
+  if(ago !== null){
+    const w = el("span","");
+    if(ago <= 0){ w.textContent = "  · " + t("meta.tonight"); w.style.color = "var(--green)"; }
+    else{ w.textContent = "  " + (ago === 1 ? t("meta.lastnight") : t("meta.ago", {n: ago})); w.style.color = "var(--amber)"; }
+    meta.append(w);
   }
   meta.append("  ·  " + fname);
 
@@ -2486,7 +2532,8 @@ function renderNickEditor(){
   ed.style.display = "block";
   $("#nEditRoom").textContent = NSEL;
   document.querySelector("#nEdit .nWho").childNodes[0].textContent = t("n.room") + " ";
-  $("#nEditGuest").textContent = e && e.guest ? "— " + e.guest : t("n.notSeen");
+  $("#nEditGuest").textContent = (e && e.guest ? "— " + e.guest : t("n.notSeen")) +
+    (e && e.seen ? " · " + relNight(dateNum(e.seen)) : "");
   $("#nNick").value = (e && e.nick) || "";
   $("#nRemove").style.display = (e && e.nick) ? "" : "none";
   $("#nErr").textContent = "";
@@ -2848,8 +2895,10 @@ $("#resetDay").onclick = () => {
     try{ FB.dir = await window.reccheckFiles.getDir(); }catch(e){}
   }
   paintTierSel();
+  clNightCheck();
   applyLang();
   showScreen("menu");
+  setInterval(() => { paintClock(); clNightCheck(); }, 30000);
   const ver = $("#appVer");
   if(ver) ver.textContent = "v" + APP_VERSION;
   if(!window.reccheckUpdate) return;             // plain browser — nothing to do
@@ -2935,6 +2984,8 @@ const I18N={
   err_norooms:"Parsed the file but found no rooms. Is this the right report?", err_read:"Couldn't read that file: ",
   err_wrongkind:"That looks like the wrong report for this slot.",
   confirm_clear:"Erase all saved data — room history and manual-check marks? This can't be undone.",
+  tw_pastrate:"This Rate Check is for a PAST night ({0}) — the current working night is {1}. Make sure you are not auditing old occupancy.",
+  tw_pasttax:"This Tax Check is for a PAST night ({0}) — the current working night is {1}. Its postings are not tonight's.",
   m_title:"Which night is this Rate Check for?",
   m_body1:"The Rate Check header reads {0}, but the Tax Check is for night {1}. The cross-reference only works if this Rate Check is the occupancy for the Tax Check's night. Enter the night this Rate Check actually covers:",
   m_datelabel:"Rate Check night:", m_decline:"Different nights — don't pair", m_continue:"Continue",
@@ -2986,6 +3037,8 @@ const I18N={
   err_norooms:"Έγινε ανάλυση αλλά δεν βρέθηκαν δωμάτια. Είναι η σωστή αναφορά;", err_read:"Αδυναμία ανάγνωσης αρχείου: ",
   err_wrongkind:"Αυτό μοιάζει λάθος αναφορά για αυτή τη θέση.",
   confirm_clear:"Διαγραφή όλων των αποθηκευμένων δεδομένων — ιστορικό δωματίων και σημειώσεις ελέγχου; Δεν αναιρείται.",
+  tw_pastrate:"Αυτό το Rate Check είναι για ΠΑΛΑΙΟΤΕΡΗ νύχτα ({0}) — η τρέχουσα νύχτα εργασίας είναι {1}. Πρόσεξε μην ελέγχεις παλιά πληρότητα.",
+  tw_pasttax:"Αυτό το Tax Check είναι για ΠΑΛΑΙΟΤΕΡΗ νύχτα ({0}) — η τρέχουσα νύχτα εργασίας είναι {1}. Οι καταχωρήσεις του δεν είναι οι αποψινές.",
   m_title:"Για ποια νύχτα είναι αυτό το Rate Check;",
   m_body1:"Η κεφαλίδα του Rate Check γράφει {0}, αλλά το Tax Check είναι για τη νύχτα {1}. Η διασταύρωση δουλεύει μόνο αν αυτό το Rate Check είναι η πληρότητα για τη νύχτα του Tax Check. Δώσε τη νύχτα που καλύπτει πραγματικά αυτό το Rate Check:",
   m_datelabel:"Νύχτα Rate Check:", m_decline:"Διαφορετικές νύχτες — χωρίς ζεύξη", m_continue:"Συνέχεια",
@@ -3249,6 +3302,18 @@ el('file-tax').addEventListener('change',e=>loadTax(e.target.files[0]));
 });
 el('taxBack').addEventListener('click',()=>{ if(window.rcShowAudit) window.rcShowAudit(); });
 window.__taSetLang=function(l){ if(l!==LANG) setLang(l); el('taxBack').textContent='← '+(l==='el'?'ΕΛΕΓΧΟΣ':'AUDIT'); };
+
+/* time safeguard: warn when a loaded report is for a past working night (07:00 rollover) */
+function bnk(){const d=new Date(Date.now()-7*3600e3);return d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();}
+function timeGuardHTML(){
+  let h='';const B=bnk();
+  if(RATE&&RATE.dateKey&&RATE.dateKey<B)h+=`<div class="banner warn">⚠ ${t('tw_pastrate',dfmt(RATE.dateKey),dfmt(B))}</div>`;
+  if(TAX&&TAX.dateKey&&TAX.dateKey<B)h+=`<div class="banner warn">⚠ ${t('tw_pasttax',dfmt(TAX.dateKey),dfmt(B))}</div>`;
+  return h;
+}
+const __renderCore=render;
+render=function(){__renderCore();const g=timeGuardHTML();if(g)el('banner').insertAdjacentHTML('afterbegin',g);};
+window.__taSimulate=function(rk,tk){RATE=rk?{kind:'rate',dateKey:rk,bizDate:dfmt(rk),rooms:{},count:0}:null;TAX=tk?{kind:'tax',dateKey:tk,fileDate:dfmt(tk),rooms:{},totalRooms:0,totalArrangements:0}:null;render();};
 
 /* ============ boot ============ */
 function pruneZeroMem(){const mem=loadMem();let ch=false;for(const room of Object.keys(mem)){const rec=mem[room];for(const d of Object.keys(rec)){const e=rec[d];if(((e.arr||0)+(e.auto||0)+(e.man||0))===0){delete rec[d];ch=true;}}if(!Object.keys(rec).length){delete mem[room];ch=true;}}if(ch)saveMem(mem);}
