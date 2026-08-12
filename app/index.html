@@ -822,7 +822,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.1.1";
+const APP_VERSION = "1.1.2";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1064,15 +1064,30 @@ function saveRooms(){
   try{ localStorage.setItem(ROOMS_KEY, JSON.stringify(ROOMS)); }catch(e){}
 }
 /* feed tonight's report into the DB: rooms are the stable keys, guest names the
-   changing part — a changed guest resets that room's nickname */
+   changing part — a changed guest resets that room's nickname.
+   Two guards keep this honest:
+   – time: viewing an OLDER report must never rewrite newer knowledge (it used to
+     silently kill fresh nicknames and plant stale guest names);
+   – ambiguity: if one night shows TWO different guests for a room (same-day
+     changeover), skip that room until a night speaks with one voice. */
+function dateNum(d){
+  const m = String(d || "").match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  return m ? (+m[3]) * 10000 + (+m[2]) * 100 + (+m[1]) : 0;
+}
 function syncRooms(){
   const dropped = [];
-  const gm = {};
-  for(const r of MODEL.receipts)
-    if(r.roomMain && r.guest && gm[r.roomMain] === undefined) gm[r.roomMain] = r.guest.trim();
-  for(const [room, g] of Object.entries(gm)){
+  const gm = {};                                  // roomMain -> Set of guest names
+  for(const r of MODEL.receipts){
+    if(!r.roomMain || !r.guest) continue;
+    (gm[r.roomMain] = gm[r.roomMain] || new Set()).add(r.guest.trim());
+  }
+  const rd = dateNum(MODEL.reportDate);
+  for(const [room, guests] of Object.entries(gm)){
+    if(guests.size > 1) continue;                 // changeover night — leave the room alone
+    const g = guests.values().next().value;
     const e = ROOMS[room];
     if(!e){ ROOMS[room] = {guest: g, seen: MODEL.reportDate}; continue; }
+    if(rd && e.seen && dateNum(e.seen) > rd) continue;   // older report — read-only
     if(e.guest && e.guest !== g && e.nick){
       dropped.push(room + " (" + e.nick + ")");
       delete e.nick;
