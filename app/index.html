@@ -2132,7 +2132,10 @@ function extraRow(x){
 
 /* ---------- row ⚠ menu ---------- */
 let menuEl = null;
-function closeMenu(){ if(menuEl){ menuEl.remove(); menuEl = null; } }
+let ENTER_GUARD = 0;
+function armEnterGuard(){ ENTER_GUARD = Date.now(); }
+function enterGuarded(){ return Date.now() - ENTER_GUARD < 500; }
+function closeMenu(){ if(menuEl){ menuEl.remove(); menuEl = null; armEnterGuard(); } }
 document.addEventListener("click", e => { if(menuEl && !menuEl.contains(e.target)) closeMenu(); });
 
 /* ---------- keyboard navigation (room search · arrows · Enter) ---------- */
@@ -2265,7 +2268,7 @@ function openRowMenu(anchor, r){
 
 /* ---------- modal ---------- */
 function openModal(html){ const bg = $("#modalBg"); $("#modal").innerHTML = html; bg.classList.add("open"); }
-function closeModal(){ $("#modalBg").classList.remove("open"); $("#snInput").focus(); }
+function closeModal(){ $("#modalBg").classList.remove("open"); armEnterGuard(); $("#snInput").focus(); }
 $("#modalBg").addEventListener("click", e => { if(e.target.id === "modalBg") closeModal(); });
 document.addEventListener("keydown", e => { if(e.key === "Escape"){ closeModal(); closeMenu(); } });
 
@@ -2479,6 +2482,7 @@ function confirmReceipt(r, on){
 
 document.addEventListener("keydown", e => {
   if(e.key === "Enter" && document.activeElement === inp()){
+    if(enterGuarded()) return;              // a dialog/menu just closed — swallow the ghost Enter
     if(currentMatches.length === 1){
       const mr = currentMatches[0].r;
       if(mr.cancelled){ toast(t("search.reversed"), true); return; }
