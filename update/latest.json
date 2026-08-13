@@ -1,10 +1,10 @@
 {
-  "version": "1.7.0",
+  "version": "1.7.1",
   "type": "full",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.7.0/RecCheck-Setup.exe",
-  "setupSha256": "da2e14c0f9c02537bd985d2e7fde120fcf6581c4446fecddf7a03c4c6bbf46d2",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.7.1/RecCheck-Setup.exe",
+  "setupSha256": "f0ef4db5d5b5fe21555ac990604167c7078ac8e0da69ad436d31d1e4c04a5c00",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/app/index.html",
-  "sha256": "12157cee62717a01a4ee3c6192f4ca0b13d33a618e34213bad9e3cbcf0485ffc",
-  "notes": "Global overlay hotkey: Ctrl+T toggles the desktop checklist from anywhere — app unfocused or in the tray. Rebindable in Edit home screen → Customize overlay."
+  "sha256": "addaafd5ce78012e6b9cb0343b89481aff8850436eb819d0bb5f9459721ec5e0",
+  "notes": "Serial search matches complete serial numbers only — the confusing partial-digit matching is gone."
 }
