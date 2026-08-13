@@ -1066,7 +1066,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.7.0";
+const APP_VERSION = "1.7.1";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1121,7 +1121,7 @@ en: {
   "err.wrongreport": "Wrong report — this is not checkcharge1 (ΕΛΕΓΧΟΣ ΤΜΗΜΑΤΩΝ BY ROOM).",
   "sum.grand": "Receipts to check — grand total", "sum.checked": " checked", "sum.flagged": " flagged", "sum.rec": " rec.",
   "search.ph": "serial number…", "search.notThere": "Receipt isn't there?",
-  "search.hint": "Type a receipt SN · exact or last ≥3 digits · Enter confirms a single match",
+  "search.hint": "Type the receipt's full serial number · Enter confirms the match",
   "search.many": " matches — pick one with its checkbox", "search.reversed": "REVERSED at the POS — nothing to check",
   "search.void": "VOID — consolidated by {by}, not counted",
   "room.ph": "room…", "room.hint": "room № · Enter = OK · ↑↓ rows · ←→ OK/⚠ · Esc",
@@ -1220,7 +1220,7 @@ gr: {
   "err.wrongreport": "Λάθος αναφορά — δεν είναι checkcharge1 (ΕΛΕΓΧΟΣ ΤΜΗΜΑΤΩΝ BY ROOM).",
   "sum.grand": "Αποδείξεις για έλεγχο — γενικό σύνολο", "sum.checked": " ελεγμένες", "sum.flagged": " σημειωμένες", "sum.rec": " αποδ.",
   "search.ph": "σειριακός αριθμός…", "search.notThere": "Δεν υπάρχει η απόδειξη;",
-  "search.hint": "Πληκτρολογήστε Σ.Ν. · ακριβής ή τελευταία ≥3 ψηφία · Enter επιβεβαιώνει μοναδικό ταίριασμα",
+  "search.hint": "Πληκτρολογήστε ολόκληρο τον σειριακό αριθμό · Enter επιβεβαιώνει το ταίριασμα",
   "search.many": " ταιριάσματα — επιλέξτε ένα με το κουτάκι του", "search.reversed": "ΑΚΥΡΩΜΕΝΗ στο POS — δεν χρειάζεται έλεγχο",
   "search.void": "ΑΚΥΡΗ — ενοποιήθηκε από {by}, δεν μετράει",
   "room.ph": "δωμ…", "room.hint": "№ δωματίου · Enter = OK · ↑↓ γραμμές · ←→ OK/⚠ · Esc",
@@ -2497,14 +2497,7 @@ function findMatches(q){
   if(!q) return [];
   const out = [];
   for(const r of MODEL.receipts){
-    const sn = effSN(r);
-    if(sn === q) out.push({r, exact: true});
-  }
-  if(!out.length && q.length >= 3){
-    for(const r of MODEL.receipts){
-      const sn = effSN(r);
-      if(sn.endsWith(q)) out.push({r, exact: false});
-    }
+    if(effSN(r) === q) out.push({r, exact: true});   // exact serials only — no partial guessing
   }
   return out;
 }
