@@ -8,8 +8,8 @@ on:
 permissions:
   contents: write
 env:
-  VERSION: v1.6.0
-  SETUP_SHA256: 3989cad6247af1d99f6fde8fd872b1d818850f938297ba34a8ee319af772f2a6
+  VERSION: v1.6.1
+  SETUP_SHA256: 5ac9d0b0774c2d308da9e019aecd835e3ea51c4ab4ab21a8d3b2af130d26711b
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -26,6 +26,6 @@ jobs:
           gh release delete "$VERSION" --yes || true
           git push --delete origin "refs/tags/$VERSION" || true
           gh release create "$VERSION" RecCheck-Setup.exe \
-            --title "RecCheck 1.6.0 — Windows" \
+            --title "RecCheck 1.6.1 — Windows" \
             --notes-file .github/release-notes.md \
             --latest

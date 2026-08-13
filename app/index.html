@@ -1066,7 +1066,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.6.0";
+const APP_VERSION = "1.6.1";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1090,7 +1090,7 @@ en: {
   "ov.txtop": "Text opacity", "ov.size": "Font size", "ov.font": "Font", "ov.bold": "Bold text",
   "ov.reset": "Reset to defaults", "ov.ok": "Done", "ov.hint": "changes apply live while the overlay is on", "cl.tierLow": "low importance", "cl.tierMed": "medium importance", "cl.tierHigh": "extremely important",
   "welcome": "Welcome — here's what tonight looks like.",
-  "welcome.night": "working night of {d} · {t}",
+  "welcome.night": "working night of {d}, Date: {cd} {t}",
   "meta.tonight": "tonight's report ✓", "meta.lastnight": "⚠ last night's report", "meta.ago": "⚠ report from {n} nights ago",
   "fb.tonight": "tonight",
   "rel.tonight": "tonight", "rel.lastnight": "last night", "rel.ago": "{n} nights ago",
@@ -1186,7 +1186,7 @@ gr: {
   "ov.txtop": "Διαφάνεια κειμένου", "ov.size": "Μέγεθος γραμμάτων", "ov.font": "Γραμματοσειρά", "ov.bold": "Έντονα γράμματα",
   "ov.reset": "Επαναφορά προεπιλογών", "ov.ok": "Έτοιμο", "ov.hint": "οι αλλαγές εφαρμόζονται ζωντανά όσο η επικάλυψη είναι ανοιχτή", "cl.tierLow": "χαμηλή σημασία", "cl.tierMed": "μεσαία σημασία", "cl.tierHigh": "εξαιρετικά σημαντικό",
   "welcome": "Καλώς ήρθες — έτσι δείχνει η αποψινή βραδιά.",
-  "welcome.night": "νύχτα εργασίας {d} · {t}",
+  "welcome.night": "νύχτα εργασίας {d}, Ημερομηνία: {cd} {t}",
   "meta.tonight": "αποψινή αναφορά ✓", "meta.lastnight": "⚠ χθεσινή αναφορά", "meta.ago": "⚠ αναφορά πριν από {n} νύχτες",
   "fb.tonight": "αποψινό",
   "rel.tonight": "απόψε", "rel.lastnight": "χθες βράδυ", "rel.ago": "πριν {n} νύχτες",
@@ -1508,8 +1508,11 @@ function paintClock(){
   const wl = $("#welcomeLine");
   if(!wl) return;
   const b = businessNightDate(), now = new Date();
-  wl.textContent = t("welcome") + "  ·  " + t("welcome.night",
-    {d: pad2(b.getDate()) + "/" + pad2(b.getMonth() + 1), t: pad2(now.getHours()) + ":" + pad2(now.getMinutes())});
+  wl.textContent = t("welcome") + "  ·  " + t("welcome.night", {
+    d: pad2(b.getDate()) + "/" + pad2(b.getMonth() + 1),
+    cd: now.getDate() + "/" + (now.getMonth() + 1),
+    t: now.getHours() + ":" + pad2(now.getMinutes())
+  });
 }
 
 /* ---------- home checklist ---------- */
