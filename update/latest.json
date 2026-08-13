@@ -1,10 +1,10 @@
 {
-  "version": "1.3.0",
+  "version": "1.4.0",
   "type": "full",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.3.0/RecCheck-Setup.exe",
-  "setupSha256": "3e72fc8c98a0ae78cedd2df3e273316fc10d59c83539b08caa331abf5ce90684",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.4.0/RecCheck-Setup.exe",
+  "setupSha256": "489ba9e31135d4c50d3d57951b0ebd401d9c60ec51a7d6b129ec12ec332693d0",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/app/index.html",
-  "sha256": "76f49f50c0fd35496824602d4ba0353a797d6ca43ff5b72db7447cf5c70ba504",
-  "notes": "RecCheck 1.3.0 — desktop checklist overlay (transparent, click-through, always on top), Enter submits correction dialogs, corrected rooms show their guest, ghost-confirm bug fixed."
+  "sha256": "80e860d345d43d573b91d2327fbad462e31962ec5d0d0faffda50083e905786f",
+  "notes": "Overlay customization — grey background opacity, font family/size/weight, and screen-corner positioning, all live-previewed from Edit home screen → Customize overlay."
 }
