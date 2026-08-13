@@ -1066,7 +1066,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.7.1";
+const APP_VERSION = "1.7.2";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1158,6 +1158,10 @@ en: {
   "w.remove": "Remove from watchlist", "w.rowTitle": "Click to search this serial",
   "w.errRoom": "Room number (digits) is required.", "w.errSn": "Serial number must be digits.",
   "w.errNeed": "Add the serial number and/or the signed name.",
+  "wch.title": "WATCHLIST — GUESTS CHANGED", 
+  "wch.body": "The guests changed in watched rooms. Keep or remove each entry?",
+  "wch.keep": "Keep", "wch.remove": "Remove", "wch.apply": "Apply",
+  "wch.done": "Watchlist updated — {n} entr{s} removed", "wch.none": "Watchlist kept as is",
   "n.search": "search room № / guest / nickname…", "n.nick": "nickname", "n.save": "Save", "n.remove": "Remove",
   "n.head": "NICKNAMED ROOMS", "n.none": "— none yet —", "n.room": "Room",
   "n.notSeen": "— not seen in a report yet", "n.more": "… {n} more — narrow the search",
@@ -1257,6 +1261,10 @@ gr: {
   "w.remove": "Αφαίρεση από τη λίστα", "w.rowTitle": "Κλικ για αναζήτηση του σειριακού",
   "w.errRoom": "Ο αριθμός δωματίου (ψηφία) είναι υποχρεωτικός.", "w.errSn": "Ο σειριακός πρέπει να είναι ψηφία.",
   "w.errNeed": "Συμπληρώστε σειριακό ή/και το όνομα της υπογραφής.",
+  "wch.title": "ΛΙΣΤΑ ΠΑΡΑΚΟΛΟΥΘΗΣΗΣ — ΑΛΛΑΞΑΝ ΟΙ ΕΠΙΣΚΕΠΤΕΣ",
+  "wch.body": "Άλλαξαν οι επισκέπτες σε δωμάτια της λίστας. Να κρατηθεί ή να αφαιρεθεί κάθε εγγραφή;",
+  "wch.keep": "Κράτημα", "wch.remove": "Αφαίρεση", "wch.apply": "Εφαρμογή",
+  "wch.done": "Η λίστα ενημερώθηκε — αφαιρέθηκαν {n}", "wch.none": "Η λίστα έμεινε ως έχει",
   "n.search": "αναζήτηση δωματίου / ονόματος / ψευδωνύμου…", "n.nick": "ψευδώνυμο", "n.save": "Αποθήκευση", "n.remove": "Αφαίρεση",
   "n.head": "ΔΩΜΑΤΙΑ ΜΕ ΨΕΥΔΩΝΥΜΟ", "n.none": "— κανένα ακόμη —", "n.room": "Δωμάτιο",
   "n.notSeen": "— δεν έχει εμφανιστεί σε αναφορά ακόμη", "n.more": "… {n} ακόμη — περιορίστε την αναζήτηση",
@@ -1387,7 +1395,7 @@ function dateNum(d){
   return m ? (+m[3]) * 10000 + (+m[2]) * 100 + (+m[1]) : 0;
 }
 function syncRooms(){
-  const dropped = [];
+  const dropped = [], watchHit = [];
   const gm = {};                                  // roomMain -> Set of guest names
   for(const r of MODEL.receipts){
     if(!r.roomMain || !r.guest) continue;
@@ -1400,16 +1408,73 @@ function syncRooms(){
     const e = ROOMS[room];
     if(!e){ ROOMS[room] = {guest: g, seen: MODEL.reportDate}; continue; }
     if(rd && e.seen && dateNum(e.seen) > rd) continue;   // older report — read-only
-    if(e.guest && e.guest !== g && e.nick){
+    const changed = !!(e.guest && e.guest !== g);
+    if(changed && e.nick){
       dropped.push(room + " (" + e.nick + ")");
       delete e.nick;
     }
+    if(changed && WATCH.some(w => String(w.room) === room))
+      watchHit.push({room, oldGuest: e.guest, newGuest: g});
     e.guest = g;
     e.seen = MODEL.reportDate;
   }
   saveRooms();
   if(dropped.length)
     setTimeout(() => toast(t("n.reset") + dropped.join(" · "), true), 700);
+  if(watchHit.length)
+    setTimeout(() => openWatchChangePrompt(watchHit), 900);
+}
+/* guests changed in rooms that carry watchlist entries — the user decides per entry */
+function openWatchChangePrompt(changes){
+  const affected = [];
+  for(const ch of changes)
+    for(const w of WATCH)
+      if(String(w.room) === ch.room) affected.push({w, ch});
+  if(!affected.length) return;
+  const rows = affected.map((a, i) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(35,48,71,.5);font-family:var(--mono);font-size:13px">
+      <div style="flex:1;min-width:0">
+        <div><b style="color:#ffd98a">${escapeHtml(a.w.room)}</b> · <span style="color:var(--amber)">${escapeHtml(a.w.sn || "—")}</span> · ${escapeHtml(a.w.name || "")}</div>
+        <div style="color:var(--faint);font-size:11px;overflow:hidden;text-overflow:ellipsis">${escapeHtml(a.ch.oldGuest || "?")} → ${escapeHtml(a.ch.newGuest || "?")}</div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn small wchK" data-i="${i}">${t("wch.keep")}</button>
+        <button class="btn small wchR" data-i="${i}" style="border-color:var(--red-dim);color:var(--red)">${t("wch.remove")}</button>
+      </div>
+    </div>`).join("");
+  openModal(`
+    <h3>${t("wch.title")}</h3>
+    <div style="font-size:13.5px;color:var(--dim);margin-bottom:8px">${t("wch.body")}</div>
+    ${rows}
+    <div class="actions"><button class="btn amber" id="wchApply">${t("wch.apply")}</button></div>`);
+  const keep = affected.map(() => false);            // default: remove
+  const paint = () => {
+    document.querySelectorAll(".wchK").forEach(b => {
+      const on = keep[+b.dataset.i];
+      b.style.borderColor = on ? "var(--green-dim)" : "";
+      b.style.color = on ? "var(--green)" : "";
+    });
+    document.querySelectorAll(".wchR").forEach(b => {
+      const on = !keep[+b.dataset.i];
+      b.style.borderColor = on ? "var(--red)" : "var(--line)";
+      b.style.color = on ? "var(--red)" : "var(--dim)";
+    });
+  };
+  document.querySelectorAll(".wchK").forEach(b => b.onclick = () => { keep[+b.dataset.i] = true; paint(); });
+  document.querySelectorAll(".wchR").forEach(b => b.onclick = () => { keep[+b.dataset.i] = false; paint(); });
+  paint();
+  $("#wchApply").onclick = () => {
+    const drop = affected.filter((a, i) => !keep[i]).map(a => a.w);
+    if(drop.length){
+      WATCH = WATCH.filter(w => !drop.includes(w));
+      saveWatch();
+      toast(t("wch.done", {n: drop.length, s: drop.length === 1 ? "y" : "ies"}), true);
+    }else{
+      toast(t("wch.none"));
+    }
+    closeModal();
+    refresh();
+  };
 }
 function nickFor(room){ const e = ROOMS[String(room)]; return (e && e.nick) ? e.nick : null; }
 function guestFor(room){
