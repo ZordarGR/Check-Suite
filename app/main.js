@@ -1,4 +1,4 @@
-const {app, BrowserWindow, ipcMain, shell, dialog, screen, Tray, Menu} = require("electron");
+const {app, BrowserWindow, ipcMain, shell, dialog, screen, Tray, Menu, globalShortcut} = require("electron");
 const {spawn} = require("child_process");
 const path = require("path");
 const {pathToFileURL} = require("url");
@@ -23,6 +23,24 @@ const TRAY_TXT = {
   gr: {open: "Άνοιγμα RecCheck", overlay: "Εναλλαγή επικάλυψης λίστας", close: "Κλείσιμο RecCheck"}
 };
 function showMain(){ if(win){ win.show(); win.focus(); } }
+
+/* ---- system-wide overlay hotkey (works unfocused / from the tray) ---- */
+function toggleOverlayGlobal(){
+  if(overlayWin) destroyOverlay(); else createOverlay();
+  try{ const c = hub.readConfig(); c.overlayOn = !!overlayWin; hub.writeConfig(c); }catch(e){}
+  announceOverlayState();
+}
+function currentHotkey(){
+  try{
+    const c = hub.readConfig();
+    return (c.overlayHotkey !== undefined) ? c.overlayHotkey : "Control+T";
+  }catch(e){ return "Control+T"; }
+}
+function applyHotkey(acc){
+  try{ globalShortcut.unregisterAll(); }catch(e){}
+  if(!acc) return true;                        // empty = hotkey disabled
+  try{ return globalShortcut.register(acc, toggleOverlayGlobal); }catch(e){ return false; }
+}
 function announceOverlayState(){
   if(win && !win.isDestroyed()) win.webContents.send("overlay-state-changed", !!overlayWin);
 }
@@ -120,6 +138,7 @@ app.whenReady().then(() => {
   createWindow(eff.file);
   try{ if(hub.readConfig().overlayOn) createOverlay(); }catch(e){}
   buildTray();
+  applyHotkey(currentHotkey());
   updater.check().then(info => {
     if(info && win && !win.isDestroyed())
       win.webContents.send("reccheck-update-ready", info);
@@ -180,6 +199,19 @@ ipcMain.handle("overlay-data", (_e, d) => {
 
 app.on("before-quit", () => { QUITTING = true; });
 app.on("window-all-closed", () => { if(QUITTING) app.quit(); });   // otherwise we live in the tray
+
+ipcMain.handle("overlay-hotkey-get", () => currentHotkey());
+ipcMain.handle("overlay-hotkey-set", (_e, acc) => {
+  acc = typeof acc === "string" ? acc : "";
+  const prev = currentHotkey();
+  if(!applyHotkey(acc)){
+    applyHotkey(prev);                         // keep the old one working
+    return false;
+  }
+  try{ const c = hub.readConfig(); c.overlayHotkey = acc; hub.writeConfig(c); }catch(e){}
+  return true;
+});
+app.on("will-quit", () => { try{ globalShortcut.unregisterAll(); }catch(e){} });
 
 ipcMain.handle("app-set-lang", (_e, l) => {
   TRAYLANG = l === "gr" ? "gr" : "en";

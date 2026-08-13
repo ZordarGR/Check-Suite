@@ -1066,7 +1066,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.6.1";
+const APP_VERSION = "1.7.0";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1088,7 +1088,10 @@ en: {
   "ov.menu": "CUSTOMIZE OVERLAY", "ov.menuSub": "background, font, size and position of the desktop overlay",
   "ov.title": "CUSTOMIZE OVERLAY", "ov.pos": "Position on screen", "ov.bg": "Background (grey)",
   "ov.txtop": "Text opacity", "ov.size": "Font size", "ov.font": "Font", "ov.bold": "Bold text",
-  "ov.reset": "Reset to defaults", "ov.ok": "Done", "ov.hint": "changes apply live while the overlay is on", "cl.tierLow": "low importance", "cl.tierMed": "medium importance", "cl.tierHigh": "extremely important",
+  "ov.reset": "Reset to defaults", "ov.ok": "Done", "ov.hint": "changes apply live while the overlay is on",
+  "ov.hk": "Global shortcut (toggles the overlay from anywhere)", "ov.hkPress": "press the new combination… (Esc cancels)",
+  "ov.hkBusy": "That combination is held by another program — pick a different one.",
+  "ov.hkNeedMod": "Use at least one of Ctrl / Alt / Shift with a key.", "cl.tierLow": "low importance", "cl.tierMed": "medium importance", "cl.tierHigh": "extremely important",
   "welcome": "Welcome — here's what tonight looks like.",
   "welcome.night": "working night of {d}, Date: {cd} {t}",
   "meta.tonight": "tonight's report ✓", "meta.lastnight": "⚠ last night's report", "meta.ago": "⚠ report from {n} nights ago",
@@ -1184,7 +1187,10 @@ gr: {
   "ov.menu": "ΠΡΟΣΑΡΜΟΓΗ ΕΠΙΚΑΛΥΨΗΣ", "ov.menuSub": "φόντο, γραμματοσειρά, μέγεθος και θέση της επικάλυψης",
   "ov.title": "ΠΡΟΣΑΡΜΟΓΗ ΕΠΙΚΑΛΥΨΗΣ", "ov.pos": "Θέση στην οθόνη", "ov.bg": "Φόντο (γκρι)",
   "ov.txtop": "Διαφάνεια κειμένου", "ov.size": "Μέγεθος γραμμάτων", "ov.font": "Γραμματοσειρά", "ov.bold": "Έντονα γράμματα",
-  "ov.reset": "Επαναφορά προεπιλογών", "ov.ok": "Έτοιμο", "ov.hint": "οι αλλαγές εφαρμόζονται ζωντανά όσο η επικάλυψη είναι ανοιχτή", "cl.tierLow": "χαμηλή σημασία", "cl.tierMed": "μεσαία σημασία", "cl.tierHigh": "εξαιρετικά σημαντικό",
+  "ov.reset": "Επαναφορά προεπιλογών", "ov.ok": "Έτοιμο", "ov.hint": "οι αλλαγές εφαρμόζονται ζωντανά όσο η επικάλυψη είναι ανοιχτή",
+  "ov.hk": "Καθολική συντόμευση (ανοιγοκλείνει την επικάλυψη από παντού)", "ov.hkPress": "πατήστε τον νέο συνδυασμό… (Esc ακύρωση)",
+  "ov.hkBusy": "Ο συνδυασμός χρησιμοποιείται από άλλο πρόγραμμα — διαλέξτε άλλον.",
+  "ov.hkNeedMod": "Χρησιμοποιήστε τουλάχιστον Ctrl / Alt / Shift μαζί με ένα πλήκτρο.", "cl.tierLow": "χαμηλή σημασία", "cl.tierMed": "μεσαία σημασία", "cl.tierHigh": "εξαιρετικά σημαντικό",
   "welcome": "Καλώς ήρθες — έτσι δείχνει η αποψινή βραδιά.",
   "welcome.night": "νύχτα εργασίας {d}, Ημερομηνία: {cd} {t}",
   "meta.tonight": "αποψινή αναφορά ✓", "meta.lastnight": "⚠ χθεσινή αναφορά", "meta.ago": "⚠ αναφορά πριν από {n} νύχτες",
@@ -1587,6 +1593,9 @@ function openOverlaySettings(){
     <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer">
       <input type="checkbox" id="ovBold" style="width:17px;height:17px;accent-color:var(--amber)"${OVCFG.bold ? " checked" : ""}> ${t("ov.bold")}
     </label>
+    <label>${t("ov.hk")}</label>
+    <button class="btn" id="ovHk" style="width:100%;font-family:var(--mono);letter-spacing:.08em">…</button>
+    <div class="err" id="ovHkErr"></div>
     <div class="err" style="color:var(--faint)">${t("ov.hint")}</div>
     <div class="actions">
       <button class="btn" id="ovReset">${t("ov.reset")}</button>
@@ -1604,6 +1613,47 @@ function openOverlaySettings(){
   $("#ovBold").onchange = e => { OVCFG.bold = e.target.checked; apply(); };
   $("#ovReset").onclick = () => { OVCFG = Object.assign({}, OVDEF); apply(); closeModal(); openOverlaySettings(); };
   $("#ovOk").onclick = closeModal;
+
+  // global hotkey binding
+  const hkBtn = $("#ovHk"), hkErr = $("#ovHkErr");
+  const pretty = a => (a || "—").replace("Control", "Ctrl").replace("Super", "Win");
+  if(!(window.reccheckOverlay && window.reccheckOverlay.hotkeyGet)){
+    hkBtn.style.display = "none";
+  }else{
+    window.reccheckOverlay.hotkeyGet().then(a => { hkBtn.textContent = pretty(a); }).catch(() => {});
+    hkBtn.onclick = () => {
+      hkErr.textContent = "";
+      hkBtn.textContent = t("ov.hkPress");
+      const cap = async e => {
+        e.preventDefault();
+        e.stopPropagation();
+        if(e.key === "Escape"){
+          document.removeEventListener("keydown", cap, true);
+          window.reccheckOverlay.hotkeyGet().then(a => { hkBtn.textContent = pretty(a); });
+          return;
+        }
+        if(["Control","Alt","Shift","Meta"].includes(e.key)) return;   // wait for the full combo
+        const mods = [];
+        if(e.ctrlKey) mods.push("Control");
+        if(e.altKey) mods.push("Alt");
+        if(e.shiftKey) mods.push("Shift");
+        if(e.metaKey) mods.push("Super");
+        let key = e.key.length === 1 ? e.key.toUpperCase() : e.key;
+        const isFn = /^F([1-9]|1[0-9]|2[0-4])$/.test(key);
+        if(!mods.length && !isFn){ hkErr.textContent = t("ov.hkNeedMod"); return; }
+        if(!/^[A-Z0-9]$/.test(key) && !isFn && !["Space","Home","End","Insert","Delete","PageUp","PageDown"].includes(key)) return;
+        document.removeEventListener("keydown", cap, true);
+        const acc = mods.concat([key === " " ? "Space" : key]).join("+");
+        const ok = await window.reccheckOverlay.hotkeySet(acc).catch(() => false);
+        if(ok){ hkBtn.textContent = pretty(acc); }
+        else{
+          hkErr.textContent = t("ov.hkBusy");
+          window.reccheckOverlay.hotkeyGet().then(a => { hkBtn.textContent = pretty(a); });
+        }
+      };
+      document.addEventListener("keydown", cap, true);
+    };
+  }
 }
 function clSorted(){
   const order = {high: 0, med: 1, low: 2};
