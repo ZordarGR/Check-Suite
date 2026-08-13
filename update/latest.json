@@ -1,10 +1,10 @@
 {
-  "version": "1.6.0",
+  "version": "1.6.1",
   "type": "full",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.6.0/RecCheck-Setup.exe",
-  "setupSha256": "3989cad6247af1d99f6fde8fd872b1d818850f938297ba34a8ee319af772f2a6",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.6.1/RecCheck-Setup.exe",
+  "setupSha256": "034abbc831ca3fbf5c3f43e23242c916e2498410442e5a2d8a8f0202246a7d93",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/app/index.html",
-  "sha256": "eeb4c64a306f828c1b4829a17004a1dd86ec0e7f5029e5a5c104c8eb0cba5b3f",
-  "notes": "Update front end: engine downloads now show a live 'Update available. Downloading: x%' box bottom-right, replaced by the install arrow when ready."
+  "sha256": "e664977e9cb0db660dc1eb28aa7ce9ee541f611a568020f7ddacbe9cd03f6d2f",
+  "notes": "Home clock shows the working night and the real calendar date/time, ticking live every second."
 }
