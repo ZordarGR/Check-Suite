@@ -18,10 +18,11 @@ function vNewer(a, b){          // true when a > b
 
 class Updater {
   constructor(opts){
-    // opts: {userDataDir, packagedDir, pkgVersion, updateUrl, fallbackReleaseUrl}
+    // opts: {userDataDir, packagedDir, pkgVersion, updateUrl, fallbackReleaseUrl, onProgress}
     this.o = opts;
     this.pending = null;
   }
+  emit(p){ try{ this.o.onProgress && this.o.onProgress(p); }catch(e){} }
   paths(){
     const d = path.join(this.o.userDataDir, "updates");
     fs.mkdirSync(d, {recursive: true});
@@ -83,11 +84,32 @@ class Updater {
         const have = this.readJson(P.setupMeta);
         if(!(have && have.version === latest.version && fs.existsSync(P.setupExe))){
           const sr = await fetch(latest.setup, {cache: "no-store", redirect: "follow"});
-          if(!sr.ok) return null;
-          const sbuf = Buffer.from(await sr.arrayBuffer());
+          if(!sr.ok){ this.emit({phase: "failed", version: latest.version}); return null; }
+          let sbuf;
+          const total = parseInt(sr.headers.get("content-length") || "0", 10);
+          if(sr.body && sr.body.getReader){
+            const reader = sr.body.getReader();
+            const chunks = [];
+            let received = 0, lastPct = -1;
+            this.emit({phase: "downloading", version: latest.version, pct: total ? 0 : null, received: 0, total});
+            for(;;){
+              const {done, value} = await reader.read();
+              if(done) break;
+              chunks.push(Buffer.from(value));
+              received += value.length;
+              const pct = total ? Math.min(99, Math.floor(received / total * 100)) : null;
+              if(pct !== lastPct){
+                lastPct = pct;
+                this.emit({phase: "downloading", version: latest.version, pct, received, total});
+              }
+            }
+            sbuf = Buffer.concat(chunks);
+          }else{
+            sbuf = Buffer.from(await sr.arrayBuffer());
+          }
           const ssha = crypto.createHash("sha256").update(sbuf).digest("hex");
-          if(latest.setupSha256 && ssha.toLowerCase() !== String(latest.setupSha256).toLowerCase()) return null;
-          if(sbuf.length < 1048576 || sbuf.slice(0, 2).toString("latin1") !== "MZ") return null;
+          if(latest.setupSha256 && ssha.toLowerCase() !== String(latest.setupSha256).toLowerCase()){ this.emit({phase: "failed", version: latest.version}); return null; }
+          if(sbuf.length < 1048576 || sbuf.slice(0, 2).toString("latin1") !== "MZ"){ this.emit({phase: "failed", version: latest.version}); return null; }
           fs.writeFileSync(P.setupExe + ".tmp", sbuf);
           fs.renameSync(P.setupExe + ".tmp", P.setupExe);
           fs.writeFileSync(P.setupMeta, JSON.stringify({version: latest.version, sha256: ssha}));

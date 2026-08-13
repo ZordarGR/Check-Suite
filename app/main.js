@@ -108,7 +108,8 @@ app.whenReady().then(() => {
     packagedDir: __dirname,
     pkgVersion: PKG_VERSION,
     updateUrl: (process.env.RECCHECK_UPDATE_URL || REPO_RAW + "/update/latest.json"),
-    fallbackReleaseUrl: "https://github.com/ZordarGR/Check-Suite/releases/latest"
+    fallbackReleaseUrl: "https://github.com/ZordarGR/Check-Suite/releases/latest",
+    onProgress: (p) => { if(win && !win.isDestroyed()) win.webContents.send("reccheck-update-progress", p); }
   });
   hub = new FileHub({
     configPath: path.join(app.getPath("userData"), "config.json"),

@@ -365,6 +365,9 @@ main{transition:margin-right .18s ease}
 #updateBtn:hover{transform:translateY(-2px);box-shadow:0 10px 30px rgba(40,110,220,.55)}
 #updateBtn.busy{opacity:.55;pointer-events:none}
 #updateBtn svg{display:block}
+#updBox{position:fixed;right:22px;bottom:22px;z-index:89;background:#101d33;border:1.5px solid #2f5f9e;border-radius:12px;
+  color:#9cc4f8;font-family:var(--mono);font-size:12.5px;padding:10px 14px;display:none;
+  box-shadow:0 6px 22px rgba(40,110,220,.3);animation:updIn .25s ease-out}
 @keyframes updIn{from{transform:scale(.5);opacity:0}to{transform:scale(1);opacity:1}}
 
 #printSheet{display:none}
@@ -372,7 +375,7 @@ main{transition:margin-right .18s ease}
   html,body{height:auto !important;min-height:0 !important;overflow:visible !important}
   body{background:#fff !important;margin:0;padding:0}
   @page{margin:12mm}
-  header,main,#landing,#modalBg,#toast,#updateBtn,#rail,#drawer,#taxScreen{display:none !important}
+  header,main,#landing,#modalBg,#toast,#updateBtn,#updBox,#rail,#drawer,#taxScreen{display:none !important}
   #printSheet{display:block !important;color:#000;font-family:"Segoe UI",Arial,sans-serif;padding:0;font-size:12px}
   #printSheet h1{font-size:16px;letter-spacing:.06em;margin:0 0 2px;font-weight:700}
   #printSheet .meta{font-size:11px;margin-bottom:14px;color:#000}
@@ -709,6 +712,7 @@ main{transition:margin-right .18s ease}
 </div></div>
 </div>
 <div id="print-mount"></div>
+<div id="updBox"></div>
 
 <div id="printSheet"></div>
 <div id="modalBg"><div id="modal"></div></div>
@@ -1062,7 +1066,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.5.0";
+const APP_VERSION = "1.6.0";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1160,6 +1164,7 @@ en: {
   "n.nickedTitle": " — nicknamed room",
   "upd.ready": "Update v{v} downloaded — click to install and restart",
   "upd.full": "Version {v} needs a full reinstall — click to open the download page",
+  "upd.dl": "Update available. Downloading: {pct}",
   "exp.none": "Nothing to export yet", "exp.done": "Exported {n} saved item(s)",
   "imp.done": "✓ Imported {n} saved item(s)", "imp.loadhint": " — they will appear when you load a report",
   "imp.fail": "✗ Import failed: ", "imp.notours": "this is not a RecCheck data file", "imp.nodata": "the file contained no usable data", "imp.noread": "✗ Could not read the file"
@@ -1255,6 +1260,7 @@ gr: {
   "n.nickedTitle": " — δωμάτιο με ψευδώνυμο",
   "upd.ready": "Η ενημέρωση v{v} κατέβηκε — κλικ για εγκατάσταση και επανεκκίνηση",
   "upd.full": "Η έκδοση {v} χρειάζεται πλήρη επανεγκατάσταση — κλικ για τη σελίδα λήψης",
+  "upd.dl": "Διαθέσιμη ενημέρωση. Λήψη: {pct}",
   "exp.none": "Δεν υπάρχει τίποτα για εξαγωγή ακόμη", "exp.done": "Εξήχθησαν {n} στοιχεία",
   "imp.done": "✓ Εισήχθησαν {n} στοιχεία", "imp.loadhint": " — θα εμφανιστούν όταν φορτώσετε αναφορά",
   "imp.fail": "✗ Η εισαγωγή απέτυχε: ", "imp.notours": "δεν είναι αρχείο δεδομένων RecCheck", "imp.nodata": "το αρχείο δεν είχε αξιοποιήσιμα δεδομένα", "imp.noread": "✗ Δεν ήταν δυνατή η ανάγνωση του αρχείου"
@@ -3020,7 +3026,18 @@ $("#resetDay").onclick = () => {
   if(ver) ver.textContent = "v" + APP_VERSION;
   if(!window.reccheckUpdate) return;             // plain browser — nothing to do
   window.reccheckUpdate.version().then(v => { if(ver && v) ver.textContent = "v" + v; }).catch(() => {});
+  if(window.reccheckUpdate.onProgress){
+    window.reccheckUpdate.onProgress(p => {
+      const box = $("#updBox");
+      if(!box) return;
+      if(p.phase === "failed" || document.getElementById("updateBtn")){ box.style.display = "none"; return; }
+      box.style.display = "block";
+      box.textContent = t("upd.dl", {pct: (p.pct === null || p.pct === undefined) ? "…" : p.pct + "%"});
+    });
+  }
   window.reccheckUpdate.onReady(info => {
+    const box = $("#updBox");
+    if(box) box.style.display = "none";
     if(document.getElementById("updateBtn")) return;
     const b = document.createElement("button");
     b.id = "updateBtn";
