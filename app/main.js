@@ -1,4 +1,4 @@
-const {app, BrowserWindow, ipcMain, shell, dialog, screen} = require("electron");
+const {app, BrowserWindow, ipcMain, shell, dialog, screen, Tray, Menu} = require("electron");
 const {spawn} = require("child_process");
 const path = require("path");
 const {pathToFileURL} = require("url");
@@ -10,6 +10,41 @@ const REPO_RAW = "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main";
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
 let win = null, updater = null, hub = null;
+let tray = null, QUITTING = false, TRAYLANG = "en";
+
+/* ---- single instance: a second launch just resurfaces the running one ---- */
+if(!app.requestSingleInstanceLock()){
+  app.exit(0);
+}
+app.on("second-instance", () => { if(win){ win.show(); win.focus(); } });
+
+const TRAY_TXT = {
+  en: {open: "Open RecCheck", overlay: "Toggle checklist overlay", close: "Close RecCheck"},
+  gr: {open: "Άνοιγμα RecCheck", overlay: "Εναλλαγή επικάλυψης λίστας", close: "Κλείσιμο RecCheck"}
+};
+function showMain(){ if(win){ win.show(); win.focus(); } }
+function announceOverlayState(){
+  if(win && !win.isDestroyed()) win.webContents.send("overlay-state-changed", !!overlayWin);
+}
+function buildTray(){
+  if(!tray){
+    tray = new Tray(path.join(__dirname, "tray.ico"));
+    tray.setToolTip("RecCheck");
+    tray.on("click", showMain);
+    tray.on("double-click", showMain);
+  }
+  const L = TRAY_TXT[TRAYLANG] || TRAY_TXT.en;
+  tray.setContextMenu(Menu.buildFromTemplate([
+    {label: L.open, click: showMain},
+    {label: L.overlay, click: () => {
+      if(overlayWin) destroyOverlay(); else createOverlay();
+      try{ const c = hub.readConfig(); c.overlayOn = !!overlayWin; hub.writeConfig(c); }catch(e){}
+      announceOverlayState();
+    }},
+    {type: "separator"},
+    {label: L.close, click: () => { QUITTING = true; app.quit(); }}
+  ]));
+}
 let overlayWin = null, overlayData = null;
 
 /* ---- desktop checklist overlay: transparent, click-through, always on top ---- */
@@ -61,7 +96,10 @@ function createWindow(file){
     if(updater && updater.pending)
       win.webContents.send("reccheck-update-ready", updater.pending);
   });
-  win.on("closed", () => { destroyOverlay(); });   // the overlay lives only while the app does
+  win.on("close", e => {
+    if(!QUITTING){ e.preventDefault(); win.hide(); }   // X hides to tray — the overlay stays up
+  });
+  win.on("closed", () => { win = null; destroyOverlay(); });
 }
 
 app.whenReady().then(() => {
@@ -80,6 +118,7 @@ app.whenReady().then(() => {
   const eff = updater.effective();
   createWindow(eff.file);
   try{ if(hub.readConfig().overlayOn) createOverlay(); }catch(e){}
+  buildTray();
   updater.check().then(info => {
     if(info && win && !win.isDestroyed())
       win.webContents.send("reccheck-update-ready", info);
@@ -138,4 +177,11 @@ ipcMain.handle("overlay-data", (_e, d) => {
   return true;
 });
 
-app.on("window-all-closed", () => app.quit());
+app.on("before-quit", () => { QUITTING = true; });
+app.on("window-all-closed", () => { if(QUITTING) app.quit(); });   // otherwise we live in the tray
+
+ipcMain.handle("app-set-lang", (_e, l) => {
+  TRAYLANG = l === "gr" ? "gr" : "en";
+  buildTray();
+  return true;
+});

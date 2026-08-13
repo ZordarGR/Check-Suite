@@ -1062,7 +1062,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.4.0";
+const APP_VERSION = "1.5.0";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1302,6 +1302,7 @@ function applyLang(){
   document.querySelector(".tierBtn.t-high").title = t("cl.tierHigh");
   renderChecklist();
   if(window.__taSetLang) window.__taSetLang(LANG === "gr" ? "el" : "en");
+  if(window.reccheckApp && window.reccheckApp.setLang) window.reccheckApp.setLang(LANG).catch(() => {});
   $("#fbBack").textContent = t("fb.back");
   $("#fbEmpty").textContent = t("fb.empty");
   $("#fbViewList").title = t("fb.viewList");
@@ -3007,6 +3008,8 @@ $("#resetDay").onclick = () => {
   }
   if(window.reccheckOverlay){
     try{ OVON = await window.reccheckOverlay.state(); }catch(e){}
+    if(window.reccheckOverlay.onState)
+      window.reccheckOverlay.onState(on => { OVON = on; paintOverlayBtn(); });
   }
   paintTierSel();
   clNightCheck();

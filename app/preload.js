@@ -15,7 +15,11 @@ contextBridge.exposeInMainWorld("reccheckFiles", {
 contextBridge.exposeInMainWorld("reccheckOverlay", {
   toggle: () => ipcRenderer.invoke("overlay-toggle"),
   state: () => ipcRenderer.invoke("overlay-state"),
-  setData: (d) => ipcRenderer.invoke("overlay-data", d)
+  setData: (d) => ipcRenderer.invoke("overlay-data", d),
+  onState: (cb) => ipcRenderer.on("overlay-state-changed", (_e, on) => cb(on))
+});
+contextBridge.exposeInMainWorld("reccheckApp", {
+  setLang: (l) => ipcRenderer.invoke("app-set-lang", l)
 });
 contextBridge.exposeInMainWorld("reccheckHelp", {
   open: () => ipcRenderer.invoke("open-help")
