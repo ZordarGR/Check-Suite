@@ -3024,7 +3024,8 @@ $("#resetDay").onclick = () => {
   clNightCheck();
   applyLang();
   showScreen("menu");
-  setInterval(() => { paintClock(); clNightCheck(); }, 30000);
+  setInterval(paintClock, 1000);                 // live clock — repaint every second
+  setInterval(clNightCheck, 30000);              // night rollover check
   const ver = $("#appVer");
   if(ver) ver.textContent = "v" + APP_VERSION;
   if(!window.reccheckUpdate) return;             // plain browser — nothing to do
