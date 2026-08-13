@@ -540,6 +540,7 @@ main{transition:margin-right .18s ease}
         <button class="mcatBtn" id="mcEditBtn"></button>
         <div class="msub">
           <button class="msubItem" id="mEditChecklist"><span class="mLabel"></span><span class="mSub"></span></button>
+          <button class="msubItem" id="mCustomOverlay" style="display:none"><span class="mLabel"></span><span class="mSub"></span></button>
         </div>
       </div>
     </div>
@@ -1061,7 +1062,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.3.0";
+const APP_VERSION = "1.4.0";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1079,7 +1080,11 @@ en: {
   "cl.title": "TONIGHT'S CHECKLIST", "cl.count": "{d} / {n} done", "cl.empty": "— no tasks yet — use Edit home screen → Edit checklist to add some",
   "cl.add": "Add task", "cl.save": "Save", "cl.doneEditing": "Done editing", "cl.edit": "edit", "cl.del": "delete",
   "cl.ph": "what needs to happen tonight…", "cl.ovOn": "⧉ overlay: on", "cl.ovOff": "⧉ overlay: off",
-  "cl.ovTitle": "Show the checklist on the desktop — always on top, click-through, until the app closes", "cl.tierLow": "low importance", "cl.tierMed": "medium importance", "cl.tierHigh": "extremely important",
+  "cl.ovTitle": "Show the checklist on the desktop — always on top, click-through, until the app closes",
+  "ov.menu": "CUSTOMIZE OVERLAY", "ov.menuSub": "background, font, size and position of the desktop overlay",
+  "ov.title": "CUSTOMIZE OVERLAY", "ov.pos": "Position on screen", "ov.bg": "Background (grey)",
+  "ov.txtop": "Text opacity", "ov.size": "Font size", "ov.font": "Font", "ov.bold": "Bold text",
+  "ov.reset": "Reset to defaults", "ov.ok": "Done", "ov.hint": "changes apply live while the overlay is on", "cl.tierLow": "low importance", "cl.tierMed": "medium importance", "cl.tierHigh": "extremely important",
   "welcome": "Welcome — here's what tonight looks like.",
   "welcome.night": "working night of {d} · {t}",
   "meta.tonight": "tonight's report ✓", "meta.lastnight": "⚠ last night's report", "meta.ago": "⚠ report from {n} nights ago",
@@ -1170,7 +1175,11 @@ gr: {
   "cl.title": "Η ΛΙΣΤΑ ΤΗΣ ΒΡΑΔΙΑΣ", "cl.count": "{d} / {n} έγιναν", "cl.empty": "— καμία εργασία — Επεξεργασία αρχικής → Επεξεργασία λίστας για προσθήκη",
   "cl.add": "Προσθήκη", "cl.save": "Αποθήκευση", "cl.doneEditing": "Τέλος επεξεργασίας", "cl.edit": "αλλαγή", "cl.del": "διαγραφή",
   "cl.ph": "τι πρέπει να γίνει απόψε…", "cl.ovOn": "⧉ επικάλυψη: ναι", "cl.ovOff": "⧉ επικάλυψη: όχι",
-  "cl.ovTitle": "Εμφάνιση της λίστας στην επιφάνεια εργασίας — πάντα από πάνω, δεν πιάνει κλικ, όσο η εφαρμογή είναι ανοιχτή", "cl.tierLow": "χαμηλή σημασία", "cl.tierMed": "μεσαία σημασία", "cl.tierHigh": "εξαιρετικά σημαντικό",
+  "cl.ovTitle": "Εμφάνιση της λίστας στην επιφάνεια εργασίας — πάντα από πάνω, δεν πιάνει κλικ, όσο η εφαρμογή είναι ανοιχτή",
+  "ov.menu": "ΠΡΟΣΑΡΜΟΓΗ ΕΠΙΚΑΛΥΨΗΣ", "ov.menuSub": "φόντο, γραμματοσειρά, μέγεθος και θέση της επικάλυψης",
+  "ov.title": "ΠΡΟΣΑΡΜΟΓΗ ΕΠΙΚΑΛΥΨΗΣ", "ov.pos": "Θέση στην οθόνη", "ov.bg": "Φόντο (γκρι)",
+  "ov.txtop": "Διαφάνεια κειμένου", "ov.size": "Μέγεθος γραμμάτων", "ov.font": "Γραμματοσειρά", "ov.bold": "Έντονα γράμματα",
+  "ov.reset": "Επαναφορά προεπιλογών", "ov.ok": "Έτοιμο", "ov.hint": "οι αλλαγές εφαρμόζονται ζωντανά όσο η επικάλυψη είναι ανοιχτή", "cl.tierLow": "χαμηλή σημασία", "cl.tierMed": "μεσαία σημασία", "cl.tierHigh": "εξαιρετικά σημαντικό",
   "welcome": "Καλώς ήρθες — έτσι δείχνει η αποψινή βραδιά.",
   "welcome.night": "νύχτα εργασίας {d} · {t}",
   "meta.tonight": "αποψινή αναφορά ✓", "meta.lastnight": "⚠ χθεσινή αναφορά", "meta.ago": "⚠ αναφορά πριν από {n} νύχτες",
@@ -1275,6 +1284,8 @@ function applyLang(){
   $("#mcOptionsBtn").textContent = t("menu.options");
   $("#mcEditBtn").textContent = t("menu.editHome");
   mi("#mEditChecklist", "menu.editCl", "menu.editClSub");
+  $("#mCustomOverlay").style.display = window.reccheckOverlay ? "" : "none";
+  mi("#mCustomOverlay", "ov.menu", "ov.menuSub");
   const me = $("#mExport"); me.querySelector(".mLabel").textContent = t("land.export"); me.querySelector(".mSub").textContent = t("land.dataHint");
   const mim = $("#mImport"); mim.querySelector(".mLabel").textContent = t("land.import"); mim.querySelector(".mSub").textContent = t("land.dataHint");
   mi("#auditBtn", "menu.audit", "menu.auditSub");
@@ -1539,13 +1550,58 @@ function renderChecklist(){
   }
 }
 let OVON = false;
+const OVDEF = {pos: "tr", bg: 0, txt: 50, size: 14, font: "segoe", bold: true};
+let OVCFG = (function(){
+  try{ return Object.assign({}, OVDEF, JSON.parse(localStorage.getItem("reccheck_overlay_cfg") || "{}")); }
+  catch(e){ return Object.assign({}, OVDEF); }
+})();
+function saveOvCfg(){ try{ localStorage.setItem("reccheck_overlay_cfg", JSON.stringify(OVCFG)); }catch(e){} }
+function openOverlaySettings(){
+  const posBtn = (k, sym) => `<button class="btn small ovPos${OVCFG.pos === k ? " sel" : ""}" data-pos="${k}" style="flex:1;font-size:16px${OVCFG.pos === k ? ";border-color:var(--amber);color:var(--amber)" : ""}">${sym}</button>`;
+  openModal(`
+    <h3>${t("ov.title")}</h3>
+    <label>${t("ov.pos")}</label>
+    <div style="display:flex;gap:8px">${posBtn("tl","↖")}${posBtn("tr","↗")}${posBtn("bl","↙")}${posBtn("br","↘")}</div>
+    <label>${t("ov.bg")} — <span id="ovBgV">${OVCFG.bg}%</span></label>
+    <input type="range" id="ovBg" min="0" max="90" step="5" value="${OVCFG.bg}" style="width:100%;accent-color:var(--amber)">
+    <label>${t("ov.txtop")} — <span id="ovTxV">${OVCFG.txt}%</span></label>
+    <input type="range" id="ovTx" min="15" max="100" step="5" value="${OVCFG.txt}" style="width:100%;accent-color:var(--amber)">
+    <label>${t("ov.size")} — <span id="ovSzV">${OVCFG.size}px</span></label>
+    <input type="range" id="ovSz" min="11" max="22" step="1" value="${OVCFG.size}" style="width:100%;accent-color:var(--amber)">
+    <label>${t("ov.font")}</label>
+    <select id="ovFont">
+      <option value="segoe"${OVCFG.font === "segoe" ? " selected" : ""}>Segoe UI</option>
+      <option value="mono"${OVCFG.font === "mono" ? " selected" : ""}>Consolas (monospace)</option>
+      <option value="serif"${OVCFG.font === "serif" ? " selected" : ""}>Georgia (serif)</option>
+    </select>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer">
+      <input type="checkbox" id="ovBold" style="width:17px;height:17px;accent-color:var(--amber)"${OVCFG.bold ? " checked" : ""}> ${t("ov.bold")}
+    </label>
+    <div class="err" style="color:var(--faint)">${t("ov.hint")}</div>
+    <div class="actions">
+      <button class="btn" id="ovReset">${t("ov.reset")}</button>
+      <button class="btn amber" id="ovOk">${t("ov.ok")}</button>
+    </div>`);
+  const apply = () => { saveOvCfg(); pushOverlay(); };
+  document.querySelectorAll(".ovPos").forEach(b => b.onclick = () => {
+    OVCFG.pos = b.dataset.pos; apply();
+    document.querySelectorAll(".ovPos").forEach(x => { const on = x.dataset.pos === OVCFG.pos; x.style.borderColor = on ? "var(--amber)" : ""; x.style.color = on ? "var(--amber)" : ""; });
+  });
+  $("#ovBg").oninput = e => { OVCFG.bg = +e.target.value; $("#ovBgV").textContent = OVCFG.bg + "%"; apply(); };
+  $("#ovTx").oninput = e => { OVCFG.txt = +e.target.value; $("#ovTxV").textContent = OVCFG.txt + "%"; apply(); };
+  $("#ovSz").oninput = e => { OVCFG.size = +e.target.value; $("#ovSzV").textContent = OVCFG.size + "px"; apply(); };
+  $("#ovFont").onchange = e => { OVCFG.font = e.target.value; apply(); };
+  $("#ovBold").onchange = e => { OVCFG.bold = e.target.checked; apply(); };
+  $("#ovReset").onclick = () => { OVCFG = Object.assign({}, OVDEF); apply(); closeModal(); openOverlaySettings(); };
+  $("#ovOk").onclick = closeModal;
+}
 function clSorted(){
   const order = {high: 0, med: 1, low: 2};
   return CL.slice().sort((a, b) => (a.done - b.done) || (order[a.tier] - order[b.tier]));
 }
 function pushOverlay(){
   if(!window.reccheckOverlay) return;
-  window.reccheckOverlay.setData({tasks: clSorted().map(x => ({text: x.text, done: !!x.done, tier: x.tier}))}).catch(() => {});
+  window.reccheckOverlay.setData({tasks: clSorted().map(x => ({text: x.text, done: !!x.done, tier: x.tier})), cfg: OVCFG}).catch(() => {});
 }
 function paintOverlayBtn(){
   const b = $("#clOverlay");
@@ -2814,6 +2870,7 @@ $("#aTax").onclick = () => showScreen("tax");
 $("#mLang").onclick = () => setLang(LANG === "en" ? "gr" : "en");
 $("#mDir").onclick = fbPickDir;
 $("#mEditChecklist").onclick = () => { CLEDIT = true; renderChecklist(); document.querySelectorAll(".mcat").forEach(c => c.classList.remove("open")); setTimeout(() => $("#clText").focus(), 60); };
+$("#mCustomOverlay").onclick = () => { document.querySelectorAll(".mcat").forEach(c => c.classList.remove("open")); openOverlaySettings(); };
 $("#clDone").onclick = () => { CLEDIT = false; CLEDITID = null; $("#clText").value = ""; renderChecklist(); applyLang(); };
 $("#clOverlay").onclick = async () => {
   if(!window.reccheckOverlay) return;

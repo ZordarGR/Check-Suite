@@ -13,15 +13,21 @@ let win = null, updater = null, hub = null;
 let overlayWin = null, overlayData = null;
 
 /* ---- desktop checklist overlay: transparent, click-through, always on top ---- */
-function overlayBounds(count){
+function overlayBounds(count, cfg){
+  cfg = cfg || {};
   const wa = screen.getPrimaryDisplay().workArea;
-  const W = 340;
-  const H = Math.min(Math.max(60, 24 + count * 27), Math.round(wa.height * 0.6));
-  return {x: wa.x + wa.width - W - 12, y: wa.y + 12, width: W, height: H};
+  const size = Math.min(26, Math.max(10, cfg.size || 14));
+  const W = Math.min(520, Math.max(300, Math.round(340 * size / 14)));
+  const lineH = Math.round(size * 1.45 + 10);
+  const H = Math.min(Math.max(60, 28 + count * lineH), Math.round(wa.height * 0.7));
+  const pos = cfg.pos || "tr";
+  const x = (pos === "tl" || pos === "bl") ? wa.x + 12 : wa.x + wa.width - W - 12;
+  const y = (pos === "bl" || pos === "br") ? wa.y + wa.height - H - 12 : wa.y + 12;
+  return {x, y, width: W, height: H};
 }
 function createOverlay(){
   if(overlayWin) return;
-  overlayWin = new BrowserWindow(Object.assign(overlayBounds((overlayData && overlayData.tasks || []).length), {
+  overlayWin = new BrowserWindow(Object.assign(overlayBounds((overlayData && overlayData.tasks || []).length, overlayData && overlayData.cfg), {
     transparent: true, frame: false, alwaysOnTop: true, skipTaskbar: true,
     focusable: false, resizable: false, movable: false, hasShadow: false, show: true,
     webPreferences: {contextIsolation: true, preload: path.join(__dirname, "overlay-preload.js")}
@@ -126,7 +132,7 @@ ipcMain.handle("overlay-state", () => !!overlayWin);
 ipcMain.handle("overlay-data", (_e, d) => {
   overlayData = d;
   if(overlayWin){
-    try{ overlayWin.setBounds(overlayBounds((d && d.tasks || []).length)); }catch(e){}
+    try{ overlayWin.setBounds(overlayBounds((d && d.tasks || []).length, d && d.cfg)); }catch(e){}
     overlayWin.webContents.send("overlay-data", d);
   }
   return true;
