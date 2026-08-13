@@ -1,10 +1,10 @@
 {
-  "version": "1.7.1",
+  "version": "1.7.2",
   "type": "full",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.7.1/RecCheck-Setup.exe",
-  "setupSha256": "f0ef4db5d5b5fe21555ac990604167c7078ac8e0da69ad436d31d1e4c04a5c00",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.7.2/RecCheck-Setup.exe",
+  "setupSha256": "26457ed64af115f08663955d379e5a2ccecc47e61435119113a32d8a3eb46da2",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/app/index.html",
-  "sha256": "addaafd5ce78012e6b9cb0343b89481aff8850436eb819d0bb5f9459721ec5e0",
-  "notes": "Serial search matches complete serial numbers only — the confusing partial-digit matching is gone."
+  "sha256": "0fce7279dd9bffa256692ed8aba17304deb24b1d2a7a1ede08b41b4c1541853f",
+  "notes": "Watchlist follows room changes: when a watched room's guests change, a dialog asks per entry whether to keep or remove it. Serial search is exact-only."
 }
