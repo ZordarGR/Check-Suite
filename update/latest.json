@@ -1,10 +1,10 @@
 {
-  "version": "1.5.0",
+  "version": "1.6.0",
   "type": "full",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.5.0/RecCheck-Setup.exe",
-  "setupSha256": "1ae1e4a74e961299c369f596b5c6ce20c2b6ce90e44db7c7e2ccc4ec80eb04aa",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.6.0/RecCheck-Setup.exe",
+  "setupSha256": "3989cad6247af1d99f6fde8fd872b1d818850f938297ba34a8ee319af772f2a6",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/app/index.html",
-  "sha256": "8a3f3471427835b0ecfcfda4d2d2cc56d69a5290f2417ba64ee287f9df7bdb64",
-  "notes": "Tray residency: closing the window keeps RecCheck (and the overlay) running in the tray; right-click the tray icon to open, toggle the overlay, or close for real. Single-instance protection included."
+  "sha256": "eeb4c64a306f828c1b4829a17004a1dd86ec0e7f5029e5a5c104c8eb0cba5b3f",
+  "notes": "Update front end: engine downloads now show a live 'Update available. Downloading: x%' box bottom-right, replaced by the install arrow when ready."
 }
