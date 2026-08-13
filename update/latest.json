@@ -1,10 +1,10 @@
 {
-  "version": "1.4.0",
+  "version": "1.5.0",
   "type": "full",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.4.0/RecCheck-Setup.exe",
-  "setupSha256": "489ba9e31135d4c50d3d57951b0ebd401d9c60ec51a7d6b129ec12ec332693d0",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.5.0/RecCheck-Setup.exe",
+  "setupSha256": "1ae1e4a74e961299c369f596b5c6ce20c2b6ce90e44db7c7e2ccc4ec80eb04aa",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/app/index.html",
-  "sha256": "80e860d345d43d573b91d2327fbad462e31962ec5d0d0faffda50083e905786f",
-  "notes": "Overlay customization — grey background opacity, font family/size/weight, and screen-corner positioning, all live-previewed from Edit home screen → Customize overlay."
+  "sha256": "8a3f3471427835b0ecfcfda4d2d2cc56d69a5290f2417ba64ee287f9df7bdb64",
+  "notes": "Tray residency: closing the window keeps RecCheck (and the overlay) running in the tray; right-click the tray icon to open, toggle the overlay, or close for real. Single-instance protection included."
 }
