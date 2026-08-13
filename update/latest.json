@@ -1,10 +1,10 @@
 {
-  "version": "1.6.1",
+  "version": "1.7.0",
   "type": "full",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.6.1/RecCheck-Setup.exe",
-  "setupSha256": "034abbc831ca3fbf5c3f43e23242c916e2498410442e5a2d8a8f0202246a7d93",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.7.0/RecCheck-Setup.exe",
+  "setupSha256": "da2e14c0f9c02537bd985d2e7fde120fcf6581c4446fecddf7a03c4c6bbf46d2",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/app/index.html",
-  "sha256": "e664977e9cb0db660dc1eb28aa7ce9ee541f611a568020f7ddacbe9cd03f6d2f",
-  "notes": "Home clock shows the working night and the real calendar date/time, ticking live every second."
+  "sha256": "12157cee62717a01a4ee3c6192f4ca0b13d33a618e34213bad9e3cbcf0485ffc",
+  "notes": "Global overlay hotkey: Ctrl+T toggles the desktop checklist from anywhere — app unfocused or in the tray. Rebindable in Edit home screen → Customize overlay."
 }
