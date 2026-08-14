@@ -83,14 +83,21 @@ header .spacer{flex:1}
 #clText{flex:1;min-width:180px;background:var(--bg2);border:1.5px solid var(--line);border-radius:9px;color:var(--txt);
   font-size:14px;padding:9px 12px;outline:none}
 #clText:focus{border-color:var(--amber)}
-#clTiers{display:flex;gap:6px}
-.tierBtn{width:26px;height:26px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;opacity:.45;transition:opacity .12s,border-color .12s}
-.tierBtn.t-low{background:#2e9e57}.tierBtn.t-med{background:#e08a2e}.tierBtn.t-high{background:#e04747}
-.tierBtn.sel{opacity:1;border-color:#fff}
-.tierBtn:hover{opacity:.85}
+#clSev{position:relative}
+#clSevBtn{display:flex;align-items:center;gap:7px;white-space:nowrap}
+#clSevBtn .sv{font-weight:700}
+#clSevMenu{position:absolute;top:calc(100% + 6px);right:0;min-width:150px;background:var(--bg2);border:1.5px solid var(--line);
+  border-radius:9px;display:none;z-index:60;overflow:hidden;box-shadow:0 10px 26px rgba(0,0,0,.5)}
+#clSevMenu.open{display:block}
+#clSevMenu button{display:block;width:100%;background:none;border:none;text-align:left;padding:9px 14px;cursor:pointer;
+  font-family:inherit;font-size:13px;font-weight:700;letter-spacing:.02em}
+#clSevMenu button:hover{background:rgba(255,255,255,.07)}
+#clSevMenu button.sel{background:rgba(255,255,255,.04)}
+#clSevMenu button .chk{float:right;color:var(--faint);font-weight:400}
+.sv-low{color:#2e9e57}.sv-med{color:#e08a2e}.sv-high{color:#e04747}
 .clRow{display:flex;align-items:center;gap:11px;padding:10px 6px;border-top:1px solid rgba(35,48,71,.55);font-size:15px}
 .clRow:first-child{border-top:none}
-.clRow .tier{width:5px;align-self:stretch;border-radius:3px;flex:0 0 auto}
+.clRow .tier{width:11px;height:11px;border-radius:50%;flex:0 0 auto;box-shadow:0 1px 2px rgba(0,0,0,.4)}
 .clRow.tl .tier{background:#2e9e57}.clRow.tm .tier{background:#e08a2e}.clRow.th .tier{background:#e04747}
 .clRow input[type=checkbox]{width:19px;height:19px;accent-color:var(--green);cursor:pointer;flex:0 0 auto}
 .clRow .txt{flex:1;line-height:1.4;overflow-wrap:anywhere}
@@ -552,10 +559,13 @@ main{transition:margin-right .18s ease}
       <div id="clHead"><span id="clTitle"></span><span id="clCount"></span><button class="btn small" id="clOverlay" style="display:none"></button><button class="btn small" id="clDone" style="display:none"></button></div>
       <div id="clAddWrap" style="display:none">
         <input id="clText" autocomplete="off" maxlength="140">
-        <div id="clTiers">
-          <button class="tierBtn t-low" data-tier="low"></button>
-          <button class="tierBtn t-med" data-tier="med"></button>
-          <button class="tierBtn t-high" data-tier="high"></button>
+        <div id="clSev">
+          <button class="btn small" id="clSevBtn" type="button"></button>
+          <div id="clSevMenu">
+            <button type="button" data-tier="low"></button>
+            <button type="button" data-tier="med"></button>
+            <button type="button" data-tier="high"></button>
+          </div>
         </div>
         <button class="btn amber" id="clAdd"></button>
       </div>
@@ -1066,7 +1076,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.7.3";
+const APP_VERSION = "1.7.4";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1092,6 +1102,7 @@ en: {
   "ov.hk": "Global shortcut (toggles the overlay from anywhere)", "ov.hkPress": "press the new combination… (Esc cancels)",
   "ov.hkBusy": "That combination is held by another program — pick a different one.",
   "ov.hkNeedMod": "Use at least one of Ctrl / Alt / Shift with a key.", "cl.tierLow": "low importance", "cl.tierMed": "medium importance", "cl.tierHigh": "extremely important",
+  "cl.sev": "SEVERITY", "cl.sevLow": "LOW", "cl.sevMed": "MEDIUM", "cl.sevHigh": "HIGH",
   "welcome": "Welcome — here's what tonight looks like.",
   "welcome.night": "working night of {d}, Date: {cd} {t}",
   "meta.tonight": "tonight's report ✓", "meta.lastnight": "⚠ last night's report", "meta.ago": "⚠ report from {n} nights ago",
@@ -1195,6 +1206,7 @@ gr: {
   "ov.hk": "Καθολική συντόμευση (ανοιγοκλείνει την επικάλυψη από παντού)", "ov.hkPress": "πατήστε τον νέο συνδυασμό… (Esc ακύρωση)",
   "ov.hkBusy": "Ο συνδυασμός χρησιμοποιείται από άλλο πρόγραμμα — διαλέξτε άλλον.",
   "ov.hkNeedMod": "Χρησιμοποιήστε τουλάχιστον Ctrl / Alt / Shift μαζί με ένα πλήκτρο.", "cl.tierLow": "χαμηλή σημασία", "cl.tierMed": "μεσαία σημασία", "cl.tierHigh": "εξαιρετικά σημαντικό",
+  "cl.sev": "ΣΟΒΑΡΟΤΗΤΑ", "cl.sevLow": "ΧΑΜΗΛΗ", "cl.sevMed": "ΜΕΣΑΙΑ", "cl.sevHigh": "ΥΨΗΛΗ",
   "welcome": "Καλώς ήρθες — έτσι δείχνει η αποψινή βραδιά.",
   "welcome.night": "νύχτα εργασίας {d}, Ημερομηνία: {cd} {t}",
   "meta.tonight": "αποψινή αναφορά ✓", "meta.lastnight": "⚠ χθεσινή αναφορά", "meta.ago": "⚠ αναφορά πριν από {n} νύχτες",
@@ -1317,9 +1329,7 @@ function applyLang(){
   $("#clText").placeholder = t("cl.ph");
   $("#clAdd").textContent = CLEDITID ? t("cl.save") : t("cl.add");
   $("#clDone").textContent = t("cl.doneEditing");
-  document.querySelector(".tierBtn.t-low").title = t("cl.tierLow");
-  document.querySelector(".tierBtn.t-med").title = t("cl.tierMed");
-  document.querySelector(".tierBtn.t-high").title = t("cl.tierHigh");
+  paintSevSel();
   renderChecklist();
   if(window.__taSetLang) window.__taSetLang(LANG === "gr" ? "el" : "en");
   if(window.reccheckApp && window.reccheckApp.setLang) window.reccheckApp.setLang(LANG).catch(() => {});
@@ -1619,7 +1629,7 @@ function renderChecklist(){
       CLEDITID = task.id;
       $("#clText").value = task.text;
       CLTIER = task.tier;
-      paintTierSel();
+      paintSevSel();
       $("#clAdd").textContent = t("cl.save");
       $("#clText").focus();
     };
@@ -1737,8 +1747,20 @@ function paintOverlayBtn(){
   b.style.borderColor = OVON ? "var(--amber-dim)" : "";
   b.style.color = OVON ? "var(--amber)" : "";
 }
-function paintTierSel(){
-  document.querySelectorAll(".tierBtn").forEach(b => b.classList.toggle("sel", b.dataset.tier === CLTIER));
+const SEVMETA = {low: {lbl: "cl.sevLow", cls: "sv-low", tip: "cl.tierLow"},
+                 med: {lbl: "cl.sevMed", cls: "sv-med", tip: "cl.tierMed"},
+                 high: {lbl: "cl.sevHigh", cls: "sv-high", tip: "cl.tierHigh"}};
+function paintSevSel(){
+  const btn = $("#clSevBtn");
+  if(!btn) return;
+  const m = SEVMETA[CLTIER] || SEVMETA.low;
+  btn.innerHTML = `${t("cl.sev")}: <span class="sv ${m.cls}">${t(m.lbl)}</span> <span style="color:var(--faint);font-size:10px">▾</span>`;
+  document.querySelectorAll("#clSevMenu button").forEach(b => {
+    const bm = SEVMETA[b.dataset.tier];
+    b.className = bm.cls + (b.dataset.tier === CLTIER ? " sel" : "");
+    b.title = t(bm.tip);
+    b.innerHTML = t(bm.lbl) + (b.dataset.tier === CLTIER ? ' <span class="chk">✓</span>' : "");
+  });
 }
 function clNightCheck(){
   const k = String(bnKey());
@@ -2998,7 +3020,15 @@ $("#clOverlay").onclick = async () => {
 };
 $("#clAdd").onclick = clSubmit;
 $("#clText").addEventListener("keydown", e => { if(e.key === "Enter"){ clSubmit(); e.preventDefault(); } });
-document.querySelectorAll(".tierBtn").forEach(b => b.onclick = () => { CLTIER = b.dataset.tier; paintTierSel(); });
+$("#clSevBtn").onclick = e => { e.stopPropagation(); $("#clSevMenu").classList.toggle("open"); };
+document.querySelectorAll("#clSevMenu button").forEach(b => b.onclick = e => {
+  e.stopPropagation();
+  CLTIER = b.dataset.tier;
+  paintSevSel();
+  $("#clSevMenu").classList.remove("open");
+  $("#clText").focus();
+});
+document.addEventListener("click", e => { if(!e.target.closest("#clSev")) $("#clSevMenu").classList.remove("open"); });
 document.querySelectorAll(".mcatBtn").forEach(b => b.onclick = e => {   // touch/click fallback for hover
   e.stopPropagation();
   const cat = b.parentElement;
@@ -3128,7 +3158,7 @@ $("#resetDay").onclick = () => {
     if(window.reccheckOverlay.onState)
       window.reccheckOverlay.onState(on => { OVON = on; paintOverlayBtn(); });
   }
-  paintTierSel();
+  paintSevSel();
   clNightCheck();
   applyLang();
   showScreen("menu");
