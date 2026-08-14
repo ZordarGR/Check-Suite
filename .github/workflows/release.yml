@@ -26,6 +26,6 @@ jobs:
           gh release delete "$VERSION" --yes || true
           git push --delete origin "refs/tags/$VERSION" || true
           gh release create "$VERSION" RecCheck-Setup.exe \
-            --title "RecCheck 1.7.3 — Windows" \
+            --title "RecCheck ${VERSION#v} — Windows" \
             --notes-file .github/release-notes.md \
             --latest
