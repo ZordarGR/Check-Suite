@@ -1,10 +1,10 @@
 {
-  "version": "1.7.3",
+  "version": "1.7.4",
   "type": "full",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.7.3/RecCheck-Setup.exe",
-  "setupSha256": "9c49e15240a7e14c9b93369229214ae5e15f56cc90fa94f8194e4f3387d5293a",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.7.4/RecCheck-Setup.exe",
+  "setupSha256": "ad2bd523c3a5272c8dfd2c0d9364833701b20c232d9db8560850502c200bd80b",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/app/index.html",
-  "sha256": "d61e6e4c8e98dbe3d3fa3a3e6f611ba462069d4715e9f86d1b141a1332aad933",
-  "notes": "Tray menu gains Check for updates (with an up-to-date balloon), and tray-resident sessions re-check quietly every 6 hours."
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
+  "sha256": "d0d196e90b9b37a4bb7cd5357433a9c07245a4a20e673ab258c90a1c54f65a86",
+  "notes": "Overlay severity dots keep their color when tasks are checked; SEVERITY dropdown in the checklist editor."
 }
