@@ -19,9 +19,33 @@ if(!app.requestSingleInstanceLock()){
 app.on("second-instance", () => { if(win){ win.show(); win.focus(); } });
 
 const TRAY_TXT = {
-  en: {open: "Open RecCheck", overlay: "Toggle checklist overlay", close: "Close RecCheck"},
-  gr: {open: "Άνοιγμα RecCheck", overlay: "Εναλλαγή επικάλυψης λίστας", close: "Κλείσιμο RecCheck"}
+  en: {open: "Open RecCheck", overlay: "Toggle checklist overlay", check: "Check for updates",
+       uptodate: "You are up to date — v", close: "Close RecCheck"},
+  gr: {open: "Άνοιγμα RecCheck", overlay: "Εναλλαγή επικάλυψης λίστας", check: "Έλεγχος για ενημερώσεις",
+       uptodate: "Είστε ενημερωμένοι — v", close: "Κλείσιμο RecCheck"}
 };
+let CHECKING = false, MANUAL_SHOWN = false;
+async function runCheck(manual){
+  if(CHECKING || !updater) return;
+  CHECKING = true;
+  MANUAL_SHOWN = !manual;                       // manual checks surface the window once a download starts
+  try{
+    if(updater.pending){
+      if(win && !win.isDestroyed()) win.webContents.send("reccheck-update-ready", updater.pending);
+      if(manual) showMain();
+      return;
+    }
+    const info = await updater.check();
+    if(info){
+      if(win && !win.isDestroyed()) win.webContents.send("reccheck-update-ready", info);
+      if(manual) showMain();
+    }else if(manual && tray){
+      const L = TRAY_TXT[TRAYLANG] || TRAY_TXT.en;
+      try{ tray.displayBalloon({title: "RecCheck", content: L.uptodate + updater.effective().version, iconType: "info"}); }catch(e){}
+    }
+  }catch(e){}
+  CHECKING = false;
+}
 function showMain(){ if(win){ win.show(); win.focus(); } }
 
 /* ---- system-wide overlay hotkey (works unfocused / from the tray) ---- */
@@ -54,6 +78,7 @@ function buildTray(){
   const L = TRAY_TXT[TRAYLANG] || TRAY_TXT.en;
   tray.setContextMenu(Menu.buildFromTemplate([
     {label: L.open, click: showMain},
+    {label: L.check, click: () => runCheck(true)},
     {label: L.overlay, click: () => {
       if(overlayWin) destroyOverlay(); else createOverlay();
       try{ const c = hub.readConfig(); c.overlayOn = !!overlayWin; hub.writeConfig(c); }catch(e){}
@@ -127,7 +152,10 @@ app.whenReady().then(() => {
     pkgVersion: PKG_VERSION,
     updateUrl: (process.env.RECCHECK_UPDATE_URL || REPO_RAW + "/update/latest.json"),
     fallbackReleaseUrl: "https://github.com/ZordarGR/Check-Suite/releases/latest",
-    onProgress: (p) => { if(win && !win.isDestroyed()) win.webContents.send("reccheck-update-progress", p); }
+    onProgress: (p) => {
+      if(win && !win.isDestroyed()) win.webContents.send("reccheck-update-progress", p);
+      if(!MANUAL_SHOWN && p && p.phase === "downloading"){ MANUAL_SHOWN = true; showMain(); }
+    }
   });
   hub = new FileHub({
     configPath: path.join(app.getPath("userData"), "config.json"),
@@ -139,10 +167,12 @@ app.whenReady().then(() => {
   try{ if(hub.readConfig().overlayOn) createOverlay(); }catch(e){}
   buildTray();
   applyHotkey(currentHotkey());
+  MANUAL_SHOWN = true;                        // startup check never pops the window
   updater.check().then(info => {
     if(info && win && !win.isDestroyed())
       win.webContents.send("reccheck-update-ready", info);
   });
+  setInterval(() => runCheck(false), 6 * 3600e3);
 });
 
 ipcMain.handle("reccheck-apply-update", () => {
