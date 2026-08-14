@@ -1,10 +1,10 @@
 {
-  "version": "1.7.2",
+  "version": "1.7.3",
   "type": "full",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.7.2/RecCheck-Setup.exe",
-  "setupSha256": "26457ed64af115f08663955d379e5a2ccecc47e61435119113a32d8a3eb46da2",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.7.3/RecCheck-Setup.exe",
+  "setupSha256": "9c49e15240a7e14c9b93369229214ae5e15f56cc90fa94f8194e4f3387d5293a",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/app/index.html",
-  "sha256": "0fce7279dd9bffa256692ed8aba17304deb24b1d2a7a1ede08b41b4c1541853f",
-  "notes": "Watchlist follows room changes: when a watched room's guests change, a dialog asks per entry whether to keep or remove it. Serial search is exact-only."
+  "sha256": "d61e6e4c8e98dbe3d3fa3a3e6f611ba462069d4715e9f86d1b141a1332aad933",
+  "notes": "Tray menu gains Check for updates (with an up-to-date balloon), and tray-resident sessions re-check quietly every 6 hours."
 }
