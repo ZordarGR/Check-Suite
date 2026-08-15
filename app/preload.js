@@ -6,12 +6,13 @@ contextBridge.exposeInMainWorld("reccheckUpdate", {
   version: () => ipcRenderer.invoke("reccheck-get-version")
 });
 contextBridge.exposeInMainWorld("reccheckFiles", {
-  getDir: () => ipcRenderer.invoke("files-get-dir"),
-  pickDir: () => ipcRenderer.invoke("files-pick-dir"),
-  list: (rel) => ipcRenderer.invoke("files-list", rel),
-  read: (p) => ipcRenderer.invoke("files-read", p),
-  stat: (p) => ipcRenderer.invoke("files-stat", p),
-  onDirEvent: (cb) => ipcRenderer.on("reccheck-dir-event", () => cb())
+  getDir: (profile) => ipcRenderer.invoke("files-get-dir", profile),
+  pickDir: (profile) => ipcRenderer.invoke("files-pick-dir", profile),
+  list: (profile, rel) => ipcRenderer.invoke("files-list", profile, rel),
+  read: (profile, p) => ipcRenderer.invoke("files-read", profile, p),
+  stat: (profile, p) => ipcRenderer.invoke("files-stat", profile, p),
+  perTool: true,
+  onDirEvent: (cb) => ipcRenderer.on("reccheck-dir-event", (_e, profile) => cb(profile))
 });
 contextBridge.exposeInMainWorld("reccheckOverlay", {
   toggle: () => ipcRenderer.invoke("overlay-toggle"),

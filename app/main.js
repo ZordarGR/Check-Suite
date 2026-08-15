@@ -159,7 +159,7 @@ app.whenReady().then(() => {
   });
   hub = new FileHub({
     configPath: path.join(app.getPath("userData"), "config.json"),
-    onDirEvent: () => { if(win && !win.isDestroyed()) win.webContents.send("reccheck-dir-event"); }
+    onDirEvent: (profile) => { if(win && !win.isDestroyed()) win.webContents.send("reccheck-dir-event", profile); }
   });
   hub.startWatch();
   const eff = updater.effective();
@@ -197,18 +197,25 @@ ipcMain.handle("reccheck-apply-update", () => {
 });
 ipcMain.handle("reccheck-get-version", () => updater ? updater.effective().version : PKG_VERSION);
 
-ipcMain.handle("files-get-dir", () => hub ? hub.getDir() : null);
-ipcMain.handle("files-pick-dir", async () => {
+const PICK_TITLES = {
+  en: {dept: "Choose the folder with the Department Check reports (checkcharge)",
+       tax:  "Choose the folder with the Tax Check reports"},
+  gr: {dept: "Επιλέξτε τον φάκελο με τις αναφορές του Ελέγχου Τμημάτων (checkcharge)",
+       tax:  "Επιλέξτε τον φάκελο με τις αναφορές του Ελέγχου ΤΑ"}
+};
+ipcMain.handle("files-get-dir", (_e, profile) => hub ? hub.getDir(profile) : null);
+ipcMain.handle("files-pick-dir", async (_e, profile) => {
+  const p = hub.norm(profile);
   const r = await dialog.showOpenDialog(win, {
     properties: ["openDirectory"],
-    title: "Choose the folder where the protel reports are saved"
+    title: (PICK_TITLES[TRAYLANG] || PICK_TITLES.en)[p]
   });
-  if(r.canceled || !r.filePaths[0]) return hub.getDir();
-  return hub.setDir(r.filePaths[0]);
+  if(r.canceled || !r.filePaths[0]) return hub.getDir(p);
+  return hub.setDir(p, r.filePaths[0]);
 });
-ipcMain.handle("files-list", (_e, rel) => hub ? hub.list(rel) : {dir: null, rel: "", dirs: [], files: []});
-ipcMain.handle("files-read", (_e, p) => hub.read(p));
-ipcMain.handle("files-stat", (_e, p) => hub ? hub.stat(p) : null);
+ipcMain.handle("files-list", (_e, profile, rel) => hub ? hub.list(profile, rel) : {dir: null, rel: "", dirs: [], files: []});
+ipcMain.handle("files-read", (_e, profile, p) => hub.read(profile, p));
+ipcMain.handle("files-stat", (_e, profile, p) => hub ? hub.stat(profile, p) : null);
 ipcMain.handle("open-help", () => { shell.openExternal(ISSUES_URL); return true; });
 
 ipcMain.handle("overlay-toggle", () => {

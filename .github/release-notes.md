@@ -1,12 +1,10 @@
-## RecCheck 1.7.4 — Windows
+## RecCheck 1.8.0 — Windows
 
 Nightly POS receipt audit for the protel checkcharge1 report (.oxps). Everything runs locally — no data leaves the machine.
 
-### New in 1.7.4
+### New in 1.8.0
 
-**Overlay fix:** when a task is checked, its text turns green but the severity dot now keeps its own color (green / orange / red) so you can still see how important each item is at a glance.
-
-**Severity picker:** in the checklist editor the three colored dots are replaced by a **SEVERITY** button next to the task field — click it and choose **Low / Medium / High**. The colored dots remain as indicators in the task list and the desktop overlay.
+**Separate folders per tool:** Department Check and Tax Check now each have their own reports directory. Under *Options* the single "Change Directory" entry became two — one per tool — each showing its current folder. The first time you feed the Tax Check it asks for its own folder, and the file list always shows which tool's folder you are browsing.
 
 ### Install
 

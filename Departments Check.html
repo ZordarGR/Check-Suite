@@ -123,6 +123,8 @@ header .spacer{flex:1}
 #filesScreen{text-align:left;margin-top:26px}
 #fbHead{display:flex;align-items:center;gap:10px;margin-bottom:14px}
 #fbDir{font-family:var(--mono);font-size:12px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:1}
+#fbTool{font-family:var(--mono);font-size:11px;letter-spacing:.08em;color:var(--amber);border:1px solid var(--amber-dim);
+  border-radius:6px;padding:3px 8px;white-space:nowrap;flex-shrink:0}
 .vbtn.active{border-color:var(--amber);color:var(--amber)}
 #fbList.list{display:flex;flex-direction:column;gap:6px}
 #fbList.list .fbItem{display:flex;align-items:center;gap:12px;padding:10px 14px}
@@ -540,7 +542,8 @@ main{transition:margin-right .18s ease}
         <button class="mcatBtn" id="mcOptionsBtn"></button>
         <div class="msub">
           <button class="msubItem" id="mLang"><span class="mLabel"></span><span class="mSub"></span></button>
-          <button class="msubItem" id="mDir"><span class="mLabel"></span><span class="mSub" id="mDirSub"></span></button>
+          <button class="msubItem" id="mDirDept"><span class="mLabel"></span><span class="mSub" id="mDirDeptSub"></span></button>
+          <button class="msubItem" id="mDirTax"><span class="mLabel"></span><span class="mSub" id="mDirTaxSub"></span></button>
           <button class="msubItem" id="mHelp"><span class="mLabel"></span><span class="mSub"></span></button>
           <button class="msubItem" id="mExport"><span class="mLabel"></span><span class="mSub"></span></button>
           <button class="msubItem" id="mImport"><span class="mLabel"></span><span class="mSub"></span></button>
@@ -585,6 +588,7 @@ main{transition:margin-right .18s ease}
   <div id="filesScreen" style="display:none">
     <div id="fbHead">
       <button class="btn small" id="fbBack"></button>
+      <span id="fbTool"></span>
       <span id="fbDir" title=""></span>
       <div class="spacer"></div>
       <button class="btn small vbtn" id="fbViewList">≡</button>
@@ -1076,7 +1080,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.7.4";
+const APP_VERSION = "1.8.0";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1111,7 +1115,8 @@ en: {
   "pick.title": "pick a report for the Tax Check slot — click a file",
   "menu.compare": "COMPARE", "menu.compareSub": "open tonight's reports and check the receipts",
   "menu.lang": "LANGUAGE — ENGLISH", "menu.langSub": "αλλαγή σε ΕΛΛΗΝΙΚΑ",
-  "menu.dir": "CHANGE DIRECTORY", "menu.dirNone": "no reports folder chosen yet",
+  "menu.dirDept": "DIRECTORY — DEPARTMENT CHECK", "menu.dirTax": "DIRECTORY — TAX CHECK",
+  "menu.dirNone": "no reports folder chosen yet",
   "menu.help": "HELP", "menu.helpSub": "opens the support page (GitHub)",
   "menu.title": "Menu",
   "land.export": "⇅ Export data", "land.import": "Import data…",
@@ -1215,7 +1220,8 @@ gr: {
   "pick.title": "διάλεξε αναφορά για τη θέση του Ελέγχου ΤΑ — κλικ σε αρχείο",
   "menu.compare": "ΣΥΓΚΡΙΣΗ", "menu.compareSub": "άνοιγμα των αναφορών της βραδιάς και έλεγχος αποδείξεων",
   "menu.lang": "ΓΛΩΣΣΑ — ΕΛΛΗΝΙΚΑ", "menu.langSub": "switch to ENGLISH",
-  "menu.dir": "ΑΛΛΑΓΗ ΦΑΚΕΛΟΥ", "menu.dirNone": "δεν έχει οριστεί φάκελος αναφορών",
+  "menu.dirDept": "ΦΑΚΕΛΟΣ — ΕΛΕΓΧΟΣ ΤΜΗΜΑΤΩΝ", "menu.dirTax": "ΦΑΚΕΛΟΣ — ΕΛΕΓΧΟΣ ΤΑ",
+  "menu.dirNone": "δεν έχει οριστεί φάκελος αναφορών",
   "menu.help": "ΒΟΗΘΕΙΑ", "menu.helpSub": "ανοίγει τη σελίδα υποστήριξης (GitHub)",
   "menu.title": "Μενού",
   "land.export": "⇅ Εξαγωγή δεδομένων", "land.import": "Εισαγωγή δεδομένων…",
@@ -1310,7 +1316,8 @@ function applyLang(){
   $("#homeLogo").title = t("menu.title");
   const mi = (id, l, sub) => { const b = $(id); b.querySelector(".mLabel").textContent = t(l); if(sub !== null) b.querySelector(".mSub").textContent = t(sub); };
   mi("#mLang", "menu.lang", "menu.langSub");
-  mi("#mDir", "menu.dir", null);
+  mi("#mDirDept", "menu.dirDept", null);
+  mi("#mDirTax", "menu.dirTax", null);
   mi("#mHelp", "menu.help", "menu.helpSub");
   paintDirSub();
   $("#mcOptionsBtn").textContent = t("menu.options");
@@ -1343,7 +1350,7 @@ function applyLang(){
   $("#searchHint").textContent = t("search.hint");
   $("#staleChip").textContent = t("chip.stale");
   $("#staleChip").title = t("chip.staleTitle");
-  $("#openAnother").textContent = (window.reccheckFiles && FB.dir) ? t("hdr.files") : t("hdr.open");
+  $("#openAnother").textContent = (window.reccheckFiles && FB.p.dept.dir) ? t("hdr.files") : t("hdr.open");
   $("#expandAll").textContent = t("kebab.expand");
   $("#collapseAll").textContent = t("kebab.collapse");
   $("#exportData").textContent = t("kebab.export");
@@ -1795,16 +1802,23 @@ function clSubmit(){
 /* ---------- screens + reports-folder browser ---------- */
 let SCREEN = "menu";
 let LASTFNAME = "";
-const FB = {dir: null, view: (function(){ try{ return localStorage.getItem("reccheck_fbview") || "list"; }catch(e){ return "list"; } })(),
-            rel: (function(){ try{ return localStorage.getItem("reccheck_fbrel") || ""; }catch(e){ return ""; } })(),
-            open: null, stale: false};
+/* each tool browses its own folder: "dept" = Department Check, "tax" = Tax Check */
+const FB = {tool: "dept",
+            view: (function(){ try{ return localStorage.getItem("reccheck_fbview") || "list"; }catch(e){ return "list"; } })(),
+            p: {
+              dept: {dir: null, open: null, stale: false,
+                     rel: (function(){ try{ return localStorage.getItem("reccheck_fbrel_dept") || localStorage.getItem("reccheck_fbrel") || ""; }catch(e){ return ""; } })()},
+              tax:  {dir: null, open: null, stale: false,
+                     rel: (function(){ try{ return localStorage.getItem("reccheck_fbrel_tax") || ""; }catch(e){ return ""; } })()}
+            }};
+function fbCur(){ return FB.p[FB.tool]; }
 function fbGo(rel){
-  FB.rel = rel || "";
-  try{ localStorage.setItem("reccheck_fbrel", FB.rel); }catch(e){}
+  fbCur().rel = rel || "";
+  try{ localStorage.setItem("reccheck_fbrel_" + FB.tool, fbCur().rel); }catch(e){}
   fbRefresh();
 }
 function fbUpRel(){
-  const parts = FB.rel.split(/[\\/]/).filter(Boolean);
+  const parts = fbCur().rel.split(/[\\/]/).filter(Boolean);
   parts.pop();
   return parts.join("/");
 }
@@ -1840,15 +1854,23 @@ function showScreen(which){
 let PICKCB = null;
 window.rcShowAudit = function(){ showScreen("audit"); };
 window.rcPickReport = function(cb){
-  if(!(window.reccheckFiles && FB.dir)) return false;
+  if(!window.reccheckFiles) return false;
   PICKCB = cb;
+  FB.tool = "tax";
+  if(!FB.p.tax.dir){                       // first use — the Tax Check gets its own folder
+    fbPickDir("tax").then(() => {
+      if(FB.p.tax.dir) showScreen("files");
+      else{ PICKCB = null; showScreen("tax"); }
+    });
+    return true;
+  }
   showScreen("files");
   return true;
 };
 function paintDirSub(){
-  const el2 = $("#mDirSub");
-  if(!window.reccheckFiles){ $("#mDir").style.display = "none"; return; }
-  el2.textContent = FB.dir || t("menu.dirNone");
+  if(!window.reccheckFiles){ $("#mDirDept").style.display = "none"; $("#mDirTax").style.display = "none"; return; }
+  $("#mDirDeptSub").textContent = FB.p.dept.dir || t("menu.dirNone");
+  $("#mDirTaxSub").textContent = FB.p.tax.dir || t("menu.dirNone");
 }
 function escapeHtml(x){ const d = document.createElement("div"); d.textContent = x; return d.innerHTML; }
 function fmtWhen(ms){
@@ -1866,28 +1888,31 @@ function fbPaintChrome(){
   $("#fbViewTiles").style.display = hasHub ? "" : "none";
   $("#fbList").style.display = hasHub ? "" : "none";
   $("#drop").style.display = hasHub ? "none" : "";
-  if(!hasHub){ $("#fbEmpty").style.display = "none"; return; }
-  $("#fbDir").textContent = FB.dir || "";
-  $("#fbDir").title = FB.dir || "";
+  if(!hasHub){ $("#fbEmpty").style.display = "none"; $("#fbTool").style.display = "none"; return; }
+  $("#fbTool").style.display = "";
+  $("#fbTool").textContent = t(FB.tool === "tax" ? "audit.tax" : "audit.dept");
+  $("#fbDir").textContent = fbCur().dir || "";
+  $("#fbDir").title = fbCur().dir || "";
   $("#fbViewList").classList.toggle("active", FB.view === "list");
   $("#fbViewTiles").classList.toggle("active", FB.view === "tiles");
   $("#fbList").className = FB.view;
 }
 async function fbRefresh(){
   fbPaintChrome();
-  if(!window.reccheckFiles || !FB.dir) return;
+  const cur = fbCur();
+  if(!window.reccheckFiles || !cur.dir) return;
   let res;
-  try{ res = await window.reccheckFiles.list(FB.rel); }catch(e){ return; }
-  if(res.error && FB.rel){ fbGo(""); return; }          // folder vanished — back to the root
-  if(res.dir !== FB.dir){ FB.dir = res.dir; paintDirSub(); fbPaintChrome(); }
-  if(typeof res.rel === "string") FB.rel = res.rel.split("\\").join("/");
-  $("#fbDir").textContent = FB.dir + (FB.rel ? " / " + FB.rel : "");
+  try{ res = await window.reccheckFiles.list(FB.tool, cur.rel); }catch(e){ return; }
+  if(res.error && cur.rel){ fbGo(""); return; }          // folder vanished — back to the root
+  if(res.dir !== cur.dir){ cur.dir = res.dir; paintDirSub(); fbPaintChrome(); }
+  if(typeof res.rel === "string") cur.rel = res.rel.split("\\").join("/");
+  $("#fbDir").textContent = cur.dir + (cur.rel ? " / " + cur.rel : "");
   $("#fbDir").title = $("#fbDir").textContent;
   const dirs = res.dirs || [];                           // old engines send no dirs
   const box = $("#fbList");
   box.innerHTML = "";
-  $("#fbEmpty").style.display = (res.files.length || dirs.length || FB.rel) ? "none" : "";
-  if(FB.rel){
+  $("#fbEmpty").style.display = (res.files.length || dirs.length || cur.rel) ? "none" : "";
+  if(cur.rel){
     const up = el("div", "fbItem up");
     up.append(el("div", "fbIcon", "↰"));
     const meta = el("div", "fbMeta");
@@ -1907,7 +1932,7 @@ async function fbRefresh(){
     box.append(it);
   }
   for(const f of res.files){
-    const it = el("div", "fbItem" + (FB.open && FB.open.path === f.path ? " open" : ""));
+    const it = el("div", "fbItem" + (FB.tool === "dept" && FB.p.dept.open && FB.p.dept.open.path === f.path ? " open" : ""));
     it.append(el("div", "fbIcon", "▤"));
     const meta = el("div", "fbMeta");
     const nmRow = el("div", "fbName", f.name);
@@ -1918,23 +1943,24 @@ async function fbRefresh(){
     it.onclick = () => fbOpen(f);
     box.append(it);
   }
-  checkOpenChanged(res.files);
+  if(FB.tool === "dept") checkOpenChanged(res.files);
 }
 /* the open file may live in another folder than the one on screen — stat it directly */
 async function checkOpenByStat(){
-  if(!FB.open || !window.reccheckFiles) return;
+  const open = FB.p.dept.open;
+  if(!open || !window.reccheckFiles) return;
   if(window.reccheckFiles.stat){
     try{
-      const st = await window.reccheckFiles.stat(FB.open.path);
-      if(st) checkOpenChanged([{path: FB.open.path, mtimeMs: st.mtimeMs}]);
+      const st = await window.reccheckFiles.stat("dept", open.path);
+      if(st) checkOpenChanged([{path: open.path, mtimeMs: st.mtimeMs}]);
     }catch(e){}
   }else{
-    try{ checkOpenChanged((await window.reccheckFiles.list()).files || []); }catch(e){}
+    try{ checkOpenChanged((await window.reccheckFiles.list("dept")).files || []); }catch(e){}
   }
 }
 async function fbOpen(f){
   try{
-    const raw = await window.reccheckFiles.read(f.path);
+    const raw = await window.reccheckFiles.read(FB.tool, f.path);
     const u8 = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
     if(PICKCB){
       const cb = PICKCB;
@@ -1943,22 +1969,24 @@ async function fbOpen(f){
       cb(new File([u8], f.name));
       return;
     }
+    if(FB.tool === "tax"){ showScreen("tax"); return; }   // no picker armed — nothing to feed
     const buf = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
-    FB.open = {path: f.path, name: f.name, mtimeMs: f.mtimeMs};
-    FB.stale = false;
+    FB.p.dept.open = {path: f.path, name: f.name, mtimeMs: f.mtimeMs};
+    FB.p.dept.stale = false;
     paintStaleChip();
     await loadReport(buf, f.name);
   }catch(err){
     toast("✗ " + (err.message || err), true);
   }
 }
-function paintStaleChip(){ $("#staleChip").style.display = (FB.stale && MODEL) ? "inline-block" : "none"; }
+function paintStaleChip(){ $("#staleChip").style.display = (FB.p.dept.stale && MODEL) ? "inline-block" : "none"; }
 function checkOpenChanged(files){
-  if(!FB.open) return;
-  const cur = files.find(x => x.path === FB.open.path);
-  if(!cur || cur.mtimeMs <= FB.open.mtimeMs + 500) return;
-  FB.open.mtimeMs = cur.mtimeMs;          // one prompt per change
-  FB.stale = true;
+  const open = FB.p.dept.open;
+  if(!open) return;
+  const cur = files.find(x => x.path === open.path);
+  if(!cur || cur.mtimeMs <= open.mtimeMs + 500) return;
+  open.mtimeMs = cur.mtimeMs;             // one prompt per change
+  FB.p.dept.stale = true;
   paintStaleChip();
   if(SCREEN !== "app") return;            // browsing — the list refresh is enough
   showLivePrompt(cur);
@@ -1966,18 +1994,19 @@ function checkOpenChanged(files){
 function showLivePrompt(cur){
   openModal(`
     <h3>${t("live.title")}</h3>
-    <div style="font-size:14px;line-height:1.65">${t("live.body", {name: "<b style=\"font-family:var(--mono)\">" + escapeHtml(FB.open.name) + "</b>", when: escapeHtml(fmtWhen(cur.mtimeMs))})}</div>
+    <div style="font-size:14px;line-height:1.65">${t("live.body", {name: "<b style=\"font-family:var(--mono)\">" + escapeHtml(FB.p.dept.open.name) + "</b>", when: escapeHtml(fmtWhen(cur.mtimeMs))})}</div>
     <div class="actions">
       <button class="btn" id="chKeep">${t("live.keep")}</button>
       <button class="btn amber" id="chLive">${t("live.load")}</button>
     </div>`);
   $("#chKeep").onclick = () => { closeModal(); paintStaleChip(); };
-  $("#chLive").onclick = () => { closeModal(); fbOpen(cur); };
+  $("#chLive").onclick = () => { closeModal(); FB.tool = "dept"; fbOpen(cur); };
 }
-async function fbPickDir(){
+async function fbPickDir(tool){
   if(!window.reccheckFiles) return;
-  const dir = await window.reccheckFiles.pickDir();
-  if(dir){ FB.dir = dir; paintDirSub(); if(SCREEN === "files") fbRefresh(); }
+  tool = tool === "tax" ? "tax" : "dept";
+  const dir = await window.reccheckFiles.pickDir(tool);
+  if(dir){ FB.p[tool].dir = dir; paintDirSub(); if(SCREEN === "files" && FB.tool === tool) fbRefresh(); }
 }
 
 /* ---------- file load ---------- */
@@ -2019,7 +2048,7 @@ function renderAll(fname){
   $("#reportMeta").classList.add("clickable");
   $("#hdrLogo").title = t("menu.title");
   $("#openAnother").style.display = "";
-  $("#openAnother").textContent = (window.reccheckFiles && FB.dir) ? t("hdr.files") : t("hdr.open");
+  $("#openAnother").textContent = (window.reccheckFiles && FB.p.dept.dir) ? t("hdr.files") : t("hdr.open");
   $("#printBtn").style.display = "";
   $("#kebab").style.display = "";
   $("#reportMeta").innerHTML = "";
@@ -2993,7 +3022,7 @@ function buildPrintSheet(force){
 /* ---------- wiring ---------- */
 $("#drop").onclick = () => $("#fileInput").click();
 $("#openAnother").onclick = () => {
-  if(window.reccheckFiles && FB.dir) showScreen("files");
+  if(window.reccheckFiles && FB.p.dept.dir){ FB.tool = "dept"; showScreen("files"); }
   else $("#fileInput").click();
 };
 $("#homeLogo").onclick = () => showScreen("menu");
@@ -3003,12 +3032,14 @@ $("#auditBtn").onclick = () => showScreen("audit");
 $("#aBack").onclick = () => showScreen("menu");
 $("#aDept").onclick = async () => {
   if(!window.reccheckFiles){ showScreen("files"); return; }
-  if(!FB.dir) await fbPickDir();
-  if(FB.dir) showScreen("files");
+  FB.tool = "dept";
+  if(!FB.p.dept.dir) await fbPickDir("dept");
+  if(FB.p.dept.dir) showScreen("files");
 };
 $("#aTax").onclick = () => showScreen("tax");
 $("#mLang").onclick = () => setLang(LANG === "en" ? "gr" : "en");
-$("#mDir").onclick = fbPickDir;
+$("#mDirDept").onclick = () => fbPickDir("dept");
+$("#mDirTax").onclick = () => fbPickDir("tax");
 $("#mEditChecklist").onclick = () => { CLEDIT = true; renderChecklist(); document.querySelectorAll(".mcat").forEach(c => c.classList.remove("open")); setTimeout(() => $("#clText").focus(), 60); };
 $("#mCustomOverlay").onclick = () => { document.querySelectorAll(".mcat").forEach(c => c.classList.remove("open")); openOverlaySettings(); };
 $("#clDone").onclick = () => { CLEDIT = false; CLEDITID = null; $("#clText").value = ""; renderChecklist(); applyLang(); };
@@ -3047,13 +3078,14 @@ $("#fbBack").onclick = () => {
 $("#fbViewList").onclick = () => { FB.view = "list"; try{ localStorage.setItem("reccheck_fbview","list"); }catch(e){} fbPaintChrome(); };
 $("#fbViewTiles").onclick = () => { FB.view = "tiles"; try{ localStorage.setItem("reccheck_fbview","tiles"); }catch(e){} fbPaintChrome(); };
 $("#staleChip").onclick = () => {
-  if(!window.reccheckFiles || !FB.open) return;
-  fbOpen({path: FB.open.path, name: FB.open.name, mtimeMs: Date.now()});
+  if(!window.reccheckFiles || !FB.p.dept.open) return;
+  FB.tool = "dept";
+  fbOpen({path: FB.p.dept.open.path, name: FB.p.dept.open.name, mtimeMs: Date.now()});
 };
 if(window.reccheckFiles){
-  window.reccheckFiles.onDirEvent(() => {
-    if(SCREEN === "files") fbRefresh();
-    checkOpenByStat();
+  window.reccheckFiles.onDirEvent(profile => {
+    if(SCREEN === "files" && (!profile || FB.tool === profile)) fbRefresh();
+    if(!profile || profile === "dept") checkOpenByStat();
   });
 }
 $("#fileInput").onchange = e => { if(e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ""; };
@@ -3151,7 +3183,8 @@ $("#resetDay").onclick = () => {
 /* ---------- auto-update (active only inside the desktop app) ---------- */
 (async function(){
   if(window.reccheckFiles){
-    try{ FB.dir = await window.reccheckFiles.getDir(); }catch(e){}
+    try{ FB.p.dept.dir = await window.reccheckFiles.getDir("dept"); }catch(e){}
+    try{ FB.p.tax.dir = await window.reccheckFiles.getDir("tax"); }catch(e){}
   }
   if(window.reccheckOverlay){
     try{ OVON = await window.reccheckOverlay.state(); }catch(e){}

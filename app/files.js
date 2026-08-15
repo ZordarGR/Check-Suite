@@ -1,15 +1,18 @@
 /* Reports-folder access — pure Node logic, no Electron imports, testable standalone.
-   The directory is chosen once, persisted in config.json, watched for changes. */
+   Each tool has its own directory ("dept" = Department Check, "tax" = Tax Check),
+   chosen once, persisted in config.json, watched for changes independently. */
 "use strict";
 const fs = require("fs"), path = require("path");
 const REPORT_RE = /\.(oxps|xps)$/i;
+const PROFILES = ["dept", "tax"];
 
 class FileHub {
-  constructor(opts){            // {configPath, onDirEvent}
+  constructor(opts){            // {configPath, onDirEvent(profile)}
     this.o = opts;
-    this.watcher = null;
-    this.debounce = null;
+    this.watchers = {};         // profile -> fs.FSWatcher
+    this.debounce = {};         // profile -> timer
   }
+  norm(profile){ return profile === "tax" ? "tax" : "dept"; }
   readConfig(){ try{ return JSON.parse(fs.readFileSync(this.o.configPath, "utf8")); }catch(e){ return {}; } }
   writeConfig(c){
     try{
@@ -17,20 +20,26 @@ class FileHub {
       fs.writeFileSync(this.o.configPath, JSON.stringify(c));
     }catch(e){}
   }
-  getDir(){
-    const d = this.readConfig().reportsDir;
+  getDir(profile){
+    const p = this.norm(profile);
+    const c = this.readConfig();
+    let d = (c.reportsDirs || {})[p];
+    if(!d && p === "dept") d = c.reportsDir;      // pre-1.8 config had a single shared folder
     return (d && fs.existsSync(d)) ? d : null;
   }
-  setDir(dir){
+  setDir(profile, dir){
+    const p = this.norm(profile);
     const c = this.readConfig();
-    c.reportsDir = dir;
+    c.reportsDirs = c.reportsDirs || {};
+    c.reportsDirs[p] = dir;
+    if(p === "dept") c.reportsDir = dir;          // keep the legacy key in step
     this.writeConfig(c);
     this.startWatch();
     return dir;
   }
-  /* a path is usable only inside the configured folder tree */
-  contained(p){
-    const base = this.getDir();
+  /* a path is usable only inside that profile's folder tree */
+  contained(profile, p){
+    const base = this.getDir(profile);
     if(!base) return null;
     const rbase = path.resolve(base);
     const full = path.resolve(p);
@@ -38,10 +47,10 @@ class FileHub {
     return full;
   }
   /* list one level of the tree: sub-folders plus the report files in `rel` */
-  list(rel){
-    const base = this.getDir();
+  list(profile, rel){
+    const base = this.getDir(profile);
     if(!base) return {dir: null, rel: "", dirs: [], files: []};
-    const target = this.contained(path.resolve(base, String(rel || "")));
+    const target = this.contained(profile, path.resolve(base, String(rel || "")));
     if(!target) return {dir: base, rel: "", dirs: [], files: [], error: "outside the reports folder"};
     let entries;
     try{ entries = fs.readdirSync(target, {withFileTypes: true}); }
@@ -62,14 +71,14 @@ class FileHub {
     files.sort((a, b) => b.mtimeMs - a.mtimeMs);
     return {dir: base, rel: path.relative(base, target), dirs, files};
   }
-  read(p){
-    const full = this.contained(p);
+  read(profile, p){
+    const full = this.contained(profile, p);
     if(!full) throw new Error("file is outside the reports folder");
     if(!REPORT_RE.test(full)) throw new Error("not a report file");
     return fs.readFileSync(full);
   }
-  stat(p){
-    const full = this.contained(p);
+  stat(profile, p){
+    const full = this.contained(profile, p);
     if(!full) return null;
     try{
       const st = fs.statSync(full);
@@ -78,21 +87,28 @@ class FileHub {
   }
   startWatch(){
     this.stopWatch();
-    const dir = this.getDir();
-    if(!dir) return;
-    try{
-      let opts = {};
-      try{ opts = {recursive: true}; }catch(e){}
-      this.watcher = fs.watch(dir, opts, () => {
-        clearTimeout(this.debounce);
-        this.debounce = setTimeout(() => { try{ this.o.onDirEvent(); }catch(e){} }, 800);
-      });
-      this.watcher.on("error", () => {});
-    }catch(e){}
+    for(const p of PROFILES){
+      const dir = this.getDir(p);
+      if(!dir) continue;
+      try{
+        let opts = {};
+        try{ opts = {recursive: true}; }catch(e){}
+        const w = fs.watch(dir, opts, () => {
+          clearTimeout(this.debounce[p]);
+          this.debounce[p] = setTimeout(() => { try{ this.o.onDirEvent(p); }catch(e){} }, 800);
+        });
+        w.on("error", () => {});
+        this.watchers[p] = w;
+      }catch(e){}
+    }
   }
   stopWatch(){
-    if(this.watcher){ try{ this.watcher.close(); }catch(e){} this.watcher = null; }
-    clearTimeout(this.debounce);
+    for(const p of Object.keys(this.watchers)){
+      try{ this.watchers[p].close(); }catch(e){}
+      delete this.watchers[p];
+    }
+    for(const p of Object.keys(this.debounce)) clearTimeout(this.debounce[p]);
+    this.debounce = {};
   }
 }
-module.exports = {FileHub, REPORT_RE};
+module.exports = {FileHub, REPORT_RE, PROFILES};
