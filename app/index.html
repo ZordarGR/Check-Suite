@@ -1080,7 +1080,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.8.0";
+const APP_VERSION = "1.8.1";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -2502,7 +2502,29 @@ function openRowMenu(anchor, r){
 function openModal(html){ const bg = $("#modalBg"); $("#modal").innerHTML = html; bg.classList.add("open"); }
 function closeModal(){ $("#modalBg").classList.remove("open"); armEnterGuard(); $("#snInput").focus(); }
 $("#modalBg").addEventListener("click", e => { if(e.target.id === "modalBg") closeModal(); });
-document.addEventListener("keydown", e => { if(e.key === "Escape"){ closeModal(); closeMenu(); } });
+/* every prompt: Enter = its default (amber) button, Esc = cancel/close */
+function modalDefaultBtn(){
+  const m = $("#modal");
+  const def = m.querySelector("[data-def]");
+  if(def) return def;
+  const ambers = m.querySelectorAll(".actions .btn.amber");
+  return ambers.length === 1 ? ambers[0] : null;
+}
+document.addEventListener("keydown", e => {
+  if(e.key === "Escape"){
+    closeModal();
+    closeMenu();
+    document.querySelectorAll(".mcat").forEach(c => c.classList.remove("open"));
+    const sv = $("#clSevMenu"); if(sv) sv.classList.remove("open");
+    return;
+  }
+  if(e.key === "Enter" && $("#modalBg").classList.contains("open")){
+    const a = document.activeElement;
+    if(a && ["BUTTON","SELECT","TEXTAREA","A"].includes(a.tagName)) return;   // Enter there acts on the focused control
+    const def = modalDefaultBtn();
+    if(def){ e.preventDefault(); e.stopPropagation(); def.click(); }
+  }
+});
 
 function moneyField(v){ return (v === undefined || v === null || v === "") ? "" : String(v).replace(".", ","); }
 function readMoney(s){
@@ -3164,7 +3186,7 @@ $("#resetDay").onclick = () => {
       <b style="font-family:var(--mono);color:var(--amber)">${MODEL.reportDate}</b>?</div>
     <div class="actions">
       <button class="btn" id="rCancel">${t("reset.cancel")}</button>
-      <button class="btn" id="rGo" style="border-color:var(--red-dim);color:var(--red)">${t("reset.go")}</button>
+      <button class="btn" id="rGo" data-def style="border-color:var(--red-dim);color:var(--red)">${t("reset.go")}</button>
     </div>`);
   $("#rCancel").onclick = closeModal;
   $("#rGo").onclick = () => {
@@ -3588,6 +3610,18 @@ el('m-continue').addEventListener('click',()=>{
 });
 el('m-back').addEventListener('click',()=>{el('m-confirm').style.display='none';el('m-row2').style.display='none';el('m-row1').style.display='flex';});
 el('m-confirmbtn').addEventListener('click',()=>{PAIR_OVERRIDE={mode:'paired',night:TAX.dateKey};closeModal();render();});
+/* Enter = continue / confirm, Esc = close — same manners as the rest of the app */
+document.addEventListener('keydown',e=>{
+  if(!el('backdrop').classList.contains('show'))return;
+  if(e.key==='Escape'){closeModal();return;}
+  if(e.key==='Enter'){
+    const a=document.activeElement;
+    if(a&&a.tagName==='BUTTON')return;
+    e.preventDefault();
+    if(el('m-row2').style.display!=='none')el('m-confirmbtn').click();
+    else el('m-continue').click();
+  }
+});
 
 /* ============ language ============ */
 function applyStatic(){el('apptitle').innerHTML='<span>'+t('app_brand')+'</span> '+t('app_rest');document.querySelectorAll('[data-i18n]').forEach(e=>{e.textContent=t(e.getAttribute('data-i18n'));});el('memhint').textContent=t('mem_hint');el('foot').textContent=t('foot');}

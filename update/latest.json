@@ -1,10 +1,8 @@
 {
-  "version": "1.8.0",
-  "type": "full",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.8.0/RecCheck-Setup.exe",
-  "setupSha256": "62551ec15bba7580a39fb396fac13e59e87532b8c6b4cf9c44ae81c89ddb2166",
-  "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
+  "version": "1.8.1",
+  "type": "html",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "e887a48ca6fdf7e97ef60f96a973c3fcb09d8d843a78b14f1e47b4acaabd8ce3",
-  "notes": "Separate reports folder for each tool \u2014 Department Check and Tax Check each remember their own directory."
+  "sha256": "0f4932fd73e9af25d28c7394911e23764818afecfa4eb10bdae33d263ad70022",
+  "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
+  "notes": "Every prompt now answers to the keyboard: Enter confirms, Esc cancels."
 }
