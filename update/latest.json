@@ -1,10 +1,10 @@
 {
-  "version": "1.7.4",
+  "version": "1.8.0",
   "type": "full",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.7.4/RecCheck-Setup.exe",
-  "setupSha256": "ad2bd523c3a5272c8dfd2c0d9364833701b20c232d9db8560850502c200bd80b",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.8.0/RecCheck-Setup.exe",
+  "setupSha256": "62551ec15bba7580a39fb396fac13e59e87532b8c6b4cf9c44ae81c89ddb2166",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "d0d196e90b9b37a4bb7cd5357433a9c07245a4a20e673ab258c90a1c54f65a86",
-  "notes": "Overlay severity dots keep their color when tasks are checked; SEVERITY dropdown in the checklist editor."
+  "sha256": "e887a48ca6fdf7e97ef60f96a973c3fcb09d8d843a78b14f1e47b4acaabd8ce3",
+  "notes": "Separate reports folder for each tool \u2014 Department Check and Tax Check each remember their own directory."
 }
