@@ -12,6 +12,14 @@ html,body{margin:0;background:transparent;overflow:hidden;-webkit-user-select:no
   box-shadow:0 1px 2px rgba(0,0,0,.8)}
 body.left .t .b{margin:0 8px 0 0}
 .b.low{background:#2e9e57}.b.med{background:#e08a2e}.b.high{background:#e04747}
+/* interact mode: the window catches the mouse — rows become tickable */
+body.interact{pointer-events:auto}
+body.interact #box{opacity:1;outline:1.5px solid rgba(240,180,60,.85);outline-offset:-1px;background:rgba(20,24,32,.85) !important}
+body.interact .t{cursor:pointer;border-radius:7px;padding:2px 6px;margin:4px -6px}
+body.interact .t:hover{background:rgba(255,255,255,.12)}
+#hint{display:none;font-size:11px;font-weight:400;color:rgba(255,255,255,.55);margin-top:7px;
+  text-shadow:0 1px 3px rgba(0,0,0,.95)}
+body.interact #hint{display:block}
 </style>
 </head>
 <body><div id="box"></div>
@@ -21,13 +29,14 @@ var FONTS = {
   mono: 'Consolas,"Cascadia Mono","Courier New",monospace',
   serif: 'Georgia,"Times New Roman",serif'
 };
-window.overlayBridge.onData(function(d){
+var LAST = null;
+function paint(d){
   var cfg = d.cfg || {};
   var pos = cfg.pos || "tr";
   var left = pos === "tl" || pos === "bl";
-  document.body.className = left ? "left" : "";
+  document.body.classList.toggle("left", left);
   var box = document.getElementById("box");
-  box.style.opacity = (cfg.txt !== undefined ? cfg.txt : 50) / 100;
+  box.style.opacity = document.body.classList.contains("interact") ? 1 : (cfg.txt !== undefined ? cfg.txt : 50) / 100;
   box.style.background = "rgba(72,76,84," + ((cfg.bg || 0) / 100) + ")";
   box.style.fontFamily = FONTS[cfg.font] || FONTS.segoe;
   box.style.fontSize = (cfg.size || 14) + "px";
@@ -37,13 +46,29 @@ window.overlayBridge.onData(function(d){
   (d.tasks || []).forEach(function(t){
     var div = document.createElement("div");
     div.className = "t" + (t.done ? " done" : "");
+    div.dataset.id = t.id || "";
     var b = document.createElement("span");
     b.className = "b " + (t.tier || "low");
     var txt = document.createTextNode((t.done ? "✓ " : "") + t.text);
     if(left){ div.appendChild(b); div.appendChild(txt); }
     else{ div.appendChild(txt); div.appendChild(b); }
+    div.addEventListener("click", function(){
+      if(document.body.classList.contains("interact") && t.id) window.overlayBridge.tick(t.id);
+    });
     box.appendChild(div);
   });
+  var hint = document.createElement("div");
+  hint.id = "hint";
+  hint.textContent = (d.lang === "gr") ? "κλικ = ✓ · Esc = έξοδος" : "click = ✓ · Esc = leave";
+  box.appendChild(hint);
+}
+window.overlayBridge.onData(function(d){ LAST = d; paint(d); });
+window.overlayBridge.onMode(function(m){
+  document.body.classList.toggle("interact", !!(m && m.interact));
+  if(LAST) paint(LAST);
+});
+window.addEventListener("keydown", function(e){
+  if(e.key === "Escape") window.overlayBridge.exitInteract();
 });
 </script>
 </body>

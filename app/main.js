@@ -60,10 +60,47 @@ function currentHotkey(){
     return (c.overlayHotkey !== undefined) ? c.overlayHotkey : "Control+T";
   }catch(e){ return "Control+T"; }
 }
-function applyHotkey(acc){
-  try{ globalShortcut.unregisterAll(); }catch(e){}
+function currentIHotkey(){
+  try{
+    const c = hub.readConfig();
+    return (c.interactHotkey !== undefined) ? c.interactHotkey : "Alt+Shift+Z";
+  }catch(e){ return "Alt+Shift+Z"; }
+}
+function tryRegister(acc, fn){
   if(!acc) return true;                        // empty = hotkey disabled
-  try{ return globalShortcut.register(acc, toggleOverlayGlobal); }catch(e){ return false; }
+  try{ return globalShortcut.register(acc, fn); }catch(e){ return false; }
+}
+/* register both system-wide combos: toggle, and interact (focus + tick tasks) */
+function applyHotkeys(){
+  try{ globalShortcut.unregisterAll(); }catch(e){}
+  const tog = currentHotkey(), inter = currentIHotkey();
+  const okT = tryRegister(tog, toggleOverlayGlobal);
+  const okI = (inter && inter === tog) ? false : tryRegister(inter, interactOverlayGlobal);
+  return {okT, okI};
+}
+/* the interact combo surfaces the overlay and lets the mouse reach it */
+function interactOverlayGlobal(){
+  if(!overlayWin){
+    createOverlay();
+    try{ const c = hub.readConfig(); c.overlayOn = true; hub.writeConfig(c); }catch(e){}
+    announceOverlayState();
+    setTimeout(() => setInteract(true), 120);   // let the window finish loading
+    return;
+  }
+  setInteract(!INTERACT);
+}
+function setInteract(on){
+  if(!overlayWin){ INTERACT = false; return; }
+  INTERACT = !!on;
+  try{
+    overlayWin.setIgnoreMouseEvents(!INTERACT);
+    overlayWin.setFocusable(INTERACT);
+    if(INTERACT) overlayWin.focus();
+  }catch(e){}
+  try{
+    if(overlayData) overlayWin.setBounds(overlayBounds((overlayData.tasks || []).length + (INTERACT ? 1 : 0), overlayData.cfg));
+  }catch(e){}
+  try{ overlayWin.webContents.send("overlay-mode", {interact: INTERACT}); }catch(e){}
 }
 function announceOverlayState(){
   if(win && !win.isDestroyed()) win.webContents.send("overlay-state-changed", !!overlayWin);
@@ -88,7 +125,7 @@ function buildTray(){
     {label: L.close, click: () => { QUITTING = true; app.quit(); }}
   ]));
 }
-let overlayWin = null, overlayData = null;
+let overlayWin = null, overlayData = null, INTERACT = false;
 
 /* ---- desktop checklist overlay: transparent, click-through, always on top ---- */
 function overlayBounds(count, cfg){
@@ -116,10 +153,12 @@ function createOverlay(){
   overlayWin.webContents.once("did-finish-load", () => {
     if(overlayData && overlayWin) overlayWin.webContents.send("overlay-data", overlayData);
   });
-  overlayWin.on("closed", () => { overlayWin = null; });
+  overlayWin.on("blur", () => { if(INTERACT) setInteract(false); });
+  overlayWin.on("closed", () => { overlayWin = null; INTERACT = false; });
 }
 function destroyOverlay(){
   if(overlayWin){ try{ overlayWin.destroy(); }catch(e){} overlayWin = null; }
+  INTERACT = false;
 }
 
 function createWindow(file){
@@ -166,7 +205,7 @@ app.whenReady().then(() => {
   createWindow(eff.file);
   try{ if(hub.readConfig().overlayOn) createOverlay(); }catch(e){}
   buildTray();
-  applyHotkey(currentHotkey());
+  applyHotkeys();
   MANUAL_SHOWN = true;                        // startup check never pops the window
   updater.check().then(info => {
     if(info && win && !win.isDestroyed())
@@ -228,7 +267,7 @@ ipcMain.handle("overlay-state", () => !!overlayWin);
 ipcMain.handle("overlay-data", (_e, d) => {
   overlayData = d;
   if(overlayWin){
-    try{ overlayWin.setBounds(overlayBounds((d && d.tasks || []).length, d && d.cfg)); }catch(e){}
+    try{ overlayWin.setBounds(overlayBounds((d && d.tasks || []).length + (INTERACT ? 1 : 0), d && d.cfg)); }catch(e){}
     overlayWin.webContents.send("overlay-data", d);
   }
   return true;
@@ -241,13 +280,32 @@ ipcMain.handle("overlay-hotkey-get", () => currentHotkey());
 ipcMain.handle("overlay-hotkey-set", (_e, acc) => {
   acc = typeof acc === "string" ? acc : "";
   const prev = currentHotkey();
-  if(!applyHotkey(acc)){
-    applyHotkey(prev);                         // keep the old one working
+  try{ const c = hub.readConfig(); c.overlayHotkey = acc; hub.writeConfig(c); }catch(e){}
+  if(!applyHotkeys().okT){
+    try{ const c = hub.readConfig(); c.overlayHotkey = prev; hub.writeConfig(c); }catch(e){}
+    applyHotkeys();                            // keep the old one working
     return false;
   }
-  try{ const c = hub.readConfig(); c.overlayHotkey = acc; hub.writeConfig(c); }catch(e){}
   return true;
 });
+ipcMain.handle("overlay-ihotkey-get", () => currentIHotkey());
+ipcMain.handle("overlay-ihotkey-set", (_e, acc) => {
+  acc = typeof acc === "string" ? acc : "";
+  const prev = currentIHotkey();
+  try{ const c = hub.readConfig(); c.interactHotkey = acc; hub.writeConfig(c); }catch(e){}
+  if(acc && !applyHotkeys().okI){
+    try{ const c = hub.readConfig(); c.interactHotkey = prev; hub.writeConfig(c); }catch(e){}
+    applyHotkeys();
+    return false;
+  }
+  if(!acc) applyHotkeys();
+  return true;
+});
+ipcMain.handle("overlay-tick", (_e, id) => {
+  if(win && !win.isDestroyed()) win.webContents.send("reccheck-overlay-tick", id);
+  return true;
+});
+ipcMain.handle("overlay-exit-interact", () => { setInteract(false); return true; });
 app.on("will-quit", () => { try{ globalShortcut.unregisterAll(); }catch(e){} });
 
 ipcMain.handle("app-set-lang", (_e, l) => {

@@ -20,7 +20,10 @@ contextBridge.exposeInMainWorld("reccheckOverlay", {
   setData: (d) => ipcRenderer.invoke("overlay-data", d),
   onState: (cb) => ipcRenderer.on("overlay-state-changed", (_e, on) => cb(on)),
   hotkeyGet: () => ipcRenderer.invoke("overlay-hotkey-get"),
-  hotkeySet: (acc) => ipcRenderer.invoke("overlay-hotkey-set", acc)
+  hotkeySet: (acc) => ipcRenderer.invoke("overlay-hotkey-set", acc),
+  ihotkeyGet: () => ipcRenderer.invoke("overlay-ihotkey-get"),
+  ihotkeySet: (acc) => ipcRenderer.invoke("overlay-ihotkey-set", acc),
+  onTick: (cb) => ipcRenderer.on("reccheck-overlay-tick", (_e, id) => cb(id))
 });
 contextBridge.exposeInMainWorld("reccheckApp", {
   setLang: (l) => ipcRenderer.invoke("app-set-lang", l)

@@ -1,10 +1,14 @@
-## RecCheck 1.8.0 — Windows
+## RecCheck 1.9.0 — Windows
 
 Nightly POS receipt audit for the protel checkcharge1 report (.oxps). Everything runs locally — no data leaves the machine.
 
-### New in 1.8.0
+### New in 1.9.0
 
-**Separate folders per tool:** Department Check and Tax Check now each have their own reports directory. Under *Options* the single "Change Directory" entry became two — one per tool — each showing its current folder. The first time you feed the Tax Check it asks for its own folder, and the file list always shows which tool's folder you are browsing.
+**Tick tasks on the overlay:** a second global shortcut — **Alt+Shift+Z** by default, rebindable under *Customize overlay* — brings the desktop checklist into focus. While focused it lights up with an amber border; click a task to tick or untick it, press Esc (or the combo again, or click elsewhere) to return it to click-through mode.
+
+**Tax Check remembers your dismissals:** dismissing an overcharged room now sticks across nights. The room only reappears if something actually changes on it — another extra charge, or a correction. Clearing the tool's memory also clears the dismissals.
+
+Also included since 1.8.0: every prompt accepts **Enter** as OK and **Esc** as cancel.
 
 ### Install
 

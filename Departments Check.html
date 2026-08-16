@@ -1080,7 +1080,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.8.1";
+const APP_VERSION = "1.9.0";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1104,6 +1104,7 @@ en: {
   "ov.txtop": "Text opacity", "ov.size": "Font size", "ov.font": "Font", "ov.bold": "Bold text",
   "ov.reset": "Reset to defaults", "ov.ok": "Done", "ov.hint": "changes apply live while the overlay is on",
   "ov.hk": "Global shortcut (toggles the overlay from anywhere)", "ov.hkPress": "press the new combination… (Esc cancels)",
+  "ov.hk2": "Tick shortcut (focuses the overlay — click tasks to tick them, Esc leaves)",
   "ov.hkBusy": "That combination is held by another program — pick a different one.",
   "ov.hkNeedMod": "Use at least one of Ctrl / Alt / Shift with a key.", "cl.tierLow": "low importance", "cl.tierMed": "medium importance", "cl.tierHigh": "extremely important",
   "cl.sev": "SEVERITY", "cl.sevLow": "LOW", "cl.sevMed": "MEDIUM", "cl.sevHigh": "HIGH",
@@ -1209,6 +1210,7 @@ gr: {
   "ov.txtop": "Διαφάνεια κειμένου", "ov.size": "Μέγεθος γραμμάτων", "ov.font": "Γραμματοσειρά", "ov.bold": "Έντονα γράμματα",
   "ov.reset": "Επαναφορά προεπιλογών", "ov.ok": "Έτοιμο", "ov.hint": "οι αλλαγές εφαρμόζονται ζωντανά όσο η επικάλυψη είναι ανοιχτή",
   "ov.hk": "Καθολική συντόμευση (ανοιγοκλείνει την επικάλυψη από παντού)", "ov.hkPress": "πατήστε τον νέο συνδυασμό… (Esc ακύρωση)",
+  "ov.hk2": "Συντόμευση τικ (φέρνει την επικάλυψη σε εστίαση — κλικ στις εργασίες για ✓, Esc για έξοδο)",
   "ov.hkBusy": "Ο συνδυασμός χρησιμοποιείται από άλλο πρόγραμμα — διαλέξτε άλλον.",
   "ov.hkNeedMod": "Χρησιμοποιήστε τουλάχιστον Ctrl / Alt / Shift μαζί με ένα πλήκτρο.", "cl.tierLow": "χαμηλή σημασία", "cl.tierMed": "μεσαία σημασία", "cl.tierHigh": "εξαιρετικά σημαντικό",
   "cl.sev": "ΣΟΒΑΡΟΤΗΤΑ", "cl.sevLow": "ΧΑΜΗΛΗ", "cl.sevMed": "ΜΕΣΑΙΑ", "cl.sevHigh": "ΥΨΗΛΗ",
@@ -1678,6 +1680,9 @@ function openOverlaySettings(){
     <label>${t("ov.hk")}</label>
     <button class="btn" id="ovHk" style="width:100%;font-family:var(--mono);letter-spacing:.08em">…</button>
     <div class="err" id="ovHkErr"></div>
+    <label>${t("ov.hk2")}</label>
+    <button class="btn" id="ovHk2" style="width:100%;font-family:var(--mono);letter-spacing:.08em">…</button>
+    <div class="err" id="ovHk2Err"></div>
     <div class="err" style="color:var(--faint)">${t("ov.hint")}</div>
     <div class="actions">
       <button class="btn" id="ovReset">${t("ov.reset")}</button>
@@ -1696,22 +1701,20 @@ function openOverlaySettings(){
   $("#ovReset").onclick = () => { OVCFG = Object.assign({}, OVDEF); apply(); closeModal(); openOverlaySettings(); };
   $("#ovOk").onclick = closeModal;
 
-  // global hotkey binding
-  const hkBtn = $("#ovHk"), hkErr = $("#ovHkErr");
+  // global hotkey bindings — the toggle combo and the tick (interact) combo
   const pretty = a => (a || "—").replace("Control", "Ctrl").replace("Super", "Win");
-  if(!(window.reccheckOverlay && window.reccheckOverlay.hotkeyGet)){
-    hkBtn.style.display = "none";
-  }else{
-    window.reccheckOverlay.hotkeyGet().then(a => { hkBtn.textContent = pretty(a); }).catch(() => {});
-    hkBtn.onclick = () => {
-      hkErr.textContent = "";
-      hkBtn.textContent = t("ov.hkPress");
+  const bindHotkeyRow = (btn, err, getF, setF) => {
+    if(!getF){ btn.style.display = "none"; return; }
+    getF().then(a => { btn.textContent = pretty(a); }).catch(() => {});
+    btn.onclick = () => {
+      err.textContent = "";
+      btn.textContent = t("ov.hkPress");
       const cap = async e => {
         e.preventDefault();
         e.stopPropagation();
         if(e.key === "Escape"){
           document.removeEventListener("keydown", cap, true);
-          window.reccheckOverlay.hotkeyGet().then(a => { hkBtn.textContent = pretty(a); });
+          getF().then(a => { btn.textContent = pretty(a); });
           return;
         }
         if(["Control","Alt","Shift","Meta"].includes(e.key)) return;   // wait for the full combo
@@ -1722,20 +1725,23 @@ function openOverlaySettings(){
         if(e.metaKey) mods.push("Super");
         let key = e.key.length === 1 ? e.key.toUpperCase() : e.key;
         const isFn = /^F([1-9]|1[0-9]|2[0-4])$/.test(key);
-        if(!mods.length && !isFn){ hkErr.textContent = t("ov.hkNeedMod"); return; }
+        if(!mods.length && !isFn){ err.textContent = t("ov.hkNeedMod"); return; }
         if(!/^[A-Z0-9]$/.test(key) && !isFn && !["Space","Home","End","Insert","Delete","PageUp","PageDown"].includes(key)) return;
         document.removeEventListener("keydown", cap, true);
         const acc = mods.concat([key === " " ? "Space" : key]).join("+");
-        const ok = await window.reccheckOverlay.hotkeySet(acc).catch(() => false);
-        if(ok){ hkBtn.textContent = pretty(acc); }
+        const ok = await setF(acc).catch(() => false);
+        if(ok){ btn.textContent = pretty(acc); }
         else{
-          hkErr.textContent = t("ov.hkBusy");
-          window.reccheckOverlay.hotkeyGet().then(a => { hkBtn.textContent = pretty(a); });
+          err.textContent = t("ov.hkBusy");
+          getF().then(a => { btn.textContent = pretty(a); });
         }
       };
       document.addEventListener("keydown", cap, true);
     };
-  }
+  };
+  const ovl = window.reccheckOverlay || {};
+  bindHotkeyRow($("#ovHk"), $("#ovHkErr"), ovl.hotkeyGet && (() => ovl.hotkeyGet()), a => ovl.hotkeySet(a));
+  bindHotkeyRow($("#ovHk2"), $("#ovHk2Err"), ovl.ihotkeyGet && (() => ovl.ihotkeyGet()), a => ovl.ihotkeySet(a));
 }
 function clSorted(){
   const order = {high: 0, med: 1, low: 2};
@@ -1743,7 +1749,7 @@ function clSorted(){
 }
 function pushOverlay(){
   if(!window.reccheckOverlay) return;
-  window.reccheckOverlay.setData({tasks: clSorted().map(x => ({text: x.text, done: !!x.done, tier: x.tier})), cfg: OVCFG}).catch(() => {});
+  window.reccheckOverlay.setData({tasks: clSorted().map(x => ({id: x.id, text: x.text, done: !!x.done, tier: x.tier})), cfg: OVCFG, lang: LANG}).catch(() => {});
 }
 function paintOverlayBtn(){
   const b = $("#clOverlay");
@@ -3212,6 +3218,11 @@ $("#resetDay").onclick = () => {
     try{ OVON = await window.reccheckOverlay.state(); }catch(e){}
     if(window.reccheckOverlay.onState)
       window.reccheckOverlay.onState(on => { OVON = on; paintOverlayBtn(); });
+    if(window.reccheckOverlay.onTick)
+      window.reccheckOverlay.onTick(id => {        // a task was clicked on the desktop overlay
+        const task = CL.find(x => x.id === id);
+        if(task){ task.done = !task.done; saveCL(); renderChecklist(); }
+      });
   }
   paintSevSel();
   clNightCheck();
@@ -3414,7 +3425,15 @@ function verifyOf(nightKey,room){const v=loadVerify();return (v[nightKey]&&v[nig
 function setVerify(nightKey,room,val){const v=loadVerify();const n=v[nightKey]||(v[nightKey]={});if(val)n[room]=val;else delete n[room];const keys=Object.keys(v).sort((a,b)=>Number(b)-Number(a));for(const k of keys.slice(7))delete v[k];saveVerify(v);}
 /* consolidation across the days in memory: TA total vs nights */
 function roomBalance(mem,room){const rec=mem[room]||{};let ta=0,nights=0;for(const d of Object.keys(rec)){const e=rec[d];if(e.manual==='arrival'||e.manual==='checkout')continue;ta+=(e.auto||0)+(e.man||0);if((e.arr||0)>0)nights++;}return{bal:ta-nights,nights,ta};}
-function overchargeFromMemory(){const mem=loadMem();const out=[];for(const room of Object.keys(mem)){const b=roomBalance(mem,room);if(b.bal>0)out.push({room,extra:b.bal,nights:b.nights});}out.sort((a,b)=>(parseInt(a.room)||0)-(parseInt(b.room)||0));return out;}
+function overchargeFromMemory(){const mem=loadMem();const out=[];for(const room of Object.keys(mem)){const b=roomBalance(mem,room);if(b.bal>0)out.push({room,extra:b.bal,nights:b.nights});}out.sort((a,b)=>(parseInt(a.room)||0)-(parseInt(b.room)||0));pruneAck(out);return out;}
+/* overcharge dismissals persist across nights — an ack is tied to the room's balance
+   at the moment of dismissal, so the room only resurfaces if something new happens */
+const ACK_KEY="ta_check_ack_v1";
+function loadAck(){try{return JSON.parse(localStorage.getItem(ACK_KEY))||{};}catch(e){return{};}}
+function saveAck(a){try{localStorage.setItem(ACK_KEY,JSON.stringify(a));}catch(e){}}
+function ackOf(room,bal){return loadAck()[room]===bal;}
+function toggleAck(room,bal){const a=loadAck();if(a[room]===bal)delete a[room];else a[room]=bal;saveAck(a);}
+function pruneAck(over){const a=loadAck();let ch=false;for(const room of Object.keys(a)){const cur=over.find(o=>o.room===room);if(!cur||cur.extra!==a[room]){delete a[room];ch=true;}}if(ch)saveAck(a);}
 
 /* ============ helpers ============ */
 function el(id){return document.getElementById(id);}
@@ -3449,7 +3468,8 @@ function render(){
     const adjOk=x.adjoining.filter(o=>verifyOf(d.night,o.room)==='ok').length;
     bn.innerHTML=`<div class="banner ok">${t('b_paired', dfmt(RATE.dateKey)||RATE.bizDate, dfmt(d.night))}</div>`;
     sm.style.display='flex';
-    sm.innerHTML=stat('stat_night',dfmt(d.night),true)+stat('stat_inhouse',RATE.count)+stat('stat_posted',TAX.totalRooms)+stat('stat_flags',x.totalFail.length+x.autoMiss.length+over.length+adjProblem);
+    const overPend=over.filter(o=>!ackOf(o.room,o.extra)).length;
+    sm.innerHTML=stat('stat_night',dfmt(d.night),true)+stat('stat_inhouse',RATE.count)+stat('stat_posted',TAX.totalRooms)+stat('stat_flags',x.totalFail.length+x.autoMiss.length+overPend+adjProblem);
     rs.innerHTML=
       ackSection('fail','sec_fail','empty_fail',x.totalFail,d.night,o=>['red',t('tag_fail'),t('meta_fail')],false)+
       ackSection('auto','sec_auto','empty_auto',x.autoMiss,d.night,o=>['red',o.covered?t('tag_auto_cov'):t('tag_auto_none'),o.covered?t('meta_auto_cov'):t('meta_auto_none')],true)+
@@ -3509,15 +3529,16 @@ function adjRow(o,night){
   return `<div class="row"><span class="rm">${o.room}${o.partner?('-'+o.partner):''}</span><span class="nm">${o.name||''}</span><span class="tag ${tagCls}">${tagLabel}</span><span class="meta">${meta}</span>${btns}</div>`;
 }
 function ackRow(o,night,tagCls,tagLabel,meta,ns){
-  const k=ns+o.room;
-  const dis=verifyOf(night,k)==='dismissed';
-  const btn=`<span class="btns"><button class="mini ${dis?'on-arr':''}" data-verify="dismissed" data-room="${k}" data-night="${night}">${t('btn_dismiss')}</button></span>`;
+  const persistent=ns==='ov:';        // overcharges come from cross-night memory — their ack survives the night rollover
+  const dis=persistent?ackOf(o.room,o.extra):(verifyOf(night,ns+o.room)==='dismissed');
+  const attrs=persistent?`data-ack="${o.room}" data-bal="${o.extra}"`:`data-verify="dismissed" data-room="${ns+o.room}" data-night="${night}"`;
+  const btn=`<span class="btns"><button class="mini ${dis?'on-arr':''}" ${attrs}>${t('btn_dismiss')}</button></span>`;
   if(dis)return `<div class="row"><span class="rm">${o.room}</span><span class="nm">${o.name||''}</span><span class="tag ok">${t('tag_dismissed')}</span><span class="meta"></span>${btn}</div>`;
   return `<div class="row"><span class="rm">${o.room}</span><span class="nm">${o.name||''}</span><span class="tag ${tagCls}">${tagLabel}</span><span class="meta">${meta}</span>${btn}</div>`;
 }
 function ackSection(key,titleKey,emptyKey,list,night,spec,withPrint,ns){ns=ns||'';
   if(!list.length)return `<div class="dgroup seg"><div class="dhead static"><span class="segtitle">${t(titleKey)}</span><span class="count c-none">${t('pill_none')}</span></div></div>`;
-  const total=list.length;let dN=0;for(const o of list)if(verifyOf(night,ns+o.room)==='dismissed')dN++;
+  const total=list.length;let dN=0;for(const o of list)if(ns==='ov:'?ackOf(o.room,o.extra):verifyOf(night,ns+o.room)==='dismissed')dN++;
   const pending=total-dN, done=pending===0;
   const open=SEC_OPEN[key]!==undefined?SEC_OPEN[key]:pending>0;
   const body=list.map(o=>{const sp=spec(o);return ackRow(o,night,sp[0],sp[1],sp[2],ns);}).join('');
@@ -3557,12 +3578,13 @@ function renderTaxStandalone(){
   const noArr=sk(noArrAll.filter(room=>!manualOf(room)));const classified=noArrAll.length-noArr.length;
   const over=overchargeFromMemory();
   over.sort((a,b)=>(parseInt(a.room)||0)-(parseInt(b.room)||0));
+  const overPend=over.filter(o=>!ackOf(o.room,o.extra)).length;
   const sm=el('ta-summary'); sm.style.display='flex';
-  sm.innerHTML=stat('stat_night',r.fileDate,true)+stat('stat_posted',r.totalRooms)+stat('stat_flags',autoMiss.length+over.length);
+  sm.innerHTML=stat('stat_night',r.fileDate,true)+stat('stat_posted',r.totalRooms)+stat('stat_flags',autoMiss.length+overPend);
   const rs=el('results');
   rs.innerHTML +=
     sectAuto(autoMiss.length, autoMiss.length? autoMiss.map(o=>rowHTML(o.room,'','red',o.covered?t('tag_auto_cov'):t('tag_auto_none'),o.covered?t('meta_auto_cov'):t('meta_auto_none'))).join(''):empt('empty_auto'))+
-    sect('sec_over','a2',over.length, over.length? over.map(o=>rowHTML(o.room,'','amber',t('tag_over',o.extra),t('meta_over',o.extra,o.nights))).join(''):empt('empty_over'))+
+    sect('sec_over','a2',overPend, over.length? over.map(o=>ackRow(o,0,'amber',t('tag_over',o.extra),t('meta_over',o.extra,o.nights),'ov:')).join(''):empt('empty_over'))+
     sect('sec_adj','a3',0,'')+  // placeholder to keep layout (hidden below)
     noArrSection(noArr,classified);
   // remove empty adjoining placeholder in standalone
@@ -3582,11 +3604,12 @@ function renderMemory(){const mem=loadMem();const dates=recentDates(mem,7);const
 /* manual tagging */
 function setManual(room,date,val){const mem=loadMem();const rec=mem[room]||(mem[room]={});const e=rec[date]||(rec[date]={arr:0,auto:0,man:0,manual:null});e.manual=val;saveMem(mem);}
 function cycleManual(room,date){const mem=loadMem();const e=((mem[room]||{})[date])||{manual:null};const order=[null,'arrival','checkout'];const nx=order[(order.indexOf(e.manual)+1)%3];setManual(room,date,nx);}
-document.addEventListener('click',ev=>{const ah=ev.target.closest('[data-adjtoggle]');if(ah&&!ev.target.closest('[data-print]')){const sec=ah.closest('.seg');if(!sec)return;sec.classList.toggle('open');SEC_OPEN[ah.getAttribute('data-adjtoggle')]=sec.classList.contains('open');return;}const pbtn=ev.target.closest('[data-print]');if(pbtn){printReport();return;}const tg=ev.target.closest('[data-toggle]');if(tg){const d=tg.getAttribute('data-toggle');if(EXPANDED.has(d))EXPANDED.delete(d);else EXPANDED.add(d);renderMemory();return;}const vb=ev.target.closest('button[data-verify]');if(vb){const room=vb.getAttribute('data-room');const night=Number(vb.getAttribute('data-night'));const val=vb.getAttribute('data-verify');const cur=verifyOf(night,room);setVerify(night,room,cur===val?null:val);SEC_OPEN={};render();return;}
+document.addEventListener('click',ev=>{const ah=ev.target.closest('[data-adjtoggle]');if(ah&&!ev.target.closest('[data-print]')){const sec=ah.closest('.seg');if(!sec)return;sec.classList.toggle('open');SEC_OPEN[ah.getAttribute('data-adjtoggle')]=sec.classList.contains('open');return;}const pbtn=ev.target.closest('[data-print]');if(pbtn){printReport();return;}const tg=ev.target.closest('[data-toggle]');if(tg){const d=tg.getAttribute('data-toggle');if(EXPANDED.has(d))EXPANDED.delete(d);else EXPANDED.add(d);renderMemory();return;}const ab=ev.target.closest('button[data-ack]');if(ab){toggleAck(ab.getAttribute('data-ack'),Number(ab.getAttribute('data-bal')));SEC_OPEN={};render();return;}
+const vb=ev.target.closest('button[data-verify]');if(vb){const room=vb.getAttribute('data-room');const night=Number(vb.getAttribute('data-night'));const val=vb.getAttribute('data-verify');const cur=verifyOf(night,room);setVerify(night,room,cur===val?null:val);SEC_OPEN={};render();return;}
 const b=ev.target.closest('button[data-set]');if(b){const room=b.getAttribute('data-room');const set=b.getAttribute('data-set');const cur=((loadMem()[room]||{})[TAX.fileDate]||{}).manual||null;setManual(room,TAX.fileDate,cur===set?null:set);render();return;}const c=ev.target.closest('.cyc');if(c){cycleManual(c.getAttribute('data-room'),c.getAttribute('data-date'));render();return;}});
 el('menu-btn').addEventListener('click',e=>{e.stopPropagation();el('menu-drop').classList.toggle('show');});
 document.addEventListener('click',e=>{if(!e.target.closest('.menu'))el('menu-drop').classList.remove('show');});
-el('reset-mem').addEventListener('click',()=>{if(confirm(t('confirm_clear'))){localStorage.removeItem(MEM_KEY);localStorage.removeItem(VERIFY_KEY);EXPANDED.clear();el('menu-drop').classList.remove('show');render();}});
+el('reset-mem').addEventListener('click',()=>{if(confirm(t('confirm_clear'))){localStorage.removeItem(MEM_KEY);localStorage.removeItem(VERIFY_KEY);localStorage.removeItem(ACK_KEY);EXPANDED.clear();el('menu-drop').classList.remove('show');render();}});
 
 /* ============ modal ============ */
 function openModal(){
