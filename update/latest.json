@@ -1,10 +1,8 @@
 {
-  "version": "1.9.0",
-  "type": "full",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.9.0/RecCheck-Setup.exe",
-  "setupSha256": "861af1b8fa4fdfdec14ce89133a461b30262d8083aea2a235e74f4188051050e",
-  "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
+  "version": "1.9.1",
+  "type": "html",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "8f9cc1aa20eabe96699885ccf9256c9429bab5b028ea530413a7d4dd135d0fcd",
-  "notes": "Tick tasks on the overlay with Alt+Shift+Z; Tax Check overcharge dismissals persist across nights."
+  "sha256": "42634216c7b14c58f317bfcefee0ea40f79b482f2e8740b975ac98d3cc4251cd",
+  "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
+  "notes": "Step-by-step guides inside both audit tools (incl. exporting XPS from protel) and checklist editing help."
 }
