@@ -237,9 +237,9 @@ ipcMain.handle("reccheck-apply-update", () => {
 ipcMain.handle("reccheck-get-version", () => updater ? updater.effective().version : PKG_VERSION);
 
 const PICK_TITLES = {
-  en: {dept: "Choose the folder with the Department Check reports (checkcharge)",
+  en: {dept: "Choose the folder with the Department Check reports (ΕΛΕΓΧΟΣ ΤΜΗΜΑΤΩΝ BY ROOM)",
        tax:  "Choose the folder with the Tax Check reports"},
-  gr: {dept: "Επιλέξτε τον φάκελο με τις αναφορές του Ελέγχου Τμημάτων (checkcharge)",
+  gr: {dept: "Επιλέξτε τον φάκελο με τις αναφορές του Ελέγχου Τμημάτων (ΕΛΕΓΧΟΣ ΤΜΗΜΑΤΩΝ BY ROOM)",
        tax:  "Επιλέξτε τον φάκελο με τις αναφορές του Ελέγχου ΤΑ"}
 };
 ipcMain.handle("files-get-dir", (_e, profile) => hub ? hub.getDir(profile) : null);

@@ -1,14 +1,12 @@
-## RecCheck 1.9.0 — Windows
+## RecCheck 1.10.0 — Windows
 
 Nightly POS receipt audit for the protel checkcharge1 report (.oxps). Everything runs locally — no data leaves the machine.
 
-### New in 1.9.0
+### New in 1.10.0
 
-**Tick tasks on the overlay:** a second global shortcut — **Alt+Shift+Z** by default, rebindable under *Customize overlay* — brings the desktop checklist into focus. While focused it lights up with an amber border; click a task to tick or untick it, press Esc (or the combo again, or click elsewhere) to return it to click-through mode.
+**Overlay highlighter:** each task on the desktop overlay now sits on a highlighter tinted like its severity dot — red, orange or green at a glance. Finished tasks keep a faint tint so priorities stay readable.
 
-**Tax Check remembers your dismissals:** dismissing an overcharged room now sticks across nights. The room only reappears if something actually changes on it — another extra charge, or a correction. Clearing the tool's memory also clears the dismissals.
-
-Also included since 1.8.0: every prompt accepts **Enter** as OK and **Esc** as cancel.
+**Guides for first-time users** (since 1.9.1): a step-by-step panel on the left inside both audit tools, covering the protel exports by their real menu names — ΕΛΕΓΧΟΣ ΤΜΗΜΑΤΩΝ BY ROOM for the Department Check, and Office → Internal reporting → Room charges (history) for the Tax Check — plus the XPS Document Writer printing steps. Dismissible per tool; a slim GUIDE tab brings it back. The checklist editor also explains itself now.
 
 ### Install
 

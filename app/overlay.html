@@ -12,6 +12,14 @@ html,body{margin:0;background:transparent;overflow:hidden;-webkit-user-select:no
   box-shadow:0 1px 2px rgba(0,0,0,.8)}
 body.left .t .b{margin:0 8px 0 0}
 .b.low{background:#2e9e57}.b.med{background:#e08a2e}.b.high{background:#e04747}
+/* highlighter behind the text, tinted like the severity dot */
+.t .txt{padding:1px 7px;border-radius:6px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.t.low .txt{background:rgba(46,158,87,.30)}
+.t.med .txt{background:rgba(224,138,46,.32)}
+.t.high .txt{background:rgba(224,71,71,.34)}
+.t.done.low .txt{background:rgba(46,158,87,.12)}
+.t.done.med .txt{background:rgba(224,138,46,.12)}
+.t.done.high .txt{background:rgba(224,71,71,.12)}
 /* interact mode: the window catches the mouse — rows become tickable */
 body.interact{pointer-events:auto}
 body.interact #box{opacity:1;outline:1.5px solid rgba(240,180,60,.85);outline-offset:-1px;background:rgba(20,24,32,.85) !important}
@@ -45,11 +53,13 @@ function paint(d){
   box.innerHTML = "";
   (d.tasks || []).forEach(function(t){
     var div = document.createElement("div");
-    div.className = "t" + (t.done ? " done" : "");
+    div.className = "t " + (t.tier || "low") + (t.done ? " done" : "");
     div.dataset.id = t.id || "";
     var b = document.createElement("span");
     b.className = "b " + (t.tier || "low");
-    var txt = document.createTextNode((t.done ? "✓ " : "") + t.text);
+    var txt = document.createElement("span");
+    txt.className = "txt";
+    txt.textContent = (t.done ? "✓ " : "") + t.text;
     if(left){ div.appendChild(b); div.appendChild(txt); }
     else{ div.appendChild(txt); div.appendChild(b); }
     div.addEventListener("click", function(){
