@@ -1,8 +1,8 @@
 {
-  "version": "1.9.1",
+  "version": "1.9.2",
   "type": "html",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "42634216c7b14c58f317bfcefee0ea40f79b482f2e8740b975ac98d3cc4251cd",
+  "sha256": "e49b3644c2a0370bf0ca0222eb590c426320fdade701a917a4a5445f465f0666",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "notes": "Step-by-step guides inside both audit tools (incl. exporting XPS from protel) and checklist editing help."
+  "notes": "Guide wording: the protel report is named by its UI title, \u0395\u039b\u0395\u0393\u03a7\u039f\u03a3 \u03a4\u039c\u0397\u039c\u0391\u03a4\u03a9\u039d BY ROOM."
 }
