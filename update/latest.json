@@ -1,8 +1,11 @@
 {
-  "version": "1.11.1",
-  "type": "html",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "3986be27eb0219fcf0f91907929a8ce752ae2b1808594f8c2dbf9372c5e0a701",
+  "version": "1.11.2",
+  "type": "full",
+  "engine": "1.11.2",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.11.2/RecCheck-Setup.exe",
+  "setupSha256": "dd576ed01b241b925a5e15bc87e6964e8e952915528aadca063209a40419768c",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "notes": "The mouse-button binding is now named T.A Selection Shortcut."
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
+  "sha256": "76b4fa65c113f5383221c4c15a1de7b5dfab19ddae8a405d36bdf1714e275338",
+  "notes": "T.A Selection Shortcut for every install; the updater is now engine-aware and self-healing."
 }
