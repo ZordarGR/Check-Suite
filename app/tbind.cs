@@ -1,18 +1,25 @@
 // rc-tbind — RecCheck helper: bind a mouse button to typing the Greek letter τ.
-// Modes:
 //   rc-tbind.exe detect <parentPid>      -> waits for middle/X1/X2 press, prints "BTN:<code>", exits
 //   rc-tbind.exe bind <code> <parentPid> -> swallows that button system-wide and types τ instead
 // Codes: 3 = middle, 4 = X1 (Back), 5 = X2 (Forward). Left/right are never bindable.
-// The helper exits by itself when the parent process (RecCheck) is gone.
+//
+// Design notes (v2 — the v1 pump could stall and throttle the whole desktop's mouse):
+//   * raw Win32 GetMessage loop — no frameworks, nothing else runs on the hook thread
+//   * the hook callback ONLY classifies and returns; the actual SendInput happens on the
+//     message loop via PostThreadMessage, never inside the hook
+//   * the parent watchdog is an independent thread that hard-exits the process,
+//     so the helper dies with RecCheck even if the loop is somehow wedged
 using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using System.Windows.Forms;
+using System.Threading;
 
 static class TBind {
-  const int WH_MOUSE_LL   = 14;
+  const int WH_MOUSE_LL    = 14;
   const int WM_MBUTTONDOWN = 0x0207, WM_MBUTTONUP = 0x0208;
   const int WM_XBUTTONDOWN = 0x020B, WM_XBUTTONUP = 0x020C;
+  const uint WM_QUIT       = 0x0012;
+  const uint WM_APP_SEND   = 0x8000 + 1;
   const uint KEYEVENTF_UNICODE = 0x0004, KEYEVENTF_KEYUP = 0x0002;
   const char TAU = 'τ';
 
@@ -22,31 +29,34 @@ static class TBind {
   [DllImport("user32.dll")] static extern bool UnhookWindowsHookEx(IntPtr hk);
   [DllImport("user32.dll", SetLastError = true)] static extern uint SendInput(uint n, INPUT[] inputs, int size);
   [DllImport("kernel32.dll")] static extern IntPtr GetModuleHandle(string name);
+  [DllImport("user32.dll")] static extern int GetMessage(out MSG msg, IntPtr hWnd, uint min, uint max);
+  [DllImport("user32.dll")] static extern bool TranslateMessage(ref MSG msg);
+  [DllImport("user32.dll")] static extern IntPtr DispatchMessage(ref MSG msg);
+  [DllImport("user32.dll")] static extern bool PostThreadMessage(uint tid, uint msg, IntPtr w, IntPtr l);
+  [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
 
-  [StructLayout(LayoutKind.Sequential)]
-  struct MSLLHOOKSTRUCT { public int x, y; public uint mouseData, flags, time; public IntPtr extra; }
-  [StructLayout(LayoutKind.Sequential)]
-  struct MOUSEINPUT { public int dx, dy; public uint mouseData, dwFlags, time; public IntPtr dwExtraInfo; }
-  [StructLayout(LayoutKind.Sequential)]
-  struct KEYBDINPUT { public ushort wVk, wScan; public uint dwFlags, time; public IntPtr dwExtraInfo; }
-  [StructLayout(LayoutKind.Explicit)]
-  struct InputUnion { [FieldOffset(0)] public MOUSEINPUT mi; [FieldOffset(0)] public KEYBDINPUT ki; }
-  [StructLayout(LayoutKind.Sequential)]
-  struct INPUT { public uint type; public InputUnion u; }
+  [StructLayout(LayoutKind.Sequential)] struct POINT { public int x, y; }
+  [StructLayout(LayoutKind.Sequential)] struct MSG { public IntPtr hwnd; public uint message; public IntPtr wParam, lParam; public uint time; public POINT pt; }
+  [StructLayout(LayoutKind.Sequential)] struct MSLLHOOKSTRUCT { public POINT pt; public uint mouseData, flags, time; public IntPtr extra; }
+  [StructLayout(LayoutKind.Sequential)] struct MOUSEINPUT { public int dx, dy; public uint mouseData, dwFlags, time; public IntPtr dwExtraInfo; }
+  [StructLayout(LayoutKind.Sequential)] struct KEYBDINPUT { public ushort wVk, wScan; public uint dwFlags, time; public IntPtr dwExtraInfo; }
+  [StructLayout(LayoutKind.Explicit)] struct InputUnion { [FieldOffset(0)] public MOUSEINPUT mi; [FieldOffset(0)] public KEYBDINPUT ki; }
+  [StructLayout(LayoutKind.Sequential)] struct INPUT { public uint type; public InputUnion u; }
 
-  static HookProc keepAlive;             // prevents the delegate from being garbage-collected
+  static HookProc keepAlive;           // prevents the delegate from being garbage-collected
   static IntPtr hook = IntPtr.Zero;
-  static int mode = 0;                   // 1 = detect, 2 = bind
+  static int mode = 0;                 // 1 = detect, 2 = bind
   static int boundBtn = 0;
+  static uint mainTid = 0;
+  static Thread watchdog;              // static ref so it can never be collected
 
   static int ButtonOf(IntPtr wParam, IntPtr lParam, out bool down){
-    int msg = (int)wParam;
-    down = msg == WM_MBUTTONDOWN || msg == WM_XBUTTONDOWN;
-    if(msg == WM_MBUTTONDOWN || msg == WM_MBUTTONUP) return 3;
-    if(msg == WM_XBUTTONDOWN || msg == WM_XBUTTONUP){
-      var info = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
-      int x = (int)(info.mouseData >> 16) & 0xFFFF;
-      return x == 2 ? 5 : 4;
+    int m = wParam.ToInt32();
+    down = m == WM_MBUTTONDOWN || m == WM_XBUTTONDOWN;
+    if(m == WM_MBUTTONDOWN || m == WM_MBUTTONUP) return 3;
+    if(m == WM_XBUTTONDOWN || m == WM_XBUTTONUP){
+      MSLLHOOKSTRUCT info = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
+      return ((info.mouseData >> 16) & 0xFFFF) == 2 ? 5 : 4;
     }
     return 0;
   }
@@ -61,53 +71,61 @@ static class TBind {
   }
 
   static IntPtr Callback(int nCode, IntPtr wParam, IntPtr lParam){
-    if(nCode >= 0){
-      bool down;
-      int btn = ButtonOf(wParam, lParam, out down);
-      if(btn != 0){
-        if(mode == 1 && down){
-          Console.Out.Write("BTN:" + btn + "\n");
-          Console.Out.Flush();
-          Application.Exit();
-          return (IntPtr)1;                      // swallow the press that was used to bind
-        }
-        if(mode == 2 && btn == boundBtn){
-          if(down) SendTau();
-          return (IntPtr)1;                      // swallow both down and up of the bound button
+    try{
+      if(nCode >= 0){
+        bool down;
+        int btn = ButtonOf(wParam, lParam, out down);
+        if(btn != 0){
+          if(mode == 1 && down){
+            try{ Console.Out.Write("BTN:" + btn + "\n"); Console.Out.Flush(); }catch(Exception){}
+            PostThreadMessage(mainTid, WM_QUIT, IntPtr.Zero, IntPtr.Zero);
+            return (IntPtr)1;                    // swallow the press that was used to bind
+          }
+          if(mode == 2 && btn == boundBtn){
+            if(down) PostThreadMessage(mainTid, WM_APP_SEND, IntPtr.Zero, IntPtr.Zero);
+            return (IntPtr)1;                    // swallow both down and up of the bound button
+          }
         }
       }
-    }
+    }catch(Exception){}
     return CallNextHookEx(hook, nCode, wParam, lParam);
   }
 
-  static void WatchParent(int pid){
-    var t = new Timer();
-    t.Interval = 4000;
-    t.Tick += delegate {
-      try{ Process.GetProcessById(pid); }
-      catch{ Application.Exit(); }
-    };
-    t.Start();
-  }
-
-  [STAThread]
   static int Main(string[] args){
-    if(args.Length < 2) return 2;
     int parentPid;
-    if(args[0] == "detect"){
+    if(args.Length >= 2 && args[0] == "detect"){
       mode = 1;
       if(!int.TryParse(args[1], out parentPid)) return 2;
-    }else if(args[0] == "bind" && args.Length >= 3){
+    }else if(args.Length >= 3 && args[0] == "bind"){
       mode = 2;
       if(!int.TryParse(args[1], out boundBtn) || !int.TryParse(args[2], out parentPid)) return 2;
       if(boundBtn < 3 || boundBtn > 5) return 2;
     }else return 2;
 
+    mainTid = GetCurrentThreadId();
+
+    watchdog = new Thread(delegate(){          // independent of the message loop by design
+      for(;;){
+        Thread.Sleep(2000);
+        try{
+          var p = Process.GetProcessById(parentPid);
+          if(p.HasExited) Environment.Exit(0);
+        }catch(Exception){ Environment.Exit(0); }
+      }
+    });
+    watchdog.IsBackground = true;
+    watchdog.Start();
+
     keepAlive = Callback;
     hook = SetWindowsHookEx(WH_MOUSE_LL, keepAlive, GetModuleHandle(null), 0);
     if(hook == IntPtr.Zero) return 3;
-    WatchParent(parentPid);
-    Application.Run();
+
+    MSG msg;
+    while(GetMessage(out msg, IntPtr.Zero, 0, 0) > 0){
+      if(msg.message == WM_APP_SEND){ SendTau(); continue; }
+      TranslateMessage(ref msg);
+      DispatchMessage(ref msg);
+    }
     UnhookWindowsHookEx(hook);
     return 0;
   }

@@ -112,6 +112,18 @@ function tauPath(){
   return null;
 }
 function tauStop(){ if(TAU){ try{ TAU.kill(); }catch(e){} TAU = null; } }
+/* kill any rc-tbind left over from a previous run (incl. crashed/old versions) */
+function tauKillStrays(cb){
+  if(process.platform !== "win32"){ if(cb) cb(); return; }
+  let done = false;
+  const fin = () => { if(!done){ done = true; if(cb) cb(); } };
+  try{
+    const k = spawn("taskkill", ["/F", "/IM", "rc-tbind.exe"], {stdio: "ignore", windowsHide: true});
+    k.on("exit", fin);
+    k.on("error", fin);
+    setTimeout(fin, 1500);
+  }catch(e){ fin(); }
+}
 function tauStart(){
   tauStop();
   if(process.platform !== "win32") return;
@@ -229,7 +241,7 @@ app.whenReady().then(() => {
   try{ if(hub.readConfig().overlayOn) createOverlay(); }catch(e){}
   buildTray();
   applyHotkeys();
-  tauStart();
+  tauKillStrays(() => tauStart());
   MANUAL_SHOWN = true;                        // startup check never pops the window
   updater.check().then(info => {
     if(info && win && !win.isDestroyed())
