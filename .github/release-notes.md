@@ -1,12 +1,12 @@
-## RecCheck 1.11.0 — Windows
+## RecCheck 1.11.2 — Windows
 
 Nightly POS receipt audit for the protel checkcharge1 report (.oxps). Everything runs locally — no data leaves the machine.
 
-### New in 1.11.0
+### New in 1.11.2
 
-**Mouse button → τ:** under *Customize overlay* you can now bind a mouse button (middle or a side button) so that pressing it types the Greek letter **τ** — anywhere in Windows, protel included, no matter which keyboard language is active. Click the row, press the button you want, done. The bound button is reserved while RecCheck is running (its normal function, e.g. browser Back, is suppressed); the ✕ next to the row releases it.
+**T.A Selection Shortcut:** under *Customize overlay* you can bind a mouse button (middle or a side button) so that pressing it types the Greek letter **τ** — anywhere in Windows, protel included, no matter which keyboard language is active. Click the row, press the button you want, done. The bound button is reserved while RecCheck runs; the ✕ next to the row releases it. (A 7 KB helper installed with the app does the listening and typing locally.)
 
-A tiny helper (rc-tbind.exe, 7 KB, installed with the app) does the listening and typing locally. It runs only while a button is bound and closes with RecCheck.
+**Self-healing updates:** the updater now knows which engine a tool update needs. If an install's engine is too old for the latest tool version, it automatically fetches the full installer instead — an out-of-date install can no longer get stuck behind a lightweight update.
 
 ### Install
 

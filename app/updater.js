@@ -72,26 +72,32 @@ class Updater {
       if(!latest || !latest.version) return null;
       if(!vNewer(latest.version, eff.version)) return null;
 
-      if(latest.type === "full"){
+      /* safeguard: any manifest may declare the minimum engine it needs ("engine").
+         If this install's engine is older, take the full-installer path even for a
+         light (html) update — a stale engine can never again swallow a tool update
+         and strand itself behind a higher version number. */
+      const needEngine = latest.engine && vNewer(latest.engine, this.o.pkgVersion);
+      if(latest.type === "full" || needEngine){
+        const tv = (latest.type === "full") ? latest.version : latest.engine;
         // with a "setup" url we self-download the installer and the arrow click
         // runs it silently; without one we fall back to opening the release page
         if(!latest.setup){
-          this.pending = {version: latest.version, full: true,
+          this.pending = {version: tv, full: true,
                           url: latest.url || this.o.fallbackReleaseUrl};
           return this.pending;
         }
         const P = this.paths();
         const have = this.readJson(P.setupMeta);
-        if(!(have && have.version === latest.version && fs.existsSync(P.setupExe))){
+        if(!(have && have.version === tv && fs.existsSync(P.setupExe))){
           const sr = await fetch(latest.setup, {cache: "no-store", redirect: "follow"});
-          if(!sr.ok){ this.emit({phase: "failed", version: latest.version}); return null; }
+          if(!sr.ok){ this.emit({phase: "failed", version: tv}); return null; }
           let sbuf;
           const total = parseInt(sr.headers.get("content-length") || "0", 10);
           if(sr.body && sr.body.getReader){
             const reader = sr.body.getReader();
             const chunks = [];
             let received = 0, lastPct = -1;
-            this.emit({phase: "downloading", version: latest.version, pct: total ? 0 : null, received: 0, total});
+            this.emit({phase: "downloading", version: tv, pct: total ? 0 : null, received: 0, total});
             for(;;){
               const {done, value} = await reader.read();
               if(done) break;
@@ -100,7 +106,7 @@ class Updater {
               const pct = total ? Math.min(99, Math.floor(received / total * 100)) : null;
               if(pct !== lastPct){
                 lastPct = pct;
-                this.emit({phase: "downloading", version: latest.version, pct, received, total});
+                this.emit({phase: "downloading", version: tv, pct, received, total});
               }
             }
             sbuf = Buffer.concat(chunks);
@@ -108,13 +114,13 @@ class Updater {
             sbuf = Buffer.from(await sr.arrayBuffer());
           }
           const ssha = crypto.createHash("sha256").update(sbuf).digest("hex");
-          if(latest.setupSha256 && ssha.toLowerCase() !== String(latest.setupSha256).toLowerCase()){ this.emit({phase: "failed", version: latest.version}); return null; }
-          if(sbuf.length < 1048576 || sbuf.slice(0, 2).toString("latin1") !== "MZ"){ this.emit({phase: "failed", version: latest.version}); return null; }
+          if(latest.setupSha256 && ssha.toLowerCase() !== String(latest.setupSha256).toLowerCase()){ this.emit({phase: "failed", version: tv}); return null; }
+          if(sbuf.length < 1048576 || sbuf.slice(0, 2).toString("latin1") !== "MZ"){ this.emit({phase: "failed", version: tv}); return null; }
           fs.writeFileSync(P.setupExe + ".tmp", sbuf);
           fs.renameSync(P.setupExe + ".tmp", P.setupExe);
-          fs.writeFileSync(P.setupMeta, JSON.stringify({version: latest.version, sha256: ssha}));
+          fs.writeFileSync(P.setupMeta, JSON.stringify({version: tv, sha256: ssha}));
         }
-        this.pending = {version: latest.version, full: true, downloaded: true, setupPath: P.setupExe};
+        this.pending = {version: tv, full: true, downloaded: true, setupPath: P.setupExe};
         return this.pending;
       }
       const P = this.paths();
