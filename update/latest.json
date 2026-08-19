@@ -1,10 +1,10 @@
 {
-  "version": "1.10.0",
+  "version": "1.11.0",
   "type": "full",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.10.0/RecCheck-Setup.exe",
-  "setupSha256": "23f0a7b8a51c9b29c06c810d61ea61161d2b925bbe5209a865559a2682e1ad5e",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.11.0/RecCheck-Setup.exe",
+  "setupSha256": "e206ce5f797cf804167de8b6dd8b6eef2c532ab6786c8f9b825ab46732976821",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "6ec55f5b980383b9fea4afd01b8ae83e80d9c2c47c5e465a3630fa21c08f1092",
-  "notes": "Severity-tinted highlighter on overlay tasks; guides name the protel menus for both reports."
+  "sha256": "1eb0447356ab9f6738e84657a203c6af216acb2aa528b94dc2090cc267c324df",
+  "notes": "Bind a mouse button to type the Greek letter \u03c4 anywhere in Windows \u2014 set it under Customize overlay."
 }
