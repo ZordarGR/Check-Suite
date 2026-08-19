@@ -1,11 +1,11 @@
 {
-  "version": "1.11.2",
+  "version": "1.11.3",
   "type": "full",
-  "engine": "1.11.2",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.11.2/RecCheck-Setup.exe",
-  "setupSha256": "dd576ed01b241b925a5e15bc87e6964e8e952915528aadca063209a40419768c",
+  "engine": "1.11.3",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.11.3/RecCheck-Setup.exe",
+  "setupSha256": "2dae96d056de970ce925e09f0f8bb018cd5f7059177a3590359822d17ffdf15c",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "76b4fa65c113f5383221c4c15a1de7b5dfab19ddae8a405d36bdf1714e275338",
-  "notes": "T.A Selection Shortcut for every install; the updater is now engine-aware and self-healing."
+  "sha256": "666672275625e24c01fc98aeb537830d4f17214e63da3dd96f130b7206bb4b43",
+  "notes": "Fix: the T.A Selection Shortcut no longer throttles the mouse outside the app; stray helpers are cleaned up automatically."
 }
