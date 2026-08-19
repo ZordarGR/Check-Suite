@@ -1,12 +1,12 @@
-## RecCheck 1.10.0 — Windows
+## RecCheck 1.11.0 — Windows
 
 Nightly POS receipt audit for the protel checkcharge1 report (.oxps). Everything runs locally — no data leaves the machine.
 
-### New in 1.10.0
+### New in 1.11.0
 
-**Overlay highlighter:** each task on the desktop overlay now sits on a highlighter tinted like its severity dot — red, orange or green at a glance. Finished tasks keep a faint tint so priorities stay readable.
+**Mouse button → τ:** under *Customize overlay* you can now bind a mouse button (middle or a side button) so that pressing it types the Greek letter **τ** — anywhere in Windows, protel included, no matter which keyboard language is active. Click the row, press the button you want, done. The bound button is reserved while RecCheck is running (its normal function, e.g. browser Back, is suppressed); the ✕ next to the row releases it.
 
-**Guides for first-time users** (since 1.9.1): a step-by-step panel on the left inside both audit tools, covering the protel exports by their real menu names — ΕΛΕΓΧΟΣ ΤΜΗΜΑΤΩΝ BY ROOM for the Department Check, and Office → Internal reporting → Room charges (history) for the Tax Check — plus the XPS Document Writer printing steps. Dismissible per tool; a slim GUIDE tab brings it back. The checklist editor also explains itself now.
+A tiny helper (rc-tbind.exe, 7 KB, installed with the app) does the listening and typing locally. It runs only while a button is bound and closes with RecCheck.
 
 ### Install
 

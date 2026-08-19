@@ -1111,7 +1111,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.10.0";
+const APP_VERSION = "1.11.0";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1136,6 +1136,11 @@ en: {
   "ov.reset": "Reset to defaults", "ov.ok": "Done", "ov.hint": "changes apply live while the overlay is on",
   "ov.hk": "Global shortcut (toggles the overlay from anywhere)", "ov.hkPress": "press the new combination… (Esc cancels)",
   "ov.hk2": "Tick shortcut (focuses the overlay — click tasks to tick them, Esc leaves)",
+  "ov.mb": "Mouse button → types τ (works everywhere in Windows, whatever the keyboard language)",
+  "ov.mbPress": "press the mouse button now… (Esc cancels)", "ov.mbNone": "not set",
+  "ov.mbMid": "Middle button", "ov.mbBack": "Side button — Back", "ov.mbFwd": "Side button — Forward",
+  "ov.mbFail": "No button detected — try again (only middle and side buttons can be bound).",
+  "ov.mbClear": "remove the binding",
   "ov.hkBusy": "That combination is held by another program — pick a different one.",
   "ov.hkNeedMod": "Use at least one of Ctrl / Alt / Shift with a key.", "cl.tierLow": "low importance", "cl.tierMed": "medium importance", "cl.tierHigh": "extremely important",
   "cl.sev": "SEVERITY", "cl.sevLow": "LOW", "cl.sevMed": "MEDIUM", "cl.sevHigh": "HIGH",
@@ -1248,6 +1253,11 @@ gr: {
   "ov.reset": "Επαναφορά προεπιλογών", "ov.ok": "Έτοιμο", "ov.hint": "οι αλλαγές εφαρμόζονται ζωντανά όσο η επικάλυψη είναι ανοιχτή",
   "ov.hk": "Καθολική συντόμευση (ανοιγοκλείνει την επικάλυψη από παντού)", "ov.hkPress": "πατήστε τον νέο συνδυασμό… (Esc ακύρωση)",
   "ov.hk2": "Συντόμευση τικ (φέρνει την επικάλυψη σε εστίαση — κλικ στις εργασίες για ✓, Esc για έξοδο)",
+  "ov.mb": "Πλήκτρο ποντικιού → γράφει τ (παντού στα Windows, ανεξαρτήτως γλώσσας πληκτρολογίου)",
+  "ov.mbPress": "πατήστε τώρα το πλήκτρο του ποντικιού… (Esc ακύρωση)", "ov.mbNone": "δεν έχει οριστεί",
+  "ov.mbMid": "Μεσαίο πλήκτρο", "ov.mbBack": "Πλαϊνό — Back", "ov.mbFwd": "Πλαϊνό — Forward",
+  "ov.mbFail": "Δεν εντοπίστηκε πλήκτρο — ξαναδοκιμάστε (δένονται μόνο το μεσαίο και τα πλαϊνά).",
+  "ov.mbClear": "αφαίρεση της αντιστοίχισης",
   "ov.hkBusy": "Ο συνδυασμός χρησιμοποιείται από άλλο πρόγραμμα — διαλέξτε άλλον.",
   "ov.hkNeedMod": "Χρησιμοποιήστε τουλάχιστον Ctrl / Alt / Shift μαζί με ένα πλήκτρο.", "cl.tierLow": "χαμηλή σημασία", "cl.tierMed": "μεσαία σημασία", "cl.tierHigh": "εξαιρετικά σημαντικό",
   "cl.sev": "ΣΟΒΑΡΟΤΗΤΑ", "cl.sevLow": "ΧΑΜΗΛΗ", "cl.sevMed": "ΜΕΣΑΙΑ", "cl.sevHigh": "ΥΨΗΛΗ",
@@ -1729,6 +1739,14 @@ function openOverlaySettings(){
     <label>${t("ov.hk2")}</label>
     <button class="btn" id="ovHk2" style="width:100%;font-family:var(--mono);letter-spacing:.08em">…</button>
     <div class="err" id="ovHk2Err"></div>
+    <div id="ovMbWrap" style="display:none">
+      <label>${t("ov.mb")}</label>
+      <div style="display:flex;gap:8px">
+        <button class="btn" id="ovMb" style="flex:1;font-family:var(--mono);letter-spacing:.08em">…</button>
+        <button class="btn small" id="ovMbClear" title="${t("ov.mbClear")}">✕</button>
+      </div>
+      <div class="err" id="ovMbErr"></div>
+    </div>
     <div class="err" style="color:var(--faint)">${t("ov.hint")}</div>
     <div class="actions">
       <button class="btn" id="ovReset">${t("ov.reset")}</button>
@@ -1788,6 +1806,37 @@ function openOverlaySettings(){
   const ovl = window.reccheckOverlay || {};
   bindHotkeyRow($("#ovHk"), $("#ovHkErr"), ovl.hotkeyGet && (() => ovl.hotkeyGet()), a => ovl.hotkeySet(a));
   bindHotkeyRow($("#ovHk2"), $("#ovHk2Err"), ovl.ihotkeyGet && (() => ovl.ihotkeyGet()), a => ovl.ihotkeySet(a));
+
+  // mouse-button → τ binding (desktop app on Windows only)
+  const mbName = b => b === 3 ? t("ov.mbMid") : b === 4 ? t("ov.mbBack") : b === 5 ? t("ov.mbFwd") : t("ov.mbNone");
+  const tau = window.reccheckTau;
+  if(tau){
+    tau.get().then(st => {
+      if(!st || !st.available) return;
+      $("#ovMbWrap").style.display = "";
+      const mbBtn = $("#ovMb"), mbErr = $("#ovMbErr");
+      mbBtn.textContent = mbName(st.button);
+      let detecting = false;
+      mbBtn.onclick = async () => {
+        if(detecting) return;
+        detecting = true;
+        mbErr.textContent = "";
+        mbBtn.textContent = t("ov.mbPress");
+        const esc = e => { if(e.key === "Escape"){ e.stopPropagation(); tau.cancel(); } };
+        document.addEventListener("keydown", esc, true);
+        const b = await tau.detect().catch(() => null);
+        document.removeEventListener("keydown", esc, true);
+        detecting = false;
+        if(b){ mbBtn.textContent = mbName(b); }
+        else{
+          const st2 = await tau.get().catch(() => null);
+          mbBtn.textContent = mbName(st2 && st2.button);
+          mbErr.textContent = t("ov.mbFail");
+        }
+      };
+      $("#ovMbClear").onclick = async () => { await tau.clear().catch(() => {}); mbBtn.textContent = mbName(null); mbErr.textContent = ""; };
+    }).catch(() => {});
+  }
 }
 function clSorted(){
   const order = {high: 0, med: 1, low: 2};

@@ -102,6 +102,29 @@ function setInteract(on){
   }catch(e){}
   try{ overlayWin.webContents.send("overlay-mode", {interact: INTERACT}); }catch(e){}
 }
+/* ---- mouse button → τ : managed native helper (rc-tbind.exe, ships beside app.asar) ---- */
+let TAU = null, TAU_DETECT = null;
+function tauPath(){
+  const fs = require("fs");
+  const cands = [path.join(path.dirname(__dirname), "rc-tbind.exe"),   // packaged: resources/rc-tbind.exe
+                 path.join(__dirname, "rc-tbind.exe")];                // dev: next to main.js
+  for(const c of cands){ try{ if(fs.existsSync(c)) return c; }catch(e){} }
+  return null;
+}
+function tauStop(){ if(TAU){ try{ TAU.kill(); }catch(e){} TAU = null; } }
+function tauStart(){
+  tauStop();
+  if(process.platform !== "win32") return;
+  let btn = null;
+  try{ btn = hub.readConfig().tauButton || null; }catch(e){}
+  const exe = tauPath();
+  if(!btn || !exe) return;
+  try{
+    TAU = spawn(exe, ["bind", String(btn), String(process.pid)], {stdio: "ignore", windowsHide: true});
+    TAU.on("exit", () => { TAU = null; });
+    TAU.on("error", () => { TAU = null; });
+  }catch(e){ TAU = null; }
+}
 function announceOverlayState(){
   if(win && !win.isDestroyed()) win.webContents.send("overlay-state-changed", !!overlayWin);
 }
@@ -206,6 +229,7 @@ app.whenReady().then(() => {
   try{ if(hub.readConfig().overlayOn) createOverlay(); }catch(e){}
   buildTray();
   applyHotkeys();
+  tauStart();
   MANUAL_SHOWN = true;                        // startup check never pops the window
   updater.check().then(info => {
     if(info && win && !win.isDestroyed())
@@ -301,12 +325,51 @@ ipcMain.handle("overlay-ihotkey-set", (_e, acc) => {
   if(!acc) applyHotkeys();
   return true;
 });
+ipcMain.handle("tau-get", () => {
+  try{ return {button: hub.readConfig().tauButton || null, available: process.platform === "win32" && !!tauPath()}; }
+  catch(e){ return {button: null, available: false}; }
+});
+ipcMain.handle("tau-detect", () => new Promise(res => {
+  if(process.platform !== "win32" || !tauPath()){ res(null); return; }
+  try{ if(TAU_DETECT) TAU_DETECT.kill(); }catch(e){}
+  TAU_DETECT = null;
+  tauStop();                                   // release the hook while listening
+  let out = "", done = false;
+  const finish = v => { if(done) return; done = true; TAU_DETECT = null; tauStart(); res(v); };
+  try{
+    const child = spawn(tauPath(), ["detect", String(process.pid)], {windowsHide: true});
+    TAU_DETECT = child;
+    child.stdout.on("data", d => {
+      out += d;
+      const m = out.match(/BTN:(\d)/);
+      if(m){
+        const b = +m[1];
+        try{ const c = hub.readConfig(); c.tauButton = b; hub.writeConfig(c); }catch(e){}
+        try{ child.kill(); }catch(e){}
+        finish(b);
+      }
+    });
+    child.on("exit", () => finish(null));
+    child.on("error", () => finish(null));
+    setTimeout(() => { try{ child.kill(); }catch(e){} }, 15000);
+  }catch(e){ finish(null); }
+}));
+ipcMain.handle("tau-cancel", () => { try{ if(TAU_DETECT) TAU_DETECT.kill(); }catch(e){} return true; });
+ipcMain.handle("tau-clear", () => {
+  try{ const c = hub.readConfig(); delete c.tauButton; hub.writeConfig(c); }catch(e){}
+  tauStop();
+  return true;
+});
 ipcMain.handle("overlay-tick", (_e, id) => {
   if(win && !win.isDestroyed()) win.webContents.send("reccheck-overlay-tick", id);
   return true;
 });
 ipcMain.handle("overlay-exit-interact", () => { setInteract(false); return true; });
-app.on("will-quit", () => { try{ globalShortcut.unregisterAll(); }catch(e){} });
+app.on("will-quit", () => {
+  try{ globalShortcut.unregisterAll(); }catch(e){}
+  tauStop();
+  try{ if(TAU_DETECT) TAU_DETECT.kill(); }catch(e){}
+});
 
 ipcMain.handle("app-set-lang", (_e, l) => {
   TRAYLANG = l === "gr" ? "gr" : "en";
