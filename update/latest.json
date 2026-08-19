@@ -1,10 +1,8 @@
 {
-  "version": "1.11.0",
-  "type": "full",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.11.0/RecCheck-Setup.exe",
-  "setupSha256": "e206ce5f797cf804167de8b6dd8b6eef2c532ab6786c8f9b825ab46732976821",
-  "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
+  "version": "1.11.1",
+  "type": "html",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "1eb0447356ab9f6738e84657a203c6af216acb2aa528b94dc2090cc267c324df",
-  "notes": "Bind a mouse button to type the Greek letter \u03c4 anywhere in Windows \u2014 set it under Customize overlay."
+  "sha256": "3986be27eb0219fcf0f91907929a8ce752ae2b1808594f8c2dbf9372c5e0a701",
+  "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
+  "notes": "The mouse-button binding is now named T.A Selection Shortcut."
 }
