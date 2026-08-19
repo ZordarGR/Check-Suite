@@ -287,6 +287,19 @@ main{max-width:1060px;margin:0 auto;padding:16px 18px 90px}
 #modalBg.open{display:flex}
 #modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 24px;width:min(420px,92vw);
   box-shadow:0 24px 60px rgba(0,0,0,.7)}
+#modal.wide{width:min(780px,94vw)}
+/* on-screen print preview — mirrors the @media print sheet styling on white paper */
+#pvPaper{background:#fff;color:#000;border-radius:6px;max-height:62vh;overflow:auto;padding:20px 22px;
+  font-family:"Segoe UI",Arial,sans-serif;font-size:12px;box-shadow:inset 0 0 0 1px #ccc}
+#pvPaper h1{font-size:16px;letter-spacing:.06em;margin:0 0 2px;font-weight:700;color:#000}
+#pvPaper .meta{font-size:11px;margin-bottom:14px;color:#000}
+#pvPaper h2{font-size:12.5px;margin:16px 0 6px;font-weight:700;border-bottom:1.2px solid #000;padding-bottom:3px;color:#000}
+#pvPaper table{width:100%;border-collapse:collapse;font-size:11.5px}
+#pvPaper th,#pvPaper td{border:0.6px solid #000;padding:4px 7px;text-align:left;vertical-align:top;color:#000}
+#pvPaper th{font-weight:700}
+#pvPaper td.num,#pvPaper th.num{text-align:right;font-family:Consolas,monospace}
+#pvPaper .none{font-style:italic;margin:4px 0 0}
+#pvPaper .old{text-decoration:line-through}
 #modal h3{font-size:15px;letter-spacing:.08em;color:var(--amber);margin-bottom:16px;font-family:var(--mono)}
 #modal label{display:block;font-size:12px;color:var(--dim);margin:12px 0 4px;letter-spacing:.06em}
 #modal input,#modal select{width:100%;background:var(--bg2);border:1.5px solid var(--line);border-radius:8px;
@@ -1111,7 +1124,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.11.3";
+const APP_VERSION = "1.11.4";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1141,6 +1154,7 @@ en: {
   "ov.mbMid": "Middle button", "ov.mbBack": "Side button — Back", "ov.mbFwd": "Side button — Forward",
   "ov.mbFail": "No button detected — try again (only middle and side buttons can be bound).",
   "ov.mbClear": "remove the binding",
+  "pv.title": "PRINT PREVIEW — CORRECTIONS", "pv.print": "Print", "pv.cancel": "Cancel",
   "ov.hkBusy": "That combination is held by another program — pick a different one.",
   "ov.hkNeedMod": "Use at least one of Ctrl / Alt / Shift with a key.", "cl.tierLow": "low importance", "cl.tierMed": "medium importance", "cl.tierHigh": "extremely important",
   "cl.sev": "SEVERITY", "cl.sevLow": "LOW", "cl.sevMed": "MEDIUM", "cl.sevHigh": "HIGH",
@@ -1258,6 +1272,7 @@ gr: {
   "ov.mbMid": "Μεσαίο πλήκτρο", "ov.mbBack": "Πλαϊνό — Back", "ov.mbFwd": "Πλαϊνό — Forward",
   "ov.mbFail": "Δεν εντοπίστηκε πλήκτρο — ξαναδοκιμάστε (δένονται μόνο το μεσαίο και τα πλαϊνά).",
   "ov.mbClear": "αφαίρεση της αντιστοίχισης",
+  "pv.title": "ΠΡΟΕΠΙΣΚΟΠΗΣΗ ΕΚΤΥΠΩΣΗΣ — ΔΙΟΡΘΩΣΕΙΣ", "pv.print": "Εκτύπωση", "pv.cancel": "Άκυρο",
   "ov.hkBusy": "Ο συνδυασμός χρησιμοποιείται από άλλο πρόγραμμα — διαλέξτε άλλον.",
   "ov.hkNeedMod": "Χρησιμοποιήστε τουλάχιστον Ctrl / Alt / Shift μαζί με ένα πλήκτρο.", "cl.tierLow": "χαμηλή σημασία", "cl.tierMed": "μεσαία σημασία", "cl.tierHigh": "εξαιρετικά σημαντικό",
   "cl.sev": "ΣΟΒΑΡΟΤΗΤΑ", "cl.sevLow": "ΧΑΜΗΛΗ", "cl.sevMed": "ΜΕΣΑΙΑ", "cl.sevHigh": "ΥΨΗΛΗ",
@@ -2619,7 +2634,7 @@ function openRowMenu(anchor, r){
 
 /* ---------- modal ---------- */
 function openModal(html){ const bg = $("#modalBg"); $("#modal").innerHTML = html; bg.classList.add("open"); }
-function closeModal(){ $("#modalBg").classList.remove("open"); armEnterGuard(); $("#snInput").focus(); }
+function closeModal(){ $("#modalBg").classList.remove("open"); $("#modal").classList.remove("wide"); armEnterGuard(); $("#snInput").focus(); }
 $("#modalBg").addEventListener("click", e => { if(e.target.id === "modalBg") closeModal(); });
 /* every prompt: Enter = its default (amber) button, Esc = cancel/close */
 function modalDefaultBtn(){
@@ -3241,7 +3256,16 @@ $("#drop").ondrop = e => {
 function printCorrections(){
   if(!MODEL) return;
   if(!buildPrintSheet()){ toast("Καμία διόρθωση για εκτύπωση", true); return; }
-  window.print();
+  openModal(`
+    <h3>${t("pv.title")}</h3>
+    <div id="pvPaper">${$("#printSheet").innerHTML}</div>
+    <div class="actions">
+      <button class="btn" id="pvCancel">${t("pv.cancel")}</button>
+      <button class="btn amber" id="pvGo">${t("pv.print")}</button>
+    </div>`);
+  $("#modal").classList.add("wide");
+  $("#pvCancel").onclick = closeModal;
+  $("#pvGo").onclick = () => { closeModal(); setTimeout(() => window.print(), 80); };
 }
 $("#printBtn").onclick = printCorrections;
 window.addEventListener("beforeprint", () => { if(MODEL && !document.body.classList.contains("taxPrint")) buildPrintSheet(true); });
