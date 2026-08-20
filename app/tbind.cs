@@ -21,6 +21,9 @@ static class TBind {
   const uint WM_QUIT       = 0x0012;
   const uint WM_APP_SEND   = 0x8000 + 1;
   const uint KEYEVENTF_UNICODE = 0x0004, KEYEVENTF_KEYUP = 0x0002;
+  const uint WM_INPUTLANGCHANGEREQUEST = 0x0050;
+  const uint KLF_ACTIVATE = 1;
+  const ushort VK_T = 0x54;
   const char TAU = 'τ';
 
   delegate IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam);
@@ -34,6 +37,12 @@ static class TBind {
   [DllImport("user32.dll")] static extern IntPtr DispatchMessage(ref MSG msg);
   [DllImport("user32.dll")] static extern bool PostThreadMessage(uint tid, uint msg, IntPtr w, IntPtr l);
   [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+  [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+  [DllImport("user32.dll")] static extern IntPtr GetKeyboardLayout(uint idThread);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr LoadKeyboardLayout(string klid, uint flags);
+  [DllImport("user32.dll")] static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+  [DllImport("user32.dll")] static extern uint MapVirtualKey(uint code, uint mapType);
 
   [StructLayout(LayoutKind.Sequential)] struct POINT { public int x, y; }
   [StructLayout(LayoutKind.Sequential)] struct MSG { public IntPtr hwnd; public uint message; public IntPtr wParam, lParam; public uint time; public POINT pt; }
@@ -61,13 +70,46 @@ static class TBind {
     return 0;
   }
 
-  static void SendTau(){
+  static void PressKeys(ushort vk, ushort scan, uint flags){
     var inputs = new INPUT[2];
     inputs[0].type = 1; // INPUT_KEYBOARD
-    inputs[0].u.ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)TAU, dwFlags = KEYEVENTF_UNICODE, time = 0, dwExtraInfo = IntPtr.Zero };
+    inputs[0].u.ki = new KEYBDINPUT { wVk = vk, wScan = scan, dwFlags = flags, time = 0, dwExtraInfo = IntPtr.Zero };
     inputs[1].type = 1;
-    inputs[1].u.ki = new KEYBDINPUT { wVk = 0, wScan = (ushort)TAU, dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP, time = 0, dwExtraInfo = IntPtr.Zero };
+    inputs[1].u.ki = new KEYBDINPUT { wVk = vk, wScan = scan, dwFlags = flags | KEYEVENTF_KEYUP, time = 0, dwExtraInfo = IntPtr.Zero };
     SendInput(2, inputs, Marshal.SizeOf(typeof(INPUT)));
+  }
+  /* a real press of the T KEY under the GREEK layout — protel and friends see a genuine
+     keystroke (WM_KEYDOWN VK_T + WM_CHAR 'τ'), not a pasted character. If the foreground
+     window is on another layout, hop it to Greek for the press and hop it right back. */
+  static void SendGreekT(){
+    IntPtr fg = GetForegroundWindow();
+    IntPtr cur = IntPtr.Zero;
+    if(fg != IntPtr.Zero){
+      uint pid;
+      cur = GetKeyboardLayout(GetWindowThreadProcessId(fg, out pid));
+    }
+    bool isGreek = ((long)cur & 0xFFFF) == 0x0408;
+    ushort sc = (ushort)MapVirtualKey(VK_T, 0);
+    if(isGreek){ PressKeys(VK_T, sc, 0); return; }
+    IntPtr grk = IntPtr.Zero;
+    try{ grk = LoadKeyboardLayout("00000408", KLF_ACTIVATE); }catch(Exception){}
+    if(fg == IntPtr.Zero || grk == IntPtr.Zero){
+      PressKeys(0, (ushort)TAU, KEYEVENTF_UNICODE);       // no Greek layout installed — type τ as text
+      return;
+    }
+    PostMessage(fg, WM_INPUTLANGCHANGEREQUEST, IntPtr.Zero, grk);
+    Thread.Sleep(90);                                      // let the app process the layout switch
+    PressKeys(VK_T, sc, 0);
+    if(cur != IntPtr.Zero){
+      Thread.Sleep(90);
+      PostMessage(fg, WM_INPUTLANGCHANGEREQUEST, IntPtr.Zero, cur);   // put the user's layout back
+    }
+  }
+  static readonly object sendLock = new object();
+  static void QueueSend(){                                 // off the hook thread — sleeps must never stall the mouse
+    ThreadPool.QueueUserWorkItem(delegate {
+      try{ lock(sendLock){ SendGreekT(); } }catch(Exception){}
+    });
   }
 
   static IntPtr Callback(int nCode, IntPtr wParam, IntPtr lParam){
@@ -122,7 +164,7 @@ static class TBind {
 
     MSG msg;
     while(GetMessage(out msg, IntPtr.Zero, 0, 0) > 0){
-      if(msg.message == WM_APP_SEND){ SendTau(); continue; }
+      if(msg.message == WM_APP_SEND){ QueueSend(); continue; }
       TranslateMessage(ref msg);
       DispatchMessage(ref msg);
     }
