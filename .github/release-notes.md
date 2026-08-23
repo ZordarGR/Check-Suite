@@ -1,14 +1,25 @@
-## RecCheck 1.11.5 — Windows
+## RecCheck 1.12.0 — Windows
 
 Nightly POS receipt audit for the protel checkcharge1 report (.oxps). Everything runs locally — no data leaves the machine.
 
-### New in 1.11.5
+### New in 1.12.0
 
-**T.A Selection Shortcut:** under *Customize overlay* you can bind a mouse button (middle or a side button) so that pressing it delivers a real **Greek τ keypress** — anywhere in Windows, protel included, no matter which keyboard language is active. If the active window is on another layout, the helper hops it to Greek for the keystroke and hops it right back, so programs that listen for the key itself (like protel's selections) react correctly. Click the row, press the button you want, done. The bound button is reserved while RecCheck runs; the ✕ next to the row releases it. (A 7 KB helper installed with the app does the listening and typing locally.)
+**Protel Shortcuts — its own menu.** The keybinding setup has moved out of *Customize overlay* (where it never belonged) into a **PROTEL SHORTCUTS** button on the home screen. Each shortcut now explains what it sends and *why it matters*, so anyone covering a shift can read the screen instead of being told.
 
-**Fix — mouse lock-up with the T.A Selection Shortcut:** binding a button in 1.11.2 could throttle mouse clicks outside the app until the helper was killed. The helper was rebuilt: the mouse hook now does nothing but classify events, the τ keystroke is produced outside the hook, and an independent watchdog closes the helper with RecCheck. The app and the installer also clean up any stray helper from the previous version automatically.
+**Alt + F4 can be bound.** Closes the receipt preview that pops up after every invoice is generated — one button instead of reaching for the mouse and finding the ✕ each time. It is sent as a real Alt+F4; any modifier you happen to be holding is released first so the combination arrives clean.
 
-**Self-healing updates:** the updater now knows which engine a tool update needs. If an install's engine is too old for the latest tool version, it automatically fetches the full installer instead — an out-of-date install can no longer get stuck behind a lightweight update.
+**Any key can be bound, not just a mouse button.** Side buttons are still the fastest option, but a keyboard combination such as `Ctrl+Alt+T` now works just as well — so colleagues without a multi-button mouse can work at the same speed. A warning appears if you bind a bare key, because that key is then swallowed everywhere in Windows while RecCheck is running.
+
+**Profiles.** Create, rename and delete profiles freely; each keeps its own bindings, so handing the machine to whoever is covering your night off no longer means losing your setup. The home screen greets the active profile by name. Your existing binding is carried over automatically into a first profile.
+
+**Home screen tidy-up.** The greeting now lives in the title, so the line underneath just states the working night and the clock.
+
+### Fixes
+
+- **The updater could get stuck checking forever.** If an update was already waiting, an early return left the "checking" flag raised and every later check — automatic or from the tray — was silently ignored until the app restarted.
+- **A vanishing installer no longer re-downloads without end.** If something removed the downloaded setup between checks (an antivirus quarantining an unsigned 90 MB file is the usual cause), the app would fetch all 90 MB again on every launch, forever. It now gives up after a few attempts and offers the release page instead.
+- **The Greek layout can no longer be left switched on.** If the τ shortcut failed midway, the layout restore could be skipped and every program was left typing Greek. The restore now always runs.
+- **A rare race could still produce a plain `t`.** If the target window disappeared at the moment the shortcut fired, the layout check could read *this helper's* layout instead of the target's and report a successful hop that never happened.
 
 ### Install
 

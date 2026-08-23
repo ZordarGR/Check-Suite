@@ -44,7 +44,7 @@ async function runCheck(manual){
       try{ tray.displayBalloon({title: "RecCheck", content: L.uptodate + updater.effective().version, iconType: "info"}); }catch(e){}
     }
   }catch(e){}
-  CHECKING = false;
+  finally{ CHECKING = false; }   // the pending early-return used to skip this and wedge every later check
 }
 function showMain(){ if(win){ win.show(); win.focus(); } }
 
@@ -102,7 +102,43 @@ function setInteract(on){
   }catch(e){}
   try{ overlayWin.webContents.send("overlay-mode", {interact: INTERACT}); }catch(e){}
 }
-/* ---- mouse button → τ : managed native helper (rc-tbind.exe, ships beside app.asar) ---- */
+/* ---- Protel Shortcuts: managed native helper (rc-tbind.exe, ships beside app.asar) ----
+   Triggers (a mouse side button or a key combo) are bound per PROFILE, so whoever is on
+   shift keeps their own bindings. Config shape:
+     {profiles: [{id, name, binds: {tau: <trigger>, altf4: <trigger>}}], activeProfile: id}
+   A trigger is "m3"/"m4"/"m5" or "k<mods>-<vk>"; both are opaque to this layer. */
+const ACTIONS = ["tau", "altf4"];
+function newProfileId(){ return "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+/* pre-1.12 config kept a single c.tauButton — fold it into a first profile so nobody
+   loses the binding they already had */
+function readProfiles(){
+  let c = {};
+  try{ c = hub.readConfig(); }catch(e){ c = {}; }
+  let list = Array.isArray(c.profiles) ? c.profiles.filter(p => p && p.id) : null;
+  if(!list || !list.length){
+    const binds = {};
+    if(c.tauButton >= 3 && c.tauButton <= 5) binds.tau = "m" + c.tauButton;
+    list = [{id: newProfileId(), name: "Default", binds}];
+    c.profiles = list;
+    c.activeProfile = list[0].id;
+    try{ hub.writeConfig(c); }catch(e){}
+  }
+  const active = list.some(p => p.id === c.activeProfile) ? c.activeProfile : list[0].id;
+  return {list, active, cfg: c};
+}
+function writeProfiles(list, active){
+  let c = {};
+  try{ c = hub.readConfig(); }catch(e){ c = {}; }
+  c.profiles = list;
+  c.activeProfile = active;
+  delete c.tauButton;                       // migrated; never read again
+  try{ hub.writeConfig(c); }catch(e){}
+}
+function activeBinds(){
+  const {list, active} = readProfiles();
+  const p = list.find(x => x.id === active);
+  return (p && p.binds) || {};
+}
 let TAU = null, TAU_DETECT = null;
 function tauPath(){
   const fs = require("fs");
@@ -127,12 +163,14 @@ function tauKillStrays(cb){
 function tauStart(){
   tauStop();
   if(process.platform !== "win32") return;
-  let btn = null;
-  try{ btn = hub.readConfig().tauButton || null; }catch(e){}
   const exe = tauPath();
-  if(!btn || !exe) return;
+  if(!exe) return;
+  let binds = {};
+  try{ binds = activeBinds(); }catch(e){}
+  const specs = ACTIONS.filter(a => binds[a]).map(a => binds[a] + "=" + a);
+  if(!specs.length) return;                 // nothing bound in this profile — don't hook at all
   try{
-    TAU = spawn(exe, ["bind", String(btn), String(process.pid)], {stdio: "ignore", windowsHide: true});
+    TAU = spawn(exe, ["bind", String(process.pid)].concat(specs), {stdio: "ignore", windowsHide: true});
     TAU.on("exit", () => { TAU = null; });
     TAU.on("error", () => { TAU = null; });
   }catch(e){ TAU = null; }
@@ -337,15 +375,18 @@ ipcMain.handle("overlay-ihotkey-set", (_e, acc) => {
   if(!acc) applyHotkeys();
   return true;
 });
-ipcMain.handle("tau-get", () => {
-  try{ return {button: hub.readConfig().tauButton || null, available: process.platform === "win32" && !!tauPath()}; }
-  catch(e){ return {button: null, available: false}; }
+ipcMain.handle("sc-get", () => {
+  try{
+    const {list, active} = readProfiles();
+    return {profiles: list, active, available: process.platform === "win32" && !!tauPath()};
+  }catch(e){ return {profiles: [], active: null, available: false}; }
 });
-ipcMain.handle("tau-detect", () => new Promise(res => {
-  if(process.platform !== "win32" || !tauPath()){ res(null); return; }
+/* listen for one trigger and store it against an action in the active profile */
+ipcMain.handle("sc-detect", (_e, action) => new Promise(res => {
+  if(process.platform !== "win32" || !tauPath() || ACTIONS.indexOf(action) < 0){ res(null); return; }
   try{ if(TAU_DETECT) TAU_DETECT.kill(); }catch(e){}
   TAU_DETECT = null;
-  tauStop();                                   // release the hook while listening
+  tauStop();                                   // release the hooks while listening
   let out = "", done = false;
   const finish = v => { if(done) return; done = true; TAU_DETECT = null; tauStart(); res(v); };
   try{
@@ -353,24 +394,77 @@ ipcMain.handle("tau-detect", () => new Promise(res => {
     TAU_DETECT = child;
     child.stdout.on("data", d => {
       out += d;
-      const m = out.match(/BTN:(\d)/);
-      if(m){
-        const b = +m[1];
-        try{ const c = hub.readConfig(); c.tauButton = b; hub.writeConfig(c); }catch(e){}
-        try{ child.kill(); }catch(e){}
-        finish(b);
-      }
+      const m = out.match(/BTN:(\d)/) || out.match(/KEY:(\d+)-(\d+)/);
+      if(!m) return;
+      const trigger = m.length === 2 ? "m" + m[1] : "k" + m[1] + "-" + m[2];
+      try{
+        const {list, active} = readProfiles();
+        const p = list.find(x => x.id === active);
+        if(p){
+          p.binds = p.binds || {};
+          // one physical trigger drives one action — steal it from any other action
+          for(const a of ACTIONS) if(a !== action && p.binds[a] === trigger) delete p.binds[a];
+          p.binds[action] = trigger;
+          writeProfiles(list, active);
+        }
+      }catch(e){}
+      try{ child.kill(); }catch(e){}
+      finish(trigger);
     });
     child.on("exit", () => finish(null));
     child.on("error", () => finish(null));
     setTimeout(() => { try{ child.kill(); }catch(e){} }, 15000);
   }catch(e){ finish(null); }
 }));
-ipcMain.handle("tau-cancel", () => { try{ if(TAU_DETECT) TAU_DETECT.kill(); }catch(e){} return true; });
-ipcMain.handle("tau-clear", () => {
-  try{ const c = hub.readConfig(); delete c.tauButton; hub.writeConfig(c); }catch(e){}
-  tauStop();
+ipcMain.handle("sc-cancel", () => { try{ if(TAU_DETECT) TAU_DETECT.kill(); }catch(e){} return true; });
+ipcMain.handle("sc-clear", (_e, action) => {
+  try{
+    const {list, active} = readProfiles();
+    const p = list.find(x => x.id === active);
+    if(p && p.binds) delete p.binds[action];
+    writeProfiles(list, active);
+  }catch(e){}
+  tauStart();                                  // rebind whatever is left
   return true;
+});
+ipcMain.handle("sc-profile-add", (_e, name) => {
+  try{
+    const {list} = readProfiles();
+    const p = {id: newProfileId(), name: String(name || "").slice(0, 40) || "Profile", binds: {}};
+    list.push(p);
+    writeProfiles(list, p.id);                 // a new profile becomes the active one
+    tauStart();
+    return {profiles: list, active: p.id};
+  }catch(e){ return null; }
+});
+ipcMain.handle("sc-profile-rename", (_e, id, name) => {
+  try{
+    const {list, active} = readProfiles();
+    const p = list.find(x => x.id === id);
+    if(p) p.name = String(name || "").slice(0, 40) || p.name;
+    writeProfiles(list, active);
+    return {profiles: list, active};
+  }catch(e){ return null; }
+});
+ipcMain.handle("sc-profile-delete", (_e, id) => {
+  try{
+    let {list, active} = readProfiles();
+    if(list.length <= 1) return {profiles: list, active};   // always keep one
+    list = list.filter(x => x.id !== id);
+    if(!list.some(x => x.id === active)) active = list[0].id;
+    writeProfiles(list, active);
+    tauStart();
+    return {profiles: list, active};
+  }catch(e){ return null; }
+});
+ipcMain.handle("sc-profile-select", (_e, id) => {
+  try{
+    const {list} = readProfiles();
+    if(!list.some(x => x.id === id)) return null;
+    writeProfiles(list, id);
+    tauStart();                                // swap the hooks over to the new bindings
+    return {profiles: list, active: id};
+  }catch(e){ return null; }
 });
 ipcMain.handle("overlay-tick", (_e, id) => {
   if(win && !win.isDestroyed()) win.webContents.send("reccheck-overlay-tick", id);

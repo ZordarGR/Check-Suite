@@ -5,6 +5,7 @@
    is the escape hatch for the rare shell update (button then opens the release page). */
 "use strict";
 const fs = require("fs"), path = require("path"), crypto = require("crypto");
+const MAX_SETUP_TRIES = 3;      // give up re-downloading a vanishing installer after this many attempts
 
 function vParse(v){ return String(v).trim().replace(/^v/i, "").split(".").map(n => parseInt(n, 10) || 0); }
 function vNewer(a, b){          // true when a > b
@@ -89,6 +90,17 @@ class Updater {
         const P = this.paths();
         const have = this.readJson(P.setupMeta);
         if(!(have && have.version === tv && fs.existsSync(P.setupExe))){
+          /* If the installer keeps vanishing between checks — Defender quarantining an
+             unsigned 90 MB setup in %APPDATA% is the usual cause — re-fetching it on
+             every launch forever helps nobody. Count attempts and, past the limit, hand
+             the user the release page instead. The counter is written BEFORE the
+             download so a crash mid-transfer still counts. */
+          const tries = (have && have.version === tv && +have.tries) || 0;
+          if(tries >= MAX_SETUP_TRIES){
+            this.pending = {version: tv, full: true, url: latest.url || this.o.fallbackReleaseUrl};
+            return this.pending;
+          }
+          try{ fs.writeFileSync(P.setupMeta, JSON.stringify({version: tv, tries: tries + 1})); }catch(e){}
           const sr = await fetch(latest.setup, {cache: "no-store", redirect: "follow"});
           if(!sr.ok){ this.emit({phase: "failed", version: tv}); return null; }
           let sbuf;
@@ -118,7 +130,7 @@ class Updater {
           if(sbuf.length < 1048576 || sbuf.slice(0, 2).toString("latin1") !== "MZ"){ this.emit({phase: "failed", version: tv}); return null; }
           fs.writeFileSync(P.setupExe + ".tmp", sbuf);
           fs.renameSync(P.setupExe + ".tmp", P.setupExe);
-          fs.writeFileSync(P.setupMeta, JSON.stringify({version: tv, sha256: ssha}));
+          fs.writeFileSync(P.setupMeta, JSON.stringify({version: tv, sha256: ssha, tries: tries + 1}));
         }
         this.pending = {version: tv, full: true, downloaded: true, setupPath: P.setupExe};
         return this.pending;
