@@ -115,6 +115,8 @@ header .spacer{flex:1}
 .clRow .clBtns button{background:var(--panel2);border:1px solid var(--line);border-radius:7px;color:var(--dim);cursor:pointer;
   font-size:12.5px;padding:4px 9px}
 .clRow .clBtns button:hover{border-color:var(--amber);color:var(--amber)}
+.clRow .clBtns button.clMove{padding:2px 7px;font-size:10px;line-height:1.5}
+.clRow .clBtns button.clMove:disabled{opacity:.28;cursor:default;border-color:var(--line);color:var(--dim)}
 .clEmpty{color:var(--faint);font-size:13px;font-family:var(--mono);padding:14px 4px}
 #auditBtn{max-width:640px;margin:0 auto;width:100%}
 #auditScreen{margin-top:60px}
@@ -1134,7 +1136,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.12.1";
+const APP_VERSION = "1.12.2";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1151,6 +1153,7 @@ en: {
   "audit.back": "← Menu",
   "cl.title": "TONIGHT'S CHECKLIST", "cl.count": "{d} / {n} done", "cl.empty": "— no tasks yet — use Edit home screen → Edit checklist to add some",
   "cl.add": "Add task", "cl.save": "Save", "cl.doneEditing": "Done editing", "cl.edit": "edit", "cl.del": "delete",
+  "cl.up": "move up", "cl.down": "move down",
   "cl.ph": "what needs to happen tonight…", "cl.ovOn": "⧉ overlay: on", "cl.ovOff": "⧉ overlay: off",
   "cl.ovTitle": "Show the checklist on the desktop — always on top, click-through, until the app closes",
   "ov.menu": "CUSTOMIZE OVERLAY", "ov.menuSub": "background, font, size and position of the desktop overlay",
@@ -1204,7 +1207,7 @@ en: {
   "help.deptBody": "<h4>1 · Get the report out of protel</h4><ol><li>In protel, generate the <b>ΕΛΕΓΧΟΣ ΤΜΗΜΑΤΩΝ BY ROOM</b> list for the night (protel's internal name for it is checkcharge1).</li><li>Click <b>Printer setup</b> and pick <b>Microsoft XPS Document Writer</b>.</li><li>Click <b>Print</b> and save the file into your Department Check reports folder.</li></ol><h4>2 · Open it here</h4><ol><li>Menu → <b>AUDIT</b> → <b>DEPARTMENT CHECK</b> and click the file — the freshest pull is marked <b>tonight</b>.</li></ol><h4>3 · Check the receipts</h4><ol><li>Take the night's printed POS receipts and type each serial number in the search box.</li><li>An exact match shows the room, guest and amounts — if the paper agrees, mark it OK.</li><li>Something off? The card's buttons fix a wrong amount, a wrong room, or add a receipt the report doesn't show.</li></ol><h4>4 · Finish the night</h4><ol><li>A department whose close-out posting is missing shows an <b>OPEN</b> pill — chase it before the audit.</li><li><b>Ctrl+P</b> prints the corrections sheet for reception.</li></ol><div class='hnote'>The drawer on the right keeps a watchlist (serial / room / signature) and room nicknames — matches on watched rooms glow yellow.</div>",
   "help.taxTitle": "HOW TO — TAX CHECK",
   "help.taxBody": "<h4>1 · Get the reports out of protel</h4><ol><li>Generate the in-house <b>Rate Check</b> list for the night.</li><li>For the accommodation-tax list: <b>Office → Internal reporting → Room charges (history)</b>.</li><li>For each one: <b>Printer setup</b> → <b>Microsoft XPS Document Writer</b> → <b>Print</b>, and save into your Tax Check folder.</li></ol><h4>2 · Feed the two slots</h4><ol><li>Click each slot and pick its file. With both loaded the tool cross-checks them; the Tax file alone also works, with fewer checks.</li></ol><h4>3 · Read the sections</h4><ol><li><b>Occupied but no arrangement</b> — the room owes tax but nothing is posted.</li><li><b>Automatic TA missing</b> — the automatic posting didn't run for that room.</li><li><b>Overcharged TA</b> — more tax than occupied nights. <b>Dismiss</b> hides it for good; it only returns if something new happens on that room.</li><li><b>Adjoining rooms</b> — check these by hand and mark OK / Missing.</li></ol><h4>4 · The nights below</h4><ol><li>The memory keeps recent nights per room. Tag no-arrival rooms as <b>arrival</b> / <b>checkout</b> to silence false alarms.</li><li>The ⚠ list can be printed for reception.</li></ol>",
-  "cl.help": "Type what must happen tonight, pick its <b>SEVERITY</b> (the colour of its dot) and press <b>Add task</b>. Use <b>edit</b> / <b>delete</b> on a row to change it. Ticks reset by themselves at 07:00 — the tasks stay. The ⧉ button puts the list on the desktop: one shortcut shows or hides it, the other focuses it so you can tick tasks right on it (both under EDIT HOME SCREEN → CUSTOMIZE OVERLAY).",
+  "cl.help": "Type what must happen tonight, pick its <b>SEVERITY</b> (the colour of its dot) and press <b>Add task</b>. Use <b>edit</b> / <b>delete</b> on a row to change it, and <b>\u25B2</b> / <b>\u25BC</b> to move it up or down. Ticks reset by themselves at 07:00 — the tasks stay. The ⧉ button puts the list on the desktop: one shortcut shows or hides it, the other focuses it so you can tick tasks right on it (both under EDIT HOME SCREEN → CUSTOMIZE OVERLAY).",
   "fb.today": "today", "fb.viewList": "List view", "fb.viewTiles": "Tile view",
   "fb.up": "up one level", "fb.folder": "folder",
   "drop.big": "Drop the checkcharge report here, or click to browse",
@@ -1285,6 +1288,7 @@ gr: {
   "audit.back": "← Μενού",
   "cl.title": "Η ΛΙΣΤΑ ΤΗΣ ΒΡΑΔΙΑΣ", "cl.count": "{d} / {n} έγιναν", "cl.empty": "— καμία εργασία — Επεξεργασία αρχικής → Επεξεργασία λίστας για προσθήκη",
   "cl.add": "Προσθήκη", "cl.save": "Αποθήκευση", "cl.doneEditing": "Τέλος επεξεργασίας", "cl.edit": "αλλαγή", "cl.del": "διαγραφή",
+  "cl.up": "μετακίνηση πάνω", "cl.down": "μετακίνηση κάτω",
   "cl.ph": "τι πρέπει να γίνει απόψε…", "cl.ovOn": "⧉ επικάλυψη: ναι", "cl.ovOff": "⧉ επικάλυψη: όχι",
   "cl.ovTitle": "Εμφάνιση της λίστας στην επιφάνεια εργασίας — πάντα από πάνω, δεν πιάνει κλικ, όσο η εφαρμογή είναι ανοιχτή",
   "ov.menu": "ΠΡΟΣΑΡΜΟΓΗ ΕΠΙΚΑΛΥΨΗΣ", "ov.menuSub": "φόντο, γραμματοσειρά, μέγεθος και θέση της επικάλυψης",
@@ -1340,7 +1344,7 @@ gr: {
   "help.deptBody": "<h4>1 · Εξαγωγή της αναφοράς από το protel</h4><ol><li>Στο protel βγάλτε τη λίστα <b>ΕΛΕΓΧΟΣ ΤΜΗΜΑΤΩΝ BY ROOM</b> για τη βραδιά (εσωτερικά το protel τη λέει checkcharge1).</li><li>Πατήστε <b>Printer setup</b> και διαλέξτε <b>Microsoft XPS Document Writer</b>.</li><li>Πατήστε <b>Print</b> και αποθηκεύστε το αρχείο στον φάκελο αναφορών του Ελέγχου Τμημάτων.</li></ol><h4>2 · Άνοιγμα εδώ</h4><ol><li>Μενού → <b>ΕΛΕΓΧΟΣ</b> → <b>ΕΛΕΓΧΟΣ ΤΜΗΜΑΤΩΝ</b> και κλικ στο αρχείο — το πιο φρέσκο έχει σήμανση <b>αποψινό</b>.</li></ol><h4>3 · Έλεγχος αποδείξεων</h4><ol><li>Πάρτε τις τυπωμένες αποδείξεις POS και πληκτρολογήστε κάθε σειριακό αριθμό στην αναζήτηση.</li><li>Το ταίριασμα δείχνει δωμάτιο, όνομα και ποσά — αν το χαρτί συμφωνεί, σημειώστε OK.</li><li>Κάτι λάθος; Τα κουμπιά της κάρτας διορθώνουν λάθος ποσό ή δωμάτιο, ή προσθέτουν απόδειξη που λείπει από την αναφορά.</li></ol><h4>4 · Κλείσιμο βραδιάς</h4><ol><li>Τμήμα χωρίς το κλείσιμο ταμείου δείχνει ένδειξη <b>OPEN</b> — κυνηγήστε το πριν το audit.</li><li>Με <b>Ctrl+P</b> τυπώνεται το φύλλο διορθώσεων για τη reception.</li></ol><div class='hnote'>Το συρτάρι δεξιά κρατά λίστα παρακολούθησης (σειριακός / δωμάτιο / υπογραφή) και ψευδώνυμα δωματίων — τα ταιριάσματα σε δωμάτια υπό παρακολούθηση φωτίζονται κίτρινα.</div>",
   "help.taxTitle": "ΟΔΗΓΙΕΣ — ΕΛΕΓΧΟΣ ΤΑ",
   "help.taxBody": "<h4>1 · Εξαγωγή των αναφορών από το protel</h4><ol><li>Βγάλτε τη λίστα πληρότητας <b>Rate Check</b> για τη βραδιά.</li><li>Για τη λίστα τέλους διαμονής: <b>Office → Internal reporting → Room charges (history)</b>.</li><li>Για καθεμία: <b>Printer setup</b> → <b>Microsoft XPS Document Writer</b> → <b>Print</b>, και αποθήκευση στον φάκελο του Ελέγχου ΤΑ.</li></ol><h4>2 · Φόρτωμα στις δύο θέσεις</h4><ol><li>Κλικ σε κάθε θέση και επιλογή του αρχείου της. Με τα δύο μαζί γίνεται διασταύρωση· μόνο το Tax δουλεύει κι αυτό, με λιγότερους ελέγχους.</li></ol><h4>3 · Οι ενότητες</h4><ol><li><b>Κατειλημμένο χωρίς arrangement</b> — το δωμάτιο χρωστά ΤΑ αλλά δεν έχει καταχώρηση.</li><li><b>Λείπει το αυτόματο ΤΑ</b> — δεν έτρεξε η αυτόματη καταχώρηση.</li><li><b>Υπερχρέωση ΤΑ</b> — περισσότερα ΤΑ από νύχτες. Το <b>Το είδα</b> το κρύβει οριστικά· ξαναεμφανίζεται μόνο αν αλλάξει κάτι στο δωμάτιο.</li><li><b>Συγκοινωνούντα δωμάτια</b> — έλεγχος στο χέρι και σήμανση Εντάξει / Λείπει.</li></ol><h4>4 · Οι νύχτες από κάτω</h4><ol><li>Η μνήμη κρατά τις τελευταίες νύχτες ανά δωμάτιο. Χαρακτηρίστε δωμάτια χωρίς άφιξη ως <b>άφιξη</b> / <b>αναχώρηση</b> για να σταματούν οι ψεύτικοι συναγερμοί.</li><li>Η λίστα ⚠ τυπώνεται για τη reception.</li></ol>",
-  "cl.help": "Γράψτε τι πρέπει να γίνει απόψε, διαλέξτε <b>ΣΟΒΑΡΟΤΗΤΑ</b> (το χρώμα της κουκκίδας) και πατήστε <b>Προσθήκη</b>. Με <b>αλλαγή</b> / <b>διαγραφή</b> σε κάθε γραμμή τη διορθώνετε. Τα τικ μηδενίζουν μόνα τους στις 07:00 — οι εργασίες μένουν. Το κουμπί ⧉ βάζει τη λίστα στην επιφάνεια εργασίας: η μία συντόμευση την εμφανίζει/κρύβει, η άλλη τη φέρνει σε εστίαση για τικ πάνω της (και οι δύο στο ΕΠΕΞΕΡΓΑΣΙΑ ΑΡΧΙΚΗΣ → ΠΡΟΣΑΡΜΟΓΗ ΕΠΙΚΑΛΥΨΗΣ).",
+  "cl.help": "Γράψτε τι πρέπει να γίνει απόψε, διαλέξτε <b>ΣΟΒΑΡΟΤΗΤΑ</b> (το χρώμα της κουκκίδας) και πατήστε <b>Προσθήκη</b>. Με <b>αλλαγή</b> / <b>διαγραφή</b> σε κάθε γραμμή τη διορθώνετε, και με <b>\u25B2</b> / <b>\u25BC</b> την ανεβοκατεβάζετε. Τα τικ μηδενίζουν μόνα τους στις 07:00 — οι εργασίες μένουν. Το κουμπί ⧉ βάζει τη λίστα στην επιφάνεια εργασίας: η μία συντόμευση την εμφανίζει/κρύβει, η άλλη τη φέρνει σε εστίαση για τικ πάνω της (και οι δύο στο ΕΠΕΞΕΡΓΑΣΙΑ ΑΡΧΙΚΗΣ → ΠΡΟΣΑΡΜΟΓΗ ΕΠΙΚΑΛΥΨΗΣ).",
   "fb.today": "σήμερα", "fb.viewList": "Προβολή λίστας", "fb.viewTiles": "Προβολή πλακιδίων",
   "fb.up": "ένα επίπεδο πάνω", "fb.folder": "φάκελος",
   "drop.big": "Σύρετε εδώ την αναφορά checkcharge, ή κάντε κλικ για αναζήτηση",
@@ -1730,6 +1734,7 @@ function saveCL(){ try{ localStorage.setItem("reccheck_checklist", JSON.stringif
 function renderChecklist(){
   const box = $("#clList");
   if(!box) return;
+  clSeedOrder();
   box.innerHTML = "";
   const dn = CL.filter(x => x.done).length;
   $("#clCount").textContent = CL.length ? t("cl.count", {d: dn, n: CL.length}) : "";
@@ -1751,6 +1756,15 @@ function renderChecklist(){
     row.append(cb);
     row.append(el("div","txt", task.text));
     const btns = el("div","clBtns");
+    const bu = el("button","clMove", "\u25B2");
+    bu.title = t("cl.up");
+    bu.disabled = !clCanMove(task, -1);
+    bu.onclick = () => clMove(task, -1);
+    const bdn = el("button","clMove", "\u25BC");
+    bdn.title = t("cl.down");
+    bdn.disabled = !clCanMove(task, 1);
+    bdn.onclick = () => clMove(task, 1);
+    btns.append(bu, bdn);
     const be = el("button","", t("cl.edit"));
     be.onclick = () => {
       CLEDITID = task.id;
@@ -2049,9 +2063,49 @@ function openShortcuts(){
     $("#scOk").onclick = closeModal;
   }).catch(() => {});
 }
+const CL_TIER_RANK = {high: 0, med: 1, low: 2};
+function clOrd(x){ return typeof x.ord === "number" ? x.ord : Number.MAX_SAFE_INTEGER; }
+/* Ticked tasks still sink to the bottom; above that the user's own order decides.
+   Severity now only tints the row — before 1.12.2 it drove the sort, which is why
+   the only way to reorder was to delete a task and add it again. */
 function clSorted(){
-  const order = {high: 0, med: 1, low: 2};
-  return CL.slice().sort((a, b) => (a.done - b.done) || (order[a.tier] - order[b.tier]));
+  return CL.slice().sort((a, b) => (a.done - b.done) || (clOrd(a) - clOrd(b)) );
+}
+/* Give every task an explicit position. On the first run after upgrading, seed it
+   from the OLD (done, severity, insertion) order so the list looks exactly as it did
+   and nothing appears to jump. Tasks arriving later without one (an import from an
+   older backup) simply go to the end. */
+function clSeedOrder(){
+  const missing = CL.filter(x => typeof x.ord !== "number");
+  if(!missing.length) return;
+  if(missing.length === CL.length){
+    CL.slice()
+      .sort((a, b) => (a.done - b.done) || (CL_TIER_RANK[a.tier] - CL_TIER_RANK[b.tier]))
+      .forEach((x, k) => { x.ord = k; });
+  }else{
+    let max = -1;
+    for(const x of CL) if(typeof x.ord === "number" && x.ord > max) max = x.ord;
+    missing.forEach(x => { x.ord = ++max; });
+  }
+  saveCL();
+}
+/* move a task one place up (-1) or down (+1) in the visible list */
+function clMove(task, dir){
+  const list = clSorted();
+  const i = list.indexOf(task), j = i + dir;
+  if(i < 0 || j < 0 || j >= list.length) return;
+  if(!!list[j].done !== !!task.done) return;      // ticked tasks live below; never swap across
+  list.splice(i, 1);
+  list.splice(j, 0, task);
+  list.forEach((x, k) => { x.ord = k; });
+  saveCL();
+  renderChecklist();
+}
+/* can this row still move that way? drives the disabled state of the arrows */
+function clCanMove(task, dir){
+  const list = clSorted();
+  const i = list.indexOf(task), j = i + dir;
+  return i >= 0 && j >= 0 && j < list.length && !!list[j].done === !!task.done;
 }
 function pushOverlay(){
   if(!window.reccheckOverlay) return;
@@ -2103,7 +2157,9 @@ function clSubmit(){
     CLEDITID = null;
     $("#clAdd").textContent = t("cl.add");
   }else{
-    CL.push({id: Date.now() + "-" + Math.random().toString(36).slice(2, 7), text: txt, tier: CLTIER, done: false});
+    let max = -1;
+    for(const x of CL) if(typeof x.ord === "number" && x.ord > max) max = x.ord;
+    CL.push({id: Date.now() + "-" + Math.random().toString(36).slice(2, 7), text: txt, tier: CLTIER, done: false, ord: max + 1});
   }
   $("#clText").value = "";
   saveCL();
