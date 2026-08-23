@@ -1,11 +1,11 @@
 {
-  "version": "1.11.6",
+  "version": "1.12.0",
   "type": "full",
-  "engine": "1.11.6",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.11.6/RecCheck-Setup.exe",
-  "setupSha256": "4b5bebafbb3c1ea0170ed198b18f9a2af04ec1e78098e6789e20825538451c5f",
+  "engine": "1.12.0",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.12.0/RecCheck-Setup.exe",
+  "setupSha256": "eaadd53e097e4d568fc75587fd11e0671d314a4159c092a7b4b48cb39f51e521",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "8acd082956cd84772b9cb65c5767fd3fce75d9fcbf8891e08f75fb9f5d522a9d",
-  "notes": "The T.A Selection Shortcut now verifies the keyboard layout hop before pressing T, so it can no longer type a plain English t when an app is slow to switch."
+  "sha256": "e42356407a523f28f08ce721c021f6388a55ae4626b1eaa2dcc6c5a0f8667e1a",
+  "notes": "Protel Shortcuts has its own menu now: bind the Greek τ and Alt+F4 to a mouse button or any key, with profiles so each person keeps their own bindings."
 }
