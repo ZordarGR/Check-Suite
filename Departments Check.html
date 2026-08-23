@@ -1134,7 +1134,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.12.0";
+const APP_VERSION = "1.12.1";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1916,9 +1916,13 @@ function refreshProfileName(){
   const sc = window.reccheckShortcuts;
   if(!sc){ paintProfileName(); return; }
   sc.get().then(st => {
-    const p = st && st.profiles && st.profiles.find(x => x.id === st.active);
+    const list = (st && st.profiles) || [];
+    const p = list.find(x => x.id === st.active);
     const n = (p && p.name) || "";
-    PROFILE_NAME = (n && n !== "Default") ? n : "";   // don't greet a placeholder
+    /* A lone, untouched "Default" is the fresh-install placeholder — show the wordmark
+       rather than greeting nobody. As soon as a second profile exists the user is
+       managing profiles deliberately, so greet whichever is active, by name. */
+    PROFILE_NAME = (n && !(list.length === 1 && n === "Default")) ? n : "";
     paintProfileName();
   }).catch(() => {});
 }
@@ -2008,6 +2012,7 @@ function openShortcuts(){
     SCSTATE = st;
     const p = scActiveProfile();
     SCSTATE.binds = (p && p.binds) || {};
+    refreshProfileName();
     openModal(
       '<h3>' + t("sc.title") + '</h3>' +
       '<p class="scIntro">' + t("sc.intro") + '</p>' +
@@ -3562,6 +3567,7 @@ $("#resetDay").onclick = () => {
   paintSevSel();
   clNightCheck();
   applyLang();
+  refreshProfileName();      // applyLang only repaints the cached name; this loads it
   showScreen("menu");
   setInterval(paintClock, 1000);                 // live clock — repaint every second
   setInterval(clNightCheck, 30000);              // night rollover check
