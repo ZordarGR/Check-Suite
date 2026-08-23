@@ -73,7 +73,14 @@ header .spacer{flex:1}
 .msubItem:hover{background:var(--panel2)}
 .msubItem .mLabel{font-family:var(--mono);letter-spacing:.1em;font-size:12.5px;font-weight:600}
 .msubItem .mSub{font-size:11px;color:var(--faint);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#welcomeLine{color:var(--dim);font-size:13.5px;margin:4px 0 14px}
+#welcomeLine{color:var(--dim);font-size:13.5px;margin:4px 0 18px}
+.scIntro{color:var(--dim);font-size:12.5px;line-height:1.5;margin:2px 0 14px}
+.scRow{border:1px solid var(--line);border-radius:9px;padding:12px 13px;margin-top:12px;background:var(--panel2)}
+.scHead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px}
+.scName{font-family:var(--mono);letter-spacing:.09em;font-size:12.5px;font-weight:600;color:var(--amber)}
+.scBind{width:100%;font-family:var(--mono);letter-spacing:.08em}
+.scWhy{color:var(--faint);font-size:11.5px;line-height:1.55;margin:9px 0 0}
+.scWarn:empty{display:none}
 #checklist{max-width:640px;margin:0 auto 22px;background:var(--panel);border:1px solid var(--line);border-radius:16px;
   padding:16px 18px;text-align:left}
 #clHead{display:flex;align-items:center;gap:10px;margin-bottom:10px}
@@ -585,6 +592,9 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
           <button class="msubItem" id="mExport"><span class="mLabel"></span><span class="mSub"></span></button>
           <button class="msubItem" id="mImport"><span class="mLabel"></span><span class="mSub"></span></button>
         </div>
+      </div>
+      <div class="mcat">
+        <button class="mcatBtn" id="mcShortcutsBtn" style="display:none"></button>
       </div>
       <div class="mcat">
         <button class="mcatBtn" id="mcEditBtn"></button>
@@ -1124,7 +1134,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.11.6";
+const APP_VERSION = "1.12.0";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1149,11 +1159,27 @@ en: {
   "ov.reset": "Reset to defaults", "ov.ok": "Done", "ov.hint": "changes apply live while the overlay is on",
   "ov.hk": "Global shortcut (toggles the overlay from anywhere)", "ov.hkPress": "press the new combination… (Esc cancels)",
   "ov.hk2": "Tick shortcut (focuses the overlay — click tasks to tick them, Esc leaves)",
-  "ov.mb": "T.A Selection Shortcut (mouse button that types τ — everywhere in Windows, any keyboard language)",
-  "ov.mbPress": "press the mouse button now… (Esc cancels)", "ov.mbNone": "not set",
+  "ov.mbNone": "not set",
   "ov.mbMid": "Middle button", "ov.mbBack": "Side button — Back", "ov.mbFwd": "Side button — Forward",
-  "ov.mbFail": "No button detected — try again (only middle and side buttons can be bound).",
-  "ov.mbClear": "remove the binding",
+  "sc.menu": "PROTEL SHORTCUTS",
+  "sc.title": "PROTEL SHORTCUTS",
+  "sc.intro": "Bind a mouse side button — or any key — to the two things the night shift does over and over. The binding works everywhere in Windows, not just inside RecCheck.",
+  "sc.profile": "Profile", "sc.profileHint": "each profile keeps its own bindings — hand the machine over without losing yours",
+  "sc.add": "New profile", "sc.rename": "Rename", "sc.delete": "Delete",
+  "sc.addPrompt": "Name for the new profile", "sc.renamePrompt": "New name for this profile",
+  "sc.delConfirm": "Delete the profile \u201c{n}\u201d and its bindings?",
+  "sc.tau": "Greek τ keypress",
+  "sc.tauWhy": "Jumps straight to the ΤΕΛΟΣ ΑΝΘΕΚΤΙΚΟΤΗΤΑΣ invoice. protel\u2019s list jumps to the first entry starting with the letter you press, so this replaces scrolling and hunting for it every single time. It is delivered as a real key press, which is why a pasted τ never worked.",
+  "sc.altf4": "Alt + F4",
+  "sc.altf4Why": "Closes the receipt preview that pops up after every invoice is generated. One button instead of reaching for the mouse and finding the ✕ on each one.",
+  "sc.press": "press the button or key combination now… (Esc cancels)",
+  "sc.none": "not set", "sc.clear": "remove the binding",
+  "sc.fail": "Nothing detected — try again. Mouse: only middle and side buttons can be bound.",
+  "sc.bareKey": "Careful: a plain key is swallowed everywhere in Windows while RecCheck runs — that key stops typing in every program. A combination such as Ctrl+Alt+T is safer.",
+  "sc.unavailable": "Shortcuts need the Windows desktop app.",
+  "sc.done": "Done",
+  "sc.keyMid": "Middle button", "sc.keyBack": "Side button — Back", "sc.keyFwd": "Side button — Forward",
+  "sc.welcome": "Welcome, {n}", "sc.delSure": "Sure?",
   "pv.title": "PRINT PREVIEW — CORRECTIONS", "pv.print": "Print", "pv.cancel": "Cancel",
   "ov.hkBusy": "That combination is held by another program — pick a different one.",
   "ov.hkNeedMod": "Use at least one of Ctrl / Alt / Shift with a key.", "cl.tierLow": "low importance", "cl.tierMed": "medium importance", "cl.tierHigh": "extremely important",
@@ -1267,7 +1293,25 @@ gr: {
   "ov.reset": "Επαναφορά προεπιλογών", "ov.ok": "Έτοιμο", "ov.hint": "οι αλλαγές εφαρμόζονται ζωντανά όσο η επικάλυψη είναι ανοιχτή",
   "ov.hk": "Καθολική συντόμευση (ανοιγοκλείνει την επικάλυψη από παντού)", "ov.hkPress": "πατήστε τον νέο συνδυασμό… (Esc ακύρωση)",
   "ov.hk2": "Συντόμευση τικ (φέρνει την επικάλυψη σε εστίαση — κλικ στις εργασίες για ✓, Esc για έξοδο)",
-  "ov.mb": "T.A Selection Shortcut (πλήκτρο ποντικιού που γράφει τ — παντού στα Windows, με οποιαδήποτε γλώσσα πληκτρολογίου)",
+  "sc.menu": "ΣΥΝΤΟΜΕΥΣΕΙΣ PROTEL",
+  "sc.title": "ΣΥΝΤΟΜΕΥΣΕΙΣ PROTEL",
+  "sc.intro": "Αντιστοίχισε ένα πλαϊνό πλήκτρο του ποντικιού — ή οποιοδήποτε πλήκτρο — στα δύο πράγματα που κάνει ξανά και ξανά η νυχτερινή βάρδια. Δουλεύει παντού στα Windows, όχι μόνο μέσα στο RecCheck.",
+  "sc.profile": "Προφίλ", "sc.profileHint": "κάθε προφίλ κρατά τις δικές του αντιστοιχίσεις — δώσε το μηχάνημα χωρίς να χάσεις τις δικές σου",
+  "sc.add": "Νέο προφίλ", "sc.rename": "Μετονομασία", "sc.delete": "Διαγραφή",
+  "sc.addPrompt": "Όνομα για το νέο προφίλ", "sc.renamePrompt": "Νέο όνομα για αυτό το προφίλ",
+  "sc.delConfirm": "Διαγραφή του προφίλ \u201c{n}\u201d και των αντιστοιχίσεών του;",
+  "sc.tau": "Πάτημα του ελληνικού τ",
+  "sc.tauWhy": "Πηγαίνει κατευθείαν στο τιμολόγιο ΤΕΛΟΣ ΑΝΘΕΚΤΙΚΟΤΗΤΑΣ. Η λίστα του protel πηδάει στην πρώτη εγγραφή που αρχίζει από το γράμμα που πατάς, οπότε γλιτώνεις το σκρολάρισμα και το ψάξιμο κάθε φορά. Στέλνεται ως πραγματικό πάτημα πλήκτρου — γι\u2019 αυτό το επικολλημένο τ δεν δούλευε ποτέ.",
+  "sc.altf4": "Alt + F4",
+  "sc.altf4Why": "Κλείνει την προεπισκόπηση της απόδειξης που εμφανίζεται μετά από κάθε τιμολόγιο. Ένα πλήκτρο αντί να πιάνεις το ποντίκι και να βρίσκεις το ✕ σε κάθε μία.",
+  "sc.press": "πάτα τώρα το πλήκτρο ή τον συνδυασμό… (Esc ακυρώνει)",
+  "sc.none": "δεν έχει οριστεί", "sc.clear": "αφαίρεση της αντιστοίχισης",
+  "sc.fail": "Δεν ανιχνεύθηκε τίποτα — δοκίμασε ξανά. Ποντίκι: μόνο το μεσαίο και τα πλαϊνά πλήκτρα.",
+  "sc.bareKey": "Προσοχή: ένα σκέτο πλήκτρο δεσμεύεται παντού στα Windows όσο τρέχει το RecCheck — παύει να γράφει σε κάθε πρόγραμμα. Ένας συνδυασμός όπως Ctrl+Alt+T είναι ασφαλέστερος.",
+  "sc.unavailable": "Οι συντομεύσεις χρειάζονται την εφαρμογή Windows.",
+  "sc.done": "Έτοιμο",
+  "sc.keyMid": "Μεσαίο πλήκτρο", "sc.keyBack": "Πλαϊνό πλήκτρο — Πίσω", "sc.keyFwd": "Πλαϊνό πλήκτρο — Μπροστά",
+  "sc.welcome": "Καλώς ήρθες, {n}", "sc.delSure": "Σίγουρα;",
   "ov.mbPress": "πατήστε τώρα το πλήκτρο του ποντικιού… (Esc ακύρωση)", "ov.mbNone": "δεν έχει οριστεί",
   "ov.mbMid": "Μεσαίο πλήκτρο", "ov.mbBack": "Πλαϊνό — Back", "ov.mbFwd": "Πλαϊνό — Forward",
   "ov.mbFail": "Δεν εντοπίστηκε πλήκτρο — ξαναδοκιμάστε (δένονται μόνο το μεσαίο και τα πλαϊνά).",
@@ -1384,6 +1428,7 @@ function setLang(l){
 function applyLang(){
   $("#subTag").textContent = t("subTag");
   $("#homeLogo").title = t("menu.title");
+  paintProfileName();
   const mi = (id, l, sub) => { const b = $(id); b.querySelector(".mLabel").textContent = t(l); if(sub !== null) b.querySelector(".mSub").textContent = t(sub); };
   mi("#mLang", "menu.lang", "menu.langSub");
   mi("#mDirDept", "menu.dirDept", null);
@@ -1392,6 +1437,8 @@ function applyLang(){
   mi("#mHelp", "menu.help", "menu.helpSub");
   paintDirSub();
   $("#mcOptionsBtn").textContent = t("menu.options");
+  $("#mcShortcutsBtn").textContent = t("sc.menu");
+  $("#mcShortcutsBtn").style.display = window.reccheckShortcuts ? "" : "none";
   $("#mcEditBtn").textContent = t("menu.editHome");
   mi("#mEditChecklist", "menu.editCl", "menu.editClSub");
   $("#mCustomOverlay").style.display = window.reccheckOverlay ? "" : "none";
@@ -1667,7 +1714,7 @@ function paintClock(){
   const wl = $("#welcomeLine");
   if(!wl) return;
   const b = businessNightDate(), now = new Date();
-  wl.textContent = t("welcome") + "  ·  " + t("welcome.night", {
+  wl.textContent = t("welcome.night", {
     d: pad2(b.getDate()) + "/" + pad2(b.getMonth() + 1),
     cd: now.getDate() + "/" + (now.getMonth() + 1),
     t: now.getHours() + ":" + pad2(now.getMinutes())
@@ -1754,14 +1801,6 @@ function openOverlaySettings(){
     <label>${t("ov.hk2")}</label>
     <button class="btn" id="ovHk2" style="width:100%;font-family:var(--mono);letter-spacing:.08em">…</button>
     <div class="err" id="ovHk2Err"></div>
-    <div id="ovMbWrap" style="display:none">
-      <label>${t("ov.mb")}</label>
-      <div style="display:flex;gap:8px">
-        <button class="btn" id="ovMb" style="flex:1;font-family:var(--mono);letter-spacing:.08em">…</button>
-        <button class="btn small" id="ovMbClear" title="${t("ov.mbClear")}">✕</button>
-      </div>
-      <div class="err" id="ovMbErr"></div>
-    </div>
     <div class="err" style="color:var(--faint)">${t("ov.hint")}</div>
     <div class="actions">
       <button class="btn" id="ovReset">${t("ov.reset")}</button>
@@ -1822,36 +1861,188 @@ function openOverlaySettings(){
   bindHotkeyRow($("#ovHk"), $("#ovHkErr"), ovl.hotkeyGet && (() => ovl.hotkeyGet()), a => ovl.hotkeySet(a));
   bindHotkeyRow($("#ovHk2"), $("#ovHk2Err"), ovl.ihotkeyGet && (() => ovl.ihotkeyGet()), a => ovl.ihotkeySet(a));
 
-  // mouse-button → τ binding (desktop app on Windows only)
-  const mbName = b => b === 3 ? t("ov.mbMid") : b === 4 ? t("ov.mbBack") : b === 5 ? t("ov.mbFwd") : t("ov.mbNone");
-  const tau = window.reccheckTau;
-  if(tau){
-    tau.get().then(st => {
-      if(!st || !st.available) return;
-      $("#ovMbWrap").style.display = "";
-      const mbBtn = $("#ovMb"), mbErr = $("#ovMbErr");
-      mbBtn.textContent = mbName(st.button);
-      let detecting = false;
-      mbBtn.onclick = async () => {
-        if(detecting) return;
-        detecting = true;
-        mbErr.textContent = "";
-        mbBtn.textContent = t("ov.mbPress");
-        const esc = e => { if(e.key === "Escape"){ e.stopPropagation(); tau.cancel(); } };
-        document.addEventListener("keydown", esc, true);
-        const b = await tau.detect().catch(() => null);
-        document.removeEventListener("keydown", esc, true);
-        detecting = false;
-        if(b){ mbBtn.textContent = mbName(b); }
-        else{
-          const st2 = await tau.get().catch(() => null);
-          mbBtn.textContent = mbName(st2 && st2.button);
-          mbErr.textContent = t("ov.mbFail");
-        }
-      };
-      $("#ovMbClear").onclick = async () => { await tau.clear().catch(() => {}); mbBtn.textContent = mbName(null); mbErr.textContent = ""; };
-    }).catch(() => {});
-  }
+}
+/* ---- Protel Shortcuts ---------------------------------------------------
+   Split out of the overlay settings in 1.12: these bindings have nothing to do
+   with the overlay, and each now carries an explanation of WHY it exists.
+   Profiles keep one person's bindings intact when someone else covers the shift.
+   Naming and deleting happen inline — Electron has no window.prompt, and a second
+   openModal would tear down this dialog. */
+const SC_ACTIONS = ["tau", "altf4"];
+let SCSTATE = null, PROFILE_NAME = "";
+function vkName(vk){
+  if(vk >= 0x30 && vk <= 0x39) return String.fromCharCode(vk);          // 0-9
+  if(vk >= 0x41 && vk <= 0x5A) return String.fromCharCode(vk);          // A-Z
+  if(vk >= 0x70 && vk <= 0x87) return "F" + (vk - 0x6F);                // F1-F24
+  if(vk >= 0x60 && vk <= 0x69) return "Num " + (vk - 0x60);
+  const named = {8:"Backspace",9:"Tab",13:"Enter",27:"Esc",32:"Space",33:"PageUp",34:"PageDown",
+                 35:"End",36:"Home",37:"←",38:"↑",39:"→",40:"↓",45:"Insert",46:"Delete",
+                 106:"Num *",107:"Num +",109:"Num −",110:"Num .",111:"Num /",
+                 186:";",187:"=",188:",",189:"−",190:".",191:"/",192:"`",
+                 219:"[",220:"\\",221:"]",222:"'"};
+  return named[vk] || ("Key " + vk);
+}
+function scTriggerName(trig){
+  if(!trig) return t("sc.none");
+  if(trig === "m3") return t("sc.keyMid");
+  if(trig === "m4") return t("sc.keyBack");
+  if(trig === "m5") return t("sc.keyFwd");
+  const m = /^k(\d+)-(\d+)$/.exec(trig);
+  if(!m) return t("sc.none");
+  const mods = +m[1], parts = [];
+  if(mods & 1) parts.push("Ctrl");
+  if(mods & 2) parts.push("Alt");
+  if(mods & 4) parts.push("Shift");
+  if(mods & 8) parts.push("Win");
+  parts.push(vkName(+m[2]));
+  return parts.join(" + ");
+}
+/* a bare printable key is swallowed system-wide while RecCheck runs — warn, don't veto */
+function scIsBareKey(trig){
+  const m = /^k(\d+)-(\d+)$/.exec(trig || "");
+  return !!m && +m[1] === 0;
+}
+function scActiveProfile(){
+  return SCSTATE && SCSTATE.profiles ? SCSTATE.profiles.find(x => x.id === SCSTATE.active) : null;
+}
+/* the home wordmark greets whoever is on shift, once they have named a profile */
+function paintProfileName(){
+  const el = $("#homeLogo");
+  if(!el) return;
+  if(PROFILE_NAME) el.textContent = t("sc.welcome", {n: PROFILE_NAME});
+  else el.innerHTML = 'REC<span>·</span>CHECK';
+}
+function refreshProfileName(){
+  const sc = window.reccheckShortcuts;
+  if(!sc){ paintProfileName(); return; }
+  sc.get().then(st => {
+    const p = st && st.profiles && st.profiles.find(x => x.id === st.active);
+    const n = (p && p.name) || "";
+    PROFILE_NAME = (n && n !== "Default") ? n : "";   // don't greet a placeholder
+    paintProfileName();
+  }).catch(() => {});
+}
+function scRow(action){
+  const trig = (SCSTATE.binds || {})[action];
+  const dis = trig ? "" : ' disabled style="opacity:.35"';
+  return '<div class="scRow">' +
+    '<div class="scHead"><span class="scName">' + t("sc." + action) + '</span>' +
+    '<button class="btn small scClear" data-a="' + action + '" title="' + t("sc.clear") + '"' + dis + '>✕</button></div>' +
+    '<button class="btn scBind" data-a="' + action + '">' + scTriggerName(trig) + '</button>' +
+    '<p class="scWhy">' + t("sc." + action + "Why") + '</p>' +
+    '<div class="err scWarn" data-a="' + action + '">' + (scIsBareKey(trig) ? t("sc.bareKey") : "") + '</div>' +
+    '</div>';
+}
+function scApply(res){
+  if(!res) return;
+  SCSTATE.profiles = res.profiles;
+  SCSTATE.active = res.active;
+  const p = scActiveProfile();
+  SCSTATE.binds = (p && p.binds) || {};
+  refreshProfileName();
+  renderShortcuts();
+}
+function renderShortcuts(){
+  const body = $("#scBody");
+  if(!body) return;
+  const sc = window.reccheckShortcuts;
+  body.innerHTML = SC_ACTIONS.map(scRow).join("");
+  const sel = $("#scProfile");
+  sel.innerHTML = SCSTATE.profiles.map(p =>
+    '<option value="' + p.id + '"' + (p.id === SCSTATE.active ? " selected" : "") + '>' + escapeHtml(p.name) + '</option>').join("");
+  $("#scDelete").disabled = SCSTATE.profiles.length <= 1;
+  $("#scDelete").textContent = t("sc.delete");
+  body.querySelectorAll(".scBind").forEach(b => b.onclick = async () => {
+    if(b.dataset.busy) return;
+    const action = b.dataset.a;
+    b.dataset.busy = "1";
+    b.textContent = t("sc.press");
+    const warn = body.querySelector('.scWarn[data-a="' + action + '"]');
+    warn.textContent = "";
+    const esc = e => { if(e.key === "Escape"){ e.stopPropagation(); sc.cancel(); } };
+    document.addEventListener("keydown", esc, true);
+    const trig = await sc.detect(action).catch(() => null);
+    document.removeEventListener("keydown", esc, true);
+    delete b.dataset.busy;
+    if(trig) scApply(await sc.get().catch(() => null));
+    else{
+      b.textContent = scTriggerName((SCSTATE.binds || {})[action]);
+      warn.textContent = t("sc.fail");
+    }
+  });
+  body.querySelectorAll(".scClear").forEach(b => b.onclick = async () => {
+    await sc.clear(b.dataset.a).catch(() => {});
+    scApply(await sc.get().catch(() => null));
+  });
+}
+/* inline name editor: mode is "add" or "rename" */
+function scEditName(mode){
+  const wrap = $("#scNameWrap"), input = $("#scName");
+  const sc = window.reccheckShortcuts;
+  const cur = scActiveProfile();
+  wrap.style.display = "";
+  input.value = mode === "rename" ? (cur ? cur.name : "") : "";
+  input.placeholder = t(mode === "rename" ? "sc.renamePrompt" : "sc.addPrompt");
+  input.focus();
+  input.select();
+  const done = async ok => {
+    wrap.style.display = "none";
+    input.onkeydown = null;
+    if(!ok) return;
+    const n = input.value.trim();
+    if(!n) return;
+    scApply(await (mode === "rename" ? sc.profileRename(SCSTATE.active, n) : sc.profileAdd(n)).catch(() => null));
+  };
+  input.onkeydown = e => {
+    if(e.key === "Enter"){ e.preventDefault(); e.stopPropagation(); done(true); }
+    if(e.key === "Escape"){ e.preventDefault(); e.stopPropagation(); done(false); }
+  };
+  $("#scNameOk").onclick = () => done(true);
+  $("#scNameCancel").onclick = () => done(false);
+}
+function openShortcuts(){
+  const sc = window.reccheckShortcuts;
+  if(!sc) return;
+  sc.get().then(st => {
+    if(!st) return;
+    SCSTATE = st;
+    const p = scActiveProfile();
+    SCSTATE.binds = (p && p.binds) || {};
+    openModal(
+      '<h3>' + t("sc.title") + '</h3>' +
+      '<p class="scIntro">' + t("sc.intro") + '</p>' +
+      '<label>' + t("sc.profile") + '</label>' +
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+        '<select id="scProfile" style="flex:1;min-width:130px"></select>' +
+        '<button class="btn small" id="scAdd">' + t("sc.add") + '</button>' +
+        '<button class="btn small" id="scRename">' + t("sc.rename") + '</button>' +
+        '<button class="btn small" id="scDelete">' + t("sc.delete") + '</button>' +
+      '</div>' +
+      '<div id="scNameWrap" style="display:none;margin-top:8px">' +
+        '<div style="display:flex;gap:8px">' +
+          '<input id="scName" maxlength="40" autocomplete="off" style="flex:1">' +
+          '<button class="btn small" id="scNameOk">✓</button>' +
+          '<button class="btn small" id="scNameCancel">✕</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="err" style="color:var(--faint)">' + t("sc.profileHint") + '</div>' +
+      '<div id="scBody"></div>' +
+      (st.available ? "" : '<div class="err">' + t("sc.unavailable") + '</div>') +
+      '<div class="actions"><button class="btn amber" id="scOk">' + t("sc.done") + '</button></div>');
+    renderShortcuts();
+    $("#scProfile").onchange = async e => scApply(await sc.profileSelect(e.target.value).catch(() => null));
+    $("#scAdd").onclick = () => scEditName("add");
+    $("#scRename").onclick = () => scEditName("rename");
+    let armed = false;
+    $("#scDelete").onclick = async () => {           // two-step confirm, no nested modal
+      const cur = scActiveProfile();
+      if(!cur || SCSTATE.profiles.length <= 1) return;
+      if(!armed){ armed = true; $("#scDelete").textContent = t("sc.delSure"); return; }
+      armed = false;
+      scApply(await sc.profileDelete(cur.id).catch(() => null));
+    };
+    $("#scOk").onclick = closeModal;
+  }).catch(() => {});
 }
 function clSorted(){
   const order = {high: 0, med: 1, low: 2};
@@ -3223,6 +3414,11 @@ document.querySelectorAll(".mcatBtn").forEach(b => b.onclick = e => {   // touch
   cat.classList.toggle("open");
 });
 document.addEventListener("click", e => { if(!e.target.closest(".mcat")) document.querySelectorAll(".mcat").forEach(c => c.classList.remove("open")); });
+$("#mcShortcutsBtn").onclick = e => {     // a leaf button, not a dropdown — open the dialog
+  e.stopPropagation();
+  document.querySelectorAll(".mcat").forEach(c => c.classList.remove("open"));
+  openShortcuts();
+};
 $("#mHelp").onclick = () => {
   if(window.reccheckHelp) window.reccheckHelp.open();
   else window.open(ISSUES_URL, "_blank");

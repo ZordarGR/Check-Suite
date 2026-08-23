@@ -25,11 +25,15 @@ contextBridge.exposeInMainWorld("reccheckOverlay", {
   ihotkeySet: (acc) => ipcRenderer.invoke("overlay-ihotkey-set", acc),
   onTick: (cb) => ipcRenderer.on("reccheck-overlay-tick", (_e, id) => cb(id))
 });
-contextBridge.exposeInMainWorld("reccheckTau", {
-  get: () => ipcRenderer.invoke("tau-get"),
-  detect: () => ipcRenderer.invoke("tau-detect"),
-  cancel: () => ipcRenderer.invoke("tau-cancel"),
-  clear: () => ipcRenderer.invoke("tau-clear")
+contextBridge.exposeInMainWorld("reccheckShortcuts", {
+  get: () => ipcRenderer.invoke("sc-get"),
+  detect: (action) => ipcRenderer.invoke("sc-detect", action),
+  cancel: () => ipcRenderer.invoke("sc-cancel"),
+  clear: (action) => ipcRenderer.invoke("sc-clear", action),
+  profileAdd: (name) => ipcRenderer.invoke("sc-profile-add", name),
+  profileRename: (id, name) => ipcRenderer.invoke("sc-profile-rename", id, name),
+  profileDelete: (id) => ipcRenderer.invoke("sc-profile-delete", id),
+  profileSelect: (id) => ipcRenderer.invoke("sc-profile-select", id)
 });
 contextBridge.exposeInMainWorld("reccheckApp", {
   setLang: (l) => ipcRenderer.invoke("app-set-lang", l)
