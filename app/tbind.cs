@@ -9,6 +9,19 @@
 //     message loop via PostThreadMessage, never inside the hook
 //   * the parent watchdog is an independent thread that hard-exits the process,
 //     so the helper dies with RecCheck even if the loop is somehow wedged
+//
+// Design notes (v3 — the layout hop is now synchronous instead of sleep-and-hope):
+//   * v2 posted WM_INPUTLANGCHANGEREQUEST and slept 90 ms before pressing T, then 90 ms
+//     more before hopping back (~180 ms felt latency). v3 SENDS the request with
+//     SendMessageTimeout, which returns the moment the target window has processed it —
+//     the τ lands in single-digit milliseconds on a responsive app.
+//   * every hop is VERIFIED with GetKeyboardLayout(targetThread). If the app ignored the
+//     request, fall back to AttachThreadInput + ActivateKeyboardLayout on its thread;
+//     if even that fails, fall back to the old post-and-wait; last resort is Unicode τ.
+//   * the hop BACK still waits for the keystroke to leave the input queue first
+//     (GetQueueStatus poll while attached, worst-case bounded sleep otherwise) — restoring
+//     the layout before the target translates the key would turn the τ into a plain t.
+//   * the Greek HKL is loaded once and cached, not on every press.
 using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
@@ -23,8 +36,11 @@ static class TBind {
   const uint KEYEVENTF_UNICODE = 0x0004, KEYEVENTF_KEYUP = 0x0002;
   const uint WM_INPUTLANGCHANGEREQUEST = 0x0050;
   const uint KLF_ACTIVATE = 1;
+  const uint SMTO_ABORTIFHUNG = 0x0002;
+  const uint QS_KEY = 0x0001;
   const ushort VK_T = 0x54;
   const char TAU = 'τ';
+  const long GREEK = 0x0408;
 
   delegate IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam);
   [DllImport("user32.dll", SetLastError = true)] static extern IntPtr SetWindowsHookEx(int id, HookProc fn, IntPtr mod, uint tid);
@@ -42,6 +58,10 @@ static class TBind {
   [DllImport("user32.dll")] static extern IntPtr GetKeyboardLayout(uint idThread);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr LoadKeyboardLayout(string klid, uint flags);
   [DllImport("user32.dll")] static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+  [DllImport("user32.dll")] static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, uint flags, uint timeout, out IntPtr result);
+  [DllImport("user32.dll")] static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool attach);
+  [DllImport("user32.dll")] static extern IntPtr ActivateKeyboardLayout(IntPtr hkl, uint flags);
+  [DllImport("user32.dll")] static extern uint GetQueueStatus(uint flags);
   [DllImport("user32.dll")] static extern uint MapVirtualKey(uint code, uint mapType);
 
   [StructLayout(LayoutKind.Sequential)] struct POINT { public int x, y; }
@@ -78,31 +98,74 @@ static class TBind {
     inputs[1].u.ki = new KEYBDINPUT { wVk = vk, wScan = scan, dwFlags = flags | KEYEVENTF_KEYUP, time = 0, dwExtraInfo = IntPtr.Zero };
     SendInput(2, inputs, Marshal.SizeOf(typeof(INPUT)));
   }
+
+  static IntPtr grkCached = IntPtr.Zero;
+  static IntPtr GreekHKL(){
+    if(grkCached == IntPtr.Zero){
+      try{ grkCached = LoadKeyboardLayout("00000408", KLF_ACTIVATE); }catch(Exception){}
+    }
+    return grkCached;
+  }
+  static bool IsGreek(uint tid){ return ((long)GetKeyboardLayout(tid) & 0xFFFF) == GREEK; }
+
+  /* switch the target thread's layout and return only when it has actually changed */
+  static bool HopTo(IntPtr fg, uint tid, IntPtr hkl, bool attached){
+    IntPtr res;
+    if(SendMessageTimeout(fg, WM_INPUTLANGCHANGEREQUEST, IntPtr.Zero, hkl, SMTO_ABORTIFHUNG, 80, out res) != IntPtr.Zero
+       && GetKeyboardLayout(tid) == hkl) return true;
+    if(attached){
+      ActivateKeyboardLayout(hkl, 0);
+      if(GetKeyboardLayout(tid) == hkl) return true;
+    }
+    PostMessage(fg, WM_INPUTLANGCHANGEREQUEST, IntPtr.Zero, hkl);   // old v2 path, last resort
+    for(int i = 0; i < 9; i++){
+      Thread.Sleep(10);
+      if(GetKeyboardLayout(tid) == hkl) return true;
+    }
+    return false;
+  }
+  /* the T we SendInput is TRANSLATED under whatever layout is active when the target
+     pulls it off the queue — never hop back before it has been consumed */
+  static void WaitKeyDrained(bool attached){
+    if(attached){
+      for(int i = 0; i < 12; i++){                 // queues are shared while attached,
+        if((GetQueueStatus(QS_KEY) >> 16) == 0) return;   // so we can see the key leave
+        Thread.Sleep(5);
+      }
+      return;
+    }
+    Thread.Sleep(90);                              // can't observe the queue — v2 delay
+  }
   /* a real press of the T KEY under the GREEK layout — protel and friends see a genuine
      keystroke (WM_KEYDOWN VK_T + WM_CHAR 'τ'), not a pasted character. If the foreground
      window is on another layout, hop it to Greek for the press and hop it right back. */
   static void SendGreekT(){
     IntPtr fg = GetForegroundWindow();
+    uint tid = 0;
     IntPtr cur = IntPtr.Zero;
     if(fg != IntPtr.Zero){
       uint pid;
-      cur = GetKeyboardLayout(GetWindowThreadProcessId(fg, out pid));
+      tid = GetWindowThreadProcessId(fg, out pid);
+      cur = GetKeyboardLayout(tid);
     }
-    bool isGreek = ((long)cur & 0xFFFF) == 0x0408;
     ushort sc = (ushort)MapVirtualKey(VK_T, 0);
-    if(isGreek){ PressKeys(VK_T, sc, 0); return; }
-    IntPtr grk = IntPtr.Zero;
-    try{ grk = LoadKeyboardLayout("00000408", KLF_ACTIVATE); }catch(Exception){}
+    if(((long)cur & 0xFFFF) == GREEK){ PressKeys(VK_T, sc, 0); return; }
+    IntPtr grk = GreekHKL();
     if(fg == IntPtr.Zero || grk == IntPtr.Zero){
       PressKeys(0, (ushort)TAU, KEYEVENTF_UNICODE);       // no Greek layout installed — type τ as text
       return;
     }
-    PostMessage(fg, WM_INPUTLANGCHANGEREQUEST, IntPtr.Zero, grk);
-    Thread.Sleep(90);                                      // let the app process the layout switch
-    PressKeys(VK_T, sc, 0);
-    if(cur != IntPtr.Zero){
-      Thread.Sleep(90);
-      PostMessage(fg, WM_INPUTLANGCHANGEREQUEST, IntPtr.Zero, cur);   // put the user's layout back
+    bool attached = AttachThreadInput(GetCurrentThreadId(), tid, true);
+    try{
+      if(!HopTo(fg, tid, grk, attached)){
+        PressKeys(0, (ushort)TAU, KEYEVENTF_UNICODE);     // app refuses to hop — best effort
+        return;
+      }
+      PressKeys(VK_T, sc, 0);
+      WaitKeyDrained(attached);
+      if(cur != IntPtr.Zero) HopTo(fg, tid, cur, attached);   // put the user's layout back
+    }finally{
+      if(attached) AttachThreadInput(GetCurrentThreadId(), tid, false);
     }
   }
   static readonly object sendLock = new object();
