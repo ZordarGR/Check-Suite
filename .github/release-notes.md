@@ -1,25 +1,17 @@
-## RecCheck 1.12.0 — Windows
+## RecCheck 1.13.0 — Windows
 
 Nightly POS receipt audit for the protel checkcharge1 report (.oxps). Everything runs locally — no data leaves the machine.
 
-### New in 1.12.0
+### New in 1.13.0
 
-**Protel Shortcuts — its own menu.** The keybinding setup has moved out of *Customize overlay* (where it never belonged) into a **PROTEL SHORTCUTS** button on the home screen. Each shortcut now explains what it sends and *why it matters*, so anyone covering a shift can read the screen instead of being told.
+**Test the τ shortcut, and find out why it fails.** Under *PROTEL SHORTCUTS* there is now a **Test the τ shortcut** button. Press it, click into protel, put the cursor where the τ should appear, and after a five-second countdown RecCheck runs the real shortcut and prints exactly what it observed: which window had focus, which thread owned it, what keyboard layout that thread was on, which Greek layout was loaded, whether it could attach to protel's input, and which of the layout-switch attempts succeeded or failed. There is a **Copy report** button next to it.
 
-**Alt + F4 can be bound.** Closes the receipt preview that pops up after every invoice is generated — one button instead of reaching for the mouse and finding the ✕ each time. It is sent as a real Alt+F4; any modifier you happen to be holding is released first so the combination arrives clean.
-
-**Any key can be bound, not just a mouse button.** Side buttons are still the fastest option, but a keyboard combination such as `Ctrl+Alt+T` now works just as well — so colleagues without a multi-button mouse can work at the same speed. A warning appears if you bind a bare key, because that key is then swallowed everywhere in Windows while RecCheck is running.
-
-**Profiles.** Create, rename and delete profiles freely; each keeps its own bindings, so handing the machine to whoever is covering your night off no longer means losing your setup. The home screen greets the active profile by name. Your existing binding is carried over automatically into a first profile.
-
-**Home screen tidy-up.** The greeting now lives in the title, so the line underneath just states the working night and the clock.
+This exists because the shortcut can fail for reasons that are invisible from the outside — the report says which one, instead of leaving it at "nothing happened".
 
 ### Fixes
 
-- **The updater could get stuck checking forever.** If an update was already waiting, an early return left the "checking" flag raised and every later check — automatic or from the tray — was silently ignored until the app restarted.
-- **A vanishing installer no longer re-downloads without end.** If something removed the downloaded setup between checks (an antivirus quarantining an unsigned 90 MB file is the usual cause), the app would fetch all 90 MB again on every launch, forever. It now gives up after a few attempts and offers the release page instead.
-- **The Greek layout can no longer be left switched on.** If the τ shortcut failed midway, the layout restore could be skipped and every program was left typing Greek. The restore now always runs.
-- **A rare race could still produce a plain `t`.** If the target window disappeared at the moment the shortcut fired, the layout check could read *this helper's* layout instead of the target's and report a successful hop that never happened.
+- **The layout check compared the wrong thing.** A keyboard layout handle is a device handle combined with a language id. The hop verified success by comparing whole handles, so if Windows handed back a Greek layout whose device handle differed from the one the target window ended up using — a second Greek layout, or one Windows had re-created — a hop that had genuinely worked was recorded as failed, and the shortcut fell back to inserting τ as plain text, which protel ignores. It now compares the language, which is the part that decides what the T key produces.
+- **The layout request went to the wrong window.** It was always sent to the top-level window, but on a dialog-heavy program the window holding keyboard focus is a child control. The request now goes to the focused control first and to the top-level window second, and it waits slightly longer for an answer.
 
 ### Install
 
