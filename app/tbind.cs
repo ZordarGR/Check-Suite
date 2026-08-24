@@ -4,6 +4,9 @@
 //          or "KEY:<mods>-<vk>", exits
 //   rc-tbind.exe bind <parentPid> <trigger>=<action> [<trigger>=<action> ...]
 //       -> swallows each trigger system-wide and performs its action instead
+//   rc-tbind.exe diag <parentPid> [delayMs]
+//       -> waits, then runs the tau shortcut against the foreground window and prints
+//          every step it observed, so a machine where it fails can say why
 //
 // Triggers: m3 = middle, m4 = X1 (Back), m5 = X2 (Forward)
 //           k<mods>-<vk>   mods bitmask: 1 = Ctrl, 2 = Alt, 4 = Shift, 8 = Win
@@ -43,6 +46,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 
 static class TBind {
@@ -89,8 +93,18 @@ static class TBind {
   [DllImport("user32.dll")] static extern uint GetQueueStatus(uint flags);
   [DllImport("user32.dll")] static extern uint MapVirtualKey(uint code, uint mapType);
   [DllImport("user32.dll")] static extern short GetAsyncKeyState(int vk);
+  [DllImport("user32.dll")] static extern bool GetGUIThreadInfo(uint idThread, ref GUITHREADINFO gui);
+  [DllImport("user32.dll")] static extern int GetKeyboardLayoutList(int n, [Out] IntPtr[] list);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr hWnd, StringBuilder s, int n);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr hWnd, StringBuilder s, int n);
 
   [StructLayout(LayoutKind.Sequential)] struct POINT { public int x, y; }
+  [StructLayout(LayoutKind.Sequential)] struct RECT { public int left, top, right, bottom; }
+  [StructLayout(LayoutKind.Sequential)] struct GUITHREADINFO {
+    public int cbSize; public uint flags;
+    public IntPtr hwndActive, hwndFocus, hwndCapture, hwndMenuOwner, hwndMoveSize, hwndCaret;
+    public RECT rcCaret;
+  }
   [StructLayout(LayoutKind.Sequential)] struct MSG { public IntPtr hwnd; public uint message; public IntPtr wParam, lParam; public uint time; public POINT pt; }
   [StructLayout(LayoutKind.Sequential)] struct MSLLHOOKSTRUCT { public POINT pt; public uint mouseData, flags, time; public IntPtr extra; }
   [StructLayout(LayoutKind.Sequential)] struct KBDLLHOOKSTRUCT { public uint vkCode, scanCode, flags, time; public IntPtr extra; }
@@ -147,6 +161,33 @@ static class TBind {
   }
   static void PressTau(){ PressKeys(0, (ushort)TAU, KEYEVENTF_UNICODE); }
 
+  /* When DIAG is non-null every step of the hop records what it saw, so a machine
+     where this does not work can report the reason instead of failing silently. */
+  static StringBuilder DIAG = null;
+  static void D(string line){ if(DIAG != null) DIAG.AppendLine(line); }
+  static string Hex(IntPtr p){ return "0x" + ((long)p).ToString("X8"); }
+
+  /* An HKL is (device handle << 16) | language id. Two HKLs for the same language can
+     carry different device handles — a second Greek layout, or one Windows re-created —
+     so comparing whole handles can report a hop as failed when it actually worked.
+     Only the language id is meaningful here. */
+  static bool SameLang(IntPtr a, IntPtr b){ return ((long)a & 0xFFFF) == ((long)b & 0xFFFF); }
+  static bool ThreadHasLang(uint tid, IntPtr hkl){ return SameLang(GetKeyboardLayout(tid), hkl); }
+  /* the control that actually has keyboard focus inside the target thread */
+  static IntPtr FocusedOf(uint tid){
+    GUITHREADINFO gi = new GUITHREADINFO();
+    gi.cbSize = Marshal.SizeOf(typeof(GUITHREADINFO));
+    try{ if(GetGUIThreadInfo(tid, ref gi)) return gi.hwndFocus; }catch(Exception){}
+    return IntPtr.Zero;
+  }
+  static string Describe(IntPtr hwnd){
+    if(hwnd == IntPtr.Zero) return "(none)";
+    StringBuilder cls = new StringBuilder(128), txt = new StringBuilder(128);
+    try{ GetClassName(hwnd, cls, cls.Capacity); }catch(Exception){}
+    try{ GetWindowText(hwnd, txt, txt.Capacity); }catch(Exception){}
+    return Hex(hwnd) + " class=\"" + cls + "\" title=\"" + txt + "\"";
+  }
+
   static IntPtr grkCached = IntPtr.Zero;
   static IntPtr GreekHKL(){
     if(grkCached == IntPtr.Zero){
@@ -157,18 +198,29 @@ static class TBind {
 
   /* switch the target thread's layout and return only when it has actually changed */
   static bool HopTo(IntPtr fg, uint tid, IntPtr hkl, bool attached){
+    if(ThreadHasLang(tid, hkl)){ D("    already on the target layout"); return true; }
     IntPtr res;
-    if(SendMessageTimeout(fg, WM_INPUTLANGCHANGEREQUEST, IntPtr.Zero, hkl, SMTO_ABORTIFHUNG, 80, out res) != IntPtr.Zero
-       && GetKeyboardLayout(tid) == hkl) return true;
+    IntPtr focus = FocusedOf(tid);
+    /* The request has to reach the window that owns keyboard focus. On a dialog-heavy
+       app that is a child control, not the top-level window the old code always used. */
+    IntPtr[] targets = (focus != IntPtr.Zero && focus != fg) ? new IntPtr[]{focus, fg} : new IntPtr[]{fg};
+    foreach(IntPtr target in targets){
+      IntPtr r = SendMessageTimeout(target, WM_INPUTLANGCHANGEREQUEST, IntPtr.Zero, hkl, SMTO_ABORTIFHUNG, 120, out res);
+      D("    SendMessageTimeout -> " + Describe(target) + " returned=" + (r != IntPtr.Zero) +
+        " layout now " + Hex(GetKeyboardLayout(tid)));
+      if(ThreadHasLang(tid, hkl)) return true;
+    }
     if(attached){
       ActivateKeyboardLayout(hkl, 0);
-      if(GetKeyboardLayout(tid) == hkl) return true;
-    }
+      D("    ActivateKeyboardLayout (attached) layout now " + Hex(GetKeyboardLayout(tid)));
+      if(ThreadHasLang(tid, hkl)) return true;
+    }else D("    AttachThreadInput had failed, so ActivateKeyboardLayout was skipped");
     PostMessage(fg, WM_INPUTLANGCHANGEREQUEST, IntPtr.Zero, hkl);   // old v2 path, last resort
     for(int i = 0; i < 9; i++){
       Thread.Sleep(10);
-      if(GetKeyboardLayout(tid) == hkl) return true;
+      if(ThreadHasLang(tid, hkl)){ D("    PostMessage worked after " + ((i + 1) * 10) + " ms"); return true; }
     }
+    D("    every attempt failed; layout is still " + Hex(GetKeyboardLayout(tid)));
     return false;
   }
   /* the T we SendInput is TRANSLATED under whatever layout is active when the target
@@ -188,29 +240,47 @@ static class TBind {
      window is on another layout, hop it to Greek for the press and hop it right back. */
   static void SendGreekT(){
     IntPtr fg = GetForegroundWindow();
-    if(fg == IntPtr.Zero){ PressTau(); return; }
+    if(fg == IntPtr.Zero){ D("  no foreground window -> Unicode fallback"); PressTau(); return; }
     uint pid;
     uint tid = GetWindowThreadProcessId(fg, out pid);
+    D("  foreground " + Describe(fg));
+    D("  owning thread=" + tid + " pid=" + pid + " (" + ProcName(pid) + ")");
+    D("  focused control " + Describe(FocusedOf(tid)));
     // tid 0 would make GetKeyboardLayout report OUR thread — already Greek from
     // LoadKeyboardLayout(KLF_ACTIVATE) — and every hop check would pass bogusly.
-    if(tid == 0){ PressTau(); return; }
+    if(tid == 0){ D("  thread id 0 -> Unicode fallback"); PressTau(); return; }
     IntPtr cur = GetKeyboardLayout(tid);
     ushort sc = (ushort)MapVirtualKey(VK_T, 0);
-    if(((long)cur & 0xFFFF) == GREEK){ PressKeys(VK_T, sc, 0); return; }
+    D("  target layout " + Hex(cur) + "   this helper's layout " + Hex(GetKeyboardLayout(0)));
+    D("  T scan code 0x" + sc.ToString("X2"));
+    if(((long)cur & 0xFFFF) == GREEK){
+      D("  target is ALREADY Greek -> pressing T directly (this is the path that works for you)");
+      PressKeys(VK_T, sc, 0); return;
+    }
     IntPtr grk = GreekHKL();
-    if(grk == IntPtr.Zero){ PressTau(); return; }        // no Greek layout installed
+    D("  LoadKeyboardLayout(00000408) -> " + Hex(grk));
+    D("  installed layouts: " + LayoutList());
+    if(grk == IntPtr.Zero){ D("  no Greek layout -> Unicode fallback"); PressTau(); return; }
     bool attached = AttachThreadInput(GetCurrentThreadId(), tid, true);
+    D("  AttachThreadInput -> " + attached + (attached ? "" : "   (blocked: different desktop, or protel runs elevated and RecCheck does not)"));
     bool hopped = false;
     try{
-      if(!HopTo(fg, tid, grk, attached)){ PressTau(); return; }   // app refuses to hop
+      D("  hop attempts:");
+      if(!HopTo(fg, tid, grk, attached)){
+        D("  HOP FAILED -> falling back to injecting Unicode tau, which protel appears to ignore");
+        PressTau(); return;
+      }
       hopped = true;
+      D("  hop OK, layout now " + Hex(GetKeyboardLayout(tid)) + " -> pressing VK_T");
       PressKeys(VK_T, sc, 0);
       WaitKeyDrained(attached);
     }finally{
       // the restore must survive an exception on the press — otherwise the user is
       // left typing Greek in every application until they notice and switch back
       if(hopped && cur != IntPtr.Zero){
+        D("  restoring the original layout:");
         try{ HopTo(fg, tid, cur, attached); }catch(Exception){}
+        D("  layout after restore " + Hex(GetKeyboardLayout(tid)));
       }
       if(attached) AttachThreadInput(GetCurrentThreadId(), tid, false);
     }
@@ -232,6 +302,25 @@ static class TBind {
     KeyEvent(VK_F4, scF4, 0);
     KeyEvent(VK_F4, scF4, KEYEVENTF_KEYUP);
     if(!altHeld) KeyEvent(VK_MENU, scAlt, KEYEVENTF_KEYUP);
+  }
+
+  static string ProcName(uint pid){
+    try{ return Process.GetProcessById((int)pid).ProcessName + ".exe"; }catch(Exception){ return "?"; }
+  }
+  static string LayoutList(){
+    try{
+      int n = GetKeyboardLayoutList(0, null);
+      if(n <= 0) return "(none)";
+      IntPtr[] list = new IntPtr[n];
+      GetKeyboardLayoutList(n, list);
+      StringBuilder sb = new StringBuilder();
+      for(int i = 0; i < n; i++){
+        if(i > 0) sb.Append(", ");
+        sb.Append(Hex(list[i]));
+        if(((long)list[i] & 0xFFFF) == GREEK) sb.Append(" <- Greek");
+      }
+      return sb.ToString();
+    }catch(Exception e){ return "(failed: " + e.Message + ")"; }
   }
 
   static readonly object sendLock = new object();
@@ -328,6 +417,21 @@ static class TBind {
     if(args.Length >= 2 && args[0] == "detect"){
       mode = 1;
       if(!int.TryParse(args[1], out parentPid)) return 2;
+    }else if(args.Length >= 2 && args[0] == "diag"){
+      /* Run the real shortcut against whatever the user brings to the foreground and
+         print every step. No hooks are installed; this only observes and reports. */
+      if(!int.TryParse(args[1], out parentPid)) return 2;
+      int wait = 5000;
+      if(args.Length >= 3) int.TryParse(args[2], out wait);
+      DIAG = new StringBuilder();
+      D("rc-tbind v5 diagnostic");
+      D("waited " + wait + " ms for you to bring the target window forward");
+      Thread.Sleep(wait);
+      try{ SendGreekT(); }catch(Exception e){ D("  EXCEPTION: " + e.Message); }
+      D("");
+      D("If the hop failed above, the layout request is being refused by that window.");
+      try{ Console.Out.Write(DIAG.ToString()); Console.Out.Flush(); }catch(Exception){}
+      return 0;
     }else if(args.Length >= 3 && args[0] == "bind"){
       mode = 2;
       if(!int.TryParse(args[1], out parentPid)) return 2;

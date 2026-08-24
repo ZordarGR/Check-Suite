@@ -1,11 +1,11 @@
 {
-  "version": "1.12.2",
-  "type": "html",
-  "engine": "1.12.0",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.12.0/RecCheck-Setup.exe",
-  "setupSha256": "eaadd53e097e4d568fc75587fd11e0671d314a4159c092a7b4b48cb39f51e521",
+  "version": "1.13.0",
+  "type": "full",
+  "engine": "1.13.0",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.13.0/RecCheck-Setup.exe",
+  "setupSha256": "4c3de41544120d6476ccaa38f59795dcec9319b07250395521fbd317f1b4dc62",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "2dceec43016e948b44aab0f00ce5e9df4b399704554a27b6be0767c444cbce76",
-  "notes": "Edit checklist: ▲ ▼ arrows move a task up or down, so reordering no longer means deleting and re-adding it."
+  "sha256": "c08e6fcc750422953df02fae9d73e36860b6a1c7ba35b3a41070a48eda096ca3",
+  "notes": "PROTEL SHORTCUTS can now test the τ shortcut and report exactly why it fails, plus two fixes to the keyboard layout hop."
 }

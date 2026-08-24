@@ -416,6 +416,21 @@ ipcMain.handle("sc-detect", (_e, action) => new Promise(res => {
     setTimeout(() => { try{ child.kill(); }catch(e){} }, 15000);
   }catch(e){ finish(null); }
 }));
+/* Run the shortcut against whatever the user brings forward and hand back the
+   helper's own step-by-step report. Observes only — installs no hooks. */
+ipcMain.handle("sc-diag", (_e, delayMs) => new Promise(res => {
+  if(process.platform !== "win32" || !tauPath()){ res(null); return; }
+  const wait = Math.max(1000, Math.min(30000, +delayMs || 5000));
+  let out = "", done = false;
+  const finish = () => { if(done) return; done = true; res(out || null); };
+  try{
+    const child = spawn(tauPath(), ["diag", String(process.pid), String(wait)], {windowsHide: true});
+    child.stdout.on("data", d => { out += d; });
+    child.on("exit", finish);
+    child.on("error", finish);
+    setTimeout(() => { try{ child.kill(); }catch(e){} finish(); }, wait + 20000);
+  }catch(e){ finish(); }
+}));
 ipcMain.handle("sc-cancel", () => { try{ if(TAU_DETECT) TAU_DETECT.kill(); }catch(e){} return true; });
 ipcMain.handle("sc-clear", (_e, action) => {
   try{

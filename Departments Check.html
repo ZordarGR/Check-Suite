@@ -81,6 +81,9 @@ header .spacer{flex:1}
 .scBind{width:100%;font-family:var(--mono);letter-spacing:.08em}
 .scWhy{color:var(--faint);font-size:11.5px;line-height:1.55;margin:9px 0 0}
 .scWarn:empty{display:none}
+#scDiag{margin:10px 0 0;padding:10px 12px;max-height:230px;overflow:auto;background:#0b1017;
+  border:1px solid var(--line);border-radius:8px;font-family:var(--mono);font-size:10.5px;
+  line-height:1.5;color:#b9c6d8;white-space:pre-wrap;overflow-wrap:anywhere}
 #checklist{max-width:640px;margin:0 auto 22px;background:var(--panel);border:1px solid var(--line);border-radius:16px;
   padding:16px 18px;text-align:left}
 #clHead{display:flex;align-items:center;gap:10px;margin-bottom:10px}
@@ -1136,7 +1139,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.12.2";
+const APP_VERSION = "1.13.0";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1183,6 +1186,11 @@ en: {
   "sc.done": "Done",
   "sc.keyMid": "Middle button", "sc.keyBack": "Side button — Back", "sc.keyFwd": "Side button — Forward",
   "sc.welcome": "Welcome, {n}", "sc.delSure": "Sure?",
+  "sc.test": "Test the τ shortcut",
+  "sc.testHint": "Press Test, then click into protel and put the cursor where the τ should appear. After the countdown RecCheck runs the shortcut and reports every step — send the result back if it still fails.",
+  "sc.testCount": "click into protel now… {n}",
+  "sc.testFail": "The test could not run — the helper did not report anything.",
+  "sc.testCopy": "Copy report",
   "pv.title": "PRINT PREVIEW — CORRECTIONS", "pv.print": "Print", "pv.cancel": "Cancel",
   "ov.hkBusy": "That combination is held by another program — pick a different one.",
   "ov.hkNeedMod": "Use at least one of Ctrl / Alt / Shift with a key.", "cl.tierLow": "low importance", "cl.tierMed": "medium importance", "cl.tierHigh": "extremely important",
@@ -1316,6 +1324,11 @@ gr: {
   "sc.done": "Έτοιμο",
   "sc.keyMid": "Μεσαίο πλήκτρο", "sc.keyBack": "Πλαϊνό πλήκτρο — Πίσω", "sc.keyFwd": "Πλαϊνό πλήκτρο — Μπροστά",
   "sc.welcome": "Καλώς ήρθες, {n}", "sc.delSure": "Σίγουρα;",
+  "sc.test": "Δοκιμή της συντόμευσης τ",
+  "sc.testHint": "Πάτα Δοκιμή, μετά κάνε κλικ στο protel και βάλε τον κέρσορα εκεί που πρέπει να εμφανιστεί το τ. Μετά την αντίστροφη μέτρηση το RecCheck εκτελεί τη συντόμευση και αναφέρει κάθε βήμα — στείλε το αποτέλεσμα αν αποτύχει πάλι.",
+  "sc.testCount": "κάνε κλικ στο protel τώρα… {n}",
+  "sc.testFail": "Η δοκιμή δεν έτρεξε — ο βοηθός δεν ανέφερε τίποτα.",
+  "sc.testCopy": "Αντιγραφή αναφοράς",
   "ov.mbPress": "πατήστε τώρα το πλήκτρο του ποντικιού… (Esc ακύρωση)", "ov.mbNone": "δεν έχει οριστεί",
   "ov.mbMid": "Μεσαίο πλήκτρο", "ov.mbBack": "Πλαϊνό — Back", "ov.mbFwd": "Πλαϊνό — Forward",
   "ov.mbFail": "Δεν εντοπίστηκε πλήκτρο — ξαναδοκιμάστε (δένονται μόνο το μεσαίο και τα πλαϊνά).",
@@ -2046,6 +2059,12 @@ function openShortcuts(){
       '</div>' +
       '<div class="err" style="color:var(--faint)">' + t("sc.profileHint") + '</div>' +
       '<div id="scBody"></div>' +
+      '<div style="display:flex;gap:8px;align-items:center;margin-top:16px">' +
+        '<button class="btn" id="scTest" style="flex:1">' + t("sc.test") + '</button>' +
+        '<button class="btn small" id="scCopy" style="display:none">' + t("sc.testCopy") + '</button>' +
+      '</div>' +
+      '<div class="err" style="color:var(--faint)">' + t("sc.testHint") + '</div>' +
+      '<pre id="scDiag" style="display:none"></pre>' +
       (st.available ? "" : '<div class="err">' + t("sc.unavailable") + '</div>') +
       '<div class="actions"><button class="btn amber" id="scOk">' + t("sc.done") + '</button></div>');
     renderShortcuts();
@@ -2059,6 +2078,26 @@ function openShortcuts(){
       if(!armed){ armed = true; $("#scDelete").textContent = t("sc.delSure"); return; }
       armed = false;
       scApply(await sc.profileDelete(cur.id).catch(() => null));
+    };
+    $("#scTest").onclick = async () => {
+      const b = $("#scTest"), pre = $("#scDiag"), copy = $("#scCopy");
+      if(b.dataset.busy) return;
+      b.dataset.busy = "1";
+      pre.style.display = "none";
+      copy.style.display = "none";
+      let n = 5;
+      b.textContent = t("sc.testCount", {n: n});
+      const iv = setInterval(() => { n--; if(n > 0) b.textContent = t("sc.testCount", {n: n}); }, 1000);
+      const report = await sc.diag(5000).catch(() => null);
+      clearInterval(iv);
+      delete b.dataset.busy;
+      b.textContent = t("sc.test");
+      pre.textContent = report || t("sc.testFail");
+      pre.style.display = "";
+      if(report){
+        copy.style.display = "";
+        copy.onclick = () => { try{ navigator.clipboard.writeText(report); }catch(e){} };
+      }
     };
     $("#scOk").onclick = closeModal;
   }).catch(() => {});
