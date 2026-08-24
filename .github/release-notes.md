@@ -1,17 +1,22 @@
-## RecCheck 1.13.0 — Windows
+## RecCheck 1.14.0 — Windows
 
 Nightly POS receipt audit for the protel checkcharge1 report (.oxps). Everything runs locally — no data leaves the machine.
 
-### New in 1.13.0
+### New in 1.14.0
 
-**Test the τ shortcut, and find out why it fails.** Under *PROTEL SHORTCUTS* there is now a **Test the τ shortcut** button. Press it, click into protel, put the cursor where the τ should appear, and after a five-second countdown RecCheck runs the real shortcut and prints exactly what it observed: which window had focus, which thread owned it, what keyboard layout that thread was on, which Greek layout was loaded, whether it could attach to protel's input, and which of the layout-switch attempts succeeded or failed. There is a **Copy report** button next to it.
+**The overlay finishes the night for you.** Tick the last task and the overlay fills green from the bottom up, lands a large white tick, and puts itself away for the rest of the night. At 07:00 the ticks clear and it comes straight back — as does unticking anything before then.
 
-This exists because the shortcut can fail for reasons that are invisible from the outside — the report says which one, instead of leaving it at "nothing happened".
+While that animation plays the overlay never catches the mouse, even if the last task was ticked on the overlay itself in interact mode. protel stays clickable underneath throughout.
+
+**Asking for a finished overlay tells you so.** Once it has put itself away, the toggle shortcut briefly shows *All tasks are done for tonight* rather than appearing to do nothing. Under *Customize overlay* there is a **Remind me when the night is already finished** switch — turn it off and the toggle behaves like an ordinary on/off instead, so nobody who dislikes the interruption has to live with it.
+
+Summoning the overlay with the tick shortcut still works on a finished night, so a task can be unticked; leaving tick mode puts it away again.
+
+**The τ shortcut works, so its Test button is gone.** *PROTEL SHORTCUTS* is back to just the bindings. The diagnostic itself is still in the helper — if the shortcut ever misbehaves again the button can be restored in a small update, with no reinstall.
 
 ### Fixes
 
-- **The layout check compared the wrong thing.** A keyboard layout handle is a device handle combined with a language id. The hop verified success by comparing whole handles, so if Windows handed back a Greek layout whose device handle differed from the one the target window ended up using — a second Greek layout, or one Windows had re-created — a hop that had genuinely worked was recorded as failed, and the shortcut fell back to inserting τ as plain text, which protel ignores. It now compares the language, which is the part that decides what the T key produces.
-- **The layout request went to the wrong window.** It was always sent to the top-level window, but on a dialog-heavy program the window holding keyboard focus is a child control. The request now goes to the focused control first and to the top-level window second, and it waits slightly longer for an answer.
+- **Update checks could see a stale version list.** The update manifest is cached for five minutes at each of GitHub's regional edges, so a freshly published version could stay invisible in one country while already live in another — the app would report "you are up to date" when it was not. Each check now forces a fresh read instead of accepting whatever that region had cached.
 
 ### Install
 

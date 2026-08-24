@@ -81,9 +81,7 @@ header .spacer{flex:1}
 .scBind{width:100%;font-family:var(--mono);letter-spacing:.08em}
 .scWhy{color:var(--faint);font-size:11.5px;line-height:1.55;margin:9px 0 0}
 .scWarn:empty{display:none}
-#scDiag{margin:10px 0 0;padding:10px 12px;max-height:230px;overflow:auto;background:#0b1017;
-  border:1px solid var(--line);border-radius:8px;font-family:var(--mono);font-size:10.5px;
-  line-height:1.5;color:#b9c6d8;white-space:pre-wrap;overflow-wrap:anywhere}
+
 #checklist{max-width:640px;margin:0 auto 22px;background:var(--panel);border:1px solid var(--line);border-radius:16px;
   padding:16px 18px;text-align:left}
 #clHead{display:flex;align-items:center;gap:10px;margin-bottom:10px}
@@ -1139,7 +1137,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.13.0";
+const APP_VERSION = "1.14.0";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1165,6 +1163,8 @@ en: {
   "ov.reset": "Reset to defaults", "ov.ok": "Done", "ov.hint": "changes apply live while the overlay is on",
   "ov.hk": "Global shortcut (toggles the overlay from anywhere)", "ov.hkPress": "press the new combination… (Esc cancels)",
   "ov.hk2": "Tick shortcut (focuses the overlay — click tasks to tick them, Esc leaves)",
+  "ov.doneMsg": "Remind me when the night is already finished",
+  "ov.doneMsgSub": "the overlay puts itself away once every task is ticked — with this on, asking for it back says so instead of doing nothing",
   "ov.mbNone": "not set",
   "ov.mbMid": "Middle button", "ov.mbBack": "Side button — Back", "ov.mbFwd": "Side button — Forward",
   "sc.menu": "PROTEL SHORTCUTS",
@@ -1305,6 +1305,8 @@ gr: {
   "ov.reset": "Επαναφορά προεπιλογών", "ov.ok": "Έτοιμο", "ov.hint": "οι αλλαγές εφαρμόζονται ζωντανά όσο η επικάλυψη είναι ανοιχτή",
   "ov.hk": "Καθολική συντόμευση (ανοιγοκλείνει την επικάλυψη από παντού)", "ov.hkPress": "πατήστε τον νέο συνδυασμό… (Esc ακύρωση)",
   "ov.hk2": "Συντόμευση τικ (φέρνει την επικάλυψη σε εστίαση — κλικ στις εργασίες για ✓, Esc για έξοδο)",
+  "ov.doneMsg": "Υπενθύμιση όταν η βραδιά έχει ήδη ολοκληρωθεί",
+  "ov.doneMsgSub": "η επικάλυψη αποσύρεται μόλις τικαριστούν όλες οι εργασίες — με αυτό ενεργό, αν τη ζητήσεις ξανά σου το λέει αντί να μη γίνεται τίποτα",
   "sc.menu": "ΣΥΝΤΟΜΕΥΣΕΙΣ PROTEL",
   "sc.title": "ΣΥΝΤΟΜΕΥΣΕΙΣ PROTEL",
   "sc.intro": "Αντιστοίχισε ένα πλαϊνό πλήκτρο του ποντικιού — ή οποιοδήποτε πλήκτρο — στα δύο πράγματα που κάνει ξανά και ξανά η νυχτερινή βάρδια. Δουλεύει παντού στα Windows, όχι μόνο μέσα στο RecCheck.",
@@ -1795,7 +1797,7 @@ function renderChecklist(){
   }
 }
 let OVON = false;
-const OVDEF = {pos: "tr", bg: 0, txt: 50, size: 14, font: "segoe", bold: true};
+const OVDEF = {pos: "tr", bg: 0, txt: 50, size: 14, font: "segoe", bold: true, doneMsg: true};
 let OVCFG = (function(){
   try{ return Object.assign({}, OVDEF, JSON.parse(localStorage.getItem("reccheck_overlay_cfg") || "{}")); }
   catch(e){ return Object.assign({}, OVDEF); }
@@ -1822,6 +1824,10 @@ function openOverlaySettings(){
     <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer">
       <input type="checkbox" id="ovBold" style="width:17px;height:17px;accent-color:var(--amber)"${OVCFG.bold ? " checked" : ""}> ${t("ov.bold")}
     </label>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer">
+      <input type="checkbox" id="ovDoneMsg" style="width:17px;height:17px;accent-color:var(--amber)"${OVCFG.doneMsg === false ? "" : " checked"}> ${t("ov.doneMsg")}
+    </label>
+    <div class="err" style="color:var(--faint);margin-top:2px">${t("ov.doneMsgSub")}</div>
     <label>${t("ov.hk")}</label>
     <button class="btn" id="ovHk" style="width:100%;font-family:var(--mono);letter-spacing:.08em">…</button>
     <div class="err" id="ovHkErr"></div>
@@ -1843,6 +1849,7 @@ function openOverlaySettings(){
   $("#ovSz").oninput = e => { OVCFG.size = +e.target.value; $("#ovSzV").textContent = OVCFG.size + "px"; apply(); };
   $("#ovFont").onchange = e => { OVCFG.font = e.target.value; apply(); };
   $("#ovBold").onchange = e => { OVCFG.bold = e.target.checked; apply(); };
+  $("#ovDoneMsg").onchange = e => { OVCFG.doneMsg = e.target.checked; apply(); };
   $("#ovReset").onclick = () => { OVCFG = Object.assign({}, OVDEF); apply(); closeModal(); openOverlaySettings(); };
   $("#ovOk").onclick = closeModal;
 
@@ -2059,12 +2066,6 @@ function openShortcuts(){
       '</div>' +
       '<div class="err" style="color:var(--faint)">' + t("sc.profileHint") + '</div>' +
       '<div id="scBody"></div>' +
-      '<div style="display:flex;gap:8px;align-items:center;margin-top:16px">' +
-        '<button class="btn" id="scTest" style="flex:1">' + t("sc.test") + '</button>' +
-        '<button class="btn small" id="scCopy" style="display:none">' + t("sc.testCopy") + '</button>' +
-      '</div>' +
-      '<div class="err" style="color:var(--faint)">' + t("sc.testHint") + '</div>' +
-      '<pre id="scDiag" style="display:none"></pre>' +
       (st.available ? "" : '<div class="err">' + t("sc.unavailable") + '</div>') +
       '<div class="actions"><button class="btn amber" id="scOk">' + t("sc.done") + '</button></div>');
     renderShortcuts();
@@ -2078,26 +2079,6 @@ function openShortcuts(){
       if(!armed){ armed = true; $("#scDelete").textContent = t("sc.delSure"); return; }
       armed = false;
       scApply(await sc.profileDelete(cur.id).catch(() => null));
-    };
-    $("#scTest").onclick = async () => {
-      const b = $("#scTest"), pre = $("#scDiag"), copy = $("#scCopy");
-      if(b.dataset.busy) return;
-      b.dataset.busy = "1";
-      pre.style.display = "none";
-      copy.style.display = "none";
-      let n = 5;
-      b.textContent = t("sc.testCount", {n: n});
-      const iv = setInterval(() => { n--; if(n > 0) b.textContent = t("sc.testCount", {n: n}); }, 1000);
-      const report = await sc.diag(5000).catch(() => null);
-      clearInterval(iv);
-      delete b.dataset.busy;
-      b.textContent = t("sc.test");
-      pre.textContent = report || t("sc.testFail");
-      pre.style.display = "";
-      if(report){
-        copy.style.display = "";
-        copy.onclick = () => { try{ navigator.clipboard.writeText(report); }catch(e){} };
-      }
     };
     $("#scOk").onclick = closeModal;
   }).catch(() => {});
@@ -4085,7 +4066,6 @@ document.addEventListener('keydown',e=>{
 /* ============ language ============ */
 function applyStatic(){el('apptitle').innerHTML='<span>'+t('app_brand')+'</span> '+t('app_rest');document.querySelectorAll('[data-i18n]').forEach(e=>{e.textContent=t(e.getAttribute('data-i18n'));});el('memhint').textContent=t('mem_hint');el('foot').textContent=t('foot');}
 function setLang(l){LANG=l;try{localStorage.setItem('ta_lang',l);}catch(e){}applyStatic();render();}
-
 
 /* ============ file loading ============ */
 function showErr(m){const e=el('err');e.style.display='block';e.textContent=m;} function clearErr(){el('err').style.display='none';}

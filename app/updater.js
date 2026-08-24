@@ -67,7 +67,12 @@ class Updater {
     try{
       this.cleanupSetup();
       const eff = this.effective();
-      const r = await fetch(this.o.updateUrl, {cache: "no-store"});
+      /* raw.githubusercontent caches the manifest for 5 minutes at each edge, so a
+         freshly published version can stay invisible in one region while it is live in
+         another. cache:"no-store" only bypasses the local cache, not theirs — a unique
+         query string is what actually forces a fresh read. */
+      const bust = this.o.updateUrl + (this.o.updateUrl.indexOf("?") < 0 ? "?" : "&") + "_=" + Date.now();
+      const r = await fetch(bust, {cache: "no-store"});
       if(!r.ok) return null;
       const latest = await r.json();
       if(!latest || !latest.version) return null;
