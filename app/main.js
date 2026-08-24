@@ -49,10 +49,34 @@ async function runCheck(manual){
 function showMain(){ if(win){ win.show(); win.focus(); } }
 
 /* ---- system-wide overlay hotkey (works unfocused / from the tray) ---- */
-function toggleOverlayGlobal(){
-  if(overlayWin) destroyOverlay(); else createOverlay();
+/* The overlay puts itself away once the night's tasks are all ticked. It still exists,
+   just hidden, so "bring it back" is a distinct case from "switch it on". */
+function overlayPutAway(){
+  try{ return !!overlayWin && !overlayWin.isVisible(); }catch(e){ return false; }
+}
+function doneMsgEnabled(){
+  try{ return !(overlayData && overlayData.cfg && overlayData.cfg.doneMsg === false); }catch(e){ return true; }
+}
+/* Asking for a finished overlay flashes "all done" and puts it away again. With the
+   reminder switched off it behaves like an ordinary toggle instead, so somebody who
+   does not want the interruption is not fighting it. */
+function overlayRecall(){
+  if(!overlayPutAway()) return false;
+  if(!doneMsgEnabled()) return false;
+  try{
+    overlayWin.showInactive();
+    overlayWin.webContents.send("overlay-done-msg");
+  }catch(e){}
+  return true;
+}
+function setOverlay(on){
+  if(on) createOverlay(); else destroyOverlay();
   try{ const c = hub.readConfig(); c.overlayOn = !!overlayWin; hub.writeConfig(c); }catch(e){}
   announceOverlayState();
+}
+function toggleOverlayGlobal(){
+  if(overlayRecall()) return;
+  setOverlay(!overlayWin);
 }
 function currentHotkey(){
   try{
@@ -92,6 +116,8 @@ function interactOverlayGlobal(){
 function setInteract(on){
   if(!overlayWin){ INTERACT = false; return; }
   INTERACT = !!on;
+  // it may be hidden because the night's tasks are all done — bring it back to be ticked
+  try{ if(INTERACT && !overlayWin.isVisible()) overlayWin.showInactive(); }catch(e){}
   try{
     overlayWin.setIgnoreMouseEvents(!INTERACT);
     overlayWin.setFocusable(INTERACT);
@@ -101,6 +127,15 @@ function setInteract(on){
     if(overlayData) overlayWin.setBounds(overlayBounds((overlayData.tasks || []).length + (INTERACT ? 1 : 0), overlayData.cfg));
   }catch(e){}
   try{ overlayWin.webContents.send("overlay-mode", {interact: INTERACT}); }catch(e){}
+  /* Leaving interact mode on a finished night puts the overlay away again — otherwise
+     summoning it to untick something would leave it on screen for good. Never while an
+     animation is playing: celebrate() drops interact mode itself as its first act. */
+  if(!INTERACT && !OVERLAY_BUSY){
+    try{
+      const ts = (overlayData && overlayData.tasks) || [];
+      if(ts.length && ts.every(x => x.done)) overlayWin.hide();
+    }catch(e){}
+  }
 }
 /* ---- Protel Shortcuts: managed native helper (rc-tbind.exe, ships beside app.asar) ----
    Triggers (a mouse side button or a key combo) are bound per PROFILE, so whoever is on
@@ -189,16 +224,13 @@ function buildTray(){
   tray.setContextMenu(Menu.buildFromTemplate([
     {label: L.open, click: showMain},
     {label: L.check, click: () => runCheck(true)},
-    {label: L.overlay, click: () => {
-      if(overlayWin) destroyOverlay(); else createOverlay();
-      try{ const c = hub.readConfig(); c.overlayOn = !!overlayWin; hub.writeConfig(c); }catch(e){}
-      announceOverlayState();
-    }},
+    {label: L.overlay, click: toggleOverlayGlobal},
     {type: "separator"},
     {label: L.close, click: () => { QUITTING = true; app.quit(); }}
   ]));
 }
 let overlayWin = null, overlayData = null, INTERACT = false;
+let OVERLAY_BUSY = false;      // an animation is on screen — do not hide it out from under itself
 
 /* ---- desktop checklist overlay: transparent, click-through, always on top ---- */
 function overlayBounds(count, cfg){
@@ -332,6 +364,7 @@ ipcMain.handle("files-stat", (_e, profile, p) => hub ? hub.stat(profile, p) : nu
 ipcMain.handle("open-help", () => { shell.openExternal(ISSUES_URL); return true; });
 
 ipcMain.handle("overlay-toggle", () => {
+  if(overlayRecall()) return true;          // finished for tonight — flash and stay away
   const on = !overlayWin;
   if(on) createOverlay(); else destroyOverlay();
   try{ const c = hub.readConfig(); c.overlayOn = on; hub.writeConfig(c); }catch(e){}
@@ -342,8 +375,24 @@ ipcMain.handle("overlay-data", (_e, d) => {
   overlayData = d;
   if(overlayWin){
     try{ overlayWin.setBounds(overlayBounds((d && d.tasks || []).length + (INTERACT ? 1 : 0), d && d.cfg)); }catch(e){}
+    /* The overlay hides itself once the last task is ticked. Untick anything — or let
+       07:00 clear the night — and it comes straight back. showInactive keeps it from
+       stealing focus from protel. */
+    const tasks = (d && d.tasks) || [];
+    const finished = tasks.length > 0 && tasks.every(t => t.done);
+    if(!finished){
+      try{ if(!overlayWin.isVisible()) overlayWin.showInactive(); }catch(e){}
+    }
     overlayWin.webContents.send("overlay-data", d);
   }
+  return true;
+});
+/* an animation is starting or ending in the overlay window */
+ipcMain.handle("overlay-busy", (_e, on) => { OVERLAY_BUSY = !!on; return true; });
+/* the celebration (or the reminder) has finished playing — put the overlay away */
+ipcMain.handle("overlay-complete", () => {
+  OVERLAY_BUSY = false;
+  if(overlayWin){ try{ overlayWin.hide(); }catch(e){} }
   return true;
 });
 
