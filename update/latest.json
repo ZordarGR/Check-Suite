@@ -1,11 +1,11 @@
 {
-  "version": "1.15.0",
+  "version": "1.16.0",
   "type": "full",
-  "engine": "1.15.0",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.15.0/RecCheck-Setup.exe",
-  "setupSha256": "0d1e0fb81fda1835e88f6703ec518d359abc7e389a99e60325828ada5d329edb",
+  "engine": "1.16.0",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.16.0/RecCheck-Setup.exe",
+  "setupSha256": "bd6aa3b1693aef07138e59991b49ede6bfe82de3e2d1987ae40f3d6dadc966da",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "88eed03bbcc83a87f0ea0b1b36d33d4010dbfac8f20149086d1746265eadb3f2",
-  "notes": "The τ now switches the layout with Win+Space instead of asking protel to, and can no longer leave the keyboard stuck on Greek. New: a fixed keystroke run, and modifier+button binds."
+  "sha256": "01c977cf907bd7a1d95a1c8fe7cd022ed0be7e89165487b110befb506a19923e",
+  "notes": "Fixes shortcut bindings being unsettable in 1.15.0, and moves profiles to their own Switch user button on the home screen."
 }

@@ -143,6 +143,10 @@ function setInteract(on){
      {profiles: [{id, name, binds: {tau: <trigger>, altf4: <trigger>}}], activeProfile: id}
    A trigger is "m3"/"m4"/"m5" or "k<mods>-<vk>"; both are opaque to this layer. */
 const ACTIONS = ["tau", "altf4", "seq"];
+/* A trigger the helper cannot parse is worse than no trigger, because storing one
+   silently replaces a binding that worked. Validate on the way in AND on the way out. */
+const TRIGGER_RE = /^(?:m(?:[345]|\d{1,2}-[345])|k\d{1,2}-\d{1,3})$/;
+function validTrigger(x){ return typeof x === "string" && TRIGGER_RE.test(x); }
 /* The keystroke run is deliberately DATA, not code: it lives in config and travels to
    the helper on the command line, so tuning it later is a small update rather than a
    whole new installer. Enter, Enter, Right, Enter, Enter. */
@@ -174,6 +178,17 @@ function readProfiles(){
     c.activeProfile = list[0].id;
     try{ hub.writeConfig(c); }catch(e){}
   }
+  /* 1.15.0 could store "m0" for a mouse bind — a valid-looking but unbindable trigger
+     that also displaced the working one. Drop anything unparsable so the row simply
+     reads "not set" and can be bound again, instead of looking set and doing nothing. */
+  let repaired = false;
+  for(const prof of list){
+    if(!prof.binds) continue;
+    for(const a of Object.keys(prof.binds)){
+      if(!validTrigger(prof.binds[a])){ delete prof.binds[a]; repaired = true; }
+    }
+  }
+  if(repaired){ c.profiles = list; try{ hub.writeConfig(c); }catch(e){} }
   const active = list.some(p => p.id === c.activeProfile) ? c.activeProfile : list[0].id;
   return {list, active, cfg: c};
 }
@@ -460,9 +475,18 @@ ipcMain.handle("sc-detect", (_e, action) => new Promise(res => {
     TAU_DETECT = child;
     child.stdout.on("data", d => {
       out += d;
-      const m = out.match(/BTN:(\d)/) || out.match(/KEY:(\d+)-(\d+)/);
-      if(!m) return;
-      const trigger = m.length === 2 ? "m" + m[1] : "k" + m[1] + "-" + m[2];
+      /* The helper reports "BTN:<mods>-<btn>" since 1.15. The older single-number form
+         is still accepted so a mismatched pair can never silently store nonsense — which
+         is exactly what happened when only one side of this was updated. */
+      let trigger = null;
+      let mb = out.match(/BTN:(\d+)-(\d+)/);
+      if(mb) trigger = "m" + mb[1] + "-" + mb[2];
+      else if((mb = out.match(/BTN:(\d)\b/))) trigger = "m0-" + mb[1];
+      else{
+        const mk = out.match(/KEY:(\d+)-(\d+)/);
+        if(mk) trigger = "k" + mk[1] + "-" + mk[2];
+      }
+      if(!trigger || !validTrigger(trigger)) return;   // never overwrite a good bind with junk
       try{
         const {list, active} = readProfiles();
         const p = list.find(x => x.id === active);
