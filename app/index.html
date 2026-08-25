@@ -1157,7 +1157,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.16.0";
+const APP_VERSION = "1.16.3";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1215,6 +1215,7 @@ en: {
   "sc.hDead": "The helper started and stopped on its own. Try binding the button again; if this keeps saying the same thing, send the detail below.",
   "sc.hCrash": "The helper crashed. What went wrong is printed below \u2014 send it on and it can be fixed exactly.",
   "sc.hDetail": "detail",
+  "fault.toast": "Something went wrong in {w} \u2014 the rest of the screen still updated:",
   "sc.done": "Done",
   "sc.keyMid": "Middle button", "sc.keyBack": "Side button — Back", "sc.keyFwd": "Side button — Forward",
   "sc.welcome": "Welcome, {n}", "sc.delSure": "Sure?",
@@ -1371,6 +1372,7 @@ gr: {
   "sc.hDead": "Ο βοηθός ξεκίνησε και σταμάτησε μόνος του. Δοκίμασε ξανά την αντιστοίχιση· αν συνεχίζει να το λέει, στείλε τη λεπτομέρεια παρακάτω.",
   "sc.hCrash": "Ο βοηθός κατέρρευσε. Το τι πήγε στραβά τυπώνεται παρακάτω — στείλ' το και διορθώνεται ακριβώς.",
   "sc.hDetail": "λεπτομέρεια",
+  "fault.toast": "Κάτι πήγε στραβά στο {w} — τα υπόλοιπα ενημερώθηκαν κανονικά:",
   "sc.done": "Έτοιμο",
   "sc.keyMid": "Μεσαίο πλήκτρο", "sc.keyBack": "Πλαϊνό πλήκτρο — Πίσω", "sc.keyFwd": "Πλαϊνό πλήκτρο — Μπροστά",
   "sc.welcome": "Καλώς ήρθες, {n}", "sc.delSure": "Σίγουρα;",
@@ -3600,14 +3602,40 @@ function importData(file){
 }
 
 /* ---------- refresh ---------- */
+/* Each stage is isolated because they are not actually dependent on one another,
+   and treating them as one statement made them so: a throw anywhere in the first
+   four meant searchInput() never ran, and the search results sat there showing
+   stale data with nothing on screen to say why. Applying a nickname with results
+   up is exactly that path -- saveNick -> refresh -> searchInput -- so the card
+   kept the old name and the failure was invisible. Now every stage runs, and one
+   that fails says so instead of quietly taking the others with it. */
 function refresh(){
-  renderSummary();
-  renderAccordions();
-  renderWatch();
-  renderNickPanel();
+  const stage = (name, fn) => { try{ fn(); }catch(e){ uiFault("refresh:" + name, e); } };
+  stage("summary", renderSummary);
+  stage("accordions", renderAccordions);
+  stage("watch", renderWatch);
+  stage("nicknames", renderNickPanel);
   const q = inp().value.trim();
-  if(q) searchInput();
+  if(q) stage("search", searchInput);
 }
+
+/* Somewhere to put a failure that has nowhere else to go. Until now anything that
+   threw in a handler went to a console nobody has open on a hotel front desk, and
+   the only evidence was a screen that quietly stopped keeping up. */
+let LAST_FAULT = null, FAULT_SEEN = {};
+function uiFault(where, e){
+  const msg = (e && (e.message || e)) + "";
+  LAST_FAULT = new Date().toISOString() + "  " + where + "\n" + ((e && e.stack) || msg);
+  try{ console.error("[reccheck]", where, e); }catch(_){}
+  try{ localStorage.setItem("reccheckLastFault", LAST_FAULT); }catch(_){}
+  // once per distinct fault: enough to notice and report, not enough to nag
+  const k = where + "|" + msg;
+  if(FAULT_SEEN[k]) return;
+  FAULT_SEEN[k] = 1;
+  try{ toast(t("fault.toast", {w: where}) + " " + msg, true); }catch(_){}
+}
+window.addEventListener("error", ev => uiFault("window", ev.error || ev.message));
+window.addEventListener("unhandledrejection", ev => uiFault("promise", ev.reason));
 
 /* ---------- print (Greek, corrections only) ---------- */
 function pad2(n){ return (n < 10 ? "0" : "") + n; }

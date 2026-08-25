@@ -15,6 +15,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # "Departments Check.html" is what the light (html) update path serves, and
+      # app/index.html is what the installer packs. They are the same page, so a
+      # drift means one release channel silently ships an older UI than the other
+      # -- which is exactly what happened between 1.16.1 and 1.16.2.
+      - name: Refuse to release with the two copies of the page out of step
+        run: |
+          cmp -s "app/index.html" "Departments Check.html" || {
+            echo "app/index.html and 'Departments Check.html' differ." >&2
+            diff <(head -c 200000 "app/index.html") <(head -c 200000 "Departments Check.html") | head -40 >&2
+            echo "Copy app/index.html over 'Departments Check.html' and commit." >&2
+            exit 1
+          }
       - name: Assemble installer from parts
         run: |
           cat dist-win64/parts/RecCheck-Setup.exe.* > RecCheck-Setup.exe
