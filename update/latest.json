@@ -1,11 +1,11 @@
 {
-  "version": "1.16.1",
+  "version": "1.16.2",
   "type": "full",
-  "engine": "1.16.1",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.16.1/RecCheck-Setup.exe",
-  "setupSha256": "9eece684a9445812b2f85309e8eba3ab677e837c73de8fab5d86a20657fe4a65",
+  "engine": "1.16.2",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.16.2/RecCheck-Setup.exe",
+  "setupSha256": "86cc62c431787bf939883c5fccb0f03a88b770562dd42c82e4c38791b3948cb2",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
   "sha256": "01c977cf907bd7a1d95a1c8fe7cd022ed0be7e89165487b110befb506a19923e",
-  "notes": "Side buttons routed through mouse software were being ignored; the shortcuts menu now says why the helper is not running."
+  "notes": "Fixes the helper crashing on startup, which is why no shortcut has worked since 1.15.0; the keystroke run is back."
 }
