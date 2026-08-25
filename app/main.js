@@ -142,7 +142,7 @@ function setInteract(on){
    shift keeps their own bindings. Config shape:
      {profiles: [{id, name, binds: {tau: <trigger>, altf4: <trigger>}}], activeProfile: id}
    A trigger is "m3"/"m4"/"m5" or "k<mods>-<vk>"; both are opaque to this layer. */
-const ACTIONS = ["tau", "altf4", "seq"];
+const ACTIONS = ["tau", "altf4"];
 /* A trigger the helper cannot parse is worse than no trigger, because storing one
    silently replaces a binding that worked. Validate on the way in AND on the way out. */
 const TRIGGER_RE = /^(?:m(?:[345]|\d{1,2}-[345])|k\d{1,2}-\d{1,3})$/;
@@ -206,6 +206,10 @@ function activeBinds(){
   return (p && p.binds) || {};
 }
 let TAU = null, TAU_DETECT = null;
+/* Why the shortcuts are or are not working, in a form the app can show the user.
+   Every failure below used to end in an empty catch, so a machine where the helper
+   never starts looked exactly like one where nothing was bound. */
+let TAUINFO = {state: "idle"};
 function tauPath(){
   const fs = require("fs");
   const cands = [path.join(path.dirname(__dirname), "rc-tbind.exe"),   // packaged: resources/rc-tbind.exe
@@ -228,18 +232,40 @@ function tauKillStrays(cb){
 }
 function tauStart(){
   tauStop();
-  if(process.platform !== "win32") return;
+  if(process.platform !== "win32"){ TAUINFO = {state: "not-windows"}; return; }
   const exe = tauPath();
-  if(!exe) return;
+  if(!exe){ TAUINFO = {state: "no-exe"}; return; }
   let binds = {};
   try{ binds = activeBinds(); }catch(e){}
-  const specs = ACTIONS.filter(a => binds[a]).map(a => binds[a] + "=" + (a === "seq" ? seqSpec() : a));
-  if(!specs.length) return;                 // nothing bound in this profile — don't hook at all
+  const specs = ACTIONS.filter(a => binds[a]).map(a => binds[a] + "=" + a);
+  if(!specs.length){                        // nothing bound in this profile — don't hook at all
+    TAUINFO = {state: "idle", exe: exe};
+    return;
+  }
   try{
-    TAU = spawn(exe, ["bind", String(process.pid)].concat(specs), {stdio: "ignore", windowsHide: true});
-    TAU.on("exit", () => { TAU = null; });
-    TAU.on("error", () => { TAU = null; });
-  }catch(e){ TAU = null; }
+    const child = spawn(exe, ["bind", String(process.pid)].concat(specs), {stdio: "ignore", windowsHide: true});
+    TAU = child;
+    const started = Date.now();
+    TAUINFO = {state: "running", exe: exe, pid: child.pid, specs: specs, since: started};
+    /* Only report on the child we still consider current: tauStop() clears TAU before
+       the kill lands, so a replaced helper's exit must not overwrite its successor. */
+    child.on("exit", (code, signal) => {
+      if(TAU !== child) return;
+      TAU = null;
+      TAUINFO = {state: "exited", exe: exe, code: code, signal: signal,
+                 specs: specs, ranMs: Date.now() - started};
+    });
+    child.on("error", (err) => {
+      if(TAU !== child) return;
+      TAU = null;
+      TAUINFO = {state: "spawn-failed", exe: exe, specs: specs,
+                 err: (err && (err.code || err.message)) || "unknown"};
+    });
+  }catch(e){
+    TAU = null;
+    TAUINFO = {state: "spawn-failed", exe: exe, specs: specs,
+               err: (e && (e.code || e.message)) || "unknown"};
+  }
 }
 function announceOverlayState(){
   if(win && !win.isDestroyed()) win.webContents.send("overlay-state-changed", !!overlayWin);
@@ -458,7 +484,7 @@ ipcMain.handle("overlay-ihotkey-set", (_e, acc) => {
 ipcMain.handle("sc-get", () => {
   try{
     const {list, active} = readProfiles();
-    return {profiles: list, active, seq: seqConfig(),
+    return {profiles: list, active,
             available: process.platform === "win32" && !!tauPath()};
   }catch(e){ return {profiles: [], active: null, available: false}; }
 });
@@ -520,6 +546,30 @@ ipcMain.handle("sc-diag", (_e, delayMs) => new Promise(res => {
     child.on("error", finish);
     setTimeout(() => { try{ child.kill(); }catch(e){} finish(); }, wait + 20000);
   }catch(e){ finish(); }
+}));
+/* Ask the helper to say hello and report what came back, alongside what the bound
+   helper is currently doing. This is the difference between "you have not bound
+   anything", "the file is not on disk", "Windows will not start it" and "it starts
+   and is then refused its hooks" — four causes with one symptom. */
+ipcMain.handle("sc-helper", () => new Promise(res => {
+  const exe = tauPath();
+  /* TAUINFO is read when the answer is sent, not when it is asked for: a helper that
+     fails to start reports that through an async "error" event, so a snapshot taken
+     up front would still say "running". The probe below gives it that moment. */
+  const snap = () => ({exe: exe, state: TAUINFO.state, code: TAUINFO.code, signal: TAUINFO.signal,
+                       err: TAUINFO.err, pid: TAUINFO.pid, ranMs: TAUINFO.ranMs,
+                       specs: TAUINFO.specs, since: TAUINFO.since});
+  if(process.platform !== "win32"){ const i = snap(); i.probe = "not-windows"; res(i); return; }
+  if(!exe){ const i = snap(); i.probe = "missing"; res(i); return; }
+  let out = "", done = false;
+  const fin = p => { if(done) return; done = true; const i = snap(); i.probe = p; res(i); };
+  try{
+    const child = spawn(exe, ["ping"], {windowsHide: true});
+    child.stdout.on("data", d => { out += d; });
+    child.on("error", e => fin("spawn-error:" + ((e && (e.code || e.message)) || "unknown")));
+    child.on("exit", c => fin(/RCTBIND OK/.test(out) ? "ok" : ("no-reply:exit=" + c)));
+    setTimeout(() => { try{ child.kill(); }catch(e){} fin("timeout"); }, 5000);
+  }catch(e){ fin("throw:" + ((e && (e.code || e.message)) || "unknown")); }
 }));
 ipcMain.handle("sc-cancel", () => { try{ if(TAU_DETECT) TAU_DETECT.kill(); }catch(e){} return true; });
 ipcMain.handle("sc-clear", (_e, action) => {

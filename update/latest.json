@@ -1,11 +1,11 @@
 {
-  "version": "1.16.0",
+  "version": "1.16.1",
   "type": "full",
-  "engine": "1.16.0",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.16.0/RecCheck-Setup.exe",
-  "setupSha256": "bd6aa3b1693aef07138e59991b49ede6bfe82de3e2d1987ae40f3d6dadc966da",
+  "engine": "1.16.1",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.16.1/RecCheck-Setup.exe",
+  "setupSha256": "9eece684a9445812b2f85309e8eba3ab677e837c73de8fab5d86a20657fe4a65",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
   "sha256": "01c977cf907bd7a1d95a1c8fe7cd022ed0be7e89165487b110befb506a19923e",
-  "notes": "Fixes shortcut bindings being unsettable in 1.15.0, and moves profiles to their own Switch user button on the home screen."
+  "notes": "Side buttons routed through mouse software were being ignored; the shortcuts menu now says why the helper is not running."
 }

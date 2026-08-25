@@ -1,22 +1,36 @@
-## RecCheck 1.16.0 — Windows
+## RecCheck 1.16.1 — Windows
 
 Nightly POS receipt audit for the protel checkcharge1 report (.oxps). Everything runs locally — no data leaves the machine.
 
-### Fix — shortcuts could not be bound in 1.15.0
+### Fix — side buttons that go through mouse software were being ignored
 
-**Please install this if you are on 1.15.0.** Binding any mouse button stored a value the helper could not read, so the shortcut did nothing — and because setting it also replaced whatever was there before, a binding that had been working was lost at the same time. Both halves of that change shipped in 1.15.0; only one of them had been updated.
+**Please install this if your shortcuts stopped working.**
 
-Setting a binding now stores it correctly, a binding that cannot be read is refused rather than saved over a working one, and any bad value already in your settings is cleared on first run so the row simply reads *not set* and can be bound again.
+The helper that watches for your bound button was discarding any button press that arrives flagged as *injected*. That flag is exactly how mouse software — G HUB, Synapse, an OEM driver — delivers a remapped side button. So on a mouse whose side buttons are routed through its own software, the press was thrown away before anything looked at it: nothing happened when you pressed it, and nothing was detected when you tried to bind it either.
 
-You will need to set your bindings once more after updating.
+That filter was there to stop the helper reacting to its own output. It never needed to be: the helper only ever sends *keyboard* input, never mouse input, so there was no loop to guard against. It is gone from the mouse side and kept on the keyboard side, where the loop is real.
 
-### Switch user
+It also explains why this could differ from one night to the next — the house mouse and your own need not deliver their side buttons the same way.
 
-Profiles have moved out of *PROTEL SHORTCUTS* into their own **Switch user** button on the home screen, to the right of the checklist. They are a different kind of thing: the shortcuts menu is *what the buttons do*, a profile is *who is sitting here*.
+### The shortcuts menu now says why it is not working
 
-The button opens the list of profiles with create, rename and delete. Resting the pointer on it for a second explains why profiles matter — that bindings belong to the profile rather than to the computer, so it is worth each person making their own and setting it up the way they work. It only appears after a full second, so it never flickers open in passing.
+Every way this could fail used to end the same way: a row reading *not set*, and no explanation. Four different causes, one symptom, nothing to go on.
 
-The shortcuts menu now simply states which profile it is editing.
+*PROTEL SHORTCUTS* now shows a status line, and it names the cause:
+
+- **Running** — your bindings are live.
+- **Ready, nothing bound yet** — no process exists because nothing needs one. This is normal, not a fault.
+- **The helper file is not on this computer** — reinstall; if it goes missing again, security software is removing it.
+- **Windows will not start the helper** — antivirus or a workplace policy is blocking it.
+- **It starts and is shut straight back down** — it ran, and was refused the keyboard and mouse access the shortcuts are built on.
+
+The raw detail is printed underneath so it can be copied or photographed if it needs sending on.
+
+If you were wondering why *rc-tbind* was not in Task Manager: it deliberately does not start when nothing is bound, and 1.16.0 had just cleared the bindings that 1.15.0 corrupted. That was the expected state, not a second fault.
+
+### The keystroke run is gone
+
+The fixed *Enter, Enter, Right, Enter, Enter* run has been removed from the menu, as asked.
 
 ### Install
 

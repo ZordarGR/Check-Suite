@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld("reccheckShortcuts", {
   detect: (action) => ipcRenderer.invoke("sc-detect", action),
   cancel: () => ipcRenderer.invoke("sc-cancel"),
   diag: (ms) => ipcRenderer.invoke("sc-diag", ms),
+  helper: () => ipcRenderer.invoke("sc-helper"),
   clear: (action) => ipcRenderer.invoke("sc-clear", action),
   profileAdd: (name) => ipcRenderer.invoke("sc-profile-add", name),
   profileRename: (id, name) => ipcRenderer.invoke("sc-profile-rename", id, name),
