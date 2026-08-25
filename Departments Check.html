@@ -1157,7 +1157,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.16.0";
+const APP_VERSION = "1.16.3";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1205,6 +1205,17 @@ en: {
   "sc.fail": "Nothing detected — try again. Mouse: only middle and side buttons can be bound.",
   "sc.bareKey": "Careful: a plain key is swallowed everywhere in Windows while RecCheck runs — that key stops typing in every program. A combination such as Ctrl+Alt+T is safer.",
   "sc.unavailable": "Shortcuts need the Windows desktop app.",
+  "sc.hStatus": "Helper",
+  "sc.hChecking": "checking\u2026",
+  "sc.hOk": "Running \u2014 your bindings are live.",
+  "sc.hIdle": "Ready. Nothing is bound yet, so it is not running \u2014 bind a button above and it starts.",
+  "sc.hMissing": "The helper file is not on this computer. Reinstall RecCheck from the release page; if it disappears again, security software on this machine is removing it and it will need to be allowed.",
+  "sc.hBlocked": "Windows will not start the helper. This is almost always antivirus or a workplace policy blocking it \u2014 the shortcuts cannot work until it is allowed to run.",
+  "sc.hRefused": "The helper starts and is then shut straight back down. Security software on this machine is refusing it the keyboard and mouse hooks the shortcuts are built on.",
+  "sc.hDead": "The helper started and stopped on its own. Try binding the button again; if this keeps saying the same thing, send the detail below.",
+  "sc.hCrash": "The helper crashed. What went wrong is printed below \u2014 send it on and it can be fixed exactly.",
+  "sc.hDetail": "detail",
+  "fault.toast": "Something went wrong in {w} \u2014 the rest of the screen still updated:",
   "sc.done": "Done",
   "sc.keyMid": "Middle button", "sc.keyBack": "Side button — Back", "sc.keyFwd": "Side button — Forward",
   "sc.welcome": "Welcome, {n}", "sc.delSure": "Sure?",
@@ -1351,6 +1362,17 @@ gr: {
   "sc.fail": "Δεν ανιχνεύθηκε τίποτα — δοκίμασε ξανά. Ποντίκι: μόνο το μεσαίο και τα πλαϊνά πλήκτρα.",
   "sc.bareKey": "Προσοχή: ένα σκέτο πλήκτρο δεσμεύεται παντού στα Windows όσο τρέχει το RecCheck — παύει να γράφει σε κάθε πρόγραμμα. Ένας συνδυασμός όπως Ctrl+Alt+T είναι ασφαλέστερος.",
   "sc.unavailable": "Οι συντομεύσεις χρειάζονται την εφαρμογή Windows.",
+  "sc.hStatus": "Βοηθός",
+  "sc.hChecking": "έλεγχος…",
+  "sc.hOk": "Τρέχει — οι αντιστοιχίσεις σου είναι ενεργές.",
+  "sc.hIdle": "Έτοιμος. Δεν έχει οριστεί τίποτα, οπότε δεν τρέχει — όρισε ένα πλήκτρο παραπάνω και ξεκινάει.",
+  "sc.hMissing": "Το αρχείο του βοηθού δεν υπάρχει σε αυτόν τον υπολογιστή. Κάνε ξανά εγκατάσταση του RecCheck· αν ξαναχαθεί, το σβήνει το antivirus του μηχανήματος και πρέπει να επιτραπεί.",
+  "sc.hBlocked": "Τα Windows δεν ξεκινούν τον βοηθό. Σχεδόν πάντα τον μπλοκάρει antivirus ή πολιτική της εταιρείας — οι συντομεύσεις δεν δουλεύουν μέχρι να του επιτραπεί.",
+  "sc.hRefused": "Ο βοηθός ξεκινάει και κλείνει αμέσως. Κάποιο πρόγραμμα ασφαλείας του μηχανήματος του αρνείται τα hooks πληκτρολογίου και ποντικιού που χρειάζονται οι συντομεύσεις.",
+  "sc.hDead": "Ο βοηθός ξεκίνησε και σταμάτησε μόνος του. Δοκίμασε ξανά την αντιστοίχιση· αν συνεχίζει να το λέει, στείλε τη λεπτομέρεια παρακάτω.",
+  "sc.hCrash": "Ο βοηθός κατέρρευσε. Το τι πήγε στραβά τυπώνεται παρακάτω — στείλ' το και διορθώνεται ακριβώς.",
+  "sc.hDetail": "λεπτομέρεια",
+  "fault.toast": "Κάτι πήγε στραβά στο {w} — τα υπόλοιπα ενημερώθηκαν κανονικά:",
   "sc.done": "Έτοιμο",
   "sc.keyMid": "Μεσαίο πλήκτρο", "sc.keyBack": "Πλαϊνό πλήκτρο — Πίσω", "sc.keyFwd": "Πλαϊνό πλήκτρο — Μπροστά",
   "sc.welcome": "Καλώς ήρθες, {n}", "sc.delSure": "Σίγουρα;",
@@ -2008,6 +2030,13 @@ function refreshProfileName(){
     paintUserBtn();
   }).catch(() => {});
 }
+/* Spell the run out under its description — five vk numbers in config mean nothing
+   to the person deciding whether to bind a button to them. */
+function scSeqLabel(){
+  const q = SCSTATE && SCSTATE.seq;
+  if(!q || !q.keys || !q.keys.length) return "";
+  return q.keys.map(vkName).join(" \u00b7 ") + "  (" + q.gap + " ms)";
+}
 function scRow(action){
   const trig = (SCSTATE.binds || {})[action];
   const dis = trig ? "" : ' disabled style="opacity:.35"';
@@ -2028,6 +2057,7 @@ function scApply(res){
   SCSTATE.binds = (p && p.binds) || {};
   refreshProfileName();
   renderShortcuts();
+  refreshHelperStatus();          // a new binding starts the helper — say whether it did
 }
 function renderShortcuts(){
   const body = $("#scBody");
@@ -2050,6 +2080,7 @@ function renderShortcuts(){
     else{
       b.textContent = scTriggerName((SCSTATE.binds || {})[action]);
       warn.textContent = t("sc.fail");
+      refreshHelperStatus();      // "nothing detected" is often the helper, not the button
     }
   });
   body.querySelectorAll(".scClear").forEach(b => b.onclick = async () => {
@@ -2185,6 +2216,64 @@ function openProfiles(){
     $("#upOk").onclick = closeModal;
   }).catch(() => {});
 }
+/* Say plainly whether the helper behind the shortcuts is running, and if it is not,
+   which of the four causes it is. Until 1.16 every one of these ended in an empty
+   catch, so a blocked helper and an unbound button looked identical from the app. */
+function helperVerdict(h){
+  if(!h) return {key: "sc.hDead", tone: "warn"};
+  const probe = h.probe || "";
+  if(probe === "missing" || h.state === "no-exe") return {key: "sc.hMissing", tone: "bad"};
+  if(probe === "timeout" || probe.indexOf("spawn-error:") === 0 ||
+     probe.indexOf("throw:") === 0 || probe.indexOf("no-reply:") === 0)
+    return {key: "sc.hBlocked", tone: "bad"};
+  if(h.state === "spawn-failed") return {key: "sc.hBlocked", tone: "bad"};
+  if(h.state === "running") return {key: "sc.hOk", tone: "good"};
+  if(h.state === "idle") return {key: "sc.hIdle", tone: "faint"};
+  // exit 3 is the helper's own "Windows would not give me the hooks"
+  if(h.state === "exited"){
+    if(h.code === 3) return {key: "sc.hRefused", tone: "bad"};
+    // 5 is its own caught crash; 3762504530 (0xE0434352) is one the CLR caught for it
+    if(h.code === 5 || h.code === 3762504530 || h.crash) return {key: "sc.hCrash", tone: "bad"};
+    return {key: "sc.hDead", tone: "warn"};
+  }
+  return {key: "sc.hIdle", tone: "faint"};
+}
+function helperDetail(h){
+  if(!h) return "";
+  const bits = [];
+  if(h.probe) bits.push("probe=" + h.probe);
+  if(h.state) bits.push("state=" + h.state);
+  if(h.code !== null && h.code !== undefined) bits.push("exit=" + h.code);
+  if(h.err) bits.push("err=" + h.err);
+  if(h.ranMs !== null && h.ranMs !== undefined) bits.push("ran=" + h.ranMs + "ms");
+  if(h.specs && h.specs.length) bits.push("binds=" + h.specs.join(","));
+  if(h.exe) bits.push(h.exe);
+  if(h.crash) bits.push("\n" + h.crash);      // the exception itself, when there is one
+  return bits.join("  ");
+}
+function refreshHelperStatus(){
+  const box = $("#scHelp");
+  if(!box) return;
+  const sc = window.reccheckShortcuts;
+  const TONE = {good: "#4ade80", bad: "#f87171", warn: "#fbbf24", faint: "var(--faint)"};
+  box.innerHTML = '<span style="color:var(--faint)">' + t("sc.hStatus") + ': ' +
+                  t("sc.hChecking") + '</span>';
+  if(!sc || !sc.helper) return;
+  sc.helper().then(h => {
+    if(!$("#scHelp")) return;                 // dialog closed while we were asking
+    const v = helperVerdict(h), d = helperDetail(h);
+    $("#scHelp").innerHTML =
+      '<span style="color:' + TONE[v.tone] + '">\u25cf</span> ' +
+      '<span style="color:var(--faint)">' + t("sc.hStatus") + ':</span> ' +
+      escapeHtml(t(v.key)) +
+      (d && v.tone !== "good" && v.tone !== "faint"
+        ? '<div style="margin-top:6px;color:var(--faint);font-family:ui-monospace,Consolas,monospace;' +
+          'font-size:11px;word-break:break-all;white-space:pre-wrap">' + t("sc.hDetail") + ': ' + escapeHtml(d) + '</div>'
+        : "");
+  }).catch(() => {
+    if($("#scHelp")) $("#scHelp").innerHTML = "";
+  });
+}
 function openShortcuts(){
   const sc = window.reccheckShortcuts;
   if(!sc) return;
@@ -2206,9 +2295,11 @@ function openShortcuts(){
       '</div>' +
       '<div class="err" style="color:var(--faint)">' + t("sc.testHint") + '</div>' +
       '<pre id="scDiag" style="display:none"></pre>' +
+      '<div id="scHelp" style="margin-top:12px;font-size:12px;line-height:1.5"></div>' +
       (st.available ? "" : '<div class="err">' + t("sc.unavailable") + '</div>') +
       '<div class="actions"><button class="btn amber" id="scOk">' + t("sc.done") + '</button></div>');
     renderShortcuts();
+    refreshHelperStatus();
     $("#scTest").onclick = async () => {
       const b = $("#scTest"), pre = $("#scDiag"), copy = $("#scCopy");
       if(b.dataset.busy) return;
@@ -3511,14 +3602,40 @@ function importData(file){
 }
 
 /* ---------- refresh ---------- */
+/* Each stage is isolated because they are not actually dependent on one another,
+   and treating them as one statement made them so: a throw anywhere in the first
+   four meant searchInput() never ran, and the search results sat there showing
+   stale data with nothing on screen to say why. Applying a nickname with results
+   up is exactly that path -- saveNick -> refresh -> searchInput -- so the card
+   kept the old name and the failure was invisible. Now every stage runs, and one
+   that fails says so instead of quietly taking the others with it. */
 function refresh(){
-  renderSummary();
-  renderAccordions();
-  renderWatch();
-  renderNickPanel();
+  const stage = (name, fn) => { try{ fn(); }catch(e){ uiFault("refresh:" + name, e); } };
+  stage("summary", renderSummary);
+  stage("accordions", renderAccordions);
+  stage("watch", renderWatch);
+  stage("nicknames", renderNickPanel);
   const q = inp().value.trim();
-  if(q) searchInput();
+  if(q) stage("search", searchInput);
 }
+
+/* Somewhere to put a failure that has nowhere else to go. Until now anything that
+   threw in a handler went to a console nobody has open on a hotel front desk, and
+   the only evidence was a screen that quietly stopped keeping up. */
+let LAST_FAULT = null, FAULT_SEEN = {};
+function uiFault(where, e){
+  const msg = (e && (e.message || e)) + "";
+  LAST_FAULT = new Date().toISOString() + "  " + where + "\n" + ((e && e.stack) || msg);
+  try{ console.error("[reccheck]", where, e); }catch(_){}
+  try{ localStorage.setItem("reccheckLastFault", LAST_FAULT); }catch(_){}
+  // once per distinct fault: enough to notice and report, not enough to nag
+  const k = where + "|" + msg;
+  if(FAULT_SEEN[k]) return;
+  FAULT_SEEN[k] = 1;
+  try{ toast(t("fault.toast", {w: where}) + " " + msg, true); }catch(_){}
+}
+window.addEventListener("error", ev => uiFault("window", ev.error || ev.message));
+window.addEventListener("unhandledrejection", ev => uiFault("promise", ev.reason));
 
 /* ---------- print (Greek, corrections only) ---------- */
 function pad2(n){ return (n < 10 ? "0" : "") + n; }
