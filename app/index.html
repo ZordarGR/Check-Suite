@@ -86,9 +86,25 @@ header .spacer{flex:1}
   border:1px solid var(--line);border-radius:8px;font-family:var(--mono);font-size:10.5px;
   line-height:1.5;color:#b9c6d8;white-space:pre-wrap;overflow-wrap:anywhere}
 
-#checklist{max-width:640px;margin:0 auto 22px;background:var(--panel);border:1px solid var(--line);border-radius:16px;
+#checklist{position:relative;max-width:640px;margin:0 auto 22px;background:var(--panel);border:1px solid var(--line);border-radius:16px;
   padding:16px 18px;text-align:left}
 #clHead{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+/* "Switch user" sits in the gutter to the RIGHT of the card, level with the overlay
+   button. #landing is 900px and the card 640px, so there is ~130px of room each side.
+   Below that the gutter disappears and it falls back into the header row. */
+#userBtn{position:absolute;left:100%;top:16px;margin-left:14px;max-width:118px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:1000px){ #userBtn{position:static;margin-left:0;max-width:none} }
+#userTip{position:fixed;z-index:120;max-width:250px;background:var(--panel2);color:var(--txt);
+  border:1px solid var(--line);border-radius:9px;padding:9px 11px;font-size:11.5px;line-height:1.5;
+  box-shadow:0 8px 24px rgba(0,0,0,.5);opacity:0;transition:opacity .18s ease;pointer-events:none}
+#userTip.on{opacity:1}
+.upRow{display:flex;align-items:center;gap:8px;padding:9px 10px;border-top:1px solid var(--line);cursor:pointer}
+.upRow:first-of-type{border-top:none}
+.upRow:hover{background:var(--panel2)}
+.upRow.sel{color:var(--amber)}
+.upName{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.upTick{font-family:var(--mono);font-size:12px}
 #clTitle{font-family:var(--mono);letter-spacing:.14em;font-size:13px;color:var(--amber)}
 #clCount{font-family:var(--mono);font-size:12px;color:var(--faint);flex:1}
 #clAddWrap{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
@@ -613,7 +629,7 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
     </div>
     <div id="welcomeLine"></div>
     <div id="checklist">
-      <div id="clHead"><span id="clTitle"></span><span id="clCount"></span><button class="btn small" id="clOverlay" style="display:none"></button><button class="btn small" id="clDone" style="display:none"></button></div>
+      <div id="clHead"><span id="clTitle"></span><span id="clCount"></span><button class="btn small" id="clOverlay" style="display:none"></button><button class="btn small" id="clDone" style="display:none"></button><button class="btn small" id="userBtn" style="display:none"></button></div>
       <div id="clAddWrap" style="display:none">
         <input id="clText" autocomplete="off" maxlength="140">
         <div id="clSev">
@@ -1141,7 +1157,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.15.0";
+const APP_VERSION = "1.16.0";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1192,6 +1208,10 @@ en: {
   "sc.done": "Done",
   "sc.keyMid": "Middle button", "sc.keyBack": "Side button — Back", "sc.keyFwd": "Side button — Forward",
   "sc.welcome": "Welcome, {n}", "sc.delSure": "Sure?",
+  "up.btn": "Switch user", "up.title": "SWITCH USER",
+  "up.help": "Shortcut bindings belong to the profile that is active, not to the computer. Make your own and set it up the way you work — switching back to it later restores your buttons exactly as you left them.",
+  "up.active": "Active profile", "up.none": "no profiles yet",
+  "up.scActive": "These bindings belong to: {n}",
   "sc.test": "Test the τ shortcut",
   "sc.testHint": "Press Test, then click into protel and put the cursor where the τ should appear. After the countdown RecCheck runs the shortcut and reports every step — send the result back if it still fails.",
   "sc.testCount": "click into protel now… {n}",
@@ -1334,6 +1354,10 @@ gr: {
   "sc.done": "Έτοιμο",
   "sc.keyMid": "Μεσαίο πλήκτρο", "sc.keyBack": "Πλαϊνό πλήκτρο — Πίσω", "sc.keyFwd": "Πλαϊνό πλήκτρο — Μπροστά",
   "sc.welcome": "Καλώς ήρθες, {n}", "sc.delSure": "Σίγουρα;",
+  "up.btn": "Αλλαγή χρήστη", "up.title": "ΑΛΛΑΓΗ ΧΡΗΣΤΗ",
+  "up.help": "Οι αντιστοιχίσεις των συντομεύσεων ανήκουν στο ενεργό προφίλ, όχι στον υπολογιστή. Φτιάξε το δικό σου και ρύθμισέ το όπως δουλεύεις — όταν επιστρέψεις σε αυτό, τα πλήκτρα σου είναι ακριβώς όπως τα άφησες.",
+  "up.active": "Ενεργό προφίλ", "up.none": "δεν υπάρχουν προφίλ",
+  "up.scActive": "Αυτές οι αντιστοιχίσεις ανήκουν στο: {n}",
   "sc.test": "Δοκιμή της συντόμευσης τ",
   "sc.testHint": "Πάτα Δοκιμή, μετά κάνε κλικ στο protel και βάλε τον κέρσορα εκεί που πρέπει να εμφανιστεί το τ. Μετά την αντίστροφη μέτρηση το RecCheck εκτελεί τη συντόμευση και αναφέρει κάθε βήμα — στείλε το αποτέλεσμα αν αποτύχει πάλι.",
   "sc.testCount": "κάνε κλικ στο protel τώρα… {n}",
@@ -1456,6 +1480,7 @@ function applyLang(){
   $("#subTag").textContent = t("subTag");
   $("#homeLogo").title = t("menu.title");
   paintProfileName();
+  paintUserBtn();
   const mi = (id, l, sub) => { const b = $(id); b.querySelector(".mLabel").textContent = t(l); if(sub !== null) b.querySelector(".mSub").textContent = t(sub); };
   mi("#mLang", "menu.lang", "menu.langSub");
   mi("#mDirDept", "menu.dirDept", null);
@@ -1978,7 +2003,9 @@ function refreshProfileName(){
        rather than greeting nobody. As soon as a second profile exists the user is
        managing profiles deliberately, so greet whichever is active, by name. */
     PROFILE_NAME = (n && !(list.length === 1 && n === "Default")) ? n : "";
+    UPSTATE = st;
     paintProfileName();
+    paintUserBtn();
   }).catch(() => {});
 }
 function scRow(action){
@@ -2007,11 +2034,6 @@ function renderShortcuts(){
   if(!body) return;
   const sc = window.reccheckShortcuts;
   body.innerHTML = SC_ACTIONS.map(scRow).join("");
-  const sel = $("#scProfile");
-  sel.innerHTML = SCSTATE.profiles.map(p =>
-    '<option value="' + p.id + '"' + (p.id === SCSTATE.active ? " selected" : "") + '>' + escapeHtml(p.name) + '</option>').join("");
-  $("#scDelete").disabled = SCSTATE.profiles.length <= 1;
-  $("#scDelete").textContent = t("sc.delete");
   body.querySelectorAll(".scBind").forEach(b => b.onclick = async () => {
     if(b.dataset.busy) return;
     const action = b.dataset.a;
@@ -2035,11 +2057,74 @@ function renderShortcuts(){
     scApply(await sc.get().catch(() => null));
   });
 }
-/* inline name editor: mode is "add" or "rename" */
-function scEditName(mode){
-  const wrap = $("#scNameWrap"), input = $("#scName");
+/* ---- Switch user -------------------------------------------------------
+   Profiles moved out of PROTEL SHORTCUTS in 1.15.1: they are a different kind of
+   thing. Shortcuts are "what the buttons do"; a profile is "who is sitting here",
+   and it belongs next to the rest of the home screen rather than buried in a
+   settings dialog. The shortcut dialog now only says which profile it is editing. */
+let UPSTATE = null, UPTIP = null, UPTIPT = 0;
+function upActive(){
+  if(!UPSTATE || !UPSTATE.profiles) return null;
+  return UPSTATE.profiles.find(x => x.id === UPSTATE.active) || null;
+}
+function paintUserBtn(){
+  const b = $("#userBtn");
+  if(!b) return;
+  b.style.display = window.reccheckShortcuts ? "" : "none";
+  b.textContent = t("up.btn");
+}
+/* The help is deliberately slow: it explains something you only need once, so it
+   must not flick open every time the pointer crosses the button. */
+function upHideTip(){
+  clearTimeout(UPTIPT);
+  if(UPTIP){ UPTIP.classList.remove("on"); const el = UPTIP; UPTIP = null; setTimeout(() => { try{ el.remove(); }catch(e){} }, 220); }
+}
+function upShowTip(){
+  upHideTip();
+  const b = $("#userBtn");
+  if(!b) return;
+  const tip = document.createElement("div");
+  tip.id = "userTip";
+  tip.textContent = t("up.help");
+  document.body.append(tip);
+  const r = b.getBoundingClientRect(), tr = tip.getBoundingClientRect();
+  let left = r.left + r.width / 2 - tr.width / 2;
+  left = Math.max(10, Math.min(left, innerWidth - tr.width - 10));
+  let top = r.bottom + 9;
+  if(top + tr.height > innerHeight - 10) top = Math.max(10, r.top - tr.height - 9);
+  tip.style.left = left + "px";
+  tip.style.top = top + "px";
+  UPTIP = tip;
+  requestAnimationFrame(() => tip.classList.add("on"));
+}
+function upApply(res){
+  if(!res) return;
+  UPSTATE = Object.assign(UPSTATE || {}, {profiles: res.profiles, active: res.active});
+  refreshProfileName();          // the home greeting follows the active profile
+  renderProfiles();
+}
+function renderProfiles(){
+  const box = $("#upList");
+  if(!box || !UPSTATE) return;
   const sc = window.reccheckShortcuts;
-  const cur = scActiveProfile();
+  box.innerHTML = (UPSTATE.profiles || []).map(p =>
+    '<div class="upRow' + (p.id === UPSTATE.active ? " sel" : "") + '" data-id="' + p.id + '">' +
+      '<span class="upTick">' + (p.id === UPSTATE.active ? "\u25cf" : "\u25cb") + '</span>' +
+      '<span class="upName">' + escapeHtml(p.name) + '</span>' +
+    '</div>').join("") || '<div class="clEmpty">' + t("up.none") + '</div>';
+  box.querySelectorAll(".upRow").forEach(r => r.onclick = async () => {
+    if(r.dataset.id === UPSTATE.active) return;
+    upApply(await sc.profileSelect(r.dataset.id).catch(() => null));
+  });
+  const del = $("#upDelete");
+  if(del) del.disabled = (UPSTATE.profiles || []).length <= 1;
+}
+/* inline name editor: mode is "add" or "rename" — Electron has no window.prompt,
+   and a second openModal would tear this dialog down */
+function upEditName(mode){
+  const wrap = $("#upNameWrap"), input = $("#upName");
+  const sc = window.reccheckShortcuts;
+  const cur = upActive();
   wrap.style.display = "";
   input.value = mode === "rename" ? (cur ? cur.name : "") : "";
   input.placeholder = t(mode === "rename" ? "sc.renamePrompt" : "sc.addPrompt");
@@ -2051,14 +2136,54 @@ function scEditName(mode){
     if(!ok) return;
     const n = input.value.trim();
     if(!n) return;
-    scApply(await (mode === "rename" ? sc.profileRename(SCSTATE.active, n) : sc.profileAdd(n)).catch(() => null));
+    upApply(await (mode === "rename" ? sc.profileRename(UPSTATE.active, n) : sc.profileAdd(n)).catch(() => null));
   };
   input.onkeydown = e => {
     if(e.key === "Enter"){ e.preventDefault(); e.stopPropagation(); done(true); }
     if(e.key === "Escape"){ e.preventDefault(); e.stopPropagation(); done(false); }
   };
-  $("#scNameOk").onclick = () => done(true);
-  $("#scNameCancel").onclick = () => done(false);
+  $("#upNameOk").onclick = () => done(true);
+  $("#upNameCancel").onclick = () => done(false);
+}
+function openProfiles(){
+  const sc = window.reccheckShortcuts;
+  if(!sc) return;
+  upHideTip();
+  sc.get().then(st => {
+    if(!st) return;
+    UPSTATE = st;
+    openModal(
+      '<h3>' + t("up.title") + '</h3>' +
+      '<p class="scIntro">' + t("up.help") + '</p>' +
+      '<label>' + t("up.active") + '</label>' +
+      '<div id="upList" style="border:1px solid var(--line);border-radius:9px;overflow:hidden"></div>' +
+      '<div style="display:flex;gap:8px;margin-top:10px">' +
+        '<button class="btn small" id="upAdd" style="flex:1">' + t("sc.add") + '</button>' +
+        '<button class="btn small" id="upRename" style="flex:1">' + t("sc.rename") + '</button>' +
+        '<button class="btn small" id="upDelete" style="flex:1">' + t("sc.delete") + '</button>' +
+      '</div>' +
+      '<div id="upNameWrap" style="display:none;margin-top:8px">' +
+        '<div style="display:flex;gap:8px">' +
+          '<input id="upName" maxlength="40" autocomplete="off" style="flex:1">' +
+          '<button class="btn small" id="upNameOk">\u2713</button>' +
+          '<button class="btn small" id="upNameCancel">\u2715</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="actions"><button class="btn amber" id="upOk">' + t("sc.done") + '</button></div>');
+    renderProfiles();
+    $("#upAdd").onclick = () => upEditName("add");
+    $("#upRename").onclick = () => upEditName("rename");
+    let armed = false;
+    $("#upDelete").onclick = async () => {      // two-step confirm, no nested modal
+      const cur = upActive();
+      if(!cur || (UPSTATE.profiles || []).length <= 1) return;
+      if(!armed){ armed = true; $("#upDelete").textContent = t("sc.delSure"); return; }
+      armed = false;
+      $("#upDelete").textContent = t("sc.delete");
+      upApply(await sc.profileDelete(cur.id).catch(() => null));
+    };
+    $("#upOk").onclick = closeModal;
+  }).catch(() => {});
 }
 function openShortcuts(){
   const sc = window.reccheckShortcuts;
@@ -2072,21 +2197,8 @@ function openShortcuts(){
     openModal(
       '<h3>' + t("sc.title") + '</h3>' +
       '<p class="scIntro">' + t("sc.intro") + '</p>' +
-      '<label>' + t("sc.profile") + '</label>' +
-      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
-        '<select id="scProfile" style="flex:1;min-width:130px"></select>' +
-        '<button class="btn small" id="scAdd">' + t("sc.add") + '</button>' +
-        '<button class="btn small" id="scRename">' + t("sc.rename") + '</button>' +
-        '<button class="btn small" id="scDelete">' + t("sc.delete") + '</button>' +
-      '</div>' +
-      '<div id="scNameWrap" style="display:none;margin-top:8px">' +
-        '<div style="display:flex;gap:8px">' +
-          '<input id="scName" maxlength="40" autocomplete="off" style="flex:1">' +
-          '<button class="btn small" id="scNameOk">✓</button>' +
-          '<button class="btn small" id="scNameCancel">✕</button>' +
-        '</div>' +
-      '</div>' +
-      '<div class="err" style="color:var(--faint)">' + t("sc.profileHint") + '</div>' +
+      '<div class="err" style="color:var(--faint)">' +
+        t("up.scActive", {n: (scActiveProfile() || {}).name || "-"}) + '</div>' +
       '<div id="scBody"></div>' +
       '<div style="display:flex;gap:8px;align-items:center;margin-top:16px">' +
         '<button class="btn" id="scTest" style="flex:1">' + t("sc.test") + '</button>' +
@@ -2097,17 +2209,6 @@ function openShortcuts(){
       (st.available ? "" : '<div class="err">' + t("sc.unavailable") + '</div>') +
       '<div class="actions"><button class="btn amber" id="scOk">' + t("sc.done") + '</button></div>');
     renderShortcuts();
-    $("#scProfile").onchange = async e => scApply(await sc.profileSelect(e.target.value).catch(() => null));
-    $("#scAdd").onclick = () => scEditName("add");
-    $("#scRename").onclick = () => scEditName("rename");
-    let armed = false;
-    $("#scDelete").onclick = async () => {           // two-step confirm, no nested modal
-      const cur = scActiveProfile();
-      if(!cur || SCSTATE.profiles.length <= 1) return;
-      if(!armed){ armed = true; $("#scDelete").textContent = t("sc.delSure"); return; }
-      armed = false;
-      scApply(await sc.profileDelete(cur.id).catch(() => null));
-    };
     $("#scTest").onclick = async () => {
       const b = $("#scTest"), pre = $("#scDiag"), copy = $("#scCopy");
       if(b.dataset.busy) return;
@@ -3543,6 +3644,10 @@ document.querySelectorAll(".mcatBtn").forEach(b => b.onclick = e => {   // touch
   cat.classList.toggle("open");
 });
 document.addEventListener("click", e => { if(!e.target.closest(".mcat")) document.querySelectorAll(".mcat").forEach(c => c.classList.remove("open")); });
+$("#userBtn").onclick = e => { e.stopPropagation(); openProfiles(); };
+$("#userBtn").onmouseenter = () => { clearTimeout(UPTIPT); UPTIPT = setTimeout(upShowTip, 1000); };
+$("#userBtn").onmouseleave = upHideTip;
+$("#userBtn").onblur = upHideTip;
 $("#mcShortcutsBtn").onclick = e => {     // a leaf button, not a dropdown — open the dialog
   e.stopPropagation();
   document.querySelectorAll(".mcat").forEach(c => c.classList.remove("open"));

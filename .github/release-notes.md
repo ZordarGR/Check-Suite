@@ -1,26 +1,22 @@
-## RecCheck 1.15.0 — Windows
+## RecCheck 1.16.0 — Windows
 
 Nightly POS receipt audit for the protel checkcharge1 report (.oxps). Everything runs locally — no data leaves the machine.
 
-### The τ shortcut
+### Fix — shortcuts could not be bound in 1.15.0
 
-**It no longer asks protel to change the keyboard layout — it changes it the way you would.** If the active window is already on Greek, the shortcut simply presses T and changes nothing. Otherwise it does Win+Space, presses T, and Win+Space back.
+**Please install this if you are on 1.15.0.** Binding any mouse button stored a value the helper could not read, so the shortcut did nothing — and because setting it also replaced whatever was there before, a binding that had been working was lost at the same time. Both halves of that change shipped in 1.15.0; only one of them had been updated.
 
-Every previous version asked the application itself to switch layouts, and protel is exactly the application that will not. Win+Space is handled by Windows, so it needs no cooperation. The layout switcher flashes briefly — that is the shell doing the work.
+Setting a binding now stores it correctly, a binding that cannot be read is refused rather than saved over a working one, and any bad value already in your settings is cleared on first run so the row simply reads *not set* and can be bound again.
 
-**It can no longer leave your keyboard stuck on Greek.** The old fallback posted a layout request that could not be recalled, then stopped waiting after 90 ms. When protel was busy and processed it late, the layout flipped with nothing left to undo it — no τ *and* a stranded keyboard, from one press, which is why it looked intermittent. That path is gone on the way to Greek, and the restore now runs whether or not the switch was confirmed, then re-checks that the layout stayed put.
+You will need to set your bindings once more after updating.
 
-### New
+### Switch user
 
-**A fixed keystroke run.** Under *PROTEL SHORTCUTS* you can bind **Enter · Enter · → · Enter · Enter** to a button — the whole run on one press instead of five, with a 25 ms pause between keys so nothing outruns the dialog. The run is stored as settings rather than built into the program, so it can be adjusted later without reinstalling.
+Profiles have moved out of *PROTEL SHORTCUTS* into their own **Switch user** button on the home screen, to the right of the checklist. They are a different kind of thing: the shortcuts menu is *what the buttons do*, a profile is *who is sitting here*.
 
-**Modifier + button binds.** A trigger can now be `Ctrl`, `Alt` or `Shift` together with a mouse button, so `Shift + side button` and the plain side button can drive different shortcuts. Existing bindings keep working exactly as they were.
+The button opens the list of profiles with create, rename and delete. Resting the pointer on it for a second explains why profiles matter — that bindings belong to the profile rather than to the computer, so it is worth each person making their own and setting it up the way they work. It only appears after a full second, so it never flickers open in passing.
 
-**The Test button is back.** *PROTEL SHORTCUTS → Test the τ shortcut* reports every step of what the shortcut did, with a copy button — useful if it ever misbehaves again.
-
-### Fixes
-
-- **The overlay's "all done" reminder could not appear.** If the app started, or updated, on a night whose tasks were already finished, the overlay never put itself away — so asking for it back did nothing instead of saying the night was done. Being put away now follows from the list being complete, however that came about; the animation still needs to be watched happening.
+The shortcuts menu now simply states which profile it is editing.
 
 ### Install
 
