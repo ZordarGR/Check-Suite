@@ -7,6 +7,11 @@
 //   rc-tbind.exe diag <parentPid> [delayMs]
 //       -> waits, then runs the tau shortcut against the foreground window and prints
 //          every step it observed, so a machine where it fails can say why
+//   rc-tbind.exe ping
+//       -> prints "RCTBIND OK <version>" and exits 0. Installs nothing and touches
+//          nothing. It exists so the app can tell the difference between "the helper
+//          is missing", "the helper will not start" and "the helper starts but the
+//          hooks are refused" instead of failing silently for all three.
 //
 // Triggers: m<mods>-<btn>   3 = middle, 4 = X1 (Back), 5 = X2 (Forward); bare "m4" = no mods
 //           k<mods>-<vk>    mods bitmask: 1 = Ctrl, 2 = Alt, 4 = Shift, 8 = Win
@@ -578,8 +583,16 @@ static class TBind {
     binds[key] = bindList.Count - 1;
   }
 
+  const string VER = "v7";
+
   static int Main(string[] args){
     int parentPid;
+    if(args.Length >= 1 && args[0] == "ping"){
+      /* Reached only if the file exists, is allowed to execute and the runtime is
+         present. Anything that stops those says so by this line never arriving. */
+      try{ Console.Out.Write("RCTBIND OK " + VER + "\n"); Console.Out.Flush(); }catch(Exception){}
+      return 0;
+    }
     if(args.Length >= 2 && args[0] == "detect"){
       mode = 1;
       if(!int.TryParse(args[1], out parentPid)) return 2;
@@ -590,7 +603,7 @@ static class TBind {
       int wait = 5000;
       if(args.Length >= 3) int.TryParse(args[2], out wait);
       DIAG = new StringBuilder();
-      D("rc-tbind v5 diagnostic");
+      D("rc-tbind " + VER + " diagnostic");
       D("waited " + wait + " ms for you to bring the target window forward");
       Thread.Sleep(wait);
       try{ SendGreekT(); }catch(Exception e){ D("  EXCEPTION: " + e.Message); }
