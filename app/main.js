@@ -142,7 +142,7 @@ function setInteract(on){
    shift keeps their own bindings. Config shape:
      {profiles: [{id, name, binds: {tau: <trigger>, altf4: <trigger>}}], activeProfile: id}
    A trigger is "m3"/"m4"/"m5" or "k<mods>-<vk>"; both are opaque to this layer. */
-const ACTIONS = ["tau", "altf4", "seq"];
+const ACTIONS = ["tau", "altf4"];
 /* A trigger the helper cannot parse is worse than no trigger, because storing one
    silently replaces a binding that worked. Validate on the way in AND on the way out. */
 const TRIGGER_RE = /^(?:m(?:[345]|\d{1,2}-[345])|k\d{1,2}-\d{1,3})$/;
@@ -233,7 +233,7 @@ function tauStart(){
   if(!exe) return;
   let binds = {};
   try{ binds = activeBinds(); }catch(e){}
-  const specs = ACTIONS.filter(a => binds[a]).map(a => binds[a] + "=" + (a === "seq" ? seqSpec() : a));
+  const specs = ACTIONS.filter(a => binds[a]).map(a => binds[a] + "=" + a);
   if(!specs.length) return;                 // nothing bound in this profile — don't hook at all
   try{
     TAU = spawn(exe, ["bind", String(process.pid)].concat(specs), {stdio: "ignore", windowsHide: true});
@@ -458,7 +458,7 @@ ipcMain.handle("overlay-ihotkey-set", (_e, acc) => {
 ipcMain.handle("sc-get", () => {
   try{
     const {list, active} = readProfiles();
-    return {profiles: list, active, seq: seqConfig(),
+    return {profiles: list, active,
             available: process.platform === "win32" && !!tauPath()};
   }catch(e){ return {profiles: [], active: null, available: false}; }
 });

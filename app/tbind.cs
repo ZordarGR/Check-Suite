@@ -458,8 +458,15 @@ static class TBind {
   static IntPtr MouseCallback(int nCode, IntPtr wParam, IntPtr lParam){
     try{
       if(nCode >= 0){
-        MSLLHOOKSTRUCT info = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
-        if((info.flags & LLMHF_INJECTED) == 0){          // never react to our own output
+        /* NO injected-event filter here, deliberately. We only ever SendInput with
+           type = 1 (INPUT_KEYBOARD) — mouse input is never injected by this helper, so
+           there is no feedback loop for such a filter to prevent. What it DID do was
+           discard buttons that arrive flagged as injected, which is exactly how mouse
+           software (G HUB, Synapse, OEM drivers) delivers remapped side buttons: the
+           bind stored, the helper ran, the hook fired, and the event was dropped before
+           anything looked at it. The keyboard hook keeps its filter, where we do inject
+           and the loop is real. */
+        {
           bool down;
           int btn = ButtonOf(wParam, lParam, out down);
           if(btn != 0){
