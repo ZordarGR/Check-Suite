@@ -142,7 +142,23 @@ function setInteract(on){
    shift keeps their own bindings. Config shape:
      {profiles: [{id, name, binds: {tau: <trigger>, altf4: <trigger>}}], activeProfile: id}
    A trigger is "m3"/"m4"/"m5" or "k<mods>-<vk>"; both are opaque to this layer. */
-const ACTIONS = ["tau", "altf4"];
+const ACTIONS = ["tau", "altf4", "seq"];
+/* The keystroke run is deliberately DATA, not code: it lives in config and travels to
+   the helper on the command line, so tuning it later is a small update rather than a
+   whole new installer. Enter, Enter, Right, Enter, Enter. */
+const SEQ_DEFAULT = {keys: [13, 13, 39, 13, 13], gap: 25};
+function seqConfig(){
+  let c = {};
+  try{ c = hub.readConfig(); }catch(e){}
+  const raw = (c.seq && Array.isArray(c.seq.keys) && c.seq.keys.length) ? c.seq : SEQ_DEFAULT;
+  const keys = raw.keys.filter(k => Number.isInteger(k) && k > 0 && k < 256).slice(0, 32);
+  const gap = (Number.isInteger(raw.gap) && raw.gap >= 0 && raw.gap <= 2000) ? raw.gap : SEQ_DEFAULT.gap;
+  return {keys: keys.length ? keys : SEQ_DEFAULT.keys.slice(), gap};
+}
+function seqSpec(){
+  const q = seqConfig();
+  return "seq:" + q.keys.join(",") + "@" + q.gap;
+}
 function newProfileId(){ return "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 /* pre-1.12 config kept a single c.tauButton — fold it into a first profile so nobody
    loses the binding they already had */
@@ -202,7 +218,7 @@ function tauStart(){
   if(!exe) return;
   let binds = {};
   try{ binds = activeBinds(); }catch(e){}
-  const specs = ACTIONS.filter(a => binds[a]).map(a => binds[a] + "=" + a);
+  const specs = ACTIONS.filter(a => binds[a]).map(a => binds[a] + "=" + (a === "seq" ? seqSpec() : a));
   if(!specs.length) return;                 // nothing bound in this profile — don't hook at all
   try{
     TAU = spawn(exe, ["bind", String(process.pid)].concat(specs), {stdio: "ignore", windowsHide: true});
@@ -427,7 +443,8 @@ ipcMain.handle("overlay-ihotkey-set", (_e, acc) => {
 ipcMain.handle("sc-get", () => {
   try{
     const {list, active} = readProfiles();
-    return {profiles: list, active, available: process.platform === "win32" && !!tauPath()};
+    return {profiles: list, active, seq: seqConfig(),
+            available: process.platform === "win32" && !!tauPath()};
   }catch(e){ return {profiles: [], active: null, available: false}; }
 });
 /* listen for one trigger and store it against an action in the active profile */

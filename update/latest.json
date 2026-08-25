@@ -1,11 +1,11 @@
 {
-  "version": "1.14.0",
+  "version": "1.15.0",
   "type": "full",
-  "engine": "1.14.0",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.14.0/RecCheck-Setup.exe",
-  "setupSha256": "b04110958f0b4d2a36e8fbb7ad6229a464b867f048ea0400c274282a85643ea0",
+  "engine": "1.15.0",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.15.0/RecCheck-Setup.exe",
+  "setupSha256": "0d1e0fb81fda1835e88f6703ec518d359abc7e389a99e60325828ada5d329edb",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "cae4ce1de7eda5d0481214ad7b491ed97d6d51abfbe1305bc69f7ec0b74c66c6",
-  "notes": "Tick the last task and the overlay fills green, lands a tick, and puts itself away until 07:00. Update checks no longer read a stale manifest."
+  "sha256": "88eed03bbcc83a87f0ea0b1b36d33d4010dbfac8f20149086d1746265eadb3f2",
+  "notes": "The τ now switches the layout with Win+Space instead of asking protel to, and can no longer leave the keyboard stuck on Greek. New: a fixed keystroke run, and modifier+button binds."
 }
