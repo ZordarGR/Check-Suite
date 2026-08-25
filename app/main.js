@@ -142,7 +142,7 @@ function setInteract(on){
    shift keeps their own bindings. Config shape:
      {profiles: [{id, name, binds: {tau: <trigger>, altf4: <trigger>}}], activeProfile: id}
    A trigger is "m3"/"m4"/"m5" or "k<mods>-<vk>"; both are opaque to this layer. */
-const ACTIONS = ["tau", "altf4"];
+const ACTIONS = ["tau", "altf4", "seq"];
 /* A trigger the helper cannot parse is worse than no trigger, because storing one
    silently replaces a binding that worked. Validate on the way in AND on the way out. */
 const TRIGGER_RE = /^(?:m(?:[345]|\d{1,2}-[345])|k\d{1,2}-\d{1,3})$/;
@@ -230,6 +230,18 @@ function tauKillStrays(cb){
     setTimeout(fin, 1500);
   }catch(e){ fin(); }
 }
+/* The helper writes its own unhandled exception here before dying. Exit 0xE0434352
+   only says "something threw"; this says what and where. Cleared by the helper on
+   every successful start, so it never describes a run that has been superseded. */
+function tauCrash(){
+  try{
+    const fs = require("fs");
+    const base = process.env.LOCALAPPDATA;
+    if(!base) return null;
+    const txt = fs.readFileSync(path.join(base, "RecCheck", "rc-tbind-crash.txt"), "utf8");
+    return txt.trim().split(/\r?\n/).slice(0, 4).join(" | ").slice(0, 400) || null;
+  }catch(e){ return null; }
+}
 function tauStart(){
   tauStop();
   if(process.platform !== "win32"){ TAUINFO = {state: "not-windows"}; return; }
@@ -237,7 +249,7 @@ function tauStart(){
   if(!exe){ TAUINFO = {state: "no-exe"}; return; }
   let binds = {};
   try{ binds = activeBinds(); }catch(e){}
-  const specs = ACTIONS.filter(a => binds[a]).map(a => binds[a] + "=" + a);
+  const specs = ACTIONS.filter(a => binds[a]).map(a => binds[a] + "=" + (a === "seq" ? seqSpec() : a));
   if(!specs.length){                        // nothing bound in this profile — don't hook at all
     TAUINFO = {state: "idle", exe: exe};
     return;
@@ -484,7 +496,7 @@ ipcMain.handle("overlay-ihotkey-set", (_e, acc) => {
 ipcMain.handle("sc-get", () => {
   try{
     const {list, active} = readProfiles();
-    return {profiles: list, active,
+    return {profiles: list, active, seq: seqConfig(),
             available: process.platform === "win32" && !!tauPath()};
   }catch(e){ return {profiles: [], active: null, available: false}; }
 });
@@ -558,7 +570,7 @@ ipcMain.handle("sc-helper", () => new Promise(res => {
      up front would still say "running". The probe below gives it that moment. */
   const snap = () => ({exe: exe, state: TAUINFO.state, code: TAUINFO.code, signal: TAUINFO.signal,
                        err: TAUINFO.err, pid: TAUINFO.pid, ranMs: TAUINFO.ranMs,
-                       specs: TAUINFO.specs, since: TAUINFO.since});
+                       specs: TAUINFO.specs, since: TAUINFO.since, crash: tauCrash()});
   if(process.platform !== "win32"){ const i = snap(); i.probe = "not-windows"; res(i); return; }
   if(!exe){ const i = snap(); i.probe = "missing"; res(i); return; }
   let out = "", done = false;

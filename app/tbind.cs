@@ -549,7 +549,14 @@ static class TBind {
         if(int.TryParse(body.Substring(at + 1), out g) && g >= 0 && g <= 2000) b.gap = g;
         body = body.Substring(0, at);
       }
-      string[] parts = body.Split(',');
+      /* Split(new char[]{','}), never Split(','). The single-char overload is
+         String.Split(char, StringSplitOptions), which exists in Mono's BCL — the one
+         this is cross-compiled against — but NOT in .NET Framework 4.x, which is what
+         runs it on Windows. The JIT resolves every token in a method before executing
+         it, so that one call made the whole of ParseBind throw MissingMethodException
+         on its first invocation, killing the helper 53 ms in with exit 0xE0434352 —
+         even though the seq: branch below was never taken. See build-check.sh. */
+      string[] parts = body.Split(new char[]{','});
       List<ushort> keys = new List<ushort>();
       foreach(string part in parts){
         int vk;
@@ -581,6 +588,36 @@ static class TBind {
 
     bindList.Add(b);
     binds[key] = bindList.Count - 1;
+  }
+
+  /* A helper that dies of an unhandled exception used to leave nothing behind but a
+     numeric exit code — 0xE0434352, "a managed exception happened", which says only
+     that something threw. It now writes the exception itself where the app can read
+     it, so the shortcuts menu can name the fault instead of the category.
+
+     Deliberately plain 4.0-era BCL: this file is cross-compiled on Linux against
+     Mono's class library but RUNS on .NET Framework, and a member that exists only
+     in the former throws exactly the failure this code is here to report. */
+  static string CrashPath(){
+    try{
+      string b = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+      if(b == null || b.Length == 0) return null;
+      return System.IO.Path.Combine(System.IO.Path.Combine(b, "RecCheck"), "rc-tbind-crash.txt");
+    }catch(Exception){ return null; }
+  }
+  static void WriteCrash(string where, Exception e){
+    try{
+      string p = CrashPath();
+      if(p == null) return;
+      System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(p));
+      System.IO.File.WriteAllText(p,
+        VER + " " + where + " " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "\r\n" +
+        (e == null ? "(no exception object)" : e.ToString()) + "\r\n");
+    }catch(Exception){}
+  }
+  /* Cleared on every successful start, so what the app reads is always this run's. */
+  static void ClearCrash(){
+    try{ string p = CrashPath(); if(p != null) System.IO.File.Delete(p); }catch(Exception){}
   }
 
   const string VER = "v7";
@@ -618,6 +655,22 @@ static class TBind {
       if(binds.Count == 0) return 2;
     }else return 2;
 
+    ClearCrash();
+    try{
+      AppDomain.CurrentDomain.UnhandledException += delegate(object sender, UnhandledExceptionEventArgs ue){
+        WriteCrash("unhandled", ue.ExceptionObject as Exception);
+      };
+    }catch(Exception){}
+
+    try{
+      return Run(parentPid);
+    }catch(Exception e){
+      WriteCrash("main", e);
+      return 5;                                // "it crashed", with the reason on disk
+    }
+  }
+
+  static int Run(int parentPid){
     mainTid = GetCurrentThreadId();
 
     watchdog = new Thread(delegate(){          // independent of the message loop by design
@@ -644,9 +697,13 @@ static class TBind {
 
     MSG msg;
     while(GetMessage(out msg, IntPtr.Zero, 0, 0) > 0){
-      if(msg.message == WM_APP_SEND){ QueueSend(msg.wParam.ToInt32()); continue; }
-      TranslateMessage(ref msg);
-      DispatchMessage(ref msg);
+      /* One bad message must not cost the user their shortcuts for the rest of the
+         night. Record it and keep pumping. */
+      try{
+        if(msg.message == WM_APP_SEND){ QueueSend(msg.wParam.ToInt32()); continue; }
+        TranslateMessage(ref msg);
+        DispatchMessage(ref msg);
+      }catch(Exception e){ WriteCrash("loop", e); }
     }
     if(hook != IntPtr.Zero) UnhookWindowsHookEx(hook);
     if(kbHook != IntPtr.Zero) UnhookWindowsHookEx(kbHook);

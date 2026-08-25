@@ -1213,6 +1213,7 @@ en: {
   "sc.hBlocked": "Windows will not start the helper. This is almost always antivirus or a workplace policy blocking it \u2014 the shortcuts cannot work until it is allowed to run.",
   "sc.hRefused": "The helper starts and is then shut straight back down. Security software on this machine is refusing it the keyboard and mouse hooks the shortcuts are built on.",
   "sc.hDead": "The helper started and stopped on its own. Try binding the button again; if this keeps saying the same thing, send the detail below.",
+  "sc.hCrash": "The helper crashed. What went wrong is printed below \u2014 send it on and it can be fixed exactly.",
   "sc.hDetail": "detail",
   "sc.done": "Done",
   "sc.keyMid": "Middle button", "sc.keyBack": "Side button — Back", "sc.keyFwd": "Side button — Forward",
@@ -1368,6 +1369,7 @@ gr: {
   "sc.hBlocked": "Τα Windows δεν ξεκινούν τον βοηθό. Σχεδόν πάντα τον μπλοκάρει antivirus ή πολιτική της εταιρείας — οι συντομεύσεις δεν δουλεύουν μέχρι να του επιτραπεί.",
   "sc.hRefused": "Ο βοηθός ξεκινάει και κλείνει αμέσως. Κάποιο πρόγραμμα ασφαλείας του μηχανήματος του αρνείται τα hooks πληκτρολογίου και ποντικιού που χρειάζονται οι συντομεύσεις.",
   "sc.hDead": "Ο βοηθός ξεκίνησε και σταμάτησε μόνος του. Δοκίμασε ξανά την αντιστοίχιση· αν συνεχίζει να το λέει, στείλε τη λεπτομέρεια παρακάτω.",
+  "sc.hCrash": "Ο βοηθός κατέρρευσε. Το τι πήγε στραβά τυπώνεται παρακάτω — στείλ' το και διορθώνεται ακριβώς.",
   "sc.hDetail": "λεπτομέρεια",
   "sc.done": "Έτοιμο",
   "sc.keyMid": "Μεσαίο πλήκτρο", "sc.keyBack": "Πλαϊνό πλήκτρο — Πίσω", "sc.keyFwd": "Πλαϊνό πλήκτρο — Μπροστά",
@@ -1953,7 +1955,7 @@ function openOverlaySettings(){
    Profiles keep one person's bindings intact when someone else covers the shift.
    Naming and deleting happen inline — Electron has no window.prompt, and a second
    openModal would tear down this dialog. */
-const SC_ACTIONS = ["tau", "altf4"];
+const SC_ACTIONS = ["tau", "altf4", "seq"];
 let SCSTATE = null, PROFILE_NAME = "";
 function vkName(vk){
   if(vk >= 0x30 && vk <= 0x39) return String.fromCharCode(vk);          // 0-9
@@ -2026,6 +2028,13 @@ function refreshProfileName(){
     paintUserBtn();
   }).catch(() => {});
 }
+/* Spell the run out under its description — five vk numbers in config mean nothing
+   to the person deciding whether to bind a button to them. */
+function scSeqLabel(){
+  const q = SCSTATE && SCSTATE.seq;
+  if(!q || !q.keys || !q.keys.length) return "";
+  return q.keys.map(vkName).join(" \u00b7 ") + "  (" + q.gap + " ms)";
+}
 function scRow(action){
   const trig = (SCSTATE.binds || {})[action];
   const dis = trig ? "" : ' disabled style="opacity:.35"';
@@ -2033,7 +2042,8 @@ function scRow(action){
     '<div class="scHead"><span class="scName">' + t("sc." + action) + '</span>' +
     '<button class="btn small scClear" data-a="' + action + '" title="' + t("sc.clear") + '"' + dis + '>✕</button></div>' +
     '<button class="btn scBind" data-a="' + action + '">' + scTriggerName(trig) + '</button>' +
-    '<p class="scWhy">' + t("sc." + action + "Why") + '</p>' +
+    '<p class="scWhy">' + t("sc." + action + "Why") +
+      (action === "seq" ? '<br><span class="scKeys">' + escapeHtml(scSeqLabel()) + '</span>' : '') + '</p>' +
     '<div class="err scWarn" data-a="' + action + '">' + (scIsBareKey(trig) ? t("sc.bareKey") : "") + '</div>' +
     '</div>';
 }
@@ -2218,8 +2228,12 @@ function helperVerdict(h){
   if(h.state === "running") return {key: "sc.hOk", tone: "good"};
   if(h.state === "idle") return {key: "sc.hIdle", tone: "faint"};
   // exit 3 is the helper's own "Windows would not give me the hooks"
-  if(h.state === "exited") return h.code === 3 ? {key: "sc.hRefused", tone: "bad"}
-                                               : {key: "sc.hDead", tone: "warn"};
+  if(h.state === "exited"){
+    if(h.code === 3) return {key: "sc.hRefused", tone: "bad"};
+    // 5 is its own caught crash; 3762504530 (0xE0434352) is one the CLR caught for it
+    if(h.code === 5 || h.code === 3762504530 || h.crash) return {key: "sc.hCrash", tone: "bad"};
+    return {key: "sc.hDead", tone: "warn"};
+  }
   return {key: "sc.hIdle", tone: "faint"};
 }
 function helperDetail(h){
@@ -2232,6 +2246,7 @@ function helperDetail(h){
   if(h.ranMs !== null && h.ranMs !== undefined) bits.push("ran=" + h.ranMs + "ms");
   if(h.specs && h.specs.length) bits.push("binds=" + h.specs.join(","));
   if(h.exe) bits.push(h.exe);
+  if(h.crash) bits.push("\n" + h.crash);      // the exception itself, when there is one
   return bits.join("  ");
 }
 function refreshHelperStatus(){
@@ -2251,7 +2266,7 @@ function refreshHelperStatus(){
       escapeHtml(t(v.key)) +
       (d && v.tone !== "good" && v.tone !== "faint"
         ? '<div style="margin-top:6px;color:var(--faint);font-family:ui-monospace,Consolas,monospace;' +
-          'font-size:11px;word-break:break-all">' + t("sc.hDetail") + ': ' + escapeHtml(d) + '</div>'
+          'font-size:11px;word-break:break-all;white-space:pre-wrap">' + t("sc.hDetail") + ': ' + escapeHtml(d) + '</div>'
         : "");
   }).catch(() => {
     if($("#scHelp")) $("#scHelp").innerHTML = "";

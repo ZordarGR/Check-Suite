@@ -1,36 +1,26 @@
-## RecCheck 1.16.1 — Windows
+## RecCheck 1.16.2 — Windows
 
 Nightly POS receipt audit for the protel checkcharge1 report (.oxps). Everything runs locally — no data leaves the machine.
 
-### Fix — side buttons that go through mouse software were being ignored
+### Fix — the helper crashed on startup, so no shortcut could work
 
-**Please install this if your shortcuts stopped working.**
+**Install this if your shortcuts do nothing.** This is the actual cause of the breakage that has run through 1.15.0, 1.16.0 and 1.16.1.
 
-The helper that watches for your bound button was discarding any button press that arrives flagged as *injected*. That flag is exactly how mouse software — G HUB, Synapse, an OEM driver — delivers a remapped side button. So on a mouse whose side buttons are routed through its own software, the press was thrown away before anything looked at it: nothing happened when you pressed it, and nothing was detected when you tried to bind it either.
+The status line added in 1.16.1 reported `exit=3762504530` — `0xE0434352`, the CLR's code for *an unhandled exception happened*. The helper was starting, throwing, and dying 53 ms later, every time.
 
-That filter was there to stop the helper reacting to its own output. It never needed to be: the helper only ever sends *keyboard* input, never mouse input, so there was no loop to guard against. It is gone from the mouse side and kept on the keyboard side, where the loop is real.
+The helper is compiled here on Linux against Mono's class library, and runs on your machine against .NET Framework, which is the smaller of the two. One line of the keystroke-run parser added in 1.15.0 — `body.Split(',')` — compiled to `String.Split(char, StringSplitOptions)`, an overload .NET Framework 4.8 does not have. Windows resolves every call in a method *before* running it, so that single line killed the whole of the bind parser on its first use — even though the branch containing it was never reached.
 
-It also explains why this could differ from one night to the next — the house mouse and your own need not deliver their side buttons the same way.
+It was hidden for three versions because 1.15.0 also broke *storing* a binding, so nothing was ever bound, so the helper was never started in the mode that would have crashed. Fixing the storage in 1.16.0 and 1.16.1 is what finally let it run — and crash.
 
-### The shortcuts menu now says why it is not working
+The call is now written so it can only bind to the overload that exists everywhere, and the build refuses to produce a helper that references anything outside a reviewed list of .NET Framework members.
 
-Every way this could fail used to end the same way: a row reading *not set*, and no explanation. Four different causes, one symptom, nothing to go on.
+### The helper now reports its own crashes
 
-*PROTEL SHORTCUTS* now shows a status line, and it names the cause:
+Rather than a hex exit code, an unhandled exception is written down and *PROTEL SHORTCUTS* shows what threw and where — the exception type, its message, and the method it came from. A crash while it is running no longer takes the shortcuts down for the rest of the night either; it is recorded and the helper keeps going.
 
-- **Running** — your bindings are live.
-- **Ready, nothing bound yet** — no process exists because nothing needs one. This is normal, not a fault.
-- **The helper file is not on this computer** — reinstall; if it goes missing again, security software is removing it.
-- **Windows will not start the helper** — antivirus or a workplace policy is blocking it.
-- **It starts and is shut straight back down** — it ran, and was refused the keyboard and mouse access the shortcuts are built on.
+### The keystroke run is back
 
-The raw detail is printed underneath so it can be copied or photographed if it needs sending on.
-
-If you were wondering why *rc-tbind* was not in Task Manager: it deliberately does not start when nothing is bound, and 1.16.0 had just cleared the bindings that 1.15.0 corrupted. That was the expected state, not a second fault.
-
-### The keystroke run is gone
-
-The fixed *Enter, Enter, Right, Enter, Enter* run has been removed from the menu, as asked.
+*Invoice keystroke run* returns to the menu: **Enter · Enter · Right · Enter · Enter**, 25 ms apart, on one button. It was withdrawn in 1.16.1 while it was the suspect. It was not the cause — one line of its parser was, and that line is fixed.
 
 ### Install
 
