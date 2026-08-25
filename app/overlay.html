@@ -130,9 +130,14 @@ window.overlayBridge.onData(function(d){
   LAST = d;
   paint(d);
   if(!allDone(d)){ SEEN_INCOMPLETE = true; CELEBRATED = false; return; }
-  if(CELEBRATED || !SEEN_INCOMPLETE) return;   // already shown, or it was done before we appeared
+  if(CELEBRATED) return;
   CELEBRATED = true;
-  celebrate();
+  /* Being put away is a STATE — it follows from the list being complete, however we got
+     there. The animation is the separate thing that needs a transition to be worth
+     playing. Tying both to SEEN_INCOMPLETE meant a client that started up (or updated)
+     on an already-finished night never put itself away, so the reminder was unreachable. */
+  if(SEEN_INCOMPLETE) celebrate();
+  else try{ window.overlayBridge.complete(); }catch(e){}
 });
 window.overlayBridge.onMode(function(m){
   document.body.classList.toggle("interact", !!(m && m.interact));

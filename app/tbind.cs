@@ -8,10 +8,13 @@
 //       -> waits, then runs the tau shortcut against the foreground window and prints
 //          every step it observed, so a machine where it fails can say why
 //
-// Triggers: m3 = middle, m4 = X1 (Back), m5 = X2 (Forward)
-//           k<mods>-<vk>   mods bitmask: 1 = Ctrl, 2 = Alt, 4 = Shift, 8 = Win
-// Actions:  tau   = a real Greek τ keypress (verified layout hop)
-//           altf4 = a real Alt+F4 (closes the focused window)
+// Triggers: m<mods>-<btn>   3 = middle, 4 = X1 (Back), 5 = X2 (Forward); bare "m4" = no mods
+//           k<mods>-<vk>    mods bitmask: 1 = Ctrl, 2 = Alt, 4 = Shift, 8 = Win
+// Actions:  tau            = a real Greek τ keypress (verified layout hop)
+//           altf4          = a real Alt+F4 (closes the focused window)
+//           seq:<vk,...>[@ms] = a fixed run of keystrokes, e.g. seq:13,13,39,13,13@120
+//                            (Enter Enter Right Enter Enter). Extended keys such as the
+//                            arrows carry the extended flag so they are not read as numpad.
 // Left/right mouse buttons are never bindable.
 //
 // Design notes (v2 — the v1 pump could stall and throttle the whole desktop's mouse):
@@ -33,6 +36,29 @@
 //     (GetQueueStatus poll while attached, worst-case bounded sleep otherwise) — restoring
 //     the layout before the target translates the key would turn the τ into a plain t.
 //   * the Greek HKL is loaded once and cached, not on every press.
+//
+// Design notes (v7 — Win+Space is how the layout actually changes):
+//   * the shape is: if the target is ALREADY Greek, just press T and change nothing;
+//     otherwise Win+Space, press T, Win+Space back.
+//   * every other method asks the application to change its own layout, and protel is
+//     exactly the application that refuses — so those are now the backstop, not the
+//     opening move. Win+Space goes over its head: the SHELL performs the switch.
+//   * it CYCLES rather than selecting, so it presses, verifies, and repeats up to the
+//     number of installed layouts; with the usual EN+EL pair that is a single press.
+//   * the Win key is released in a finally: a stuck Win key would turn every following
+//     keystroke into a shell shortcut, and releasing it after Space has registered is
+//     also what stops the Start menu opening.
+//
+// Design notes (v6 — the layout could be left switched to Greek):
+//   * PostMessage cannot be recalled. On the way TO Greek a request processed after we
+//     stopped waiting flipped the layout with nobody left to undo it: no tau AND a
+//     stranded keyboard from one press, and it looked intermittent because it depended
+//     on how busy the target was. That direction is now synchronous-only; the
+//     fire-and-forget fallback survives only when RESTORING, where late is still correct.
+//   * ActivateKeyboardLayout while attached is tried FIRST — synchronous, local, and
+//     incapable of arriving late.
+//   * the restore runs whether or not the hop verified, and re-checks that the layout
+//     stayed restored instead of discarding its own result.
 //
 // Design notes (v4 — multiple binds, keyboard triggers, Alt+F4):
 //   * a low-level KEYBOARD hook sits beside the mouse hook so a plain key or a combo can
@@ -57,7 +83,7 @@ static class TBind {
   const int WM_SYSKEYDOWN  = 0x0104, WM_SYSKEYUP = 0x0105;
   const uint WM_QUIT       = 0x0012;
   const uint WM_APP_SEND   = 0x8000 + 1;
-  const uint KEYEVENTF_UNICODE = 0x0004, KEYEVENTF_KEYUP = 0x0002;
+  const uint KEYEVENTF_UNICODE = 0x0004, KEYEVENTF_KEYUP = 0x0002, KEYEVENTF_EXTENDEDKEY = 0x0001;
   const uint WM_INPUTLANGCHANGEREQUEST = 0x0050;
   const uint KLF_ACTIVATE = 1;
   const uint SMTO_ABORTIFHUNG = 0x0002;
@@ -69,7 +95,7 @@ static class TBind {
   const char TAU = 'τ';
   const long GREEK = 0x0408;
 
-  const int ACT_TAU = 1, ACT_ALTF4 = 2;
+  const int ACT_TAU = 1, ACT_ALTF4 = 2, ACT_SEQ = 3;
 
   delegate IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam);
   [DllImport("user32.dll", SetLastError = true)] static extern IntPtr SetWindowsHookEx(int id, HookProc fn, IntPtr mod, uint tid);
@@ -118,8 +144,11 @@ static class TBind {
   static int mode = 0;                   // 1 = detect, 2 = bind
   static uint mainTid = 0;
   static Thread watchdog;                // static ref so it can never be collected
-  static readonly Dictionary<string, int> binds = new Dictionary<string, int>();
+  class Bind { public int action; public ushort[] keys; public int gap; }
+  static readonly List<Bind> bindList = new List<Bind>();
+  static readonly Dictionary<string, int> binds = new Dictionary<string, int>();   // trigger -> index
   static readonly HashSet<uint> swallowed = new HashSet<uint>();   // keys whose KEYUP we must eat too
+  static readonly HashSet<int> swallowedBtn = new HashSet<int>();  // buttons whose release we must eat
 
   static bool IsModifierVk(uint vk){
     return vk == VK_SHIFT || vk == VK_CONTROL || vk == VK_MENU || vk == VK_LWIN || vk == VK_RWIN
@@ -197,31 +226,102 @@ static class TBind {
   }
 
   /* switch the target thread's layout and return only when it has actually changed */
-  static bool HopTo(IntPtr fg, uint tid, IntPtr hkl, bool attached){
+  /* allowPost: may we fall back to a fire-and-forget PostMessage?
+     Only where a LATE arrival cannot hurt. Going TO Greek it can: PostMessage cannot be
+     recalled, so a request processed after we stop waiting flips the layout with nobody
+     left to put it back — no tau AND a stranded keyboard, from the same press. Coming
+     BACK it is exactly what we want, because arriving late still means correct. */
+  static bool HopTo(IntPtr fg, uint tid, IntPtr hkl, bool attached, bool allowPost){
     if(ThreadHasLang(tid, hkl)){ D("    already on the target layout"); return true; }
+    /* Win+Space FIRST. Everything below asks the target application to change its own
+       layout, and protel is precisely the application that will not — trying those first
+       only spends a few hundred milliseconds before flashing the switcher anyway. The
+       shell shortcut needs no cooperation, so it is the one that actually lands. */
+    if(HopViaWinSpace(tid, hkl)) return true;
+    /* Attached-local: synchronous, silent, and no message that can arrive late. */
+    if(attached){
+      ActivateKeyboardLayout(hkl, 0);
+      D("    ActivateKeyboardLayout (attached) layout now " + Hex(GetKeyboardLayout(tid)));
+      if(ThreadHasLang(tid, hkl)) return true;
+    }else D("    AttachThreadInput had failed, so ActivateKeyboardLayout was skipped");
     IntPtr res;
     IntPtr focus = FocusedOf(tid);
     /* The request has to reach the window that owns keyboard focus. On a dialog-heavy
        app that is a child control, not the top-level window the old code always used. */
     IntPtr[] targets = (focus != IntPtr.Zero && focus != fg) ? new IntPtr[]{focus, fg} : new IntPtr[]{fg};
     foreach(IntPtr target in targets){
-      IntPtr r = SendMessageTimeout(target, WM_INPUTLANGCHANGEREQUEST, IntPtr.Zero, hkl, SMTO_ABORTIFHUNG, 120, out res);
+      IntPtr r = SendMessageTimeout(target, WM_INPUTLANGCHANGEREQUEST, IntPtr.Zero, hkl, SMTO_ABORTIFHUNG, 150, out res);
       D("    SendMessageTimeout -> " + Describe(target) + " returned=" + (r != IntPtr.Zero) +
         " layout now " + Hex(GetKeyboardLayout(tid)));
       if(ThreadHasLang(tid, hkl)) return true;
     }
-    if(attached){
-      ActivateKeyboardLayout(hkl, 0);
-      D("    ActivateKeyboardLayout (attached) layout now " + Hex(GetKeyboardLayout(tid)));
-      if(ThreadHasLang(tid, hkl)) return true;
-    }else D("    AttachThreadInput had failed, so ActivateKeyboardLayout was skipped");
-    PostMessage(fg, WM_INPUTLANGCHANGEREQUEST, IntPtr.Zero, hkl);   // old v2 path, last resort
-    for(int i = 0; i < 9; i++){
-      Thread.Sleep(10);
-      if(ThreadHasLang(tid, hkl)){ D("    PostMessage worked after " + ((i + 1) * 10) + " ms"); return true; }
+    if(allowPost){
+      PostMessage(fg, WM_INPUTLANGCHANGEREQUEST, IntPtr.Zero, hkl);
+      for(int i = 0; i < 12; i++){
+        Thread.Sleep(15);
+        if(ThreadHasLang(tid, hkl)){ D("    PostMessage worked after " + ((i + 1) * 15) + " ms"); return true; }
+      }
     }
     D("    every attempt failed; layout is still " + Hex(GetKeyboardLayout(tid)));
     return false;
+  }
+  /* Win+Space is handled by the SHELL, not by the target application, so it works where
+     asking the app politely does not — which is the whole failure we keep hitting. Two
+     costs: it flashes the layout switcher, and it CYCLES rather than selecting, so with
+     three layouts installed the first press can land on the wrong one. Hence: cycle,
+     verify after each press, and stop the moment we are on the language we wanted. */
+  static void PressWinSpace(){
+    ushort scWin = (ushort)MapVirtualKey(VK_LWIN, 0), scSpace = (ushort)MapVirtualKey(0x20, 0);
+    int m = CurMods();      // a modifier the user is holding would spoil the chord
+    if((m & 1) != 0) KeyEvent(VK_CONTROL, (ushort)MapVirtualKey(VK_CONTROL, 0), KEYEVENTF_KEYUP);
+    if((m & 2) != 0) KeyEvent(VK_MENU,    (ushort)MapVirtualKey(VK_MENU, 0),    KEYEVENTF_KEYUP);
+    if((m & 4) != 0) KeyEvent(VK_SHIFT,   (ushort)MapVirtualKey(VK_SHIFT, 0),   KEYEVENTF_KEYUP);
+    try{
+      KeyEvent(VK_LWIN, scWin, KEYEVENTF_EXTENDEDKEY);
+      KeyEvent(0x20, scSpace, 0);
+      KeyEvent(0x20, scSpace, KEYEVENTF_KEYUP);
+    }finally{
+      /* The Win key MUST come back up even if injection throws: a stuck Win key turns
+         every subsequent keystroke into a shell shortcut. Releasing it after a Space has
+         been seen also stops the Start menu opening, which a lone Win press would do. */
+      KeyEvent(VK_LWIN, scWin, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP);
+    }
+  }
+  static bool HopViaWinSpace(uint tid, IntPtr hkl){
+    int count = 0;
+    try{ count = GetKeyboardLayoutList(0, null); }catch(Exception){}
+    if(count < 2){ D("    Win+Space skipped: only one layout installed"); return false; }
+    int tries = count > 4 ? 4 : count;          // never cycle forever hunting a layout
+    for(int i = 0; i < tries; i++){
+      PressWinSpace();
+      for(int w = 0; w < 10; w++){
+        Thread.Sleep(20);
+        if(ThreadHasLang(tid, hkl)){
+          D("    Win+Space landed on the target after " + (i + 1) + " press(es)");
+          return true;
+        }
+      }
+      D("    Win+Space press " + (i + 1) + " -> layout " + Hex(GetKeyboardLayout(tid)));
+    }
+    return false;
+  }
+
+  /* Put the user's layout back and keep checking that it STAYED back. Costs one
+     comparison when nothing moved. The retries cover a request the target processes
+     late, which is the whole reason the keyboard used to stick on Greek. */
+  static void RestoreLayout(IntPtr fg, uint tid, IntPtr cur, bool attached){
+    if(cur == IntPtr.Zero) return;
+    for(int round = 0; round < 3; round++){
+      if(ThreadHasLang(tid, cur)){
+        Thread.Sleep(40);                  // settle: catch a straggler flipping it again
+        if(ThreadHasLang(tid, cur)) return;
+        D("  layout drifted back to Greek after restoring — going again");
+      }
+      D("  restore attempt " + (round + 1) + ":");
+      try{ HopTo(fg, tid, cur, attached, true); }catch(Exception){}
+    }
+    if(!ThreadHasLang(tid, cur))
+      D("  COULD NOT RESTORE the layout; it is left on " + Hex(GetKeyboardLayout(tid)));
   }
   /* the T we SendInput is TRANSLATED under whatever layout is active when the target
      pulls it off the queue — never hop back before it has been consumed */
@@ -263,25 +363,21 @@ static class TBind {
     if(grk == IntPtr.Zero){ D("  no Greek layout -> Unicode fallback"); PressTau(); return; }
     bool attached = AttachThreadInput(GetCurrentThreadId(), tid, true);
     D("  AttachThreadInput -> " + attached + (attached ? "" : "   (blocked: different desktop, or protel runs elevated and RecCheck does not)"));
-    bool hopped = false;
     try{
       D("  hop attempts:");
-      if(!HopTo(fg, tid, grk, attached)){
+      if(!HopTo(fg, tid, grk, attached, false)){   // no fire-and-forget on the way TO Greek
         D("  HOP FAILED -> falling back to injecting Unicode tau, which protel appears to ignore");
         PressTau(); return;
       }
-      hopped = true;
       D("  hop OK, layout now " + Hex(GetKeyboardLayout(tid)) + " -> pressing VK_T");
       PressKeys(VK_T, sc, 0);
       WaitKeyDrained(attached);
     }finally{
-      // the restore must survive an exception on the press — otherwise the user is
-      // left typing Greek in every application until they notice and switch back
-      if(hopped && cur != IntPtr.Zero){
-        D("  restoring the original layout:");
-        try{ HopTo(fg, tid, cur, attached); }catch(Exception){}
-        D("  layout after restore " + Hex(GetKeyboardLayout(tid)));
-      }
+      /* Restore unconditionally, and survive an exception on the press. The old code
+         only restored when the hop had been VERIFIED, so a request that landed after we
+         gave up left the user typing Greek in every program with nobody to undo it. */
+      RestoreLayout(fg, tid, cur, attached);
+      D("  layout after restore " + Hex(GetKeyboardLayout(tid)));
       if(attached) AttachThreadInput(GetCurrentThreadId(), tid, false);
     }
   }
@@ -323,12 +419,36 @@ static class TBind {
     }catch(Exception e){ return "(failed: " + e.Message + ")"; }
   }
 
+  /* Arrows, Insert/Delete, Home/End, PageUp/Down and friends are EXTENDED keys. Without
+     the extended flag the target can read them as their numpad twins — a Right Arrow
+     arriving as numpad 6 would type a digit instead of moving the selection. */
+  static bool IsExtendedVk(ushort vk){
+    return vk == 0x21 || vk == 0x22 || vk == 0x23 || vk == 0x24    // PgUp PgDn End Home
+        || vk == 0x25 || vk == 0x26 || vk == 0x27 || vk == 0x28    // arrows
+        || vk == 0x2D || vk == 0x2E                                // Insert Delete
+        || vk == 0x2C || vk == 0x6F || vk == 0x90;                 // PrintScreen Divide NumLock
+  }
+  /* A fixed run of keystrokes, with a pause between them so a dialog has time to appear.
+     Plain navigation keys only — nothing here depends on the keyboard layout. */
+  static void SendSequence(Bind b){
+    if(b == null || b.keys == null) return;
+    for(int i = 0; i < b.keys.Length; i++){
+      ushort vk = b.keys[i];
+      ushort sc = (ushort)MapVirtualKey(vk, 0);
+      PressKeys(vk, sc, IsExtendedVk(vk) ? KEYEVENTF_EXTENDEDKEY : 0);
+      if(i < b.keys.Length - 1) Thread.Sleep(b.gap);
+    }
+  }
+
   static readonly object sendLock = new object();
-  static void QueueSend(int action){          // off the hook thread — sleeps must never stall the mouse
+  static void QueueSend(int idx){             // off the hook thread — sleeps must never stall the mouse
+    if(idx < 0 || idx >= bindList.Count) return;
+    Bind b = bindList[idx];
     ThreadPool.QueueUserWorkItem(delegate {
       try{
         lock(sendLock){
-          if(action == ACT_ALTF4) SendAltF4();
+          if(b.action == ACT_ALTF4) SendAltF4();
+          else if(b.action == ACT_SEQ) SendSequence(b);
           else SendGreekT();
         }
       }catch(Exception){}
@@ -344,14 +464,21 @@ static class TBind {
           int btn = ButtonOf(wParam, lParam, out down);
           if(btn != 0){
             if(mode == 1 && down){
-              try{ Console.Out.Write("BTN:" + btn + "\n"); Console.Out.Flush(); }catch(Exception){}
+              try{ Console.Out.Write("BTN:" + CurMods() + "-" + btn + "\n"); Console.Out.Flush(); }catch(Exception){}
               PostThreadMessage(mainTid, WM_QUIT, IntPtr.Zero, IntPtr.Zero);
               return (IntPtr)1;                  // swallow the press that was used to bind
             }
-            int action;
-            if(mode == 2 && binds.TryGetValue("m" + btn, out action)){
-              if(down) PostThreadMessage(mainTid, WM_APP_SEND, (IntPtr)action, IntPtr.Zero);
-              return (IntPtr)1;                  // swallow both down and up of the bound button
+            if(mode == 2){
+              int idx;
+              if(down && binds.TryGetValue("m" + CurMods() + "-" + btn, out idx)){
+                /* Remember the button, not the combination: a modifier may well be
+                   released before the button is, and a release we fail to swallow
+                   leaves the target seeing half a click. */
+                swallowedBtn.Add(btn);
+                PostThreadMessage(mainTid, WM_APP_SEND, (IntPtr)idx, IntPtr.Zero);
+                return (IntPtr)1;
+              }
+              if(!down && swallowedBtn.Remove(btn)) return (IntPtr)1;
             }
           }
         }
@@ -374,10 +501,10 @@ static class TBind {
             return (IntPtr)1;
           }
           if(mode == 2){
-            int action;
-            if(down && binds.TryGetValue("k" + CurMods() + "-" + k.vkCode, out action)){
+            int idx;
+            if(down && binds.TryGetValue("k" + CurMods() + "-" + k.vkCode, out idx)){
               swallowed.Add(k.vkCode);           // eat the matching KEYUP as well
-              PostThreadMessage(mainTid, WM_APP_SEND, (IntPtr)action, IntPtr.Zero);
+              PostThreadMessage(mainTid, WM_APP_SEND, (IntPtr)idx, IntPtr.Zero);
               return (IntPtr)1;
             }
             if(up && swallowed.Remove(k.vkCode)) return (IntPtr)1;
@@ -388,28 +515,60 @@ static class TBind {
     return CallNextHookEx(kbHook, nCode, wParam, lParam);
   }
 
-  /* "m4=altf4" / "k3-84=tau" — unparsable entries are skipped, never fatal */
+  /* "m4=altf4", "m1-4=tau" (Ctrl + X1), "k3-84=tau", "m5=seq:13,13,39,13,13@120"
+     Unparsable entries are skipped rather than fatal — one bad bind must never cost the
+     user the others. A bare "m4" is the pre-1.15 form and means "no modifiers". */
   static void ParseBind(string spec){
     int eq = spec.IndexOf('=');
     if(eq <= 0 || eq == spec.Length - 1) return;
     string trigger = spec.Substring(0, eq).Trim();
     string action  = spec.Substring(eq + 1).Trim();
-    int act = action == "altf4" ? ACT_ALTF4 : action == "tau" ? ACT_TAU : 0;
-    if(act == 0) return;
+
+    Bind b = new Bind();
+    if(action == "altf4") b.action = ACT_ALTF4;
+    else if(action == "tau") b.action = ACT_TAU;
+    else if(action.StartsWith("seq:")){
+      b.action = ACT_SEQ;
+      b.gap = 90;
+      string body = action.Substring(4);
+      int at = body.LastIndexOf('@');
+      if(at >= 0){
+        int g;
+        if(int.TryParse(body.Substring(at + 1), out g) && g >= 0 && g <= 2000) b.gap = g;
+        body = body.Substring(0, at);
+      }
+      string[] parts = body.Split(',');
+      List<ushort> keys = new List<ushort>();
+      foreach(string part in parts){
+        int vk;
+        if(!int.TryParse(part.Trim(), out vk) || vk <= 0 || vk > 255) return;   // all or nothing
+        keys.Add((ushort)vk);
+      }
+      if(keys.Count == 0 || keys.Count > 32) return;
+      b.keys = keys.ToArray();
+    }else return;
+
+    string key = null;
     if(trigger.Length > 1 && trigger[0] == 'm'){
-      int btn;
-      if(!int.TryParse(trigger.Substring(1), out btn) || btn < 3 || btn > 5) return;
-      binds["m" + btn] = act;
-      return;
-    }
-    if(trigger.Length > 1 && trigger[0] == 'k'){
+      int dash = trigger.IndexOf('-');
+      int mods = 0, btn;
+      if(dash > 0){
+        if(!int.TryParse(trigger.Substring(1, dash - 1), out mods) || mods < 0 || mods > 15) return;
+        if(!int.TryParse(trigger.Substring(dash + 1), out btn)) return;
+      }else if(!int.TryParse(trigger.Substring(1), out btn)) return;
+      if(btn < 3 || btn > 5) return;
+      key = "m" + mods + "-" + btn;             // normalised, so "m4" and "m0-4" are one bind
+    }else if(trigger.Length > 1 && trigger[0] == 'k'){
       int dash = trigger.IndexOf('-');
       if(dash <= 1) return;
       int mods, vk;
       if(!int.TryParse(trigger.Substring(1, dash - 1), out mods) || mods < 0 || mods > 15) return;
       if(!int.TryParse(trigger.Substring(dash + 1), out vk) || vk <= 0 || vk > 255) return;
-      binds["k" + mods + "-" + vk] = act;
-    }
+      key = "k" + mods + "-" + vk;
+    }else return;
+
+    bindList.Add(b);
+    binds[key] = bindList.Count - 1;
   }
 
   static int Main(string[] args){
