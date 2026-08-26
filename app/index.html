@@ -225,6 +225,33 @@ main{max-width:1060px;margin:0 auto;padding:16px 18px 90px}
 /* Shown by adding .show, never by clearing style.display — clearing an inline style
    removes the override and lets this rule win, which is exactly how this prompt spent
    its whole life invisible while the code around it looked correct. */
+/* The movements panel sits to the right of the departments list and scrolls with it,
+   five rooms to a line. main only widens while there is something to show, so a night
+   with no rate list looks exactly as it always did. */
+#bodyRow{display:flex;gap:18px;align-items:flex-start}
+#accordions{flex:1;min-width:0}
+#moves{display:none;flex:0 0 auto;width:250px;position:sticky;top:66px;
+  background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 13px 11px}
+body.hasMoves #moves{display:block}
+body.hasMoves main{max-width:1330px}
+.mvTitle{font-size:11px;letter-spacing:.09em;color:var(--faint);font-family:var(--mono);margin-bottom:9px}
+.mvGrid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.mvPill{font-family:var(--mono);font-size:12.5px;font-weight:700;text-align:center;
+  padding:5px 0;border-radius:7px;border:1px solid transparent;cursor:default;user-select:none}
+.mvPill.mv-dep{background:rgba(248,113,113,.14);border-color:var(--red-dim);color:var(--red)}
+.mvPill.mv-arr{background:rgba(74,222,128,.13);border-color:#1f6b3d;color:var(--green)}
+.mvPill.mv-turn{background:rgba(245,180,83,.15);border-color:#7a5522;color:var(--amber)}
+.mvPill.guess{border-style:dashed;opacity:.72}
+.mvLeg{margin-top:11px;display:flex;flex-direction:column;gap:5px}
+.mvLegRow{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--dim);font-family:var(--mono)}
+.mvDot{width:10px;height:10px;border-radius:3px;border:1px solid transparent;flex:0 0 auto}
+.mvNote{margin-top:9px;font-size:10.5px;line-height:1.45;color:var(--faint)}
+@media (max-width:1180px){
+  #bodyRow{flex-direction:column}
+  #moves{width:100%;position:static}
+  body.hasMoves main{max-width:1060px}
+  .mvGrid{grid-template-columns:repeat(10,1fr)}
+}
 #notThereBtn{display:none}
 #notThereBtn.show{display:inline-block}
 .xWho{margin:-6px 0 10px;font-size:12px;color:#4fd1c5;font-family:var(--mono)}
@@ -698,7 +725,10 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
     <div id="searchHint">Type a receipt SN · exact or last ≥3 digits · Enter confirms a single match</div>
   </div>
 
-  <div id="accordions"></div>
+  <div id="bodyRow">
+    <div id="accordions"></div>
+    <aside id="moves"></aside>
+  </div>
 </main>
 
 <div id="rail">
@@ -1162,7 +1192,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.16.8";
+const APP_VERSION = "1.16.9";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1275,6 +1305,10 @@ en: {
   "search.ph": "serial number…", "search.notThere": "Receipt isn't there?",
   "search.notThereQ": "No receipt {sn} in tonight's report — add it by hand?",
   "extra.knownAs": "in that room:",
+  "mv.title": "ROOM MOVEMENTS",
+  "mv.dep": "left today", "mv.arr": "arrived today", "mv.turn": "left and re-let same day",
+  "mv.guess": "occupant changed — inferred",
+  "mv.guessNote": "Dashed rooms are inferred from the guest name changing, not from arrival and departure dates. Load this night's rate list in Tax Check to have them confirmed.",
   "extra.dupe": "You have already added that serial by hand.",
   "extra.inReport": "That serial IS in tonight's report — close this and search for it.",
   "search.hint": "Type the receipt's full serial number · Enter confirms the match",
@@ -1440,6 +1474,10 @@ gr: {
   "search.ph": "σειριακός αριθμός…", "search.notThere": "Δεν υπάρχει η απόδειξη;",
   "search.notThereQ": "Καμία απόδειξη {sn} στην αποψινή αναφορά — να καταχωρηθεί χειροκίνητα;",
   "extra.knownAs": "στο δωμάτιο:",
+  "mv.title": "ΚΙΝΗΣΕΙΣ ΔΩΜΑΤΙΩΝ",
+  "mv.dep": "αναχώρησε σήμερα", "mv.arr": "άφιξη σήμερα", "mv.turn": "έφυγε και ξαναδόθηκε την ίδια μέρα",
+  "mv.guess": "άλλαξε ο ένοικος — εκτίμηση",
+  "mv.guessNote": "Τα διακεκομμένα προκύπτουν από αλλαγή ονόματος, όχι από ημερομηνίες άφιξης και αναχώρησης. Φόρτωσε τη λίστα δωματίων της βραδιάς στο Tax Check για να επιβεβαιωθούν.",
   "extra.dupe": "Αυτός ο σειριακός έχει ήδη καταχωρηθεί χειροκίνητα.",
   "extra.inReport": "Αυτός ο σειριακός ΥΠΑΡΧΕΙ στην αποψινή αναφορά — κλείσε και αναζήτησέ τον.",
   "search.hint": "Πληκτρολογήστε ολόκληρο τον σειριακό αριθμό · Enter επιβεβαιώνει το ταίριασμα",
@@ -1631,6 +1669,11 @@ function syncRooms(){
     if(!e){ ROOMS[room] = {guest: g, seen: MODEL.reportDate}; continue; }
     if(rd && e.seen && dateNum(e.seen) > rd) continue;   // older report — read-only
     const changed = !!(e.guest && e.guest !== g);
+    /* Stamped so the room can be marked as having turned over on a night whose rate
+       list was never opened. It is weaker evidence than an arrival or departure date —
+       it says the name under this room is not the name that was here before, which
+       could equally be a correction — so it is shown as inferred, never as fact. */
+    if(changed) e.movedOn = MODEL.reportDate;
     if(changed && e.nick){
       dropped.push(room + " (" + e.nick + ")");
       delete e.nick;
@@ -3565,6 +3608,72 @@ function addWatch(){
   $("#wSN").focus();
 }
 
+/* ---------- room movements (arrivals / departures / same-day turnover) ---------- */
+/* Written by the tax tool when a rate list is loaded — that report is the only one
+   either half of this app sees that carries arrival and departure dates. */
+const MOVES_KEY = "reccheck_moves_v1";
+function loadMoves(){
+  try{ return JSON.parse(localStorage.getItem(MOVES_KEY) || "{}") || {}; }catch(e){ return {}; }
+}
+/* room -> {kind: "arr"|"dep"|"turn", who: [names], sure: bool}
+   A room can hold two reservations on one date: one ending, one beginning. That is the
+   turnover, and it is the whole reason the rate rows are kept per room rather than one
+   per room. */
+function roomMoves(){
+  const out = {};
+  if(!MODEL) return out;
+  const night = dateNum(MODEL.reportDate);
+  if(!night) return out;
+  const night_ = loadMoves()[String(night)];
+  if(night_){
+    for(const room of Object.keys(night_)){
+      let arr = false, dep = false;
+      const who = [];
+      for(const r of night_[room]){
+        if(r.a === night){ arr = true; if(r.n) who.push("→ " + r.n); }
+        if(r.d === night){ dep = true; if(r.n) who.push("← " + r.n); }
+      }
+      if(!arr && !dep) continue;
+      out[room] = {kind: (arr && dep) ? "turn" : (arr ? "arr" : "dep"), who: who, sure: true};
+    }
+  }
+  /* Nothing recorded for this night: fall back to the occupant having changed, which
+     is all the department report on its own can tell us. Never overrides the rate list. */
+  for(const room of Object.keys(ROOMS)){
+    if(out[room]) continue;
+    const e = ROOMS[room];
+    if(e && e.movedOn && e.movedOn === MODEL.reportDate)
+      out[room] = {kind: "turn", who: e.guest ? [e.guest] : [], sure: false};
+  }
+  return out;
+}
+function renderMoves(){
+  const box = $("#moves");
+  if(!box) return;
+  const mv = roomMoves();
+  const rooms = Object.keys(mv).sort((a,b) => (parseInt(a)||0) - (parseInt(b)||0));
+  document.body.classList.toggle("hasMoves", rooms.length > 0);
+  box.innerHTML = "";
+  if(!rooms.length) return;
+  const n = k => rooms.filter(r => mv[r].kind === k).length;
+  box.append(el("div","mvTitle", t("mv.title")));
+  const grid = el("div","mvGrid");
+  for(const room of rooms){
+    const m = mv[room];
+    const pill = el("div","mvPill mv-" + m.kind + (m.sure ? "" : " guess"), room);
+    pill.title = t("mv." + m.kind) + (m.sure ? "" : " · " + t("mv.guess"))
+               + (m.who.length ? "\n" + m.who.join("\n") : "");
+    grid.append(pill);
+  }
+  box.append(grid);
+  const leg = el("div","mvLeg");
+  const line = (k, c) => { if(!c) return; const d = el("div","mvLegRow");
+    d.append(el("span","mvDot mv-" + k, "")); d.append(t("mv." + k) + "  " + c); leg.append(d); };
+  line("dep", n("dep")); line("arr", n("arr")); line("turn", n("turn"));
+  box.append(leg);
+  if(rooms.some(r => !mv[r].sure)) box.append(el("div","mvNote", t("mv.guessNote")));
+}
+
 /* ---------- room nicknames panel ---------- */
 let NSEL = null;          // room selected in the editor
 function nickCount(){ return Object.values(ROOMS).filter(e => e.nick).length; }
@@ -3717,6 +3826,7 @@ function refresh(){
   stage("accordions", renderAccordions);
   stage("watch", renderWatch);
   stage("nicknames", renderNickPanel);
+  stage("movements", renderMoves);
   const q = inp().value.trim();
   if(q) stage("search", searchInput);
 }
@@ -4196,7 +4306,11 @@ function leadRoom(s){const m=(s||'').trim().match(/^(\d{2,4})/);return m?m[1]:''
 const RE_ROOM=/^\d{2,4}(-\d{1,4})?$/;const TA_MARK="ΑΝΘΕΚΤΙΚ";const ARR_MARK="Arrangement";
 function taIsAuto(tk){const di=tk.indexOf("ΤΕΛΟΣ")>=0?tk.indexOf("ΤΕΛΟΣ"):tk.indexOf(TA_MARK);return /\*\s*$/.test(tk.slice(0,di));}
 function parseTax(tokens){const starts=[];for(let i=0;i<tokens.length;i++){if(tokens[i]==="Date"){for(let j=i-1;j>=Math.max(i-7,0);j--){const c=(tokens[j]||"").trim();if(RE_ROOM.test(c)){starts.push({room:leadRoom(c),idx:j});break;}}}}const segs={};for(let k=0;k<starts.length;k++){const room=starts[k].room;const s=starts[k].idx;const e=(k+1<starts.length)?starts[k+1].idx:tokens.length;(segs[room]=segs[room]||[]).push([s,e]);}const rooms={};let totalArr=0;const dc={};for(const room of Object.keys(segs)){let arr=0,auto=0,man=0;for(const [s,e] of segs[room])for(let i=s;i<e;i++){const tk=tokens[i]||"";const dm=tk.match(/(\d{2}\/\d{2}\/\d{2})/);if(dm)dc[dm[1]]=(dc[dm[1]]||0)+1;if(tk.includes(ARR_MARK)){arr++;totalArr++;}if(tk.includes(TA_MARK)){taIsAuto(tk)?auto++:man++;}}rooms[room]={arr,auto,man};}let fileDate=null,best=-1;for(const d of Object.keys(dc))if(dc[d]>best){best=dc[d];fileDate=d;}return{kind:'tax',fileDate,dateKey:dkey(fileDate),totalRooms:Object.keys(rooms).length,totalArrangements:totalArr,rooms};}
-function parseRate(pages){let bizDate=null;{const rows=toRows(pages[0]||[]);for(const r of rows){if(r.some(c=>/PROTEL HMS/.test(c.t))){const d=r.find(c=>/^\d{1,2}\/\d{1,2}\/\d{4}$/.test((c.t||'').trim()));if(d)bizDate=d.t.trim();}}}const rooms={};for(const g of pages){let cur=null;for(const row of toRows(g)){row.sort((a,b)=>a.x-b.x);const dates=row.filter(c=>/^\d{2}\/\d{2}\/\d{2}$/.test((c.t||'').trim())).map(c=>c.t.trim());const isData=dates.length>=2 && row[0] && /^\d/.test((row[0].t||'').trim());if(!isData){if(cur){const nm=row.filter(c=>c.x>=100&&c.x<235&&/[A-Za-zΑ-Ω]/.test(c.t)&&!/Print Date|PROTEL|Arrival Date|Departure|^Name$|^Room$|Kernos|Page/i.test(c.t)).map(c=>c.t.trim());if(nm.length)cur.name=(cur.name+' '+nm.join(' ')).trim();}continue;}let cell=(row[0].t||'').trim();const hasSepOcc=row.some(c=>c.x>=375&&c.x<478&&/^\d{4}$/.test((c.t||'').trim()));let core=hasSepOcc?cell:cell.slice(0,-4);const room=(core.split('-')[0]||'').trim();if(!/^\d{2,3}$/.test(room))continue;const partner=core.includes('-')?core.split('-')[1]:'';const name=row.filter(c=>c.x>=100&&c.x<235&&/[A-Za-zΑ-Ω]/.test(c.t)).map(c=>c.t.trim()).join(' ');const term=row.filter(c=>c.x>=535&&c.x<572&&/[A-Za-z]/.test(c.t)).map(c=>c.t.trim()).join('');const agent=row.filter(c=>c.x>=572&&/[A-Za-zΑ-Ω0-9]/.test(c.t)).map(c=>c.t.trim()).join(' ');cur={room,arr:dates[0],dep:dates[1],name,term,agent,adjoining:!!partner,partner};rooms[room]=cur;}}return{kind:'rate',bizDate,dateKey:dkey(bizDate),count:Object.keys(rooms).length,rooms};}
+/* `rooms` keeps one reservation per room because the tax cross-reference is written
+   against that shape. `all` keeps every row, which is the only way to see that a room
+   was left AND re-let on the same day — the turnover the department check wants to
+   flag. Two views of the same parse; neither disturbs the other. */
+function parseRate(pages){const all={};let bizDate=null;{const rows=toRows(pages[0]||[]);for(const r of rows){if(r.some(c=>/PROTEL HMS/.test(c.t))){const d=r.find(c=>/^\d{1,2}\/\d{1,2}\/\d{4}$/.test((c.t||'').trim()));if(d)bizDate=d.t.trim();}}}const rooms={};for(const g of pages){let cur=null;for(const row of toRows(g)){row.sort((a,b)=>a.x-b.x);const dates=row.filter(c=>/^\d{2}\/\d{2}\/\d{2}$/.test((c.t||'').trim())).map(c=>c.t.trim());const isData=dates.length>=2 && row[0] && /^\d/.test((row[0].t||'').trim());if(!isData){if(cur){const nm=row.filter(c=>c.x>=100&&c.x<235&&/[A-Za-zΑ-Ω]/.test(c.t)&&!/Print Date|PROTEL|Arrival Date|Departure|^Name$|^Room$|Kernos|Page/i.test(c.t)).map(c=>c.t.trim());if(nm.length)cur.name=(cur.name+' '+nm.join(' ')).trim();}continue;}let cell=(row[0].t||'').trim();const hasSepOcc=row.some(c=>c.x>=375&&c.x<478&&/^\d{4}$/.test((c.t||'').trim()));let core=hasSepOcc?cell:cell.slice(0,-4);const room=(core.split('-')[0]||'').trim();if(!/^\d{2,3}$/.test(room))continue;const partner=core.includes('-')?core.split('-')[1]:'';const name=row.filter(c=>c.x>=100&&c.x<235&&/[A-Za-zΑ-Ω]/.test(c.t)).map(c=>c.t.trim()).join(' ');const term=row.filter(c=>c.x>=535&&c.x<572&&/[A-Za-z]/.test(c.t)).map(c=>c.t.trim()).join('');const agent=row.filter(c=>c.x>=572&&/[A-Za-zΑ-Ω0-9]/.test(c.t)).map(c=>c.t.trim()).join(' ');cur={room,arr:dates[0],dep:dates[1],name,term,agent,adjoining:!!partner,partner};rooms[room]=cur;(all[room]=all[room]||[]).push(cur);}}return{kind:'rate',bizDate,dateKey:dkey(bizDate),count:Object.keys(rooms).length,rooms,all};}
 function crossReference(rate,tax,nightKey){const N=nightKey||tax.dateKey;const totalFail=[],autoMiss=[],adjoining=[],ok=[];let notOwed=0;for(const room of Object.keys(rate.rooms)){const rr=rate.rooms[room];const aK=dkey(rr.arr),dK=dkey(rr.dep);const occ=aK&&dK&&aK<=N&&N<dK;if(!occ){notOwed++;continue;}if(rr.adjoining){adjoining.push({room,name:rr.name,partner:rr.partner});continue;}const tr=tax.rooms[room];if(!tr||tr.arr===0){totalFail.push({room,name:rr.name,covered:tr?(tr.man>0):false});}else if(tr.auto===0){autoMiss.push({room,name:rr.name,covered:tr.man>0});}else{ok.push(room);}}const over=[];for(const room of Object.keys(tax.rooms)){const b=tax.rooms[room];if((b.auto+b.man)>=2&&b.arr>0)over.push({room,extra:(b.auto+b.man)-1});}const sk=a=>a.sort((x,y)=>(parseInt(x.room||x)||0)-(parseInt(y.room||y)||0));return{nightKey:N,totalFail:sk(totalFail),autoMiss:sk(autoMiss),adjoining:sk(adjoining),overcharge:sk(over),okCount:ok.length,notOwed};}
 
 /* ============ state + memory ============ */
@@ -4208,6 +4322,27 @@ function dnum(d){return dkey(d);}
 function recentDates(mem,n){const s=new Set();for(const r of Object.keys(mem))for(const d of Object.keys(mem[r]))s.add(d);return[...s].sort((a,b)=>dnum(b)-dnum(a)).slice(0,n);}
 function pruneRoom(rec,n){const ds=Object.keys(rec).sort((a,b)=>dnum(b)-dnum(a));for(const d of ds.slice(n))delete rec[d];}
 function ingestTax(tax){const mem=loadMem();for(const room of Object.keys(tax.rooms)){const b=tax.rooms[room];const rec=mem[room]||(mem[room]={});if(((b.arr||0)+(b.auto||0)+(b.man||0))===0){delete rec[tax.fileDate];if(!Object.keys(rec).length)delete mem[room];continue;}const pm=rec[tax.fileDate]&&rec[tax.fileDate].manual||null;rec[tax.fileDate]={arr:b.arr,auto:b.auto,man:b.man,manual:pm};pruneRoom(rec,7);}saveMem(mem);}
+/* Room movements, kept for the DEPARTMENT check to colour its rooms by. The rate list
+   is the only report either tool sees that carries arrival and departure dates, and it
+   is loaded here — so it is recorded here, keyed by night, and read over there. Dates
+   are normalised to YYYYMMDD so both sides compare them the same way. */
+const MOVES_KEY="reccheck_moves_v1";
+function saveMoves(rate){
+  if(!rate||!rate.dateKey||!rate.all)return;
+  try{
+    const store=JSON.parse(localStorage.getItem(MOVES_KEY)||"{}")||{};
+    const night={};
+    for(const room of Object.keys(rate.all)){
+      const rs=rate.all[room].map(r=>({a:dkey(r.arr),d:dkey(r.dep),n:r.name||""}))
+                             .filter(r=>r.a||r.d);
+      if(rs.length)night[room]=rs;
+    }
+    store[String(rate.dateKey)]=night;
+    for(const k of Object.keys(store).sort((a,b)=>Number(b)-Number(a)).slice(14))delete store[k];
+    localStorage.setItem(MOVES_KEY,JSON.stringify(store));
+  }catch(e){}
+}
+
 /* manual-check outcomes for adjoining rooms, per night */
 const VERIFY_KEY="ta_check_verify_v1";
 function loadVerify(){try{return JSON.parse(localStorage.getItem(VERIFY_KEY))||{};}catch(e){return{};}}
@@ -4444,7 +4579,7 @@ function setLang(l){LANG=l;try{localStorage.setItem('ta_lang',l);}catch(e){}appl
 /* ============ file loading ============ */
 function showErr(m){const e=el('err');e.style.display='block';e.textContent=m;} function clearErr(){el('err').style.display='none';}
 async function readOxps(file){const buf=await file.arrayBuffer();const zip=await JSZip.loadAsync(buf);const hasPages=Object.keys(zip.files).some(n=>/Pages\/\d+\.fpage$/i.test(n));if(!hasPages)throw new Error('notxps');return await oxpsPages(zip);}
-async function loadRate(file){clearErr();el('fn-rate').textContent=file?file.name:'';if(!file)return;try{const pages=await readOxps(file);const r=parseRate(pages);if(!r.count){showErr(t('err_norooms'));return;}RATE=r;PAIR_OVERRIDE=null;ADJ_OPEN_OVERRIDE=null;el('slot-rate').classList.add('loaded');render();}catch(e){showErr(e.message==='notxps'?t('err_notxps'):t('err_read')+e.message);}}
+async function loadRate(file){clearErr();el('fn-rate').textContent=file?file.name:'';if(!file)return;try{const pages=await readOxps(file);const r=parseRate(pages);if(!r.count){showErr(t('err_norooms'));return;}RATE=r;saveMoves(r);PAIR_OVERRIDE=null;ADJ_OPEN_OVERRIDE=null;el('slot-rate').classList.add('loaded');render();}catch(e){showErr(e.message==='notxps'?t('err_notxps'):t('err_read')+e.message);}}
 async function loadTax(file){clearErr();el('fn-tax').textContent=file?file.name:'';if(!file)return;try{const pages=await readOxps(file);const tokens=pagesToTokens(pages);const r=parseTax(tokens);if(!r.totalRooms){showErr(t('err_norooms'));return;}TAX=r;PAIR_OVERRIDE=null;ADJ_OPEN_OVERRIDE=null;ingestTax(r);if(r.fileDate)EXPANDED.add(r.fileDate);el('slot-tax').classList.add('loaded');render();}catch(e){showErr(e.message==='notxps'?t('err_notxps'):t('err_read')+e.message);}}
 el('file-rate').addEventListener('change',e=>loadRate(e.target.files[0]));
 el('file-tax').addEventListener('change',e=>loadTax(e.target.files[0]));
