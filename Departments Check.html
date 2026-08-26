@@ -1162,7 +1162,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.16.7";
+const APP_VERSION = "1.16.8";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1275,11 +1275,13 @@ en: {
   "search.ph": "serial number…", "search.notThere": "Receipt isn't there?",
   "search.notThereQ": "No receipt {sn} in tonight's report — add it by hand?",
   "extra.knownAs": "in that room:",
+  "extra.dupe": "You have already added that serial by hand.",
+  "extra.inReport": "That serial IS in tonight's report — close this and search for it.",
   "search.hint": "Type the receipt's full serial number · Enter confirms the match",
   "search.many": " matches — pick one with its checkbox", "search.reversed": "REVERSED at the POS — nothing to check",
   "search.void": "VOID — consolidated by {by}, not counted",
   "room.ph": "room…", "room.hint": "room № · Enter = OK · ↑↓ rows · ←→ OK/⚠ · Esc",
-  "acc.extra": " + {n} extra", "acc.void": " · {n} void",
+  "acc.extra": " · incl. {n} added by hand", "acc.void": " · {n} void",
   "acc.other": "▸ {n} folio posting(s) excluded — ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ / CREDIT CARDS — informational",
   "tag.ok": "OK", "tag.missing": "MISSING", "tag.corr": "CORRECTED — verify", "tag.corr2": "CORRECTED",
   "tag.cancelled": "REVERSED 0,00", "tag.extra": "NOT IN REPORT", "tag.void": "VOID", "tag.merged": "MERGED: ",
@@ -1438,11 +1440,13 @@ gr: {
   "search.ph": "σειριακός αριθμός…", "search.notThere": "Δεν υπάρχει η απόδειξη;",
   "search.notThereQ": "Καμία απόδειξη {sn} στην αποψινή αναφορά — να καταχωρηθεί χειροκίνητα;",
   "extra.knownAs": "στο δωμάτιο:",
+  "extra.dupe": "Αυτός ο σειριακός έχει ήδη καταχωρηθεί χειροκίνητα.",
+  "extra.inReport": "Αυτός ο σειριακός ΥΠΑΡΧΕΙ στην αποψινή αναφορά — κλείσε και αναζήτησέ τον.",
   "search.hint": "Πληκτρολογήστε ολόκληρο τον σειριακό αριθμό · Enter επιβεβαιώνει το ταίριασμα",
   "search.many": " ταιριάσματα — επιλέξτε ένα με το κουτάκι του", "search.reversed": "ΑΚΥΡΩΜΕΝΗ στο POS — δεν χρειάζεται έλεγχο",
   "search.void": "ΑΚΥΡΗ — ενοποιήθηκε από {by}, δεν μετράει",
   "room.ph": "δωμ…", "room.hint": "№ δωματίου · Enter = OK · ↑↓ γραμμές · ←→ OK/⚠ · Esc",
-  "acc.extra": " + {n} επιπλέον", "acc.void": " · {n} άκυρες",
+  "acc.extra": " · μαζί με {n} χειροκίνητες", "acc.void": " · {n} άκυρες",
   "acc.other": "▸ {n} καταχωρήσεις folio εκτός — ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ / CREDIT CARDS — ενημερωτικά",
   "tag.ok": "OK", "tag.missing": "ΛΕΙΠΕΙ", "tag.corr": "ΔΙΟΡΘΩΘΗΚΕ — επιβεβαίωση", "tag.corr2": "ΔΙΟΡΘΩΘΗΚΕ",
   "tag.cancelled": "ΑΚΥΡΩΜΕΝΗ 0,00", "tag.extra": "ΕΚΤΟΣ ΑΝΑΦΟΡΑΣ", "tag.void": "ΑΚΥΡΗ", "tag.merged": "ΣΥΓΧΩΝΕΥΣΗ: ",
@@ -2753,39 +2757,53 @@ function renderValidation(){
 function checkableList(){
   return MODEL.receipts.filter(r => !r.cancelled && !r.voided);
 }
+/* A manually added receipt is one you are holding. It is money the hotel took and a
+   receipt that was received, so it belongs in the totals and in the count — otherwise
+   the night reads as fewer receipts than actually came in, which is the one number the
+   whole audit exists to get right. Entering it IS the act of checking it: there is
+   nothing further to confirm, only reception's posting to chase, which is why it stays
+   flagged and stays in the discrepancies. */
+function extraTotal(x){ return Math.round((((x && x.v24) || 0) + ((x && x.v13) || 0)) * 100) / 100; }
+function extrasOf(dept){ return STATE.extras.filter(x => x.dept === dept); }
+function extrasSum(xs){ return xs.reduce((a, x) => a + extraTotal(x), 0); }
 
 function renderSummary(){
   const s = $("#summary");
   s.style.display = "grid";
   s.innerHTML = "";
   const list = checkableList();
-  const grand = list.reduce((a,r) => a + effTotal(r), 0);
-  const done = list.filter(r => ["ok"].includes(rState(r).status)).length;
+  const ex = STATE.extras;
+  const received = list.length + ex.length;               // every receipt actually in hand
+  const grand = list.reduce((a,r) => a + effTotal(r), 0) + extrasSum(ex);
+  const done = list.filter(r => ["ok"].includes(rState(r).status)).length + ex.length;
   const flags = list.filter(r => rState(r).status === "missing").length
               + list.filter(r => rState(r).status === "corrected").length
-              + STATE.extras.length;
+              + ex.length;
 
   const stCls = (dn, n) => (n && dn === n) ? " done" : (dn > 0 ? " part" : "");
 
-  const g = el("div","card grand" + stCls(done, list.length));
+  const g = el("div","card grand" + stCls(done, received));
   const gl = el("div","lbl", t("sum.grand"));
-  if(list.length && done === list.length) gl.append(el("span","tick","✓"));
+  if(received && done === received) gl.append(el("span","tick","✓"));
   g.append(gl);
   g.append(el("div","val", numToMoney(Math.round(grand*100)/100)));
   const gs = el("div","sub");
   gs.append(el("b","", String(done)));
-  gs.append(` / ${list.length}` + t("sum.checked") + (flags ? ` · ${flags}` + t("sum.flagged") : ""));
+  gs.append(` / ${received}` + t("sum.checked") + (flags ? ` · ${flags}` + t("sum.flagged") : "")
+            + (ex.length ? t("acc.extra", {n: ex.length}) : ""));
   g.append(gs);
   s.append(g);
 
   for(const b of TARGET_DEPTS){
     const dl = (MODEL.depts[b].list || []).filter(r => !r.cancelled && !r.voided);
     if(!dl.length && !STATE.extras.some(x => x.dept === b)) continue;
-    const tot = dl.reduce((a,r) => a + effTotal(r), 0);
-    const dn = dl.filter(r => rState(r).status === "ok").length;
-    const c = el("div","card" + stCls(dn, dl.length));
+    const dx = extrasOf(b);
+    const dRec = dl.length + dx.length;
+    const tot = dl.reduce((a,r) => a + effTotal(r), 0) + extrasSum(dx);
+    const dn = dl.filter(r => rState(r).status === "ok").length + dx.length;
+    const c = el("div","card" + stCls(dn, dRec));
     const cl = el("div","lbl", b);
-    if(dl.length && dn === dl.length) cl.append(el("span","tick","✓"));
+    if(dRec && dn === dRec) cl.append(el("span","tick","✓"));
     if(MODEL.depts[b].stillOpen){
       const op = el("span","openPill", t("tag.open"));
       op.title = "No ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ close-out posting in the report — this department had not closed when the report was pulled and may still add receipts. Re-pull the report after it closes.";
@@ -2795,9 +2813,9 @@ function renderSummary(){
     c.append(el("div","val", numToMoney(Math.round(tot*100)/100)));
     const cs = el("div","sub");
     cs.append(el("b","", String(dn)));
-    cs.append(` / ${dl.length} · `);
-    cs.append(el("b","", String(dl.length)));
-    cs.append(t("sum.rec"));
+    cs.append(` / ${dRec} · `);
+    cs.append(el("b","", String(dRec)));
+    cs.append(t("sum.rec") + (dx.length ? t("acc.extra", {n: dx.length}) : ""));
     c.append(cs);
     s.append(c);
   }
@@ -2836,11 +2854,14 @@ function renderAccordions(){
 
 function buildAcc(name, list, extras, other, open, isExtraAcc){
   const checkable = list.filter(r => !r.cancelled && !r.voided);
-  const done = checkable.filter(r => rState(r).status === "ok").length;
-  const tot = checkable.reduce((a,r) => a + effTotal(r), 0);
+  const received = checkable.length + extras.length;
+  const done = checkable.filter(r => rState(r).status === "ok").length + extras.length;
+  const tot = checkable.reduce((a,r) => a + effTotal(r), 0) + extrasSum(extras);
 
+  /* The not-in-report box is never marked finished: everything in it is by definition
+     still owed a posting, however completely it has been entered here. */
   const dyn = isExtraAcc ? "" :
-    (checkable.length && done === checkable.length) ? " done" : (done > 0 ? " part" : "");
+    (received && done === received) ? " done" : (done > 0 ? " part" : "");
   const acc = el("div","acc" + (open ? " open" : "") + (isExtraAcc ? " extraAcc" : "") + dyn);
   acc.dataset.dept = name;
   const head = el("div","head");
@@ -2856,11 +2877,13 @@ function buildAcc(name, list, extras, other, open, isExtraAcc){
   head.append(nm);
   const cnt = el("div","cnt");
   const voidCnt = list.filter(r => r.voided).length;
-  cnt.append(el("b","", String(checkable.length)));
-  cnt.append(t("sum.rec") + (voidCnt ? t("acc.void", {n: voidCnt}) : "") + (extras.length ? t("acc.extra", {n: extras.length}) : ""));
+  cnt.append(el("b","", String(received)));
+  /* tautological in the not-in-report box, where every entry is one */
+  cnt.append(t("sum.rec") + (voidCnt ? t("acc.void", {n: voidCnt}) : "")
+             + (extras.length && !isExtraAcc ? t("acc.extra", {n: extras.length}) : ""));
   head.append(cnt);
   const prog = el("div","prog");
-  const pb = el("b","", String(done)); prog.append(pb); prog.append(` / ${checkable.length}`);
+  const pb = el("b","", String(done)); prog.append(pb); prog.append(` / ${received}`);
   head.append(prog);
   head.append(el("div","tot", numToMoney(Math.round(tot*100)/100)));
   head.append(el("div","chev","▶"));
@@ -3008,7 +3031,14 @@ function extraRow(x){
   const xg = x.room ? (nickFor(x.room) || x.guest || guestFor(x.room)) : null;
   if(xg) row.append(el("div","name", xg));
   row.append(el("div","split", rateSplitStr({"24%": x.v24, "13%": x.v13})));
-  row.append(el("span","tag extra","NOT IN REPORT"));
+  const xw = x.room ? watchFor(x.room) : [];
+  if(xw.length){
+    row.classList.add("watch");
+    const wt = el("span","tag watch", t("tag.watch"));
+    wt.title = xw.map(w => (w.name || "?") + (w.sn ? " · SN " + w.sn : "")).join("  |  ");
+    row.append(wt);
+  }
+  row.append(el("span","tag extra", t("tag.extra")));
   row.append(el("div","amt", numToMoney(Math.round(((x.v24||0)+(x.v13||0))*100)/100)));
   const del = el("button","warnBtn","✕");
   del.title = "Remove this manual entry";
@@ -3291,6 +3321,10 @@ function openExtraModal(prefillSN){
     const v24 = readMoney($("#xV24").value), v13 = readMoney($("#xV13").value);
     const room = $("#xRoom").value.trim();
     if(!/^\d+$/.test(sn)){ $("#xErr").textContent = t("corr.errSn"); return; }
+    /* Adding the same receipt twice would inflate the night's takings and its count,
+       silently, and nothing downstream would ever notice. */
+    if(STATE.extras.some(e => String(e.sn) === sn)){ $("#xErr").textContent = t("extra.dupe"); return; }
+    if(MODEL && MODEL.receipts.some(r => effSN(r) === sn)){ $("#xErr").textContent = t("extra.inReport"); return; }
     if(v24 === null || v13 === null){ $("#xErr").textContent = t("corr.errVal"); return; }
     if(!room){ $("#xErr").textContent = t("roomM.err"); return; }
     STATE.extras.push({sn, v24, v13, room, guest: guestFor(room) || null,
@@ -3315,6 +3349,33 @@ function findMatches(q){
   }
   return out;
 }
+/* Searching a serial you added by hand used to find nothing and then offer to add it
+   again — the app actively inviting a double entry, and no way to look up what you had
+   already recorded. A manual entry is part of the night; the search knows about it. */
+function findExtras(q){
+  if(!q) return [];
+  return STATE.extras.filter(x => String(x.sn) === q);
+}
+function extraMatchCard(x){
+  const c = el("div","match");
+  c.append(el("span","dept", x.dept === "UNASSIGNED" ? t("extra.unassigned") : x.dept));
+  c.append(el("span","room", x.room || "—"));
+  c.append(el("span","msn", x.sn));
+  const nick = x.room ? nickFor(x.room) : null;
+  const nm = x.room ? (nick || x.guest || guestFor(x.room)) : null;
+  if(nm) c.append(el("span","name" + (nick ? " nick" : ""), nm));
+  c.append(el("span","split", rateSplitStr({"24%": x.v24, "13%": x.v13})));
+  c.append(el("span","amt", numToMoney(extraTotal(x))));
+  const ws = x.room ? watchFor(x.room) : [];
+  if(ws.length){
+    c.classList.add("watch");
+    const wt = el("span","tag watch", t("tag.watch"));
+    wt.title = ws.map(w => (w.name || "?") + (w.sn ? " · SN " + w.sn : "")).join("  |  ");
+    c.append(wt);
+  }
+  c.append(el("span","tag extra", t("tag.extra")));
+  return c;
+}
 
 function searchInput(){
   const f = inp();
@@ -3330,8 +3391,10 @@ function searchInput(){
   if(!q) return;
 
   const ms = findMatches(q);
-  currentMatches = ms;
-  if(!ms.length){
+  const xs = findExtras(q);
+  currentMatches = ms;               // Enter confirms a report receipt; an entry you
+                                     // typed yourself has nothing left to confirm
+  if(!ms.length && !xs.length){
     inp().classList.add("nomatch");
     /* A bare "Receipt isn't there?" button beside the box was missed entirely — it read
        as decoration. It now states the case and asks the question, with the serial in
@@ -3345,6 +3408,7 @@ function searchInput(){
     return;
   }
   for(const m of ms) box.append(matchCard(m.r));
+  for(const x of xs) box.append(extraMatchCard(x));
 }
 
 function matchCard(r){
