@@ -1,11 +1,11 @@
 {
-  "version": "1.16.7",
+  "version": "1.16.8",
   "type": "html",
   "engine": "1.16.5",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.16.5/RecCheck-Setup.exe",
   "setupSha256": "208c493236789ae9614e24f86817ae58009e29ee61ee91c22373d4d272730ad6",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "dc608c17fd259222d70afee889b78f4d78a895f9ad43ea0c63aa08695b0095e2",
-  "notes": "The prompt offering to add a receipt by hand now actually appears — a CSS rule had been hiding it since it was written."
+  "sha256": "39c1e1e707eb1fe5acad0a9b4aa2312566b5fe32715553cfc7b31a5ac81a42a0",
+  "notes": "Receipts added by hand now count toward the money and the number of receipts received, while staying flagged in the discrepancies."
 }
