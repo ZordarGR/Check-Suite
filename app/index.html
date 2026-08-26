@@ -223,6 +223,7 @@ main{max-width:1060px;margin:0 auto;padding:16px 18px 90px}
 #snInput.nomatch{color:var(--red);border-color:var(--red-dim)}
 #snInput::placeholder{color:var(--faint);font-size:14px;letter-spacing:0}
 #notThereBtn{display:none}
+.xWho{margin:-6px 0 10px;font-size:12px;color:#4fd1c5;font-family:var(--mono)}
 #matches{display:flex;flex-direction:column;gap:6px;flex:1;min-width:280px}
 .match{display:flex;align-items:center;gap:12px;background:var(--panel2);border:1px solid var(--amber-dim);
   border-radius:10px;padding:8px 12px;font-family:var(--mono);font-size:14px;animation:pop .12s ease-out}
@@ -1157,7 +1158,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.16.5";
+const APP_VERSION = "1.16.6";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1268,6 +1269,8 @@ en: {
   "err.wrongreport": "Wrong report — this is not checkcharge1 (ΕΛΕΓΧΟΣ ΤΜΗΜΑΤΩΝ BY ROOM).",
   "sum.grand": "Receipts to check — grand total", "sum.checked": " checked", "sum.flagged": " flagged", "sum.rec": " rec.",
   "search.ph": "serial number…", "search.notThere": "Receipt isn't there?",
+  "search.notThereQ": "No receipt {sn} in tonight's report — add it by hand?",
+  "extra.knownAs": "in that room:",
   "search.hint": "Type the receipt's full serial number · Enter confirms the match",
   "search.many": " matches — pick one with its checkbox", "search.reversed": "REVERSED at the POS — nothing to check",
   "search.void": "VOID — consolidated by {by}, not counted",
@@ -1429,6 +1432,8 @@ gr: {
   "err.wrongreport": "Λάθος αναφορά — δεν είναι checkcharge1 (ΕΛΕΓΧΟΣ ΤΜΗΜΑΤΩΝ BY ROOM).",
   "sum.grand": "Αποδείξεις για έλεγχο — γενικό σύνολο", "sum.checked": " ελεγμένες", "sum.flagged": " σημειωμένες", "sum.rec": " αποδ.",
   "search.ph": "σειριακός αριθμός…", "search.notThere": "Δεν υπάρχει η απόδειξη;",
+  "search.notThereQ": "Καμία απόδειξη {sn} στην αποψινή αναφορά — να καταχωρηθεί χειροκίνητα;",
+  "extra.knownAs": "στο δωμάτιο:",
   "search.hint": "Πληκτρολογήστε ολόκληρο τον σειριακό αριθμό · Enter επιβεβαιώνει το ταίριασμα",
   "search.many": " ταιριάσματα — επιλέξτε ένα με το κουτάκι του", "search.reversed": "ΑΚΥΡΩΜΕΝΗ στο POS — δεν χρειάζεται έλεγχο",
   "search.void": "ΑΚΥΡΗ — ενοποιήθηκε από {by}, δεν μετράει",
@@ -2995,6 +3000,9 @@ function extraRow(x){
   if(x.room) row.dataset.room = String(x.room);
   row.append(el("div","room", x.room || "—"));
   row.append(el("div","sn", x.sn));
+  /* Entries added before 1.16.6 carry no guest, so fall back to a live lookup. */
+  const xg = x.room ? (nickFor(x.room) || x.guest || guestFor(x.room)) : null;
+  if(xg) row.append(el("div","name", xg));
   row.append(el("div","split", rateSplitStr({"24%": x.v24, "13%": x.v13})));
   row.append(el("span","tag extra","NOT IN REPORT"));
   row.append(el("div","amt", numToMoney(Math.round(((x.v24||0)+(x.v13||0))*100)/100)));
@@ -3247,6 +3255,7 @@ function openExtraModal(prefillSN){
     </div>
     <label>${t("extra.room")}</label>
     <input id="xRoom" inputmode="numeric" autocomplete="off">
+    <div id="xWho"></div>
     <label>${t("extra.dept")}</label>
     <select id="xDept"><option value="">${t("extra.unassigned")}</option>${opts}</select>
     <div class="err" id="xErr"></div>
@@ -3255,6 +3264,22 @@ function openExtraModal(prefillSN){
       <button class="btn amber" id="xSave">${t("extra.add")}</button>
     </div>`);
   $("#xCancel").onclick = closeModal;
+  /* Name the room as it is typed. guestFor() answers from tonight's report first and
+     the persistent room database second, so a room that has been seen on any recent
+     night is recognised even when it has no receipt in this one. It confirms the room
+     is the one meant before the entry is written, which is the whole point of it. */
+  const xWho = () => {
+    const box = $("#xWho");
+    if(!box) return;
+    const room = $("#xRoom").value.trim();
+    const nick = room ? nickFor(room) : null;
+    const g = room ? guestFor(room) : null;
+    if(!g && !nick){ box.textContent = ""; box.className = ""; return; }
+    box.className = "xWho";
+    box.textContent = t("extra.knownAs") + " " + (nick ? nick + " (" + (g || "?") + ")" : g);
+  };
+  $("#xRoom").addEventListener("input", xWho);
+  xWho();
   for(const id of ["xSN","xV24","xV13","xRoom"])
     $("#" + id).addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); e.stopPropagation(); $("#xSave").click(); } });
   $("#xSave").onclick = () => {
@@ -3264,7 +3289,8 @@ function openExtraModal(prefillSN){
     if(!/^\d+$/.test(sn)){ $("#xErr").textContent = t("corr.errSn"); return; }
     if(v24 === null || v13 === null){ $("#xErr").textContent = t("corr.errVal"); return; }
     if(!room){ $("#xErr").textContent = t("roomM.err"); return; }
-    STATE.extras.push({sn, v24, v13, room, dept: $("#xDept").value || "UNASSIGNED"});
+    STATE.extras.push({sn, v24, v13, room, guest: guestFor(room) || null,
+                       dept: $("#xDept").value || "UNASSIGNED"});
     saveState(); closeModal(); refresh();
     $("#snInput").value = ""; searchInput();
     toast(t("extra.toast") + sn, true);
@@ -3303,7 +3329,15 @@ function searchInput(){
   currentMatches = ms;
   if(!ms.length){
     inp().classList.add("nomatch");
-    ntTimer = setTimeout(() => { if(inp().value.trim() === q) $("#notThereBtn").style.display = ""; }, 900);
+    /* A bare "Receipt isn't there?" button beside the box was missed entirely — it read
+       as decoration. It now states the case and asks the question, with the serial in
+       it, so it cannot be mistaken for part of the furniture. */
+    ntTimer = setTimeout(() => {
+      if(inp().value.trim() !== q) return;
+      const b = $("#notThereBtn");
+      b.textContent = t("search.notThereQ", {sn: q});
+      b.style.display = "";
+    }, 900);
     return;
   }
   for(const m of ms) box.append(matchCard(m.r));
@@ -3684,9 +3718,11 @@ function buildPrintSheet(force){
 
   h += `<h2>2. ΕΚΤΟΣ ΑΝΑΦΟΡΑΣ — αποδείξεις που δεν βρέθηκαν στο protel, χειροκίνητη καταχώρηση (${extras.length})</h2>`;
   if(extras.length){
-    h += `<table><tr><th>ΤΜΗΜΑ</th><th>ΔΩΜ.</th><th>Σ.Ν.</th><th class="num">24%</th><th class="num">13%</th><th class="num">ΣΥΝΟΛΟ</th></tr>`;
+    h += `<table><tr><th>ΤΜΗΜΑ</th><th>ΔΩΜ.</th><th>ΠΕΛΑΤΗΣ</th><th>Σ.Ν.</th><th class="num">24%</th><th class="num">13%</th><th class="num">ΣΥΝΟΛΟ</th></tr>`;
     for(const x of extras){
-      h += `<tr><td>${esc(x.dept === "UNASSIGNED" ? "ΑΤΑΞΙΝΟΜΗΤΟ" : x.dept)}</td><td>${esc(x.room)}</td><td>${esc(x.sn)}</td>
+      /* the real guest name, never the nickname — this sheet goes to reception */
+      h += `<tr><td>${esc(x.dept === "UNASSIGNED" ? "ΑΤΑΞΙΝΟΜΗΤΟ" : x.dept)}</td><td>${esc(x.room)}</td>
+            <td>${esc(x.guest || guestFor(x.room) || "")}</td><td>${esc(x.sn)}</td>
             <td class="num">${numToMoney(x.v24 || 0)}</td><td class="num">${numToMoney(x.v13 || 0)}</td>
             <td class="num">${numToMoney(Math.round(((x.v24 || 0) + (x.v13 || 0)) * 100) / 100)}</td></tr>`;
     }

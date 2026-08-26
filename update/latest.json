@@ -1,11 +1,11 @@
 {
-  "version": "1.16.5",
-  "type": "full",
+  "version": "1.16.6",
+  "type": "html",
   "engine": "1.16.5",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.16.5/RecCheck-Setup.exe",
   "setupSha256": "208c493236789ae9614e24f86817ae58009e29ee61ee91c22373d4d272730ad6",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "7cdafe7c7f3200dbb8d4628ef4452c53dc30efafa373383e511a063ed28a661f",
-  "notes": "Fixes the tau needing two presses on an English keyboard: the helper switched the layout back before protel had taken the key."
+  "sha256": "8c8c0be5b8f78e4ee61abacac87c3cbb140ec9d617ef7f27d183e7e0891dfc06",
+  "notes": "Adding a receipt by hand now names the guest in the room as you type it, and the prompt that offers it says what it is."
 }
