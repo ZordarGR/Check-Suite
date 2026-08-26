@@ -104,6 +104,12 @@ function applyHotkeys(){
 }
 /* the interact combo surfaces the overlay and lets the mouse reach it */
 function interactOverlayGlobal(){
+  /* A finished night answers the same way whichever hotkey asks it. Edit mode used to
+     be the exception: it resurrected a put-away overlay so a task could be unticked
+     without leaving protel. But the checklist is in the app too, so that hatch bought
+     one alt-tab and cost a surprise -- and two hotkeys disagreeing about what
+     "finished" means reads as a bug even when it is deliberate. */
+  if(overlayRecall()) return;
   if(!overlayWin){
     createOverlay();
     try{ const c = hub.readConfig(); c.overlayOn = true; hub.writeConfig(c); }catch(e){}
@@ -116,7 +122,9 @@ function interactOverlayGlobal(){
 function setInteract(on){
   if(!overlayWin){ INTERACT = false; return; }
   INTERACT = !!on;
-  // it may be hidden because the night's tasks are all done — bring it back to be ticked
+  /* Only reachable now with the done reminder switched off, where a finished night has
+     nothing to say and the hotkey behaves as an ordinary summon. With the reminder on,
+     interactOverlayGlobal has already answered and never got here. */
   try{ if(INTERACT && !overlayWin.isVisible()) overlayWin.showInactive(); }catch(e){}
   try{
     overlayWin.setIgnoreMouseEvents(!INTERACT);
