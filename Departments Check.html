@@ -1275,6 +1275,8 @@ en: {
   "search.ph": "serial number…", "search.notThere": "Receipt isn't there?",
   "search.notThereQ": "No receipt {sn} in tonight's report — add it by hand?",
   "extra.knownAs": "in that room:",
+  "extra.dupe": "You have already added that serial by hand.",
+  "extra.inReport": "That serial IS in tonight's report — close this and search for it.",
   "search.hint": "Type the receipt's full serial number · Enter confirms the match",
   "search.many": " matches — pick one with its checkbox", "search.reversed": "REVERSED at the POS — nothing to check",
   "search.void": "VOID — consolidated by {by}, not counted",
@@ -1438,6 +1440,8 @@ gr: {
   "search.ph": "σειριακός αριθμός…", "search.notThere": "Δεν υπάρχει η απόδειξη;",
   "search.notThereQ": "Καμία απόδειξη {sn} στην αποψινή αναφορά — να καταχωρηθεί χειροκίνητα;",
   "extra.knownAs": "στο δωμάτιο:",
+  "extra.dupe": "Αυτός ο σειριακός έχει ήδη καταχωρηθεί χειροκίνητα.",
+  "extra.inReport": "Αυτός ο σειριακός ΥΠΑΡΧΕΙ στην αποψινή αναφορά — κλείσε και αναζήτησέ τον.",
   "search.hint": "Πληκτρολογήστε ολόκληρο τον σειριακό αριθμό · Enter επιβεβαιώνει το ταίριασμα",
   "search.many": " ταιριάσματα — επιλέξτε ένα με το κουτάκι του", "search.reversed": "ΑΚΥΡΩΜΕΝΗ στο POS — δεν χρειάζεται έλεγχο",
   "search.void": "ΑΚΥΡΗ — ενοποιήθηκε από {by}, δεν μετράει",
@@ -3027,7 +3031,14 @@ function extraRow(x){
   const xg = x.room ? (nickFor(x.room) || x.guest || guestFor(x.room)) : null;
   if(xg) row.append(el("div","name", xg));
   row.append(el("div","split", rateSplitStr({"24%": x.v24, "13%": x.v13})));
-  row.append(el("span","tag extra","NOT IN REPORT"));
+  const xw = x.room ? watchFor(x.room) : [];
+  if(xw.length){
+    row.classList.add("watch");
+    const wt = el("span","tag watch", t("tag.watch"));
+    wt.title = xw.map(w => (w.name || "?") + (w.sn ? " · SN " + w.sn : "")).join("  |  ");
+    row.append(wt);
+  }
+  row.append(el("span","tag extra", t("tag.extra")));
   row.append(el("div","amt", numToMoney(Math.round(((x.v24||0)+(x.v13||0))*100)/100)));
   const del = el("button","warnBtn","✕");
   del.title = "Remove this manual entry";
@@ -3310,6 +3321,10 @@ function openExtraModal(prefillSN){
     const v24 = readMoney($("#xV24").value), v13 = readMoney($("#xV13").value);
     const room = $("#xRoom").value.trim();
     if(!/^\d+$/.test(sn)){ $("#xErr").textContent = t("corr.errSn"); return; }
+    /* Adding the same receipt twice would inflate the night's takings and its count,
+       silently, and nothing downstream would ever notice. */
+    if(STATE.extras.some(e => String(e.sn) === sn)){ $("#xErr").textContent = t("extra.dupe"); return; }
+    if(MODEL && MODEL.receipts.some(r => effSN(r) === sn)){ $("#xErr").textContent = t("extra.inReport"); return; }
     if(v24 === null || v13 === null){ $("#xErr").textContent = t("corr.errVal"); return; }
     if(!room){ $("#xErr").textContent = t("roomM.err"); return; }
     STATE.extras.push({sn, v24, v13, room, guest: guestFor(room) || null,
@@ -3334,6 +3349,33 @@ function findMatches(q){
   }
   return out;
 }
+/* Searching a serial you added by hand used to find nothing and then offer to add it
+   again — the app actively inviting a double entry, and no way to look up what you had
+   already recorded. A manual entry is part of the night; the search knows about it. */
+function findExtras(q){
+  if(!q) return [];
+  return STATE.extras.filter(x => String(x.sn) === q);
+}
+function extraMatchCard(x){
+  const c = el("div","match");
+  c.append(el("span","dept", x.dept === "UNASSIGNED" ? t("extra.unassigned") : x.dept));
+  c.append(el("span","room", x.room || "—"));
+  c.append(el("span","msn", x.sn));
+  const nick = x.room ? nickFor(x.room) : null;
+  const nm = x.room ? (nick || x.guest || guestFor(x.room)) : null;
+  if(nm) c.append(el("span","name" + (nick ? " nick" : ""), nm));
+  c.append(el("span","split", rateSplitStr({"24%": x.v24, "13%": x.v13})));
+  c.append(el("span","amt", numToMoney(extraTotal(x))));
+  const ws = x.room ? watchFor(x.room) : [];
+  if(ws.length){
+    c.classList.add("watch");
+    const wt = el("span","tag watch", t("tag.watch"));
+    wt.title = ws.map(w => (w.name || "?") + (w.sn ? " · SN " + w.sn : "")).join("  |  ");
+    c.append(wt);
+  }
+  c.append(el("span","tag extra", t("tag.extra")));
+  return c;
+}
 
 function searchInput(){
   const f = inp();
@@ -3349,8 +3391,10 @@ function searchInput(){
   if(!q) return;
 
   const ms = findMatches(q);
-  currentMatches = ms;
-  if(!ms.length){
+  const xs = findExtras(q);
+  currentMatches = ms;               // Enter confirms a report receipt; an entry you
+                                     // typed yourself has nothing left to confirm
+  if(!ms.length && !xs.length){
     inp().classList.add("nomatch");
     /* A bare "Receipt isn't there?" button beside the box was missed entirely — it read
        as decoration. It now states the case and asks the question, with the serial in
@@ -3364,6 +3408,7 @@ function searchInput(){
     return;
   }
   for(const m of ms) box.append(matchCard(m.r));
+  for(const x of xs) box.append(extraMatchCard(x));
 }
 
 function matchCard(r){

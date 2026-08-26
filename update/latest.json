@@ -6,6 +6,6 @@
   "setupSha256": "208c493236789ae9614e24f86817ae58009e29ee61ee91c22373d4d272730ad6",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "39c1e1e707eb1fe5acad0a9b4aa2312566b5fe32715553cfc7b31a5ac81a42a0",
-  "notes": "Receipts added by hand now count toward the money and the number of receipts received, while staying flagged in the discrepancies."
+  "sha256": "527355030063a4e694fda7fd6982daded22549e8c9b083d62defa0e7bbc236d7",
+  "notes": "A receipt added by hand is now part of the night everywhere: totals, counts, search, watchlist — and it cannot be added twice."
 }
