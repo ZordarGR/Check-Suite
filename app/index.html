@@ -1192,7 +1192,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.16.9";
+const APP_VERSION = "1.16.10";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1308,7 +1308,8 @@ en: {
   "mv.title": "ROOM MOVEMENTS",
   "mv.dep": "left today", "mv.arr": "arrived today", "mv.turn": "left and re-let same day",
   "mv.guess": "occupant changed — inferred",
-  "mv.guessNote": "Dashed rooms are inferred from the guest name changing, not from arrival and departure dates. Load this night's rate list in Tax Check to have them confirmed.",
+  "mv.from": "from the rate list of {d}",
+  "mv.guessNote": "Dashed rooms are inferred from the guest name changing, not from real dates. Load any rate list in Tax Check — it carries every in-house guest's departure date, so one list answers for the nights ahead of it too.",
   "extra.dupe": "You have already added that serial by hand.",
   "extra.inReport": "That serial IS in tonight's report — close this and search for it.",
   "search.hint": "Type the receipt's full serial number · Enter confirms the match",
@@ -1477,7 +1478,8 @@ gr: {
   "mv.title": "ΚΙΝΗΣΕΙΣ ΔΩΜΑΤΙΩΝ",
   "mv.dep": "αναχώρησε σήμερα", "mv.arr": "άφιξη σήμερα", "mv.turn": "έφυγε και ξαναδόθηκε την ίδια μέρα",
   "mv.guess": "άλλαξε ο ένοικος — εκτίμηση",
-  "mv.guessNote": "Τα διακεκομμένα προκύπτουν από αλλαγή ονόματος, όχι από ημερομηνίες άφιξης και αναχώρησης. Φόρτωσε τη λίστα δωματίων της βραδιάς στο Tax Check για να επιβεβαιωθούν.",
+  "mv.from": "από τη λίστα δωματίων της {d}",
+  "mv.guessNote": "Τα διακεκομμένα προκύπτουν από αλλαγή ονόματος, όχι από πραγματικές ημερομηνίες. Φόρτωσε οποιαδήποτε λίστα δωματίων στο Tax Check — έχει την ημερομηνία αναχώρησης κάθε ενοίκου, οπότε μία λίστα απαντά και για τις επόμενες βραδιές.",
   "extra.dupe": "Αυτός ο σειριακός έχει ήδη καταχωρηθεί χειροκίνητα.",
   "extra.inReport": "Αυτός ο σειριακός ΥΠΑΡΧΕΙ στην αποψινή αναφορά — κλείσε και αναζήτησέ τον.",
   "search.hint": "Πληκτρολογήστε ολόκληρο τον σειριακό αριθμό · Enter επιβεβαιώνει το ταίριασμα",
@@ -3611,39 +3613,43 @@ function addWatch(){
 /* ---------- room movements (arrivals / departures / same-day turnover) ---------- */
 /* Written by the tax tool when a rate list is loaded — that report is the only one
    either half of this app sees that carries arrival and departure dates. */
-const MOVES_KEY = "reccheck_moves_v1";
+const MOVES_KEY = "reccheck_moves_v2";
 function loadMoves(){
   try{ return JSON.parse(localStorage.getItem(MOVES_KEY) || "{}") || {}; }catch(e){ return {}; }
 }
-/* room -> {kind: "arr"|"dep"|"turn", who: [names], sure: bool}
-   A room can hold two reservations on one date: one ending, one beginning. That is the
-   turnover, and it is the whole reason the rate rows are kept per room rather than one
-   per room. */
+function dShort(k){
+  k = Number(k) || 0;
+  if(!k) return "";
+  return String(k % 100).padStart(2, "0") + "/" + String(Math.floor(k / 100) % 100).padStart(2, "0");
+}
+/* room -> {kind: "arr"|"dep"|"turn", who: [...], sure, from}
+   The ledger holds reservations, not nights, so this answers for any night inside the
+   span of any rate list ever loaded — including nights whose tax check was never run
+   because the main courante balanced. */
 function roomMoves(){
   const out = {};
   if(!MODEL) return out;
   const night = dateNum(MODEL.reportDate);
   if(!night) return out;
-  const night_ = loadMoves()[String(night)];
-  if(night_){
-    for(const room of Object.keys(night_)){
-      let arr = false, dep = false;
-      const who = [];
-      for(const r of night_[room]){
-        if(r.a === night){ arr = true; if(r.n) who.push("→ " + r.n); }
-        if(r.d === night){ dep = true; if(r.n) who.push("← " + r.n); }
-      }
-      if(!arr && !dep) continue;
-      out[room] = {kind: (arr && dep) ? "turn" : (arr ? "arr" : "dep"), who: who, sure: true};
+  const led = loadMoves();
+  for(const room of Object.keys(led)){
+    let arr = false, dep = false, from = 0;
+    const who = [];
+    for(const a of Object.keys(led[room])){
+      const r = led[room][a], A = Number(a), D = r.d || 0;
+      if(A === night){ arr = true; from = Math.max(from, r.seen || 0); if(r.n) who.push("\u2192 " + r.n); }
+      if(D === night){ dep = true; from = Math.max(from, r.seen || 0); if(r.n) who.push("\u2190 " + r.n); }
     }
+    if(!arr && !dep) continue;
+    out[room] = {kind: (arr && dep) ? "turn" : (arr ? "arr" : "dep"), who: who, sure: true, from: from};
   }
-  /* Nothing recorded for this night: fall back to the occupant having changed, which
-     is all the department report on its own can tell us. Never overrides the rate list. */
+  /* A room no rate list has ever covered: all the department report alone can say is
+     that the name under it changed. Never overrides a real date. */
   for(const room of Object.keys(ROOMS)){
     if(out[room]) continue;
     const e = ROOMS[room];
     if(e && e.movedOn && e.movedOn === MODEL.reportDate)
-      out[room] = {kind: "turn", who: e.guest ? [e.guest] : [], sure: false};
+      out[room] = {kind: "turn", who: e.guest ? [e.guest] : [], sure: false, from: 0};
   }
   return out;
 }
@@ -3662,7 +3668,8 @@ function renderMoves(){
     const m = mv[room];
     const pill = el("div","mvPill mv-" + m.kind + (m.sure ? "" : " guess"), room);
     pill.title = t("mv." + m.kind) + (m.sure ? "" : " · " + t("mv.guess"))
-               + (m.who.length ? "\n" + m.who.join("\n") : "");
+               + (m.who.length ? "\n" + m.who.join("\n") : "")
+               + (m.from ? "\n" + t("mv.from", {d: dShort(m.from)}) : "");
     grid.append(pill);
   }
   box.append(grid);
@@ -4323,23 +4330,75 @@ function recentDates(mem,n){const s=new Set();for(const r of Object.keys(mem))fo
 function pruneRoom(rec,n){const ds=Object.keys(rec).sort((a,b)=>dnum(b)-dnum(a));for(const d of ds.slice(n))delete rec[d];}
 function ingestTax(tax){const mem=loadMem();for(const room of Object.keys(tax.rooms)){const b=tax.rooms[room];const rec=mem[room]||(mem[room]={});if(((b.arr||0)+(b.auto||0)+(b.man||0))===0){delete rec[tax.fileDate];if(!Object.keys(rec).length)delete mem[room];continue;}const pm=rec[tax.fileDate]&&rec[tax.fileDate].manual||null;rec[tax.fileDate]={arr:b.arr,auto:b.auto,man:b.man,manual:pm};pruneRoom(rec,7);}saveMem(mem);}
 /* Room movements, kept for the DEPARTMENT check to colour its rooms by. The rate list
-   is the only report either tool sees that carries arrival and departure dates, and it
-   is loaded here — so it is recorded here, keyed by night, and read over there. Dates
-   are normalised to YYYYMMDD so both sides compare them the same way. */
-const MOVES_KEY="reccheck_moves_v1";
+   is the only report either tool sees carrying arrival and departure dates, and it is
+   loaded here — so it is recorded here and read over there.
+
+   It is a LEDGER of reservations, not a snapshot per night. Every in-house guest on the
+   list already carries the date they are due to leave, so one list answers "who leaves
+   tonight" for every night up to the last departure in it. That matters because the tax
+   check is only run on nights where the main courante did not balance — on a quiet night
+   no rate list is opened at all, and a snapshot store would simply go blank on exactly
+   the night the answer was already known days ago.
+
+   Keyed room -> arrival, so a guest extending their stay updates the same reservation
+   rather than inventing a second departure. Dates normalised to YYYYMMDD. */
+const MOVES_KEY="reccheck_moves_v2";
+function loadLedger(){
+  try{
+    const raw=JSON.parse(localStorage.getItem(MOVES_KEY)||"null");
+    if(raw&&typeof raw==="object")return raw;
+  }catch(e){}
+  /* carry over the per-night store 1.16.9 shipped, so nothing already recorded is lost */
+  const out={};
+  try{
+    const old=JSON.parse(localStorage.getItem("reccheck_moves_v1")||"{}")||{};
+    for(const night of Object.keys(old))
+      for(const room of Object.keys(old[night]||{}))
+        for(const r of old[night][room]||[]){
+          if(!r.a)continue;
+          const m=out[room]=out[room]||{};
+          if(!m[r.a]||Number(night)>=(m[r.a].seen||0))m[r.a]={d:r.d||0,n:r.n||"",seen:Number(night)||0};
+        }
+  }catch(e){}
+  return out;
+}
 function saveMoves(rate){
   if(!rate||!rate.dateKey||!rate.all)return;
   try{
-    const store=JSON.parse(localStorage.getItem(MOVES_KEY)||"{}")||{};
-    const night={};
+    const led=loadLedger(), night=rate.dateKey;
     for(const room of Object.keys(rate.all)){
-      const rs=rate.all[room].map(r=>({a:dkey(r.arr),d:dkey(r.dep),n:r.name||""}))
-                             .filter(r=>r.a||r.d);
-      if(rs.length)night[room]=rs;
+      const seenArr={};
+      for(const r of rate.all[room]){
+        const a=dkey(r.arr), d=dkey(r.dep);
+        if(!a)continue;
+        seenArr[a]=1;
+        const m=led[room]=led[room]||{};
+        // a later list wins: that is how an extended stay corrects its departure date
+        if(!m[a]||night>=(m[a].seen||0))m[a]={d:d||0,n:r.name||"",seen:night};
+      }
+      /* This list says who was in that room on this night. Any reservation we still hold
+         that claims the same room on the same night, under a different arrival date, is
+         contradicted by it and must have ended by now — two guests cannot both be in one
+         room. Only rooms the list actually mentions are touched, so a partial print can
+         never truncate a stay it simply did not include. */
+      const m=led[room]||{};
+      for(const a of Object.keys(m)){
+        const A=Number(a);
+        if(seenArr[A])continue;
+        if(A<=night&&(m[a].d||0)>night){ m[a].d=night; m[a].cut=1; }
+      }
     }
-    store[String(rate.dateKey)]=night;
-    for(const k of Object.keys(store).sort((a,b)=>Number(b)-Number(a)).slice(14))delete store[k];
-    localStorage.setItem(MOVES_KEY,JSON.stringify(store));
+    /* keep it bounded without needing a clock: drop anything that ended long before the
+       newest departure the ledger knows about */
+    let newest=0;
+    for(const room of Object.keys(led))
+      for(const a of Object.keys(led[room]))newest=Math.max(newest,led[room][a].d||0);
+    const floor=newest-10000;                      // ~a year in YYYYMMDD arithmetic
+    for(const room of Object.keys(led)){
+      for(const a of Object.keys(led[room]))if((led[room][a].d||0)<floor)delete led[room][a];
+      if(!Object.keys(led[room]).length)delete led[room];
+    }
+    localStorage.setItem(MOVES_KEY,JSON.stringify(led));
   }catch(e){}
 }
 
