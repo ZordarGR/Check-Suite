@@ -330,15 +330,35 @@ static class TBind {
   }
   /* the T we SendInput is TRANSLATED under whatever layout is active when the target
      pulls it off the queue — never hop back before it has been consumed */
+  static bool KeyQueued(){ return (GetQueueStatus(QS_KEY) >> 16) != 0; }
   static void WaitKeyDrained(bool attached){
-    if(attached){
-      for(int i = 0; i < 12; i++){                 // queues are shared while attached,
-        if((GetQueueStatus(QS_KEY) >> 16) == 0) return;   // so we can see the key leave
-        Thread.Sleep(5);
-      }
+    if(!attached){
+      Thread.Sleep(90);                            // can't observe the queue — v2 delay
+      D("  waited 90 ms for the key (queue not observable without the attach)");
       return;
     }
-    Thread.Sleep(90);                              // can't observe the queue — v2 delay
+    /* The old loop checked the queue with ZERO delay after SendInput and returned the
+       instant it looked empty — but SendInput hands the key to the raw input thread, so
+       an empty queue a microsecond later means "has not arrived yet", not "already
+       consumed". It therefore returned immediately having waited for nothing, and the
+       restore flipped the layout back before the target had translated the key. Whether
+       the tau survived was a scheduling coin flip: intermittent from English, never a
+       problem from Greek because that path neither hops nor restores.
+
+       So: wait for the key to APPEAR, then for it to LEAVE, then settle. */
+    int t = 0;
+    for(; t < 40 && !KeyQueued(); t += 3) Thread.Sleep(3);          // arrive (max 120 ms)
+    if(!KeyQueued() && t >= 40)
+      D("  the key never showed up in the queue within " + t + " ms");
+    else D("  key reached the queue after ~" + t + " ms");
+    int d = 0;
+    for(; d < 120 && KeyQueued(); d += 5) Thread.Sleep(5);          // leave  (max 120 ms)
+    D(KeyQueued() ? "  the target still has not taken the key after " + d + " ms"
+                  : "  target took the key after ~" + d + " ms");
+    /* TranslateMessage runs just after GetMessage, and an embedded browser control
+       (protel's list is one) routes the key on again before the character is resolved.
+       The layout must still be Greek for all of that, not just for the dequeue. */
+    Thread.Sleep(25);
   }
   /* a real press of the T KEY under the GREEK layout — protel and friends see a genuine
      keystroke (WM_KEYDOWN VK_T + WM_CHAR 'τ'), not a pasted character. If the foreground

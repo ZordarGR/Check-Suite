@@ -108,6 +108,7 @@ KLF_ACTIVATE
 KeyCallback
 KeyCollection
 KeyEvent
+KeyQueued
 LLKHF_INJECTED
 LLMHF_INJECTED
 LastIndexOf
