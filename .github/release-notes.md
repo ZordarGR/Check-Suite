@@ -1,26 +1,18 @@
-## RecCheck 1.16.2 — Windows
+## RecCheck 1.16.4 — Windows
 
 Nightly POS receipt audit for the protel checkcharge1 report (.oxps). Everything runs locally — no data leaves the machine.
 
-### Fix — the helper crashed on startup, so no shortcut could work
+### A finished night now answers the same way whichever key you press
 
-**Install this if your shortcuts do nothing.** This is the actual cause of the breakage that has run through 1.15.0, 1.16.0 and 1.16.1.
+Once the last task is ticked the overlay puts itself away until 07:00. Asking for it with the overlay key (**Ctrl+T**) flashed *all tasks are done for tonight* and left it away — but asking with the edit key (**Alt+Shift+Z**) brought it back onto the screen instead.
 
-The status line added in 1.16.1 reported `exit=3762504530` — `0xE0434352`, the CLR's code for *an unhandled exception happened*. The helper was starting, throwing, and dying 53 ms later, every time.
+That was deliberate: a way to untick something without leaving protel. In practice the checklist is in the app anyway, so it bought one alt-tab and cost a surprise — and two keys disagreeing about what *finished* means reads as a fault even when it isn't. Both now do the same thing.
 
-The helper is compiled here on Linux against Mono's class library, and runs on your machine against .NET Framework, which is the smaller of the two. One line of the keystroke-run parser added in 1.15.0 — `body.Split(',')` — compiled to `String.Split(char, StringSplitOptions)`, an overload .NET Framework 4.8 does not have. Windows resolves every call in a method *before* running it, so that single line killed the whole of the bind parser on its first use — even though the branch containing it was never reached.
+If you have switched the reminder off under *Customize overlay*, nothing changes: with no message to show, both keys behave as an ordinary summon, so a colleague who does not want the interruption is not fighting it.
 
-It was hidden for three versions because 1.15.0 also broke *storing* a binding, so nothing was ever bound, so the helper was never started in the mode that would have crashed. Fixing the storage in 1.16.0 and 1.16.1 is what finally let it run — and crash.
+### Also in this build
 
-The call is now written so it can only bind to the overload that exists everywhere, and the build refuses to produce a helper that references anything outside a reviewed list of .NET Framework members.
-
-### The helper now reports its own crashes
-
-Rather than a hex exit code, an unhandled exception is written down and *PROTEL SHORTCUTS* shows what threw and where — the exception type, its message, and the method it came from. A crash while it is running no longer takes the shortcuts down for the rest of the night either; it is recorded and the helper keeps going.
-
-### The keystroke run is back
-
-*Invoice keystroke run* returns to the menu: **Enter · Enter · Right · Enter · Enter**, 25 ms apart, on one button. It was withdrawn in 1.16.1 while it was the suspect. It was not the cause — one line of its parser was, and that line is fixed.
+Everything from 1.16.3, which went out as a light update: applying a room nickname updates the search results again, and a part of the screen that fails to draw no longer silently stops the rest — it says so instead.
 
 ### Install
 

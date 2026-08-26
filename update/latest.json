@@ -1,11 +1,11 @@
 {
-  "version": "1.16.3",
-  "type": "html",
-  "engine": "1.16.2",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.16.2/RecCheck-Setup.exe",
-  "setupSha256": "86cc62c431787bf939883c5fccb0f03a88b770562dd42c82e4c38791b3948cb2",
+  "version": "1.16.4",
+  "type": "full",
+  "engine": "1.16.4",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.16.4/RecCheck-Setup.exe",
+  "setupSha256": "1e93fa7e3def8001db38e49492e0d5f49affce61b9092448f90c71a3f4b7699f",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "e0f497f890d7ad2ce3439f15c6253c130054f450c132c3ae1cd439f45705b804",
-  "notes": "Applying a room nickname updates the search results again; a renderer that fails no longer silently stops the rest of the screen."
+  "sha256": "b7b561516debf011f665e317617ab1453c3fae4538308b4655bf3cb8c6cbac2a",
+  "notes": "A finished night now answers the same way whichever overlay key you press; includes the 1.16.3 nickname and error-reporting fixes."
 }
