@@ -222,7 +222,11 @@ main{max-width:1060px;margin:0 auto;padding:16px 18px 90px}
 #snInput:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(245,180,83,.12)}
 #snInput.nomatch{color:var(--red);border-color:var(--red-dim)}
 #snInput::placeholder{color:var(--faint);font-size:14px;letter-spacing:0}
+/* Shown by adding .show, never by clearing style.display — clearing an inline style
+   removes the override and lets this rule win, which is exactly how this prompt spent
+   its whole life invisible while the code around it looked correct. */
 #notThereBtn{display:none}
+#notThereBtn.show{display:inline-block}
 .xWho{margin:-6px 0 10px;font-size:12px;color:#4fd1c5;font-family:var(--mono)}
 #matches{display:flex;flex-direction:column;gap:6px;flex:1;min-width:280px}
 .match{display:flex;align-items:center;gap:12px;background:var(--panel2);border:1px solid var(--amber-dim);
@@ -1158,7 +1162,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.16.6";
+const APP_VERSION = "1.16.7";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -3318,7 +3322,7 @@ function searchInput(){
   if(clean !== f.value) f.value = clean;
   const q = clean;
   clearTimeout(ntTimer);
-  $("#notThereBtn").style.display = "none";
+  $("#notThereBtn").classList.remove("show");
   const box = $("#matches");
   box.innerHTML = "";
   currentMatches = [];
@@ -3336,7 +3340,7 @@ function searchInput(){
       if(inp().value.trim() !== q) return;
       const b = $("#notThereBtn");
       b.textContent = t("search.notThereQ", {sn: q});
-      b.style.display = "";
+      b.classList.add("show");
     }, 900);
     return;
   }
@@ -3924,7 +3928,7 @@ $("#resetDay").onclick = () => {
     const i = $("#snInput");
     i.value = ""; i.classList.remove("nomatch");
     $("#matches").innerHTML = "";
-    $("#notThereBtn").style.display = "none";
+    $("#notThereBtn").classList.remove("show");
     renderSummary();
     renderAccordions();
     toast(t("reset.toast"), true);
