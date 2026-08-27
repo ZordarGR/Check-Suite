@@ -8,7 +8,7 @@
 # So: adding a line to this file is the moment to confirm the member exists in
 # .NET Framework 4.8. Nothing else in this build will tell you.
 #
-# Reviewed for 1.16.2. Regenerate deliberately, never wholesale.
+# Reviewed for 1.17.2 (v8). Regenerate deliberately, never wholesale.
 .cctor
 .ctor
 <>f__am$cache0
@@ -65,6 +65,7 @@ Exit
 File
 Flush
 FocusedOf
+ForegroundOf
 GREEK
 GUITHREADINFO
 GetAsyncKeyState
@@ -117,12 +118,14 @@ LastIndexOf
 LayoutList
 List`1
 LoadKeyboardLayout
+LogBlocked
 MOUSEINPUT
 MSG
 MSLLHOOKSTRUCT
 Main
 MapVirtualKey
 Marshal
+MatchesNeedle
 Monitor
 MouseCallback
 MoveNext
@@ -178,6 +181,7 @@ System.Text
 System.Threading
 TAU
 TBind
+TargetFocused
 TauLogPath
 TextWriter
 Thread
@@ -187,6 +191,7 @@ ThreadStart
 ToArray
 ToInt32
 ToString
+ToUpperInvariant
 TranslateMessage
 Trim
 TryEnter
@@ -209,6 +214,7 @@ VK_T
 ValueType
 WH_KEYBOARD_LL
 WH_MOUSE_LL
+WM_APP_BLOCK
 WM_APP_SEND
 WM_INPUTLANGCHANGEREQUEST
 WM_KEYDOWN
@@ -239,6 +245,7 @@ binds
 bottom
 callback
 cbSize
+cls
 code
 cur
 down
@@ -248,10 +255,15 @@ dx
 dy
 e
 entry
+exe
 extra
 fg
+fgOk
+fgWhat
+fgWnd
 flags
 fn
+focusNeedle
 gap
 get_Capacity
 get_Chars
@@ -296,6 +308,7 @@ ki
 klid
 l
 lParam
+lastBlocked
 left
 line
 list
@@ -342,6 +355,7 @@ tid
 time
 timeout
 top
+txt
 type
 u
 ue
@@ -353,6 +367,7 @@ wParam
 wScan
 wVk
 watchdog
+what
 where
 x
 y

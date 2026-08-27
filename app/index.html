@@ -252,6 +252,11 @@ body.hasMoves main{max-width:1330px}
   body.hasMoves main{max-width:1060px}
   .mvGrid{grid-template-columns:repeat(10,1fr)}
 }
+/* the protel-only gate, under the bind rows in PROTEL SHORTCUTS */
+.scFocus{margin-top:14px;padding:11px 12px;border:1px solid var(--line);border-radius:11px;background:#0b1017}
+.scFocusTop{display:flex;align-items:center;gap:9px;font-size:13px;cursor:pointer}
+.scFocusTop input{width:15px;height:15px;accent-color:var(--amber);cursor:pointer}
+.scFocusSub{margin:7px 0 9px;font-size:11.5px;line-height:1.5;color:var(--dim);font-family:var(--mono)}
 #notThereBtn{display:none}
 #notThereBtn.show{display:inline-block}
 .xWho{margin:-6px 0 10px;font-size:12px;color:#4fd1c5;font-family:var(--mono)}
@@ -1196,7 +1201,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.1";
+const APP_VERSION = "1.17.2";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1255,6 +1260,16 @@ en: {
   "sc.hCrash": "The helper crashed. What went wrong is printed below \u2014 send it on and it can be fixed exactly.",
   "sc.hDetail": "detail",
   "sc.log": "What the last presses did",
+  "sc.focusLabel": "Only while protel is in front",
+  "sc.focusNone": "Not pointed at anything yet \u2014 the shortcuts fire in every window.",
+  "sc.focusMatch": "Firing only in windows whose name contains \u201c{n}\u201d.",
+  "sc.focusPick": "Point it at protel",
+  "sc.focusCount": "Bring protel forward\u2026 {n}",
+  "sc.focusFail": "Could not read what was in front. Nothing changed.",
+  "sc.focusGot": "Pointed at \u201c{n}\u201d \u2014 {w}",
+  "sc.focusOff": "The shortcuts fire in every window again.",
+  "sc.focusIdle": "Tick the box above to switch it on.",
+  "sc.focusSelf": "That was RecCheck, not protel. Start it again and bring protel forward before the count ends.",
   "sc.moves": "Why the room pills say what they say",
   "dbg.menu": "DEBUG", "dbg.title": "DEBUG",
   "dbg.intro": "Diagnostics for the \u03c4 shortcut and the helper behind it. Nothing here changes anything \u2014 it only reports.",
@@ -1429,6 +1444,16 @@ gr: {
   "sc.hCrash": "Ο βοηθός κατέρρευσε. Το τι πήγε στραβά τυπώνεται παρακάτω — στείλ' το και διορθώνεται ακριβώς.",
   "sc.hDetail": "λεπτομέρεια",
   "sc.log": "Τι έκαναν τα τελευταία πατήματα",
+  "sc.focusLabel": "Μόνο όταν το protel είναι μπροστά",
+  "sc.focusNone": "Δεν έχει οριστεί παράθυρο \u2014 οι συντομεύσεις δουλεύουν παντού.",
+  "sc.focusMatch": "Δουλεύουν μόνο σε παράθυρα που περιέχουν \u201c{n}\u201d.",
+  "sc.focusPick": "Δείξε του το protel",
+  "sc.focusCount": "Φέρε το protel μπροστά\u2026 {n}",
+  "sc.focusFail": "Δεν διαβάστηκε τι ήταν μπροστά. Δεν άλλαξε τίποτα.",
+  "sc.focusGot": "Ορίστηκε στο \u201c{n}\u201d \u2014 {w}",
+  "sc.focusOff": "Οι συντομεύσεις δουλεύουν ξανά παντού.",
+  "sc.focusIdle": "Τσέκαρε το κουτί από πάνω για να ενεργοποιηθεί.",
+  "sc.focusSelf": "Αυτό ήταν το RecCheck, όχι το protel. Ξεκίνα το ξανά και φέρε το protel μπροστά πριν τελειώσει η αντίστροφη μέτρηση.",
   "sc.moves": "Γιατί λένε αυτό τα πλακίδια δωματίων",
   "dbg.menu": "DEBUG", "dbg.title": "DEBUG",
   "dbg.intro": "Διαγνωστικά για τη συντόμευση τ και τον βοηθό πίσω της. Τίποτα εδώ δεν αλλάζει κάτι — μόνο αναφέρει.",
@@ -2170,6 +2195,75 @@ function renderShortcuts(){
     await sc.clear(b.dataset.a).catch(() => {});
     scApply(await sc.get().catch(() => null));
   });
+  renderFocusGate();
+}
+/* ---- the shortcuts belong to protel ----
+   A bound side button is still a mouse button everywhere else on the machine, so the
+   helper can be told to fire only while protel is in front. What protel is called is
+   never guessed here: the user brings the real window forward once and the app takes
+   the name from it. Until they do, the gate stays off — a needle that matches nothing
+   would swallow every shortcut in the middle of a shift. */
+function focusState(){
+  const f = (SCSTATE && SCSTATE.focus) || null;
+  return {on: !!(f && f.on), needle: (f && f.needle) || ""};
+}
+function renderFocusGate(){
+  const box = $("#scFocusBox");
+  if(!box) return;
+  const sc = window.reccheckShortcuts;
+  const f = focusState();
+  box.innerHTML =
+    '<div class="scFocus">' +
+      '<label class="scFocusTop"><input type="checkbox" id="scFocusOn"' + (f.on ? " checked" : "") + '>' +
+        escapeHtml(t("sc.focusLabel")) + '</label>' +
+      '<div class="scFocusSub" id="scFocusSub">' +
+        escapeHtml(f.needle ? t("sc.focusMatch", {n: f.needle}) : t("sc.focusNone")) + '</div>' +
+      '<button class="btn small" id="scFocusPick">' + escapeHtml(t("sc.focusPick")) + '</button>' +
+    '</div>';
+  const sub = $("#scFocusSub"), pick = $("#scFocusPick"), chk = $("#scFocusOn");
+  const say = m => { sub.textContent = m; };
+  /* Five seconds, the same countdown the Test button uses, so it reads the same way:
+     start it, put protel in front, and the app reads what is actually there. */
+  const runPick = async (thenOn) => {
+    if(pick.dataset.busy) return null;
+    pick.dataset.busy = "1";
+    let n = 5;
+    pick.textContent = t("sc.focusCount", {n: n});
+    const iv = setInterval(() => { n--; if(n > 0) pick.textContent = t("sc.focusCount", {n: n}); }, 1000);
+    const got = await sc.focusPick(5000).catch(() => null);
+    clearInterval(iv);
+    delete pick.dataset.busy;
+    pick.textContent = t("sc.focusPick");
+    /* The process name first: it is the one of the three that does not change as the
+       user moves around inside protel. */
+    if(got && got.self){ say(t("sc.focusSelf")); return null; }
+    const needle = got && (got.exe || got.cls || got.title || "").trim();
+    if(!needle){ say(t("sc.focusFail")); return null; }
+    const st = await sc.focusSet(thenOn, needle).catch(() => null);
+    if(st && SCSTATE) SCSTATE.focus = st;
+    say(t("sc.focusGot", {n: needle, w: got.title || got.cls || "?"})
+        + (thenOn ? "" : "  " + t("sc.focusIdle")));
+    return needle;
+  };
+  pick.onclick = () => runPick(chk.checked);
+  chk.onchange = async () => {
+    if(!chk.checked){
+      const st = await sc.focusSet(false, focusState().needle).catch(() => null);
+      if(st && SCSTATE) SCSTATE.focus = st;
+      say(t("sc.focusOff"));
+      return;
+    }
+    /* Ticking it with nothing to match would turn every shortcut off. Ask what protel
+       is first, and only then switch it on. */
+    if(!focusState().needle){
+      const n = await runPick(true);
+      if(!n) chk.checked = false;
+      return;
+    }
+    const st = await sc.focusSet(true, focusState().needle).catch(() => null);
+    if(st && SCSTATE) SCSTATE.focus = st;
+    say(t("sc.focusMatch", {n: focusState().needle}));
+  };
 }
 /* ---- Switch user -------------------------------------------------------
    Profiles moved out of PROTEL SHORTCUTS in 1.15.1: they are a different kind of
@@ -2473,6 +2567,7 @@ function openShortcuts(){
       '<div class="err" style="color:var(--faint)">' +
         t("up.scActive", {n: (scActiveProfile() || {}).name || "-"}) + '</div>' +
       '<div id="scBody"></div>' +
+      '<div id="scFocusBox"></div>' +
       '<div id="scHelp" style="margin-top:12px;font-size:12px;line-height:1.5"></div>' +
       (st.available ? "" : '<div class="err">' + t("sc.unavailable") + '</div>') +
       '<div class="actions"><button class="btn amber" id="scOk">' + t("sc.done") + '</button></div>');

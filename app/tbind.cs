@@ -2,8 +2,15 @@
 //   rc-tbind.exe detect <parentPid>
 //       -> waits for a middle/X1/X2 press or a key combo, prints "BTN:<code>"
 //          or "KEY:<mods>-<vk>", exits
-//   rc-tbind.exe bind <parentPid> <trigger>=<action> [<trigger>=<action> ...]
-//       -> swallows each trigger system-wide and performs its action instead
+//   rc-tbind.exe bind <parentPid> [focus=<needle>] <trigger>=<action> [<trigger>=<action> ...]
+//       -> swallows each trigger system-wide and performs its action instead.
+//          With focus=<needle> a trigger only fires while the window in front matches
+//          that needle on its process name, class or title; anywhere else the press is
+//          passed through untouched, so the button stays a button. A window we cannot
+//          read anything about is allowed: the gate never blocks what it cannot see.
+//   rc-tbind.exe fg <parentPid> [delayMs]
+//       -> waits, then prints "FG<tab>exe<tab>class<tab>title" for whatever is in front,
+//          so the gate can be pointed at the real protel window instead of a guess
 //   rc-tbind.exe diag <parentPid> [delayMs]
 //       -> waits, then runs the tau shortcut against the foreground window and prints
 //          every step it observed, so a machine where it fails can say why
@@ -28,6 +35,14 @@
 //     message loop via PostThreadMessage, never inside the hook
 //   * the parent watchdog is an independent thread that hard-exits the process,
 //     so the helper dies with RecCheck even if the loop is somehow wedged
+//
+// Design notes (v8 — the shortcuts belong to protel):
+//   * the focus check runs on the hook thread, so it is cached per window handle and
+//     the process lookup happens once per window rather than once per press
+//   * a blocked trigger is reported to the message loop and written to the press log
+//     from there, one line per window: the hook thread never touches the disk
+//   * blocking must be invisible — nothing is swallowed, so the DOWN and the UP both
+//     reach the application under the cursor exactly as they would with no helper
 //
 // Design notes (v3 — the layout hop is synchronous instead of sleep-and-hope):
 //   * v2 posted WM_INPUTLANGCHANGEREQUEST and slept 90 ms before pressing T, then 90 ms
@@ -88,6 +103,7 @@ static class TBind {
   const int WM_SYSKEYDOWN  = 0x0104, WM_SYSKEYUP = 0x0105;
   const uint WM_QUIT       = 0x0012;
   const uint WM_APP_SEND   = 0x8000 + 1;
+  const uint WM_APP_BLOCK  = 0x8000 + 2;
   const uint KEYEVENTF_UNICODE = 0x0004, KEYEVENTF_KEYUP = 0x0002, KEYEVENTF_EXTENDEDKEY = 0x0001;
   const uint WM_INPUTLANGCHANGEREQUEST = 0x0050;
   const uint KLF_ACTIVATE = 1;
@@ -220,6 +236,69 @@ static class TBind {
     try{ GetClassName(hwnd, cls, cls.Capacity); }catch(Exception){}
     try{ GetWindowText(hwnd, txt, txt.Capacity); }catch(Exception){}
     return Hex(hwnd) + " class=\"" + cls + "\" title=\"" + txt + "\"";
+  }
+
+  /* ---- the shortcuts belong to protel, and to nothing else ----
+     A bound side button is still a mouse button everywhere else on this machine. When
+     a target window is configured, a trigger only fires while that window is in front;
+     anywhere else the press is passed straight through, NOT swallowed, so the button
+     keeps doing whatever it normally does.
+
+     Three things are matched, any of which is enough: the foreground process name, the
+     window class and the window title. If NONE of them can be read — a window we have
+     no rights to ask about, which is what an elevated protel looks like from here — the
+     press is allowed. A gate that cannot see must never be the reason a shortcut stops
+     working. */
+  static string focusNeedle = null;                 // null = no gate at all
+  static IntPtr fgWnd = IntPtr.Zero;                // last window we decided about …
+  static bool fgOk = true;                          // … and what we decided
+  static string fgWhat = "";
+  static string ForegroundOf(IntPtr fg, out string exe, out string cls, out string txt){
+    exe = ""; cls = ""; txt = "";
+    try{
+      uint pid;
+      GetWindowThreadProcessId(fg, out pid);
+      if(pid != 0) exe = Process.GetProcessById((int)pid).ProcessName;
+    }catch(Exception){}
+    try{ StringBuilder b = new StringBuilder(160); GetClassName(fg, b, b.Capacity); cls = b.ToString(); }catch(Exception){}
+    try{ StringBuilder b = new StringBuilder(320); GetWindowText(fg, b, b.Capacity); txt = b.ToString(); }catch(Exception){}
+    return exe + " | " + cls + " | " + txt;
+  }
+  /* The decision itself, kept free of Win32 so it can be tested off Windows. A window
+     that told us nothing at all is allowed through — see above. */
+  static bool MatchesNeedle(string exe, string cls, string txt){
+    if(focusNeedle == null) return true;
+    if(exe == null) exe = ""; if(cls == null) cls = ""; if(txt == null) txt = "";
+    if(exe.Length == 0 && cls.Length == 0 && txt.Length == 0) return true;
+    return (exe + "\n" + cls + "\n" + txt).ToUpperInvariant().IndexOf(focusNeedle) >= 0;
+  }
+  /* Runs on the hook thread, so it is cached per window handle: the expensive half is
+     the process lookup, and the foreground window does not change between two presses. */
+  static bool TargetFocused(out string what){
+    what = "";
+    if(focusNeedle == null) return true;
+    IntPtr fg = IntPtr.Zero;
+    try{ fg = GetForegroundWindow(); }catch(Exception){}
+    if(fg == IntPtr.Zero) return true;
+    if(fg == fgWnd){ what = fgWhat; return fgOk; }
+    string exe, cls, txt;
+    string all = ForegroundOf(fg, out exe, out cls, out txt);
+    bool ok = MatchesNeedle(exe, cls, txt);
+    fgWnd = fg; fgOk = ok; fgWhat = all;
+    what = all;
+    return ok;
+  }
+  static string lastBlocked = "";
+  static void LogBlocked(){
+    /* One line per window, not per press: the button under a chat client is going to be
+       pressed more than once and the log is there to be read. */
+    string what = fgWhat;
+    if(what == lastBlocked) return;
+    lastBlocked = what;
+    AppendTauLog("=== " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+                 + "  trigger ignored: protel was not in front\n"
+                 + "    in front: " + what + "\n"
+                 + "    looking for: " + focusNeedle + "\n\n");
   }
 
   static IntPtr grkCached = IntPtr.Zero;
@@ -545,6 +624,13 @@ static class TBind {
             if(mode == 2){
               int idx;
               if(down && binds.TryGetValue("m" + CurMods() + "-" + btn, out idx)){
+                /* Not protel in front: let the button be a button. Nothing is swallowed
+                   here, so the release below is not swallowed either. */
+                string what;
+                if(!TargetFocused(out what)){
+                  PostThreadMessage(mainTid, WM_APP_BLOCK, IntPtr.Zero, IntPtr.Zero);
+                  return CallNextHookEx(hook, nCode, wParam, lParam);
+                }
                 /* Remember the button, not the combination: a modifier may well be
                    released before the button is, and a release we fail to swallow
                    leaves the target seeing half a click. */
@@ -577,6 +663,11 @@ static class TBind {
           if(mode == 2){
             int idx;
             if(down && binds.TryGetValue("k" + CurMods() + "-" + k.vkCode, out idx)){
+              string what;
+              if(!TargetFocused(out what)){
+                PostThreadMessage(mainTid, WM_APP_BLOCK, IntPtr.Zero, IntPtr.Zero);
+                return CallNextHookEx(kbHook, nCode, wParam, lParam);
+              }
               swallowed.Add(k.vkCode);           // eat the matching KEYUP as well
               PostThreadMessage(mainTid, WM_APP_SEND, (IntPtr)idx, IntPtr.Zero);
               return (IntPtr)1;
@@ -707,7 +798,7 @@ static class TBind {
     try{ string p = CrashPath(); if(p != null) System.IO.File.Delete(p); }catch(Exception){}
   }
 
-  const string VER = "v7";
+  const string VER = "v8";
 
   static int Main(string[] args){
     int parentPid;
@@ -735,10 +826,36 @@ static class TBind {
       D("If the hop failed above, the layout request is being refused by that window.");
       try{ Console.Out.Write(DIAG.ToString()); Console.Out.Flush(); }catch(Exception){}
       return 0;
+    }else if(args.Length >= 2 && args[0] == "fg"){
+      /* What is in front right now — so the app can point the gate at protel from the
+         real window rather than from a guess about what it is called. */
+      if(!int.TryParse(args[1], out parentPid)) return 2;
+      int fwait = 5000;
+      if(args.Length >= 3) int.TryParse(args[2], out fwait);
+      if(fwait < 0) fwait = 0;
+      if(fwait > 60000) fwait = 60000;
+      Thread.Sleep(fwait);
+      try{
+        IntPtr fg = GetForegroundWindow();
+        string exe, cls, txt;
+        ForegroundOf(fg, out exe, out cls, out txt);
+        Console.Out.Write("FG\t" + exe + "\t" + cls + "\t" + txt + "\n");
+        Console.Out.Flush();
+      }catch(Exception){}
+      return 0;
     }else if(args.Length >= 3 && args[0] == "bind"){
       mode = 2;
       if(!int.TryParse(args[1], out parentPid)) return 2;
-      for(int i = 2; i < args.Length; i++) ParseBind(args[i]);
+      for(int i = 2; i < args.Length; i++){
+        /* "focus=PROTEL" — everything else is a trigger. An empty value means the gate
+           is off, which is also what happens when the argument is absent. */
+        if(args[i].StartsWith("focus=")){
+          string needle = args[i].Substring(6).Trim();
+          focusNeedle = needle.Length > 0 ? needle.ToUpperInvariant() : null;
+          continue;
+        }
+        ParseBind(args[i]);
+      }
       if(binds.Count == 0) return 2;
     }else return 2;
 
@@ -788,6 +905,7 @@ static class TBind {
          night. Record it and keep pumping. */
       try{
         if(msg.message == WM_APP_SEND){ QueueSend(msg.wParam.ToInt32()); continue; }
+        if(msg.message == WM_APP_BLOCK){ LogBlocked(); continue; }
         TranslateMessage(ref msg);
         DispatchMessage(ref msg);
       }catch(Exception e){ WriteCrash("loop", e); }
