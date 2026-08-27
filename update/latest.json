@@ -1,11 +1,11 @@
 {
-  "version": "1.17.0",
-  "type": "full",
+  "version": "1.17.1",
+  "type": "html",
   "engine": "1.17.0",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.0/RecCheck-Setup.exe",
   "setupSha256": "ac43c9f66284b13bf815c25103861e063deea895179a4e57190e650a7e3388e7",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "56661ff0defe68919ab167a58daaa7a5f21f004e3639a0cab7c673c35db3c285",
-  "notes": "Every real tau press now records what it did; the shortcut waits far longer for protel and will not leave the keyboard on Greek; diagnostics move to a hidden DEBUG menu."
+  "sha256": "aab66662716b0a43f052b6e2aab8da529ff6a84cf6b1b56069439da3e69efee0",
+  "notes": "A rate list whose header date could not be read used to record nothing at all, silently — that is why the room pills stayed empty. It now records either way, says so on the slot, and DEBUG can show exactly what it wrote."
 }
