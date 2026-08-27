@@ -3,9 +3,9 @@
   "type": "full",
   "engine": "1.17.0",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.0/RecCheck-Setup.exe",
-  "setupSha256": "8658d1af80fecdc2a5c54db549a5ba47be0f52b9be0c965012f27b037a15eaee",
+  "setupSha256": "ac43c9f66284b13bf815c25103861e063deea895179a4e57190e650a7e3388e7",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "2e9dfe33ff0eb27d423c249c224a07d475bbb812ff4858f21915f3297fcf10c9",
-  "notes": "Every real tau press now records what it did, and the shortcut will not leave the keyboard on Greek."
+  "sha256": "56661ff0defe68919ab167a58daaa7a5f21f004e3639a0cab7c673c35db3c285",
+  "notes": "Every real tau press now records what it did; the shortcut waits far longer for protel and will not leave the keyboard on Greek; diagnostics move to a hidden DEBUG menu."
 }

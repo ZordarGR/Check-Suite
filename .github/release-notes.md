@@ -18,6 +18,14 @@ If it misbehaves again, that report says which step went wrong instead of leavin
 
 One thing the record will also show: a second press made while the first is still running queues behind it rather than doing nothing, and how long it waited is printed. From the desk that looks exactly like "it didn't work the first time".
 
+### A DEBUG menu, hidden
+
+Everything that only makes sense to someone debugging the tool has moved out of *PROTEL SHORTCUTS* into its own **DEBUG** menu, which does not exist until it is unlocked: type **barbarianking** on the home screen. It has a *Hide this menu again* button, and it stays as you leave it.
+
+It matches the physical keys rather than the letters, so it still works with the keyboard on Greek, and it is ignored while anything is being typed into a field.
+
+*PROTEL SHORTCUTS* keeps the plain sentence about the helper — *"antivirus is blocking it"* is something whoever is on the desk needs to know. The technical detail behind it moved to DEBUG.
+
 ### Install
 
 Download **RecCheck-Setup.exe** below (under *Assets*) and open it. It installs in a few seconds — no administrator password — and puts **RecCheck** on the Desktop and in the Start Menu. If an older RecCheck is running, the installer closes it and relaunches when done.
