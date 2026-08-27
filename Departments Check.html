@@ -796,6 +796,7 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
     <label class="slot" id="slot-rate" for="file-rate">
       <span class="num">①</span><b data-i18n="slot_rate"></b><small data-i18n="slot_rate_sub"></small>
       <div class="fn" id="fn-rate"></div>
+      <div class="fn" id="mv-rate" style="opacity:.7"></div>
     </label>
     <input type="file" id="file-rate" accept=".oxps,.xps">
     <label class="slot" id="slot-tax" for="file-tax">
@@ -1195,7 +1196,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.0";
+const APP_VERSION = "1.17.1";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1254,6 +1255,7 @@ en: {
   "sc.hCrash": "The helper crashed. What went wrong is printed below \u2014 send it on and it can be fixed exactly.",
   "sc.hDetail": "detail",
   "sc.log": "What the last presses did",
+  "sc.moves": "Why the room pills say what they say",
   "dbg.menu": "DEBUG", "dbg.title": "DEBUG",
   "dbg.intro": "Diagnostics for the \u03c4 shortcut and the helper behind it. Nothing here changes anything \u2014 it only reports.",
   "dbg.lock": "Hide this menu again",
@@ -1427,6 +1429,7 @@ gr: {
   "sc.hCrash": "Ο βοηθός κατέρρευσε. Το τι πήγε στραβά τυπώνεται παρακάτω — στείλ' το και διορθώνεται ακριβώς.",
   "sc.hDetail": "λεπτομέρεια",
   "sc.log": "Τι έκαναν τα τελευταία πατήματα",
+  "sc.moves": "Γιατί λένε αυτό τα πλακίδια δωματίων",
   "dbg.menu": "DEBUG", "dbg.title": "DEBUG",
   "dbg.intro": "Διαγνωστικά για τη συντόμευση τ και τον βοηθό πίσω της. Τίποτα εδώ δεν αλλάζει κάτι — μόνο αναφέρει.",
   "dbg.lock": "Απόκρυψη ξανά",
@@ -2375,6 +2378,9 @@ function openDebug(){
       '<button class="btn" id="scLog" style="flex:1">' + t("sc.log") + '</button>' +
       '<button class="btn small" id="scCopy" style="display:none">' + t("sc.testCopy") + '</button>' +
     '</div>' +
+    '<div style="display:flex;gap:8px;align-items:center;margin-top:8px">' +
+      '<button class="btn" id="scMoves" style="flex:1">' + t("sc.moves") + '</button>' +
+    '</div>' +
     '<div class="err" style="color:var(--faint)">' + t("sc.testHint") + '</div>' +
     '<pre id="scDiag" style="display:none"></pre>' +
     '<div class="actions">' +
@@ -2413,6 +2419,14 @@ function openDebug(){
       copy.style.display = "";
       copy.onclick = () => { try{ navigator.clipboard.writeText(log); }catch(e){} };
     }else copy.style.display = "none";
+  };
+  $("#scMoves").onclick = () => {
+    const pre = $("#scDiag"), copy = $("#scCopy");
+    const rep = movesReport();
+    pre.textContent = rep;
+    pre.style.display = "";
+    copy.style.display = "";
+    copy.onclick = () => { try{ navigator.clipboard.writeText(rep); }catch(e){} };
   };
   $("#dbgLock").onclick = () => { setDebug(false); closeModal(); };
   $("#dbgOk").onclick = closeModal;
@@ -3814,6 +3828,45 @@ function renderMoves(){
   if(rooms.some(r => !mv[r].sure)) box.append(el("div","mvNote", t("mv.guessNote")));
 }
 
+/* Why there are no pills tonight. The panel is built from two dates that have to agree —
+   the night on the department report and the arrival/departure dates a rate list wrote
+   into the ledger — and when it shows nothing there is no way to see which of the two
+   is wrong. This prints both, plus what the last rate list actually recorded. */
+function movesReport(){
+  const L = [];
+  const night = MODEL ? dateNum(MODEL.reportDate) : 0;
+  L.push("report night  : " + (MODEL ? MODEL.reportDate : "(no department report loaded)")
+         + "  ->  " + (night || "COULD NOT READ THE DATE"));
+  let last = null;
+  try{ last = JSON.parse(localStorage.getItem("reccheck_moves_last") || "null"); }catch(e){}
+  L.push("last rate list: " + (last ? JSON.stringify(last) : "(no rate list has ever been recorded)"));
+  const led = loadMoves(), rooms = Object.keys(led);
+  let res = 0, minA = 0, maxD = 0;
+  for(const r of rooms) for(const a of Object.keys(led[r])){
+    res++;
+    const A = Number(a), D = led[r][a].d || 0;
+    if(!minA || A < minA) minA = A;
+    if(D > maxD) maxD = D;
+  }
+  L.push("ledger        : " + rooms.length + " rooms, " + res + " reservations"
+         + (res ? ", " + minA + " .. " + maxD : " — EMPTY"));
+  const mv = roomMoves(), hit = Object.keys(mv);
+  L.push("tonight       : " + (hit.length ? hit.length + " pills — " + hit.join(" ") : "no pills"));
+  if(night && res){
+    L.push("");
+    L.push("stays whose arrival or departure lands near this night:");
+    const near = [];
+    for(const r of rooms) for(const a of Object.keys(led[r])){
+      const A = Number(a), e = led[r][a], D = e.d || 0;
+      if(Math.abs(A - night) <= 3 || Math.abs(D - night) <= 3)
+        near.push("  " + r + "\t" + A + " -> " + (D || "?") + "\t" + (e.n || ""));
+    }
+    L.push(near.length ? near.slice(0, 40).join("\n")
+                       : "  none — every stay in the ledger is more than three days from this night");
+  }
+  return L.join("\n");
+}
+
 /* ---------- room nicknames panel ---------- */
 let NSEL = null;          // room selected in the editor
 function nickCount(){ return Object.values(ROOMS).filter(e => e.nick).length; }
@@ -4368,6 +4421,8 @@ const I18N={
   chip_rooms:"rooms", chip_auto:"auto✗", chip_double:"double", chip_noarr:"no-arr", chip_arr:"arrivals", chip_out:"checkouts",
   err_notxps:"Doesn't look like an XPS/OXPS report — no page data found inside.",
   err_norooms:"Parsed the file but found no rooms. Is this the right report?", err_read:"Couldn't read that file: ",
+  mv_saved:"movements: {0} rooms, {1} stays recorded for {2}", mv_guessdate:"(date taken from the list, not its header)",
+  mv_none:"movements: nothing recorded from this list",
   err_wrongkind:"That looks like the wrong report for this slot.",
   confirm_clear:"Erase all saved data — room history and manual-check marks? This can't be undone.",
   tw_pastrate:"This Rate Check is for a PAST night ({0}) — the current working night is {1}. Make sure you are not auditing old occupancy.",
@@ -4421,6 +4476,8 @@ const I18N={
   chip_rooms:"δωμ.", chip_auto:"αυτόμ✗", chip_double:"διπλό", chip_noarr:"χωρίς-δ.", chip_arr:"αφίξεις", chip_out:"αναχωρήσεις",
   err_notxps:"Δεν μοιάζει με αναφορά XPS/OXPS — δεν βρέθηκαν δεδομένα σελίδων.",
   err_norooms:"Έγινε ανάλυση αλλά δεν βρέθηκαν δωμάτια. Είναι η σωστή αναφορά;", err_read:"Αδυναμία ανάγνωσης αρχείου: ",
+  mv_saved:"κινήσεις: {0} δωμάτια, {1} διαμονές για {2}", mv_guessdate:"(ημερομηνία από τη λίστα, όχι από την κεφαλίδα)",
+  mv_none:"κινήσεις: δεν καταγράφηκε τίποτα από αυτή τη λίστα",
   err_wrongkind:"Αυτό μοιάζει λάθος αναφορά για αυτή τη θέση.",
   confirm_clear:"Διαγραφή όλων των αποθηκευμένων δεδομένων — ιστορικό δωματίων και σημειώσεις ελέγχου; Δεν αναιρείται.",
   tw_pastrate:"Αυτό το Rate Check είναι για ΠΑΛΑΙΟΤΕΡΗ νύχτα ({0}) — η τρέχουσα νύχτα εργασίας είναι {1}. Πρόσεξε μην ελέγχεις παλιά πληρότητα.",
@@ -4453,7 +4510,25 @@ function parseTax(tokens){const starts=[];for(let i=0;i<tokens.length;i++){if(to
    against that shape. `all` keeps every row, which is the only way to see that a room
    was left AND re-let on the same day — the turnover the department check wants to
    flag. Two views of the same parse; neither disturbs the other. */
-function parseRate(pages){const all={};let bizDate=null;{const rows=toRows(pages[0]||[]);for(const r of rows){if(r.some(c=>/PROTEL HMS/.test(c.t))){const d=r.find(c=>/^\d{1,2}\/\d{1,2}\/\d{4}$/.test((c.t||'').trim()));if(d)bizDate=d.t.trim();}}}const rooms={};for(const g of pages){let cur=null;for(const row of toRows(g)){row.sort((a,b)=>a.x-b.x);const dates=row.filter(c=>/^\d{2}\/\d{2}\/\d{2}$/.test((c.t||'').trim())).map(c=>c.t.trim());const isData=dates.length>=2 && row[0] && /^\d/.test((row[0].t||'').trim());if(!isData){if(cur){const nm=row.filter(c=>c.x>=100&&c.x<235&&/[A-Za-zΑ-Ω]/.test(c.t)&&!/Print Date|PROTEL|Arrival Date|Departure|^Name$|^Room$|Kernos|Page/i.test(c.t)).map(c=>c.t.trim());if(nm.length)cur.name=(cur.name+' '+nm.join(' ')).trim();}continue;}let cell=(row[0].t||'').trim();const hasSepOcc=row.some(c=>c.x>=375&&c.x<478&&/^\d{4}$/.test((c.t||'').trim()));let core=hasSepOcc?cell:cell.slice(0,-4);const room=(core.split('-')[0]||'').trim();if(!/^\d{2,3}$/.test(room))continue;const partner=core.includes('-')?core.split('-')[1]:'';const name=row.filter(c=>c.x>=100&&c.x<235&&/[A-Za-zΑ-Ω]/.test(c.t)).map(c=>c.t.trim()).join(' ');const term=row.filter(c=>c.x>=535&&c.x<572&&/[A-Za-z]/.test(c.t)).map(c=>c.t.trim()).join('');const agent=row.filter(c=>c.x>=572&&/[A-Za-zΑ-Ω0-9]/.test(c.t)).map(c=>c.t.trim()).join(' ');cur={room,arr:dates[0],dep:dates[1],name,term,agent,adjoining:!!partner,partner};rooms[room]=cur;(all[room]=all[room]||[]).push(cur);}}return{kind:'rate',bizDate,dateKey:dkey(bizDate),count:Object.keys(rooms).length,rooms,all};}
+/* The business date is printed in the page header, and the room movements panel is
+   built entirely on it — a list whose header does not parse used to record NOTHING,
+   silently, because saveMoves gives up without a date. So try in order: the PROTEL HMS
+   row, any header row naming protel, the date printed most often in the file, and
+   finally the newest arrival in the list itself, which on a list of in-house guests is
+   today. Only the last of those is a guess, and dateSure says so. */
+function parseRate(pages){const all={};let bizDate=null,hdr=null;const dcount={};
+for(const g of pages){for(const r of toRows(g||[])){
+  const d=r.find(c=>/^\d{1,2}\/\d{1,2}\/\d{4}$/.test((c.t||'').trim()));if(!d)continue;
+  const v=d.t.trim();dcount[v]=(dcount[v]||0)+1;
+  const txt=r.map(c=>c.t||'').join(' ');
+  if(!bizDate&&/PROTEL\s+HMS/i.test(txt))bizDate=v;
+  if(!hdr&&/protel/i.test(txt))hdr=v;
+}}
+if(!bizDate)bizDate=hdr;
+if(!bizDate){let best=-1;for(const d of Object.keys(dcount))if(dcount[d]>best){best=dcount[d];bizDate=d;}}
+const rooms={};for(const g of pages){let cur=null;for(const row of toRows(g)){row.sort((a,b)=>a.x-b.x);const dates=row.filter(c=>/^\d{2}\/\d{2}\/\d{2}$/.test((c.t||'').trim())).map(c=>c.t.trim());const isData=dates.length>=2 && row[0] && /^\d/.test((row[0].t||'').trim());if(!isData){if(cur){const nm=row.filter(c=>c.x>=100&&c.x<235&&/[A-Za-zΑ-Ω]/.test(c.t)&&!/Print Date|PROTEL|Arrival Date|Departure|^Name$|^Room$|Kernos|Page/i.test(c.t)).map(c=>c.t.trim());if(nm.length)cur.name=(cur.name+' '+nm.join(' ')).trim();}continue;}let cell=(row[0].t||'').trim();const hasSepOcc=row.some(c=>c.x>=375&&c.x<478&&/^\d{4}$/.test((c.t||'').trim()));let core=hasSepOcc?cell:cell.slice(0,-4);const room=(core.split('-')[0]||'').trim();if(!/^\d{2,3}$/.test(room))continue;const partner=core.includes('-')?core.split('-')[1]:'';const name=row.filter(c=>c.x>=100&&c.x<235&&/[A-Za-zΑ-Ω]/.test(c.t)).map(c=>c.t.trim()).join(' ');const term=row.filter(c=>c.x>=535&&c.x<572&&/[A-Za-z]/.test(c.t)).map(c=>c.t.trim()).join('');const agent=row.filter(c=>c.x>=572&&/[A-Za-zΑ-Ω0-9]/.test(c.t)).map(c=>c.t.trim()).join(' ');cur={room,arr:dates[0],dep:dates[1],name,term,agent,adjoining:!!partner,partner};rooms[room]=cur;(all[room]=all[room]||[]).push(cur);}}let dateKey=dkey(bizDate),dateSure=!!dateKey;
+if(!dateKey)for(const room of Object.keys(all))for(const r of all[room]){const a=dkey(r.arr);if(a>dateKey)dateKey=a;}
+return{kind:'rate',bizDate,dateKey,dateSure,count:Object.keys(rooms).length,rooms,all};}
 function crossReference(rate,tax,nightKey){const N=nightKey||tax.dateKey;const totalFail=[],autoMiss=[],adjoining=[],ok=[];let notOwed=0;for(const room of Object.keys(rate.rooms)){const rr=rate.rooms[room];const aK=dkey(rr.arr),dK=dkey(rr.dep);const occ=aK&&dK&&aK<=N&&N<dK;if(!occ){notOwed++;continue;}if(rr.adjoining){adjoining.push({room,name:rr.name,partner:rr.partner});continue;}const tr=tax.rooms[room];if(!tr||tr.arr===0){totalFail.push({room,name:rr.name,covered:tr?(tr.man>0):false});}else if(tr.auto===0){autoMiss.push({room,name:rr.name,covered:tr.man>0});}else{ok.push(room);}}const over=[];for(const room of Object.keys(tax.rooms)){const b=tax.rooms[room];if((b.auto+b.man)>=2&&b.arr>0)over.push({room,extra:(b.auto+b.man)-1});}const sk=a=>a.sort((x,y)=>(parseInt(x.room||x)||0)-(parseInt(y.room||y)||0));return{nightKey:N,totalFail:sk(totalFail),autoMiss:sk(autoMiss),adjoining:sk(adjoining),overcharge:sk(over),okCount:ok.length,notOwed};}
 
 /* ============ state + memory ============ */
@@ -4499,9 +4574,14 @@ function loadLedger(){
   return out;
 }
 function saveMoves(rate){
-  if(!rate||!rate.dateKey||!rate.all)return;
+  if(!rate||!rate.all)return null;
+  let wrote=0,why="";
   try{
-    const led=loadLedger(), night=rate.dateKey;
+    const led=loadLedger(), night=rate.dateKey||0;
+    /* Truncating a stay is only ever allowed on a date the print actually gave us. A
+       date inferred from the newest arrival is good enough to stamp a reservation with,
+       and nowhere near good enough to declare someone's stay over. */
+    const sure=!!night&&rate.dateSure!==false;
     for(const room of Object.keys(rate.all)){
       const seenArr={};
       for(const r of rate.all[room]){
@@ -4510,7 +4590,7 @@ function saveMoves(rate){
         seenArr[a]=1;
         const m=led[room]=led[room]||{};
         // a later list wins: that is how an extended stay corrects its departure date
-        if(!m[a]||night>=(m[a].seen||0))m[a]={d:d||0,n:r.name||"",seen:night};
+        if(!m[a]||night>=(m[a].seen||0)){m[a]={d:d||0,n:r.name||"",seen:night};wrote++;}
       }
       /* This list says who was in that room on this night. Any reservation we still hold
          that claims the same room on the same night, under a different arrival date, is
@@ -4518,7 +4598,7 @@ function saveMoves(rate){
          room. Only rooms the list actually mentions are touched, so a partial print can
          never truncate a stay it simply did not include. */
       const m=led[room]||{};
-      for(const a of Object.keys(m)){
+      if(sure)for(const a of Object.keys(m)){
         const A=Number(a);
         if(seenArr[A])continue;
         if(A<=night&&(m[a].d||0)>night){ m[a].d=night; m[a].cut=1; }
@@ -4535,7 +4615,20 @@ function saveMoves(rate){
       if(!Object.keys(led[room]).length)delete led[room];
     }
     localStorage.setItem(MOVES_KEY,JSON.stringify(led));
-  }catch(e){}
+    /* What this list actually put in the ledger, so DEBUG can answer "why no pills?"
+       without anyone having to guess at it a second time. */
+    let rooms=0,res=0;for(const r of Object.keys(led)){rooms++;res+=Object.keys(led[r]).length;}
+    try{localStorage.setItem("reccheck_moves_last",JSON.stringify({
+      biz:rate.bizDate||"(none in the header)", key:night||0, sure:!!rate.dateSure,
+      listRooms:Object.keys(rate.all).length, wrote:wrote,
+      ledgerRooms:rooms, ledgerRes:res}));}catch(e){}
+    return {night:night, sure:!!rate.dateSure, rooms:Object.keys(rate.all).length, res:res};
+  }catch(e){
+    why=String(e&&e.message||e);
+    try{localStorage.setItem("reccheck_moves_last",JSON.stringify({
+      biz:rate&&rate.bizDate||"", key:rate&&rate.dateKey||0, wrote:wrote, error:why}));}catch(e2){}
+  }
+  return null;
 }
 
 /* manual-check outcomes for adjoining rooms, per night */
@@ -4774,7 +4867,16 @@ function setLang(l){LANG=l;try{localStorage.setItem('ta_lang',l);}catch(e){}appl
 /* ============ file loading ============ */
 function showErr(m){const e=el('err');e.style.display='block';e.textContent=m;} function clearErr(){el('err').style.display='none';}
 async function readOxps(file){const buf=await file.arrayBuffer();const zip=await JSZip.loadAsync(buf);const hasPages=Object.keys(zip.files).some(n=>/Pages\/\d+\.fpage$/i.test(n));if(!hasPages)throw new Error('notxps');return await oxpsPages(zip);}
-async function loadRate(file){clearErr();el('fn-rate').textContent=file?file.name:'';if(!file)return;try{const pages=await readOxps(file);const r=parseRate(pages);if(!r.count){showErr(t('err_norooms'));return;}RATE=r;saveMoves(r);PAIR_OVERRIDE=null;ADJ_OPEN_OVERRIDE=null;el('slot-rate').classList.add('loaded');render();}catch(e){showErr(e.message==='notxps'?t('err_notxps'):t('err_read')+e.message);}}
+/* The movements panel lives on the other screen, so a rate list that recorded nothing
+   used to look exactly like one that recorded everything. Say it here, at the moment of
+   loading, rather than leaving it to be discovered as an empty panel an hour later. */
+function showMoveSave(r){
+  const box=el('mv-rate');if(!box)return;
+  if(!r||!r.rooms){box.textContent=t('mv_none');box.style.color='var(--amber)';return;}
+  box.style.color='';
+  box.textContent=t('mv_saved',r.rooms,r.res,dfmt(r.night)||'?')+(r.sure?'':' '+t('mv_guessdate'));
+}
+async function loadRate(file){clearErr();el('fn-rate').textContent=file?file.name:'';el('mv-rate').textContent='';if(!file)return;try{const pages=await readOxps(file);const r=parseRate(pages);if(!r.count){showErr(t('err_norooms'));return;}RATE=r;showMoveSave(saveMoves(r));PAIR_OVERRIDE=null;ADJ_OPEN_OVERRIDE=null;el('slot-rate').classList.add('loaded');render();}catch(e){showErr(e.message==='notxps'?t('err_notxps'):t('err_read')+e.message);}}
 async function loadTax(file){clearErr();el('fn-tax').textContent=file?file.name:'';if(!file)return;try{const pages=await readOxps(file);const tokens=pagesToTokens(pages);const r=parseTax(tokens);if(!r.totalRooms){showErr(t('err_norooms'));return;}TAX=r;PAIR_OVERRIDE=null;ADJ_OPEN_OVERRIDE=null;ingestTax(r);if(r.fileDate)EXPANDED.add(r.fileDate);el('slot-tax').classList.add('loaded');render();}catch(e){showErr(e.message==='notxps'?t('err_notxps'):t('err_read')+e.message);}}
 el('file-rate').addEventListener('change',e=>loadRate(e.target.files[0]));
 el('file-tax').addEventListener('change',e=>loadTax(e.target.files[0]));
