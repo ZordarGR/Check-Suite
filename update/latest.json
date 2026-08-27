@@ -1,11 +1,11 @@
 {
-  "version": "1.16.10",
+  "version": "1.16.11",
   "type": "html",
   "engine": "1.16.5",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.16.5/RecCheck-Setup.exe",
   "setupSha256": "208c493236789ae9614e24f86817ae58009e29ee61ee91c22373d4d272730ad6",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "15b17a136e76c4c806f956af4ef92cfe7e806929095cff40fada0e3cefcf9a50",
-  "notes": "One rate list now answers which rooms leave on every night ahead of it, so the movements panel works on nights with no tax check."
+  "sha256": "a2348e6d1495c4cecfd7811af2fe54cfa3c0466bd63d8c483714c123f18d593a",
+  "notes": "The nightly department report now keeps the room ledger honest: a room charging under a different guest ends the stay the rate list had printed."
 }
