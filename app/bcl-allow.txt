@@ -27,6 +27,7 @@ Add
 AppDomain
 Append
 AppendLine
+AppendTauLog
 AsyncCallback
 AttachThreadInput
 BeginInvoke
@@ -59,6 +60,7 @@ Enter
 Enumerator
 Environment
 Exception
+Exists
 Exit
 File
 Flush
@@ -141,7 +143,9 @@ QS_KEY
 QueueSend
 QueueUserWorkItem
 RECT
+ReadAllText
 Remove
+Replace
 RestoreLayout
 Run
 RuntimeCompatibilityAttribute
@@ -174,6 +178,7 @@ System.Text
 System.Threading
 TAU
 TBind
+TauLogPath
 TextWriter
 Thread
 ThreadHasLang
@@ -184,6 +189,7 @@ ToInt32
 ToString
 TranslateMessage
 Trim
+TryEnter
 TryGetValue
 TryParse
 Type
@@ -241,6 +247,7 @@ dwFlags
 dx
 dy
 e
+entry
 extra
 fg
 flags
@@ -260,6 +267,7 @@ get_Message
 get_Now
 get_Out
 get_ProcessName
+get_TickCount
 grkCached
 gui
 hWnd

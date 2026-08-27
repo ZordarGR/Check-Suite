@@ -1,18 +1,30 @@
-## RecCheck 1.16.5 — Windows
+## RecCheck 1.17.0 — Windows
 
 Nightly POS receipt audit for the protel checkcharge1 report (.oxps). Everything runs locally — no data leaves the machine.
 
-### Fix — the τ needing two presses when the keyboard is on English
+### The τ now records what it actually did
 
-The layout part was never the problem. A diagnostic run showed every step of it working: Win+Space reached Greek on the first press, the T went out under the Greek layout, and the keyboard was put back on English and verified. And still the τ often did not arrive until the second press.
+The shortcut fails now and then — one invoice goes through, the next needs two presses — and every diagnostic run has come back clean, because *Test the τ shortcut* runs it against an idle protel, which is the one state it never fails in.
 
-The fault is in the moment *after* the key is sent. The helper is supposed to wait for protel to take the key before switching the layout back, and it checked whether the key had gone with no delay at all — a fraction of a millisecond after sending it. `SendInput` hands a key to Windows' input thread rather than dropping it straight into protel's queue, so at that instant the queue is empty because the key **has not arrived yet**, not because it has been used. The helper read that as "done", switched back to English immediately, and protel then read the key under the English layout: a plain `t`.
+So every real press now writes down what it did: which window it found, whether the layout hop landed, how long protel took to take the key, whether the layout came back, and how long the whole thing took. **PROTEL SHORTCUTS → What the last presses did** shows the last few, newest first, with a copy button.
 
-Whether the τ survived came down to which won the race. That is why it was intermittent, why a second press usually worked, and why it never happened with the keyboard already on Greek — that path does not switch the layout at all, so there is no race to lose.
+If it misbehaves again, that report says which step went wrong instead of leaving it to guesswork.
 
-The helper now waits for the key to actually **arrive**, then for protel to **take** it, and then a moment longer, because protel's list is an embedded browser control that passes the key on once more before deciding which character it is. Typically ~50 ms; the shortcut still feels immediate.
+### Two changes while waiting for it
 
-The diagnostic (*Test the τ shortcut*) now reports how long each of those took, so if anything is still off the report says which part.
+**It waits far longer for protel to take the key.** A protel still drawing the preview of the invoice just printed can leave the keystroke queued for the best part of a second, and the moment the helper stopped waiting the keyboard went back to English and that key became a Latin `t`. Waiting only ever makes the shortcut slower; not waiting makes it wrong.
+
+**It will not leave the keyboard on Greek.** If every polite way of putting the layout back has failed, it now cycles the Windows layout switcher directly until it is back, because that needs nothing from protel. Being left on Greek is the worst thing this shortcut can do to a night.
+
+One thing the record will also show: a second press made while the first is still running queues behind it rather than doing nothing, and how long it waited is printed. From the desk that looks exactly like "it didn't work the first time".
+
+### A DEBUG menu, hidden
+
+Everything that only makes sense to someone debugging the tool has moved out of *PROTEL SHORTCUTS* into its own **DEBUG** menu, which does not exist until it is unlocked: type **barbarianking** on the home screen. It has a *Hide this menu again* button, and it stays as you leave it.
+
+It matches the physical keys rather than the letters, so it still works with the keyboard on Greek, and it is ignored while anything is being typed into a field.
+
+*PROTEL SHORTCUTS* keeps the plain sentence about the helper — *"antivirus is blocking it"* is something whoever is on the desk needs to know. The technical detail behind it moved to DEBUG.
 
 ### Install
 

@@ -651,6 +651,9 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
       <div class="mcat">
         <button class="mcatBtn" id="mcShortcutsBtn" style="display:none"></button>
       </div>
+      <div class="mcat" id="mcDebugCat" style="display:none">
+        <button class="mcatBtn" id="mcDebugBtn"></button>
+      </div>
       <div class="mcat">
         <button class="mcatBtn" id="mcEditBtn"></button>
         <div class="msub">
@@ -1192,7 +1195,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.16.11";
+const APP_VERSION = "1.17.0";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1250,6 +1253,12 @@ en: {
   "sc.hDead": "The helper started and stopped on its own. Try binding the button again; if this keeps saying the same thing, send the detail below.",
   "sc.hCrash": "The helper crashed. What went wrong is printed below \u2014 send it on and it can be fixed exactly.",
   "sc.hDetail": "detail",
+  "sc.log": "What the last presses did",
+  "dbg.menu": "DEBUG", "dbg.title": "DEBUG",
+  "dbg.intro": "Diagnostics for the \u03c4 shortcut and the helper behind it. Nothing here changes anything \u2014 it only reports.",
+  "dbg.lock": "Hide this menu again",
+  "dbg.on": "Debug menu unlocked.", "dbg.off": "Debug menu hidden.",
+  "sc.logNone": "No \u03c4 press recorded yet. Use the shortcut, then come back here.",
   "fault.toast": "Something went wrong in {w} \u2014 the rest of the screen still updated:",
   "sc.done": "Done",
   "sc.keyMid": "Middle button", "sc.keyBack": "Side button — Back", "sc.keyFwd": "Side button — Forward",
@@ -1417,6 +1426,12 @@ gr: {
   "sc.hDead": "Ο βοηθός ξεκίνησε και σταμάτησε μόνος του. Δοκίμασε ξανά την αντιστοίχιση· αν συνεχίζει να το λέει, στείλε τη λεπτομέρεια παρακάτω.",
   "sc.hCrash": "Ο βοηθός κατέρρευσε. Το τι πήγε στραβά τυπώνεται παρακάτω — στείλ' το και διορθώνεται ακριβώς.",
   "sc.hDetail": "λεπτομέρεια",
+  "sc.log": "Τι έκαναν τα τελευταία πατήματα",
+  "dbg.menu": "DEBUG", "dbg.title": "DEBUG",
+  "dbg.intro": "Διαγνωστικά για τη συντόμευση τ και τον βοηθό πίσω της. Τίποτα εδώ δεν αλλάζει κάτι — μόνο αναφέρει.",
+  "dbg.lock": "Απόκρυψη ξανά",
+  "dbg.on": "Το μενού debug ξεκλειδώθηκε.", "dbg.off": "Το μενού debug κρύφτηκε.",
+  "sc.logNone": "Δεν έχει καταγραφεί ακόμη πάτημα τ. Χρησιμοποίησε τη συντόμευση και ξαναέλα εδώ.",
   "fault.toast": "Κάτι πήγε στραβά στο {w} — τα υπόλοιπα ενημερώθηκαν κανονικά:",
   "sc.done": "Έτοιμο",
   "sc.keyMid": "Μεσαίο πλήκτρο", "sc.keyBack": "Πλαϊνό πλήκτρο — Πίσω", "sc.keyFwd": "Πλαϊνό πλήκτρο — Μπροστά",
@@ -1567,6 +1582,8 @@ function applyLang(){
   paintDirSub();
   $("#mcOptionsBtn").textContent = t("menu.options");
   $("#mcShortcutsBtn").textContent = t("sc.menu");
+  $("#mcDebugBtn").textContent = t("dbg.menu");
+  paintDebug();
   $("#mcShortcutsBtn").style.display = window.reccheckShortcuts ? "" : "none";
   $("#mcEditBtn").textContent = t("menu.editHome");
   mi("#mEditChecklist", "menu.editCl", "menu.editClSub");
@@ -2314,8 +2331,12 @@ function helperDetail(h){
   if(h.crash) bits.push("\n" + h.crash);      // the exception itself, when there is one
   return bits.join("  ");
 }
-function refreshHelperStatus(){
-  const box = $("#scHelp");
+/* sel/raw: the shortcuts menu gets the plain sentence, because "antivirus is blocking
+   it" is something the person at the desk needs. The probe/state/exit line is only ever
+   for me, so it lives in the debug menu. */
+function refreshHelperStatus(sel, raw){
+  sel = sel || "#scHelp";
+  const box = $(sel);
   if(!box) return;
   const sc = window.reccheckShortcuts;
   const TONE = {good: "#4ade80", bad: "#f87171", warn: "#fbbf24", faint: "var(--faint)"};
@@ -2323,20 +2344,106 @@ function refreshHelperStatus(){
                   t("sc.hChecking") + '</span>';
   if(!sc || !sc.helper) return;
   sc.helper().then(h => {
-    if(!$("#scHelp")) return;                 // dialog closed while we were asking
+    const el2 = $(sel);
+    if(!el2) return;                          // dialog closed while we were asking
     const v = helperVerdict(h), d = helperDetail(h);
-    $("#scHelp").innerHTML =
+    el2.innerHTML =
       '<span style="color:' + TONE[v.tone] + '">\u25cf</span> ' +
       '<span style="color:var(--faint)">' + t("sc.hStatus") + ':</span> ' +
       escapeHtml(t(v.key)) +
-      (d && v.tone !== "good" && v.tone !== "faint"
+      (d && raw
         ? '<div style="margin-top:6px;color:var(--faint);font-family:ui-monospace,Consolas,monospace;' +
           'font-size:11px;word-break:break-all;white-space:pre-wrap">' + t("sc.hDetail") + ': ' + escapeHtml(d) + '</div>'
         : "");
   }).catch(() => {
-    if($("#scHelp")) $("#scHelp").innerHTML = "";
+    const el2 = $(sel);
+    if(el2) el2.innerHTML = "";
   });
 }
+
+/* Everything that only makes sense to someone debugging the tool lives here, behind a
+   menu that does not exist until it is unlocked. Nobody covering the desk should meet a
+   diagnostic. */
+function openDebug(){
+  const sc = window.reccheckShortcuts;
+  openModal(
+    '<h3>' + t("dbg.title") + '</h3>' +
+    '<p class="scIntro">' + t("dbg.intro") + '</p>' +
+    '<div id="dbgHelp" style="margin-top:2px;font-size:12px;line-height:1.5"></div>' +
+    '<div style="display:flex;gap:8px;align-items:center;margin-top:16px">' +
+      '<button class="btn" id="scTest" style="flex:1">' + t("sc.test") + '</button>' +
+      '<button class="btn" id="scLog" style="flex:1">' + t("sc.log") + '</button>' +
+      '<button class="btn small" id="scCopy" style="display:none">' + t("sc.testCopy") + '</button>' +
+    '</div>' +
+    '<div class="err" style="color:var(--faint)">' + t("sc.testHint") + '</div>' +
+    '<pre id="scDiag" style="display:none"></pre>' +
+    '<div class="actions">' +
+      '<button class="btn" id="dbgLock">' + t("dbg.lock") + '</button>' +
+      '<button class="btn amber" id="dbgOk">' + t("sc.done") + '</button>' +
+    '</div>');
+  refreshHelperStatus("#dbgHelp", true);
+  $("#scTest").onclick = async () => {
+    const b = $("#scTest"), pre = $("#scDiag"), copy = $("#scCopy");
+    if(!sc || b.dataset.busy) return;
+    b.dataset.busy = "1";
+    pre.style.display = "none"; copy.style.display = "none";
+    let n = 5;
+    b.textContent = t("sc.testCount", {n: n});
+    const iv = setInterval(() => { n--; if(n > 0) b.textContent = t("sc.testCount", {n: n}); }, 1000);
+    const report = await sc.diag(5000).catch(() => null);
+    clearInterval(iv);
+    delete b.dataset.busy;
+    b.textContent = t("sc.test");
+    pre.textContent = report || t("sc.testFail");
+    pre.style.display = "";
+    if(report){
+      copy.style.display = "";
+      copy.onclick = () => { try{ navigator.clipboard.writeText(report); }catch(e){} };
+    }
+  };
+  /* The Test button runs the shortcut against an idle protel, which is the one state it
+     never fails in. This is what the presses actually made did. */
+  $("#scLog").onclick = async () => {
+    const pre = $("#scDiag"), copy = $("#scCopy");
+    if(!sc) return;
+    const log = await sc.tauLog().catch(() => null);
+    pre.textContent = log || t("sc.logNone");
+    pre.style.display = "";
+    if(log){
+      copy.style.display = "";
+      copy.onclick = () => { try{ navigator.clipboard.writeText(log); }catch(e){} };
+    }else copy.style.display = "none";
+  };
+  $("#dbgLock").onclick = () => { setDebug(false); closeModal(); };
+  $("#dbgOk").onclick = closeModal;
+}
+/* Typed on the home screen, on the PHYSICAL keys — matched by e.code rather than e.key,
+   because this desk spends half the night with the keyboard on Greek and the letters
+   would not land. Never while a text field has focus, so it cannot fire mid-typing. */
+const DEBUG_SEQ = "BARBARIANKING".split("").map(c => "Key" + c);
+let DEBUG_BUF = [];
+function debugOn(){ try{ return localStorage.getItem("reccheck_debug") === "1"; }catch(e){ return false; } }
+function setDebug(on){
+  try{ localStorage.setItem("reccheck_debug", on ? "1" : "0"); }catch(e){}
+  paintDebug();
+  try{ toast(t(on ? "dbg.on" : "dbg.off"), !on); }catch(e){}
+}
+function paintDebug(){
+  const c = $("#mcDebugCat");
+  if(c) c.style.display = debugOn() ? "" : "none";
+}
+document.addEventListener("keydown", e => {
+  if(SCREEN !== "menu") return;                       // the home screen only
+  if(e.ctrlKey || e.altKey || e.metaKey) return;
+  const tg = e.target;
+  if(tg && (/^(INPUT|TEXTAREA|SELECT)$/.test(tg.tagName) || tg.isContentEditable)) return;
+  DEBUG_BUF.push(e.code);
+  if(DEBUG_BUF.length > DEBUG_SEQ.length) DEBUG_BUF.shift();
+  if(DEBUG_BUF.length === DEBUG_SEQ.length && DEBUG_BUF.every((k, i) => k === DEBUG_SEQ[i])){
+    DEBUG_BUF = [];
+    if(!debugOn()) setDebug(true);
+  }
+}, true);
 function openShortcuts(){
   const sc = window.reccheckShortcuts;
   if(!sc) return;
@@ -2352,37 +2459,11 @@ function openShortcuts(){
       '<div class="err" style="color:var(--faint)">' +
         t("up.scActive", {n: (scActiveProfile() || {}).name || "-"}) + '</div>' +
       '<div id="scBody"></div>' +
-      '<div style="display:flex;gap:8px;align-items:center;margin-top:16px">' +
-        '<button class="btn" id="scTest" style="flex:1">' + t("sc.test") + '</button>' +
-        '<button class="btn small" id="scCopy" style="display:none">' + t("sc.testCopy") + '</button>' +
-      '</div>' +
-      '<div class="err" style="color:var(--faint)">' + t("sc.testHint") + '</div>' +
-      '<pre id="scDiag" style="display:none"></pre>' +
       '<div id="scHelp" style="margin-top:12px;font-size:12px;line-height:1.5"></div>' +
       (st.available ? "" : '<div class="err">' + t("sc.unavailable") + '</div>') +
       '<div class="actions"><button class="btn amber" id="scOk">' + t("sc.done") + '</button></div>');
     renderShortcuts();
     refreshHelperStatus();
-    $("#scTest").onclick = async () => {
-      const b = $("#scTest"), pre = $("#scDiag"), copy = $("#scCopy");
-      if(b.dataset.busy) return;
-      b.dataset.busy = "1";
-      pre.style.display = "none";
-      copy.style.display = "none";
-      let n = 5;
-      b.textContent = t("sc.testCount", {n: n});
-      const iv = setInterval(() => { n--; if(n > 0) b.textContent = t("sc.testCount", {n: n}); }, 1000);
-      const report = await sc.diag(5000).catch(() => null);
-      clearInterval(iv);
-      delete b.dataset.busy;
-      b.textContent = t("sc.test");
-      pre.textContent = report || t("sc.testFail");
-      pre.style.display = "";
-      if(report){
-        copy.style.display = "";
-        copy.onclick = () => { try{ navigator.clipboard.writeText(report); }catch(e){} };
-      }
-    };
     $("#scOk").onclick = closeModal;
   }).catch(() => {});
 }
@@ -3903,7 +3984,9 @@ function uiFault(where, e){
   const k = where + "|" + msg;
   if(FAULT_SEEN[k]) return;
   FAULT_SEEN[k] = 1;
-  try{ toast(t("fault.toast", {w: where}) + " " + msg, true); }catch(_){}
+  /* The plain half always shows — a screen that quietly stops keeping up is what 1.16.3
+     was about. The technical half is only for whoever is debugging. */
+  try{ toast(t("fault.toast", {w: where}) + (debugOn() ? " " + msg : ""), true); }catch(_){}
 }
 window.addEventListener("error", ev => uiFault("window", ev.error || ev.message));
 window.addEventListener("unhandledrejection", ev => uiFault("promise", ev.reason));
@@ -4038,6 +4121,7 @@ $("#userBtn").onclick = e => { e.stopPropagation(); openProfiles(); };
 $("#userBtn").onmouseenter = () => { clearTimeout(UPTIPT); UPTIPT = setTimeout(upShowTip, 1000); };
 $("#userBtn").onmouseleave = upHideTip;
 $("#userBtn").onblur = upHideTip;
+$("#mcDebugBtn").onclick = e => { e.stopPropagation(); document.querySelectorAll(".mcat").forEach(c => c.classList.remove("open")); openDebug(); };
 $("#mcShortcutsBtn").onclick = e => {     // a leaf button, not a dropdown — open the dialog
   e.stopPropagation();
   document.querySelectorAll(".mcat").forEach(c => c.classList.remove("open"));

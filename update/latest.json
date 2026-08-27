@@ -1,11 +1,11 @@
 {
-  "version": "1.16.11",
-  "type": "html",
-  "engine": "1.16.5",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.16.5/RecCheck-Setup.exe",
-  "setupSha256": "208c493236789ae9614e24f86817ae58009e29ee61ee91c22373d4d272730ad6",
+  "version": "1.17.0",
+  "type": "full",
+  "engine": "1.17.0",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.0/RecCheck-Setup.exe",
+  "setupSha256": "ac43c9f66284b13bf815c25103861e063deea895179a4e57190e650a7e3388e7",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "a2348e6d1495c4cecfd7811af2fe54cfa3c0466bd63d8c483714c123f18d593a",
-  "notes": "The nightly department report now keeps the room ledger honest: a room charging under a different guest ends the stay the rate list had printed."
+  "sha256": "56661ff0defe68919ab167a58daaa7a5f21f004e3639a0cab7c673c35db3c285",
+  "notes": "Every real tau press now records what it did; the shortcut waits far longer for protel and will not leave the keyboard on Greek; diagnostics move to a hidden DEBUG menu."
 }

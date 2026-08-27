@@ -591,6 +591,20 @@ ipcMain.handle("sc-helper", () => new Promise(res => {
     setTimeout(() => { try{ child.kill(); }catch(e){} fin("timeout"); }, 5000);
   }catch(e){ fin("throw:" + ((e && (e.code || e.message)) || "unknown")); }
 }));
+/* What the last real presses actually did. The Test button only ever exercised an idle
+   protel; this is the record of the presses that happen for real, which is where the
+   shortcut misbehaves. */
+ipcMain.handle("sc-taulog", () => {
+  try{
+    const fs = require("fs");
+    const base = process.env.LOCALAPPDATA;
+    if(!base) return null;
+    const txt = fs.readFileSync(path.join(base, "RecCheck", "rc-tbind-tau.log"), "utf8");
+    // newest first, and only as much as anyone will actually read
+    const runs = txt.split(/(?==== tau press )/).filter(x => x.trim());
+    return runs.slice(-6).reverse().join("\n").slice(0, 20000) || null;
+  }catch(e){ return null; }
+});
 ipcMain.handle("sc-cancel", () => { try{ if(TAU_DETECT) TAU_DETECT.kill(); }catch(e){} return true; });
 ipcMain.handle("sc-clear", (_e, action) => {
   try{
