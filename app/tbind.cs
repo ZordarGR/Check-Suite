@@ -325,8 +325,24 @@ static class TBind {
       D("  restore attempt " + (round + 1) + ":");
       try{ HopTo(fg, tid, cur, attached, true); }catch(Exception){}
     }
+    if(ThreadHasLang(tid, cur)) return;
+    /* Being left on Greek is the worst thing this shortcut can do to a night: every
+       later keystroke in every program comes out wrong until somebody notices. If the
+       polite routes have all failed, cycle the shell switcher until it is back, because
+       that one needs nothing from the application. */
+    D("  restore still not done — cycling Win+Space directly");
+    try{
+      int count = 0;
+      try{ count = GetKeyboardLayoutList(0, null); }catch(Exception){}
+      int tries = count > 1 ? (count > 4 ? 4 : count) : 2;
+      for(int i = 0; i < tries && !ThreadHasLang(tid, cur); i++){
+        PressWinSpace();
+        for(int w = 0; w < 10 && !ThreadHasLang(tid, cur); w++) Thread.Sleep(20);
+      }
+    }catch(Exception){}
     if(!ThreadHasLang(tid, cur))
       D("  COULD NOT RESTORE the layout; it is left on " + Hex(GetKeyboardLayout(tid)));
+    else D("  restored by cycling Win+Space");
   }
   /* the T we SendInput is TRANSLATED under whatever layout is active when the target
      pulls it off the queue — never hop back before it has been consumed */
@@ -347,12 +363,16 @@ static class TBind {
 
        So: wait for the key to APPEAR, then for it to LEAVE, then settle. */
     int t = 0;
-    for(; t < 40 && !KeyQueued(); t += 3) Thread.Sleep(3);          // arrive (max 120 ms)
-    if(!KeyQueued() && t >= 40)
+    for(; t < 150 && !KeyQueued(); t += 3) Thread.Sleep(3);         // arrive
+    if(!KeyQueued() && t >= 150)
       D("  the key never showed up in the queue within " + t + " ms");
     else D("  key reached the queue after ~" + t + " ms");
+    /* Generous on purpose. A busy protel — one still drawing the preview of the invoice
+       just printed — can leave the key sitting in the queue for a long time, and the
+       moment we stop waiting the layout goes back to English and that key becomes a
+       Latin t. Waiting is only ever a slower shortcut; not waiting is a wrong one. */
     int d = 0;
-    for(; d < 120 && KeyQueued(); d += 5) Thread.Sleep(5);          // leave  (max 120 ms)
+    for(; d < 1200 && KeyQueued(); d += 5) Thread.Sleep(5);         // leave
     D(KeyQueued() ? "  the target still has not taken the key after " + d + " ms"
                   : "  target took the key after ~" + d + " ms");
     /* TranslateMessage runs just after GetMessage, and an embedded browser control
@@ -471,11 +491,33 @@ static class TBind {
     Bind b = bindList[idx];
     ThreadPool.QueueUserWorkItem(delegate {
       try{
-        lock(sendLock){
-          if(b.action == ACT_ALTF4) SendAltF4();
-          else if(b.action == ACT_SEQ) SendSequence(b);
-          else SendGreekT();
+        /* How long this press waited for the previous one matters: the shortcut can take
+           the better part of a second against a busy protel, and a second press made
+           while the first is still running queues here rather than doing nothing. That
+           looks, from the desk, exactly like "it did not work the first time". */
+        int queued = 0;
+        if(!Monitor.TryEnter(sendLock)){
+          int t0 = Environment.TickCount;
+          Monitor.Enter(sendLock);
+          queued = Environment.TickCount - t0;
         }
+        try{
+          if(b.action == ACT_ALTF4){ SendAltF4(); return; }
+          if(b.action == ACT_SEQ){ SendSequence(b); return; }
+          StringBuilder keep = DIAG;
+          DIAG = new StringBuilder();
+          int start = Environment.TickCount;
+          try{ SendGreekT(); }
+          finally{
+            int took = Environment.TickCount - start;
+            StringBuilder rep = DIAG;
+            DIAG = keep;
+            AppendTauLog("=== tau press " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+                         + "  took " + took + " ms"
+                         + (queued > 0 ? "  (waited " + queued + " ms for the previous press)" : "")
+                         + "\r\n" + rep.ToString().Replace("\n", "\r\n") + "\r\n");
+          }
+        }finally{ Monitor.Exit(sendLock); }
       }catch(Exception){}
     });
   }
@@ -636,6 +678,31 @@ static class TBind {
     }catch(Exception){}
   }
   /* Cleared on every successful start, so what the app reads is always this run's. */
+  /* Every real press records what it did. The diagnostic only ever ran a synthetic
+     attempt against an idle protel, which is exactly the condition under which this
+     shortcut has never once failed — so it kept coming back clean while the live press
+     went on misbehaving. This writes the same step-by-step report the diagnostic prints,
+     for the presses that actually happen, with how long each took and whether the press
+     had to queue behind one still running. */
+  static string TauLogPath(){
+    try{
+      string b = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+      if(b == null || b.Length == 0) return null;
+      return System.IO.Path.Combine(System.IO.Path.Combine(b, "RecCheck"), "rc-tbind-tau.log");
+    }catch(Exception){ return null; }
+  }
+  static void AppendTauLog(string entry){
+    try{
+      string p = TauLogPath();
+      if(p == null) return;
+      System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(p));
+      string prev = "";
+      try{ if(System.IO.File.Exists(p)) prev = System.IO.File.ReadAllText(p); }catch(Exception){}
+      // keep it small and self-trimming: the last ~40 KB is many nights of presses
+      if(prev.Length > 40000) prev = prev.Substring(prev.Length - 30000);
+      System.IO.File.WriteAllText(p, prev + entry);
+    }catch(Exception){}
+  }
   static void ClearCrash(){
     try{ string p = CrashPath(); if(p != null) System.IO.File.Delete(p); }catch(Exception){}
   }

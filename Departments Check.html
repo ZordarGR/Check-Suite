@@ -1192,7 +1192,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.16.11";
+const APP_VERSION = "1.17.0";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1250,6 +1250,8 @@ en: {
   "sc.hDead": "The helper started and stopped on its own. Try binding the button again; if this keeps saying the same thing, send the detail below.",
   "sc.hCrash": "The helper crashed. What went wrong is printed below \u2014 send it on and it can be fixed exactly.",
   "sc.hDetail": "detail",
+  "sc.log": "What the last presses did",
+  "sc.logNone": "No \u03c4 press recorded yet. Use the shortcut, then come back here.",
   "fault.toast": "Something went wrong in {w} \u2014 the rest of the screen still updated:",
   "sc.done": "Done",
   "sc.keyMid": "Middle button", "sc.keyBack": "Side button — Back", "sc.keyFwd": "Side button — Forward",
@@ -1417,6 +1419,8 @@ gr: {
   "sc.hDead": "Ο βοηθός ξεκίνησε και σταμάτησε μόνος του. Δοκίμασε ξανά την αντιστοίχιση· αν συνεχίζει να το λέει, στείλε τη λεπτομέρεια παρακάτω.",
   "sc.hCrash": "Ο βοηθός κατέρρευσε. Το τι πήγε στραβά τυπώνεται παρακάτω — στείλ' το και διορθώνεται ακριβώς.",
   "sc.hDetail": "λεπτομέρεια",
+  "sc.log": "Τι έκαναν τα τελευταία πατήματα",
+  "sc.logNone": "Δεν έχει καταγραφεί ακόμη πάτημα τ. Χρησιμοποίησε τη συντόμευση και ξαναέλα εδώ.",
   "fault.toast": "Κάτι πήγε στραβά στο {w} — τα υπόλοιπα ενημερώθηκαν κανονικά:",
   "sc.done": "Έτοιμο",
   "sc.keyMid": "Μεσαίο πλήκτρο", "sc.keyBack": "Πλαϊνό πλήκτρο — Πίσω", "sc.keyFwd": "Πλαϊνό πλήκτρο — Μπροστά",
@@ -2354,6 +2358,7 @@ function openShortcuts(){
       '<div id="scBody"></div>' +
       '<div style="display:flex;gap:8px;align-items:center;margin-top:16px">' +
         '<button class="btn" id="scTest" style="flex:1">' + t("sc.test") + '</button>' +
+        '<button class="btn" id="scLog" style="flex:1">' + t("sc.log") + '</button>' +
         '<button class="btn small" id="scCopy" style="display:none">' + t("sc.testCopy") + '</button>' +
       '</div>' +
       '<div class="err" style="color:var(--faint)">' + t("sc.testHint") + '</div>' +
@@ -2382,6 +2387,18 @@ function openShortcuts(){
         copy.style.display = "";
         copy.onclick = () => { try{ navigator.clipboard.writeText(report); }catch(e){} };
       }
+    };
+    /* The Test button runs the shortcut against an idle protel, which is the one state
+       it never fails in. This shows what the presses you actually made did. */
+    $("#scLog").onclick = async () => {
+      const pre = $("#scDiag"), copy = $("#scCopy");
+      const log = await sc.tauLog().catch(() => null);
+      pre.textContent = log || t("sc.logNone");
+      pre.style.display = "";
+      if(log){
+        copy.style.display = "";
+        copy.onclick = () => { try{ navigator.clipboard.writeText(log); }catch(e){} };
+      }else copy.style.display = "none";
     };
     $("#scOk").onclick = closeModal;
   }).catch(() => {});
