@@ -1,30 +1,24 @@
-## RecCheck 1.17.0 — Windows
+## RecCheck 1.17.2 — Windows
 
 Nightly POS receipt audit for the protel checkcharge1 report (.oxps). Everything runs locally — no data leaves the machine.
 
-### The τ now records what it actually did
+### The shortcuts belong to protel
 
-The shortcut fails now and then — one invoice goes through, the next needs two presses — and every diagnostic run has come back clean, because *Test the τ shortcut* runs it against an idle protel, which is the one state it never fails in.
+A side button bound to the τ was bound *everywhere*. In a browser, in the file manager, in RecCheck itself — the helper took the press and protel never saw it, because protel was not the window in front.
 
-So every real press now writes down what it did: which window it found, whether the layout hop landed, how long protel took to take the key, whether the layout came back, and how long the whole thing took. **PROTEL SHORTCUTS → What the last presses did** shows the last few, newest first, with a copy button.
+*PROTEL SHORTCUTS* now has **Only while protel is in front**. Tick it, and the app asks you to bring protel forward for five seconds and reads the window itself — nothing is guessed about what protel is called on your machine. Anywhere else the button goes back to being an ordinary button; nothing is swallowed, so whatever it normally does, it does.
 
-If it misbehaves again, that report says which step went wrong instead of leaving it to guesswork.
+If it ever stops firing where it should, **DEBUG → What the last presses did** now says *"trigger ignored: protel was not in front"* along with what actually was in front, so a wrong window is something you can see rather than something you have to work out.
 
-### Two changes while waiting for it
+It stays off until you point it at protel, because a gate aimed at the wrong window would quietly cost you every shortcut in the middle of a shift.
 
-**It waits far longer for protel to take the key.** A protel still drawing the preview of the invoice just printed can leave the keystroke queued for the best part of a second, and the moment the helper stopped waiting the keyboard went back to English and that key became a Latin `t`. Waiting only ever makes the shortcut slower; not waiting makes it wrong.
+### The room pills had nothing to show
 
-**It will not leave the keyboard on Greek.** If every polite way of putting the layout back has failed, it now cycles the Windows layout switcher directly until it is back, because that needs nothing from protel. Being left on Greek is the worst thing this shortcut can do to a night.
+A rate list was loading fine and the room movements panel stayed empty. The list carries a business date in its header, and the app could only read that date out of one exact header line — a list printed any other way parsed its rooms, loaded without a word of complaint, and recorded **not one stay**.
 
-One thing the record will also show: a second press made while the first is still running queues behind it rather than doing nothing, and how long it waited is printed. From the desk that looks exactly like "it didn't work the first time".
+It now looks for that date in four places, and if the print never gave one it takes the newest arrival on the list, which on a list of in-house guests is today. Loading a rate list now says on the spot what went into the ledger, instead of leaving an empty panel to be found on the other screen an hour later.
 
-### A DEBUG menu, hidden
-
-Everything that only makes sense to someone debugging the tool has moved out of *PROTEL SHORTCUTS* into its own **DEBUG** menu, which does not exist until it is unlocked: type **barbarianking** on the home screen. It has a *Hide this menu again* button, and it stays as you leave it.
-
-It matches the physical keys rather than the letters, so it still works with the keyboard on Greek, and it is ignored while anything is being typed into a field.
-
-*PROTEL SHORTCUTS* keeps the plain sentence about the helper — *"antivirus is blocking it"* is something whoever is on the desk needs to know. The technical detail behind it moved to DEBUG.
+**DEBUG → Why the room pills say what they say** prints the night the report is for, what the last rate list recorded, and every stay landing near that night — enough to see at a glance whether the panel is empty because nothing was recorded or because the dates do not line up.
 
 ### Install
 

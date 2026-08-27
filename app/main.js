@@ -167,6 +167,22 @@ function seqConfig(){
   const gap = (Number.isInteger(raw.gap) && raw.gap >= 0 && raw.gap <= 2000) ? raw.gap : SEQ_DEFAULT.gap;
   return {keys: keys.length ? keys : SEQ_DEFAULT.keys.slice(), gap};
 }
+/* The shortcuts belong to protel. A bound side button is still a mouse button in every
+   other window on this machine, so the helper can be told to fire only while a given
+   window is in front. What "protel" looks like is not guessed here: the user points the
+   app at the real window once and the needle comes from that. Off until they do, because
+   a wrong needle would silently cost them every shortcut mid-shift. */
+function focusConfig(){
+  let c = {};
+  try{ c = hub.readConfig(); }catch(e){}
+  const f = c.focus || {};
+  const needle = typeof f.needle === "string" ? f.needle.trim().slice(0, 64) : "";
+  return {on: !!f.on && needle.length > 0, needle: needle};
+}
+function focusSpec(){
+  const f = focusConfig();
+  return f.on ? ["focus=" + f.needle] : [];
+}
 function seqSpec(){
   const q = seqConfig();
   return "seq:" + q.keys.join(",") + "@" + q.gap;
@@ -262,11 +278,14 @@ function tauStart(){
     TAUINFO = {state: "idle", exe: exe};
     return;
   }
+  /* The gate is passed to the helper, never applied here: only the hook thread knows
+     what was in front at the instant of the press. */
+  const args = ["bind", String(process.pid)].concat(focusSpec()).concat(specs);
   try{
-    const child = spawn(exe, ["bind", String(process.pid)].concat(specs), {stdio: "ignore", windowsHide: true});
+    const child = spawn(exe, args, {stdio: "ignore", windowsHide: true});
     TAU = child;
     const started = Date.now();
-    TAUINFO = {state: "running", exe: exe, pid: child.pid, specs: specs, since: started};
+    TAUINFO = {state: "running", exe: exe, pid: child.pid, specs: args.slice(2), since: started};
     /* Only report on the child we still consider current: tauStop() clears TAU before
        the kill lands, so a replaced helper's exit must not overwrite its successor. */
     child.on("exit", (code, signal) => {
@@ -504,10 +523,48 @@ ipcMain.handle("overlay-ihotkey-set", (_e, acc) => {
 ipcMain.handle("sc-get", () => {
   try{
     const {list, active} = readProfiles();
-    return {profiles: list, active, seq: seqConfig(),
+    return {profiles: list, active, seq: seqConfig(), focus: focusConfig(),
             available: process.platform === "win32" && !!tauPath()};
   }catch(e){ return {profiles: [], active: null, available: false}; }
 });
+/* Turn the gate on or off, and store what it should match. An empty needle can only
+   mean off — a gate matching nothing would swallow the shortcuts entirely. */
+ipcMain.handle("sc-focus-set", (_e, on, needle) => {
+  try{
+    const c = hub.readConfig();
+    const n = typeof needle === "string" ? needle.trim().slice(0, 64) : (focusConfig().needle || "");
+    c.focus = {on: !!on && n.length > 0, needle: n};
+    hub.writeConfig(c);
+  }catch(e){}
+  tauStart();                                  // the helper takes the gate at spawn time
+  return focusConfig();
+});
+/* Ask the helper what is in front after a countdown, so the user can put protel there
+   and have the needle taken from the real window rather than from a guess. */
+ipcMain.handle("sc-focus-pick", (_e, delayMs) => new Promise(res => {
+  if(process.platform !== "win32" || !tauPath()){ res(null); return; }
+  const wait = Math.max(1000, Math.min(30000, +delayMs || 5000));
+  let out = "", done = false;
+  const finish = () => {
+    if(done) return; done = true;
+    const line = /^FG\t(.*)$/m.exec(out);
+    if(!line){ res(null); return; }
+    const [exe, cls, title] = (line[1] + "\t\t").split("\t");
+    /* The likeliest way to get this wrong is not alt-tabbing at all, which would aim the
+       gate at RecCheck and stop every shortcut working in protel. Say so instead. */
+    let me = "";
+    try{ me = String(process.execPath).split(/[\\/]/).pop().replace(/\.exe$/i, ""); }catch(e){}
+    const self = !!(me && exe && exe.toLowerCase() === me.toLowerCase());
+    res({exe: exe || "", cls: cls || "", title: title || "", self: self});
+  };
+  try{
+    const child = spawn(tauPath(), ["fg", String(process.pid), String(wait)], {windowsHide: true});
+    child.stdout.on("data", d => { out += d; });
+    child.on("exit", finish);
+    child.on("error", finish);
+    setTimeout(() => { try{ child.kill(); }catch(e){} finish(); }, wait + 10000);
+  }catch(e){ finish(); }
+}));
 /* listen for one trigger and store it against an action in the active profile */
 ipcMain.handle("sc-detect", (_e, action) => new Promise(res => {
   if(process.platform !== "win32" || !tauPath() || ACTIONS.indexOf(action) < 0){ res(null); return; }

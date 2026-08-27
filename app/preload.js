@@ -32,6 +32,8 @@ contextBridge.exposeInMainWorld("reccheckShortcuts", {
   diag: (ms) => ipcRenderer.invoke("sc-diag", ms),
   helper: () => ipcRenderer.invoke("sc-helper"),
   tauLog: () => ipcRenderer.invoke("sc-taulog"),
+  focusSet: (on, needle) => ipcRenderer.invoke("sc-focus-set", on, needle),
+  focusPick: (ms) => ipcRenderer.invoke("sc-focus-pick", ms),
   clear: (action) => ipcRenderer.invoke("sc-clear", action),
   profileAdd: (name) => ipcRenderer.invoke("sc-profile-add", name),
   profileRename: (id, name) => ipcRenderer.invoke("sc-profile-rename", id, name),
