@@ -172,6 +172,24 @@ function seqConfig(){
    window is in front. What "protel" looks like is not guessed here: the user points the
    app at the real window once and the needle comes from that. Off until they do, because
    a wrong needle would silently cost them every shortcut mid-shift. */
+/* The τ is one keypress, and protel takes a moment to react to it before it will accept
+   the Enter that always follows. Pressed by hand that Enter beats protel there and is
+   lost — which is what "the shortcut needed two presses" actually was. The helper is the
+   only one that can wait reliably, so it sends the Enter itself. Data, not code: the
+   delay lives in config and travels on the command line. */
+const TAU_ENTER_DEFAULT = {on: true, delay: 100};
+function tauEnterConfig(){
+  let c = {};
+  try{ c = hub.readConfig(); }catch(e){}
+  const f = (c && typeof c.tauEnter === "object" && c.tauEnter) || {};
+  const d = (Number.isInteger(f.delay) && f.delay >= 0 && f.delay <= 5000)
+            ? f.delay : TAU_ENTER_DEFAULT.delay;
+  return {on: f.on !== false, delay: d};        // absent config means on
+}
+function tauSpec(){
+  const f = tauEnterConfig();
+  return f.on ? "tau:" + f.delay : "tau";
+}
 function focusConfig(){
   let c = {};
   try{ c = hub.readConfig(); }catch(e){}
@@ -273,7 +291,8 @@ function tauStart(){
   if(!exe){ TAUINFO = {state: "no-exe"}; return; }
   let binds = {};
   try{ binds = activeBinds(); }catch(e){}
-  const specs = ACTIONS.filter(a => binds[a]).map(a => binds[a] + "=" + (a === "seq" ? seqSpec() : a));
+  const specs = ACTIONS.filter(a => binds[a])
+    .map(a => binds[a] + "=" + (a === "seq" ? seqSpec() : a === "tau" ? tauSpec() : a));
   if(!specs.length){                        // nothing bound in this profile — don't hook at all
     TAUINFO = {state: "idle", exe: exe};
     return;
@@ -524,8 +543,20 @@ ipcMain.handle("sc-get", () => {
   try{
     const {list, active} = readProfiles();
     return {profiles: list, active, seq: seqConfig(), focus: focusConfig(),
+            tauEnter: tauEnterConfig(),
             available: process.platform === "win32" && !!tauPath()};
   }catch(e){ return {profiles: [], active: null, available: false}; }
+});
+/* Whether the helper presses the Enter after the τ. The delay stays where it is — it is
+   the on/off that anyone at the desk would ever need. */
+ipcMain.handle("sc-tauenter-set", (_e, on) => {
+  try{
+    const c = hub.readConfig();
+    c.tauEnter = {on: !!on, delay: tauEnterConfig().delay};
+    hub.writeConfig(c);
+  }catch(e){}
+  tauStart();                                  // the helper takes its actions at spawn time
+  return tauEnterConfig();
 });
 /* Turn the gate on or off, and store what it should match. An empty needle can only
    mean off — a gate matching nothing would swallow the shortcuts entirely. */

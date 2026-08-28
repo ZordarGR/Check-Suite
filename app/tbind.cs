@@ -23,6 +23,7 @@
 // Triggers: m<mods>-<btn>   3 = middle, 4 = X1 (Back), 5 = X2 (Forward); bare "m4" = no mods
 //           k<mods>-<vk>    mods bitmask: 1 = Ctrl, 2 = Alt, 4 = Shift, 8 = Win
 // Actions:  tau            = a real Greek τ keypress (verified layout hop)
+//           tau:<ms>       = the same, then Enter <ms> after the layout is back
 //           altf4          = a real Alt+F4 (closes the focused window)
 //           seq:<vk,...>[@ms] = a fixed run of keystrokes, e.g. seq:13,13,39,13,13@120
 //                            (Enter Enter Right Enter Enter). Extended keys such as the
@@ -110,7 +111,7 @@ static class TBind {
   const uint SMTO_ABORTIFHUNG = 0x0002;
   const uint QS_KEY = 0x0001;
   const uint LLMHF_INJECTED = 0x0001, LLKHF_INJECTED = 0x0010;
-  const ushort VK_T = 0x54, VK_F4 = 0x73;
+  const ushort VK_T = 0x54, VK_F4 = 0x73, VK_RETURN = 0x0D;
   const int VK_SHIFT = 0x10, VK_CONTROL = 0x11, VK_MENU = 0x12;
   const int VK_LWIN = 0x5B, VK_RWIN = 0x5C;
   const char TAU = 'τ';
@@ -165,7 +166,7 @@ static class TBind {
   static int mode = 0;                   // 1 = detect, 2 = bind
   static uint mainTid = 0;
   static Thread watchdog;                // static ref so it can never be collected
-  class Bind { public int action; public ushort[] keys; public int gap; }
+  class Bind { public int action; public ushort[] keys; public int gap; public bool thenEnter; }
   static readonly List<Bind> bindList = new List<Bind>();
   static readonly Dictionary<string, int> binds = new Dictionary<string, int>();   // trigger -> index
   static readonly HashSet<uint> swallowed = new HashSet<uint>();   // keys whose KEYUP we must eat too
@@ -586,7 +587,16 @@ static class TBind {
           StringBuilder keep = DIAG;
           DIAG = new StringBuilder();
           int start = Environment.TickCount;
-          try{ SendGreekT(); }
+          try{
+            SendGreekT();
+            if(b.thenEnter){
+              /* After the layout is back, so this is a plain Enter under whatever
+                 keyboard the user was on. */
+              D("  then Enter, " + b.gap + " ms later");
+              Thread.Sleep(b.gap);
+              PressKeys(VK_RETURN, (ushort)MapVirtualKey(VK_RETURN, 0), 0);
+            }
+          }
           finally{
             int took = Environment.TickCount - start;
             StringBuilder rep = DIAG;
@@ -692,6 +702,16 @@ static class TBind {
     Bind b = new Bind();
     if(action == "altf4") b.action = ACT_ALTF4;
     else if(action == "tau") b.action = ACT_TAU;
+    /* "tau:120" — press the tau, then Enter after that many milliseconds. protel needs a
+       moment to react to the tau before it will take the Enter, and a person pressing it
+       by hand beats it there. The helper is the only one who can wait reliably. */
+    else if(action.StartsWith("tau:")){
+      b.action = ACT_TAU;
+      int ms;
+      if(!int.TryParse(action.Substring(4), out ms) || ms < 0 || ms > 5000) return;
+      b.thenEnter = true;
+      b.gap = ms;
+    }
     else if(action.StartsWith("seq:")){
       b.action = ACT_SEQ;
       b.gap = 90;

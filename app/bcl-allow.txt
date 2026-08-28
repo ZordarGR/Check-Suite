@@ -208,6 +208,7 @@ VK_CONTROL
 VK_F4
 VK_LWIN
 VK_MENU
+VK_RETURN
 VK_RWIN
 VK_SHIFT
 VK_T
@@ -322,6 +323,7 @@ min
 mod
 mode
 mouseData
+ms
 mscorlib
 msg
 n
@@ -351,6 +353,7 @@ size
 spec
 swallowed
 swallowedBtn
+thenEnter
 tid
 time
 timeout

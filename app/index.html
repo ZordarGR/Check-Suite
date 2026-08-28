@@ -1201,7 +1201,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.2";
+const APP_VERSION = "1.17.3";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1270,6 +1270,9 @@ en: {
   "sc.focusOff": "The shortcuts fire in every window again.",
   "sc.focusIdle": "Tick the box above to switch it on.",
   "sc.focusSelf": "That was RecCheck, not protel. Start it again and bring protel forward before the count ends.",
+  "sc.tauEnterLabel": "Press Enter for me after the \u03c4",
+  "sc.tauEnterOn": "The helper waits {n} ms for protel to react, then presses Enter \u2014 the same way the invoice run times its own keys.",
+  "sc.tauEnterOff": "The \u03c4 is sent on its own. Press Enter yourself, and not too quickly.",
   "sc.moves": "Why the room pills say what they say",
   "dbg.menu": "DEBUG", "dbg.title": "DEBUG",
   "dbg.intro": "Diagnostics for the \u03c4 shortcut and the helper behind it. Nothing here changes anything \u2014 it only reports.",
@@ -1454,6 +1457,9 @@ gr: {
   "sc.focusOff": "Οι συντομεύσεις δουλεύουν ξανά παντού.",
   "sc.focusIdle": "Τσέκαρε το κουτί από πάνω για να ενεργοποιηθεί.",
   "sc.focusSelf": "Αυτό ήταν το RecCheck, όχι το protel. Ξεκίνα το ξανά και φέρε το protel μπροστά πριν τελειώσει η αντίστροφη μέτρηση.",
+  "sc.tauEnterLabel": "Πάτα το Enter για μένα μετά το τ",
+  "sc.tauEnterOn": "Ο βοηθός περιμένει {n} ms να αντιδράσει το protel και μετά πατάει Enter — όπως ακριβώς κάνει και η ακολουθία του τιμολογίου.",
+  "sc.tauEnterOff": "Το τ στέλνεται μόνο του. Πάτα εσύ το Enter, και όχι πολύ γρήγορα.",
   "sc.moves": "Γιατί λένε αυτό τα πλακίδια δωματίων",
   "dbg.menu": "DEBUG", "dbg.title": "DEBUG",
   "dbg.intro": "Διαγνωστικά για τη συντόμευση τ και τον βοηθό πίσω της. Τίποτα εδώ δεν αλλάζει κάτι — μόνο αναφέρει.",
@@ -2196,6 +2202,33 @@ function renderShortcuts(){
     scApply(await sc.get().catch(() => null));
   });
   renderFocusGate();
+  renderTauEnter();
+}
+/* ---- the Enter that follows the τ ----
+   The τ is one keypress and protel takes a moment to react to it before it will accept
+   the Enter that always comes next. Pressed by hand that Enter beats protel there and is
+   simply lost — which is what "the shortcut needed two presses" turned out to be, all
+   along. The helper waits and presses it, the way it already does for the invoice run,
+   which is why THAT one has never missed. */
+function renderTauEnter(){
+  const box = $("#scTauBox");
+  if(!box) return;
+  const sc = window.reccheckShortcuts;
+  const te = (SCSTATE && SCSTATE.tauEnter) || {on: true, delay: 100};
+  box.innerHTML =
+    '<div class="scFocus">' +
+      '<label class="scFocusTop"><input type="checkbox" id="scTauOn"' + (te.on ? " checked" : "") + '>' +
+        escapeHtml(t("sc.tauEnterLabel")) + '</label>' +
+      '<div class="scFocusSub" id="scTauSub">' +
+        escapeHtml(te.on ? t("sc.tauEnterOn", {n: te.delay}) : t("sc.tauEnterOff")) + '</div>' +
+    '</div>';
+  $("#scTauOn").onchange = async () => {
+    const on = $("#scTauOn").checked;
+    const st = await sc.tauEnterSet(on).catch(() => null);
+    if(st && SCSTATE) SCSTATE.tauEnter = st;
+    const now = (SCSTATE && SCSTATE.tauEnter) || {on: on, delay: te.delay};
+    $("#scTauSub").textContent = now.on ? t("sc.tauEnterOn", {n: now.delay}) : t("sc.tauEnterOff");
+  };
 }
 /* ---- the shortcuts belong to protel ----
    A bound side button is still a mouse button everywhere else on the machine, so the
@@ -2568,6 +2601,7 @@ function openShortcuts(){
         t("up.scActive", {n: (scActiveProfile() || {}).name || "-"}) + '</div>' +
       '<div id="scBody"></div>' +
       '<div id="scFocusBox"></div>' +
+      '<div id="scTauBox"></div>' +
       '<div id="scHelp" style="margin-top:12px;font-size:12px;line-height:1.5"></div>' +
       (st.available ? "" : '<div class="err">' + t("sc.unavailable") + '</div>') +
       '<div class="actions"><button class="btn amber" id="scOk">' + t("sc.done") + '</button></div>');
