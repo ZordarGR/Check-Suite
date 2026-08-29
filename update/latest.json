@@ -1,11 +1,11 @@
 {
-  "version": "1.17.4",
-  "type": "full",
+  "version": "1.17.5",
+  "type": "html",
   "engine": "1.17.4",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.4/RecCheck-Setup.exe",
   "setupSha256": "93f983439b7e366f2a878f6fe44f010a934451089d94f4947b0144ede8a254ff",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "921478371ac7346d3af8cfddedd55b7310717503e1dd3f0ad4a9345cba073594",
-  "notes": "The home screen now fits the window whatever is on it — the checklist scrolls inside its card instead of pushing the audit button below the fold. The τ waits 50 ms before its Enter, and that wait is now adjustable."
+  "sha256": "d988b3d83b72d8b7b63d075d96e9d85257fdbfaa42c9cd4e80b5bae91f7179a4",
+  "notes": "The checklist now flows into as many columns as the window allows, so a full night's list is visible at once instead of behind a scroll. Dialogs no longer grow past the window — PROTEL SHORTCUTS had lost its Done button off the bottom edge."
 }
