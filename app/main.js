@@ -150,7 +150,7 @@ function setInteract(on){
    shift keeps their own bindings. Config shape:
      {profiles: [{id, name, binds: {tau: <trigger>, altf4: <trigger>}}], activeProfile: id}
    A trigger is "m3"/"m4"/"m5" or "k<mods>-<vk>"; both are opaque to this layer. */
-const ACTIONS = ["tau", "altf4", "seq"];
+const ACTIONS = ["tau", "altf4", "altn", "seq"];
 /* A trigger the helper cannot parse is worse than no trigger, because storing one
    silently replaces a binding that worked. Validate on the way in AND on the way out. */
 const TRIGGER_RE = /^(?:m(?:[345]|\d{1,2}-[345])|k\d{1,2}-\d{1,3})$/;

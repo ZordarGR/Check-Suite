@@ -23,6 +23,7 @@
 // Triggers: m<mods>-<btn>   3 = middle, 4 = X1 (Back), 5 = X2 (Forward); bare "m4" = no mods
 //           k<mods>-<vk>    mods bitmask: 1 = Ctrl, 2 = Alt, 4 = Shift, 8 = Win
 // Actions:  tau            = a real Greek τ keypress (verified layout hop)
+//           altn           = a real Alt+N (protel's "new" when entering a passport)
 //           tau:<ms>       = the same, then Enter <ms> after the layout is back
 //           altf4          = a real Alt+F4 (closes the focused window)
 //           seq:<vk,...>[@ms] = a fixed run of keystrokes, e.g. seq:13,13,39,13,13@120
@@ -111,13 +112,13 @@ static class TBind {
   const uint SMTO_ABORTIFHUNG = 0x0002;
   const uint QS_KEY = 0x0001;
   const uint LLMHF_INJECTED = 0x0001, LLKHF_INJECTED = 0x0010;
-  const ushort VK_T = 0x54, VK_F4 = 0x73, VK_RETURN = 0x0D;
+  const ushort VK_T = 0x54, VK_F4 = 0x73, VK_RETURN = 0x0D, VK_N = 0x4E;
   const int VK_SHIFT = 0x10, VK_CONTROL = 0x11, VK_MENU = 0x12;
   const int VK_LWIN = 0x5B, VK_RWIN = 0x5C;
   const char TAU = 'τ';
   const long GREEK = 0x0408;
 
-  const int ACT_TAU = 1, ACT_ALTF4 = 2, ACT_SEQ = 3;
+  const int ACT_TAU = 1, ACT_ALTF4 = 2, ACT_SEQ = 3, ACT_ALTN = 4;
 
   delegate IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam);
   [DllImport("user32.dll", SetLastError = true)] static extern IntPtr SetWindowsHookEx(int id, HookProc fn, IntPtr mod, uint tid);
@@ -508,10 +509,12 @@ static class TBind {
   }
   /* a real Alt+F4. Any other modifier the user is physically holding (because the
      trigger itself was a combo) would corrupt it, so release those first. */
-  static void SendAltF4(){
+  /* Alt + one key. The trigger may itself be a modifier+button combination, so whatever
+     the user is physically holding has to come up first or protel sees Ctrl+Alt+N. */
+  static void SendAltKey(ushort vk){
     int m = CurMods();
     ushort scCtrl = (ushort)MapVirtualKey(VK_CONTROL, 0), scShift = (ushort)MapVirtualKey(VK_SHIFT, 0);
-    ushort scAlt = (ushort)MapVirtualKey(VK_MENU, 0), scF4 = (ushort)MapVirtualKey(VK_F4, 0);
+    ushort scAlt = (ushort)MapVirtualKey(VK_MENU, 0), scKey = (ushort)MapVirtualKey(vk, 0);
     if((m & 1) != 0) KeyEvent(VK_CONTROL, scCtrl, KEYEVENTF_KEYUP);
     if((m & 4) != 0) KeyEvent(VK_SHIFT, scShift, KEYEVENTF_KEYUP);
     if((m & 8) != 0){
@@ -520,8 +523,8 @@ static class TBind {
     }
     bool altHeld = (m & 2) != 0;                  // already down: reuse it, don't double it
     if(!altHeld) KeyEvent(VK_MENU, scAlt, 0);
-    KeyEvent(VK_F4, scF4, 0);
-    KeyEvent(VK_F4, scF4, KEYEVENTF_KEYUP);
+    KeyEvent(vk, scKey, 0);
+    KeyEvent(vk, scKey, KEYEVENTF_KEYUP);
     if(!altHeld) KeyEvent(VK_MENU, scAlt, KEYEVENTF_KEYUP);
   }
 
@@ -582,7 +585,8 @@ static class TBind {
           queued = Environment.TickCount - t0;
         }
         try{
-          if(b.action == ACT_ALTF4){ SendAltF4(); return; }
+          if(b.action == ACT_ALTF4){ SendAltKey(VK_F4); return; }
+          if(b.action == ACT_ALTN){ SendAltKey(VK_N); return; }
           if(b.action == ACT_SEQ){ SendSequence(b); return; }
           StringBuilder keep = DIAG;
           DIAG = new StringBuilder();
@@ -701,6 +705,7 @@ static class TBind {
 
     Bind b = new Bind();
     if(action == "altf4") b.action = ACT_ALTF4;
+    else if(action == "altn") b.action = ACT_ALTN;     // protel's "new" on the passport screen
     else if(action == "tau") b.action = ACT_TAU;
     /* "tau:120" — press the tau, then Enter after that many milliseconds. protel needs a
        moment to react to the tau before it will take the Enter, and a person pressing it
