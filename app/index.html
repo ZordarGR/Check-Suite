@@ -1298,7 +1298,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.5";
+const APP_VERSION = "1.17.6";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1341,6 +1341,8 @@ en: {
   "sc.seqWhy": "Sends the same fixed run of keys every time, with a short pause between them so nothing outruns the dialog. Bind it to a button and the whole run happens on one press instead of five.",
   "sc.altf4": "Alt + F4",
   "sc.altf4Why": "Closes the receipt preview that pops up after every invoice is generated. One button instead of reaching for the mouse and finding the ✕ on each one.",
+  "sc.altn": "Alt + N",
+  "sc.altnWhy": "protel\u2019s \u201cnew\u201d on the passport screen. Bound to a button it starts the next guest without leaving the keyboard \u2014 or reaching for it.",
   "sc.press": "press the button or key combination now… (Esc cancels)",
   "sc.none": "not set", "sc.clear": "remove the binding",
   "sc.fail": "Nothing detected — try again. Mouse: only middle and side buttons can be bound.",
@@ -1529,6 +1531,8 @@ gr: {
   "sc.seqWhy": "Στέλνει κάθε φορά την ίδια σταθερή ακολουθία πλήκτρων, με μικρή παύση ανάμεσά τους ώστε να μην προσπερνούν τον διάλογο. Αντιστοίχισέ την σε ένα πλήκτρο και όλη η ακολουθία γίνεται με ένα πάτημα αντί για πέντε.",
   "sc.altf4": "Alt + F4",
   "sc.altf4Why": "Κλείνει την προεπισκόπηση της απόδειξης που εμφανίζεται μετά από κάθε τιμολόγιο. Ένα πλήκτρο αντί να πιάνεις το ποντίκι και να βρίσκεις το ✕ σε κάθε μία.",
+  "sc.altn": "Alt + N",
+  "sc.altnWhy": "Το «νέο» του protel στην οθόνη διαβατηρίου. Σε ένα πλήκτρο, ξεκινάει τον επόμενο πελάτη χωρίς να αφήσεις το πληκτρολόγιο — ούτε να το πιάσεις.",
   "sc.press": "πάτα τώρα το πλήκτρο ή τον συνδυασμό… (Esc ακυρώνει)",
   "sc.none": "δεν έχει οριστεί", "sc.clear": "αφαίρεση της αντιστοίχισης",
   "sc.fail": "Δεν ανιχνεύθηκε τίποτα — δοκίμασε ξανά. Ποντίκι: μόνο το μεσαίο και τα πλαϊνά πλήκτρα.",
@@ -2234,7 +2238,7 @@ function openOverlaySettings(){
    Profiles keep one person's bindings intact when someone else covers the shift.
    Naming and deleting happen inline — Electron has no window.prompt, and a second
    openModal would tear down this dialog. */
-const SC_ACTIONS = ["tau", "altf4", "seq"];
+const SC_ACTIONS = ["tau", "altf4", "altn", "seq"];
 let SCSTATE = null, PROFILE_NAME = "";
 function vkName(vk){
   if(vk >= 0x30 && vk <= 0x39) return String.fromCharCode(vk);          // 0-9

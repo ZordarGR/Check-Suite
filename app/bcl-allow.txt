@@ -20,6 +20,7 @@
 <QueueSend>c__AnonStorey0
 <Run>c__AnonStorey1
 ACT_ALTF4
+ACT_ALTN
 ACT_SEQ
 ACT_TAU
 ActivateKeyboardLayout
@@ -155,7 +156,7 @@ RuntimeCompatibilityAttribute
 RuntimeTypeHandle
 SMTO_ABORTIFHUNG
 SameLang
-SendAltF4
+SendAltKey
 SendGreekT
 SendInput
 SendMessageTimeout
@@ -208,6 +209,7 @@ VK_CONTROL
 VK_F4
 VK_LWIN
 VK_MENU
+VK_N
 VK_RETURN
 VK_RWIN
 VK_SHIFT
@@ -343,6 +345,7 @@ rcCaret
 result
 right
 s
+scKey
 scan
 scanCode
 sendLock
