@@ -1298,7 +1298,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.6";
+const APP_VERSION = "1.17.7";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1489,6 +1489,7 @@ en: {
   "n.create": "not in the database yet — click to name it anyway",
   "n.noMatch": "no matching room — the database fills from each night's report",
   "n.errEmpty": "Type a nickname (or use Remove).", "n.reset": "Nickname reset — new guests in room ",
+  "n.moved": "Nickname followed the guest — ",
   "n.nickedTitle": " — nicknamed room",
   "upd.ready": "Update v{v} downloaded — click to install and restart",
   "upd.full": "Version {v} needs a full reinstall — click to open the download page",
@@ -1683,6 +1684,7 @@ gr: {
   "n.create": "δεν είναι στη βάση ακόμη — κλικ για ονομασία", 
   "n.noMatch": "κανένα δωμάτιο — η βάση γεμίζει από την αναφορά κάθε βραδιάς",
   "n.errEmpty": "Γράψτε ένα ψευδώνυμο (ή πατήστε Αφαίρεση).", "n.reset": "Ψευδώνυμο μηδενίστηκε — νέοι επισκέπτες στο δωμάτιο ",
+  "n.moved": "Το ψευδώνυμο ακολούθησε τον πελάτη — ",
   "n.nickedTitle": " — δωμάτιο με ψευδώνυμο",
   "upd.ready": "Η ενημέρωση v{v} κατέβηκε — κλικ για εγκατάσταση και επανεκκίνηση",
   "upd.full": "Η έκδοση {v} χρειάζεται πλήρη επανεγκατάσταση — κλικ για τη σελίδα λήψης",
@@ -1812,19 +1814,44 @@ function dateNum(d){
   const m = String(d || "").match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   return m ? (+m[3]) * 10000 + (+m[2]) * 100 + (+m[1]) : 0;
 }
+/* the calendar day before, right across month and year ends */
+function prevNightKey(k){
+  if(!k) return 0;
+  const dt = new Date(Date.UTC(Math.floor(k / 10000), Math.floor(k / 100) % 100 - 1, k % 100));
+  dt.setUTCDate(dt.getUTCDate() - 1);
+  return dt.getUTCFullYear() * 10000 + (dt.getUTCMonth() + 1) * 100 + dt.getUTCDate();
+}
+/* The same person, spelled the same way. Deliberately NOT the forgiving sameGuest() the
+   ledger uses: that one answers "could this be the same person", which is the right
+   question when SHORTENING a stay and the wrong one here. Carrying a nickname onto the
+   wrong guest is worse than not carrying it, so this demands the same name — trimmed and
+   case-folded, which cannot make two different names match. */
+function sameName(a, b){
+  const n = x => String(x || "").trim().replace(/\s+/g, " ").toUpperCase();
+  const A = n(a);
+  return !!A && A === n(b);
+}
 function syncRooms(){
-  const dropped = [], watchHit = [];
+  const dropped = [], watchHit = [], moved = [];
   const gm = {};                                  // roomMain -> Set of guest names
   for(const r of MODEL.receipts){
     if(!r.roomMain || !r.guest) continue;
     (gm[r.roomMain] = gm[r.roomMain] || new Set()).add(r.guest.trim());
   }
   const rd = dateNum(MODEL.reportDate);
+  /* Worked out in full before anything is written: a room change is a question about two
+     rooms at once, and the second one cannot be answered halfway through updating the
+     first. Same reason for the snapshot below. */
   const tonight = {};                             // room -> the one guest charging to it
   for(const [room, guests] of Object.entries(gm)){
     if(guests.size > 1) continue;                 // changeover night — leave the room alone
-    const g = guests.values().next().value;
-    tonight[room] = g;
+    tonight[room] = guests.values().next().value;
+  }
+  const before = {};                              // ROOMS as it stood before tonight
+  for(const [room, e] of Object.entries(ROOMS))
+    before[room] = {guest: e.guest, nick: e.nick, seen: e.seen};
+
+  for(const [room, g] of Object.entries(tonight)){
     const e = ROOMS[room];
     if(!e){ ROOMS[room] = {guest: g, seen: MODEL.reportDate}; continue; }
     if(rd && e.seen && dateNum(e.seen) > rd) continue;   // older report — read-only
@@ -1843,10 +1870,49 @@ function syncRooms(){
     e.guest = g;
     e.seen = MODEL.reportDate;
   }
+  /* ---- a guest who changed rooms has not left ----
+     protel's report only ever lists rooms that were charged, so the room somebody moved
+     OUT of is simply absent from it — there is no event to read, and the nickname would
+     sit on an empty room for ever while the guest's new room got none.
+
+     So: if the name now charging a room is exactly the name that carried a nickname in
+     another room tonight or last night, and that other room is not still charging under
+     it, they moved. Take the nickname with them.
+
+     Two guards, both deliberately strict. The old room still charging under that name is
+     not a move — that is one party across two rooms. And two rooms holding the same name
+     is not evidence of anything, so an ambiguous match moves nothing at all. */
+  if(rd){
+    const prev = prevNightKey(rd);
+    for(const [room, g] of Object.entries(tonight)){
+      const e = ROOMS[room];
+      if(!e || (e.seen && dateNum(e.seen) > rd)) continue;
+      if(e.nick) continue;                        // already labelled: nothing to carry in
+      const was = before[room];
+      if(was && was.guest && sameName(was.guest, g)) continue;   // same guest as before
+      const from = [];
+      for(const [src, b] of Object.entries(before)){
+        if(src === room || !b.nick || !sameName(b.guest, g)) continue;
+        const sn = dateNum(b.seen);
+        if(sn !== rd && sn !== prev) continue;
+        if(tonight[src] && sameName(tonight[src], g)) continue;  // still charging there
+        from.push(src);
+      }
+      if(from.length !== 1) continue;
+      const src = from[0];
+      e.nick = before[src].nick;
+      if(ROOMS[src]) delete ROOMS[src].nick;
+      moved.push(src + " → " + room + " (" + e.nick + ")");
+    }
+  }
   saveRooms();
   ledgerReconcile(tonight, rd);
   if(dropped.length)
     setTimeout(() => toast(t("n.reset") + dropped.join(" · "), true), 700);
+  /* Never silently: moving someone's label between rooms is exactly the kind of thing
+     that has to be visible the night it happens. */
+  if(moved.length)
+    setTimeout(() => toast(t("n.moved") + moved.join(" · "), true), 1100);
   if(watchHit.length)
     setTimeout(() => openWatchChangePrompt(watchHit), 900);
 }
