@@ -177,7 +177,7 @@ function seqConfig(){
    lost — which is what "the shortcut needed two presses" actually was. The helper is the
    only one that can wait reliably, so it sends the Enter itself. Data, not code: the
    delay lives in config and travels on the command line. */
-const TAU_ENTER_DEFAULT = {on: true, delay: 100};
+const TAU_ENTER_DEFAULT = {on: true, delay: 50};
 function tauEnterConfig(){
   let c = {};
   try{ c = hub.readConfig(); }catch(e){}
@@ -547,12 +547,16 @@ ipcMain.handle("sc-get", () => {
             available: process.platform === "win32" && !!tauPath()};
   }catch(e){ return {profiles: [], active: null, available: false}; }
 });
-/* Whether the helper presses the Enter after the τ. The delay stays where it is — it is
-   the on/off that anyone at the desk would ever need. */
-ipcMain.handle("sc-tauenter-set", (_e, on) => {
+/* Whether the helper presses the Enter after the τ, and how long it waits first. */
+ipcMain.handle("sc-tauenter-set", (_e, on, delay) => {
   try{
     const c = hub.readConfig();
-    c.tauEnter = {on: !!on, delay: tauEnterConfig().delay};
+    /* The right number is whatever protel turns out to need, and that is not something
+       this side can know — so it is settable, and out-of-range means "leave it alone"
+       rather than a wait nobody asked for. */
+    const d = (Number.isInteger(delay) && delay >= 0 && delay <= 2000)
+              ? delay : tauEnterConfig().delay;
+    c.tauEnter = {on: !!on, delay: d};
     hub.writeConfig(c);
   }catch(e){}
   tauStart();                                  // the helper takes its actions at spawn time

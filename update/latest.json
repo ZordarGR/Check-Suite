@@ -1,11 +1,11 @@
 {
-  "version": "1.17.3",
+  "version": "1.17.4",
   "type": "full",
-  "engine": "1.17.3",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.3/RecCheck-Setup.exe",
-  "setupSha256": "c97b120dbdc11afafc404cb658edd2498c9ed17e4185f342f4dee4d7a7e6004f",
+  "engine": "1.17.4",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.4/RecCheck-Setup.exe",
+  "setupSha256": "93f983439b7e366f2a878f6fe44f010a934451089d94f4947b0144ede8a254ff",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "e584141187ae2b7a129ce730fa8985bb0e56d7eb90f215a25bdb1a22a27917c6",
-  "notes": "The τ presses its own Enter. The shortcut that needed two presses was never failing — protel had not finished reacting to the τ before the Enter arrived. The helper now waits 100 ms and presses it, the way the invoice run already times its own keys."
+  "sha256": "921478371ac7346d3af8cfddedd55b7310717503e1dd3f0ad4a9345cba073594",
+  "notes": "The home screen now fits the window whatever is on it — the checklist scrolls inside its card instead of pushing the audit button below the fold. The τ waits 50 ms before its Enter, and that wait is now adjustable."
 }
