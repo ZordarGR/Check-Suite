@@ -123,6 +123,21 @@ body.onMenu #clList.moreBelow{
 body.onMenu #userBtn{top:clamp(10px,1.6vh,16px)}
 /* the one button that starts the night never gives up its place */
 body.onMenu #auditBtn{flex:0 0 auto}
+
+/* ---------- and it uses the width it has ----------
+   Fitting the window is not the same as showing everything at once: a 640px strip down
+   the middle of a 1600px screen still hid twenty tasks behind a scroll. The list now
+   flows into as many columns as the room allows — down one column, then across, the way
+   a list is read — and the block widens to match. One column is exactly the old 640px
+   layout, so a short list on any screen looks untouched.
+
+   --homeW and --clRows are set by layoutChecklist() from the space actually measured;
+   the CSS only says what to do with them. */
+body.onMenu{--homeW:640px}
+body.onMenu #landing{max-width:min(1560px,96vw)}
+body.onMenu #homeBar,body.onMenu #checklist,body.onMenu #auditBtn{max-width:var(--homeW)}
+body.onMenu #clList{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
+  grid-template-rows:repeat(var(--clRows,999),auto);column-gap:22px;align-content:start}
 .mcat{position:relative}
 .mcatBtn{background:var(--panel);border:1px solid var(--line);border-radius:9px;color:var(--dim);cursor:pointer;
   font-family:var(--mono);font-size:12px;letter-spacing:.1em;padding:8px 14px;transition:border-color .15s,color .15s}
@@ -417,9 +432,14 @@ body.hasMoves main{max-width:1330px}
 .otherPost .rrow .amt{color:var(--dim)}
 
 /* ---------- modal ---------- */
-#modalBg{display:none;position:fixed;inset:0;background:rgba(4,6,10,.72);z-index:100;align-items:center;justify-content:center}
+#modalBg{display:none;position:fixed;inset:0;background:rgba(4,6,10,.72);z-index:100;align-items:center;justify-content:center;padding:16px}
 #modalBg.open{display:flex}
+/* A dialog taller than the window used to be centred and simply cut off at BOTH ends —
+   no max-height, no scroll — so PROTEL SHORTCUTS lost its Done button as it grew, and
+   there was no way to reach it. It was already 970px tall at 1.17.2, past every window
+   height here. Now it never exceeds the window and scrolls inside itself instead. */
 #modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 24px;width:min(420px,92vw);
+  max-height:calc(100vh - 32px);overflow-y:auto;overscroll-behavior:contain;
   box-shadow:0 24px 60px rgba(0,0,0,.7)}
 #modal.wide{width:min(780px,94vw)}
 /* on-screen print preview — mirrors the @media print sheet styling on white paper */
@@ -441,7 +461,17 @@ body.hasMoves main{max-width:1330px}
 #modal input:focus,#modal select:focus{border-color:var(--amber)}
 #modal .mrow{display:flex;gap:10px}
 #modal .mrow>div{flex:1}
-#modal .actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+/* and the buttons stay put while the rest of it scrolls: the way out of a dialog should
+   never be something you have to go looking for. The negative bottom margin lets the
+   sticky row's own padding stand in for the modal's, so it sits flush at the bottom. */
+/* The dialog's own bottom padding is handed to the sticky row instead, so the row sits
+   flush against the bottom edge rather than floating 22px above it with the content
+   still showing underneath. Dialogs without an actions row keep their padding. */
+#modal:has(.actions){padding-bottom:0}
+#modal .actions{display:flex;gap:10px;justify-content:flex-end;
+  position:sticky;bottom:0;z-index:2;background:var(--panel);
+  padding:12px 0 22px;margin-top:20px;
+  box-shadow:0 -14px 18px -14px rgba(4,6,10,.95)}
 #modal .err{color:var(--red);font-size:12.5px;margin-top:10px;min-height:1em}
 
 /* toast */
@@ -1268,7 +1298,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.4";
+const APP_VERSION = "1.17.5";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1984,6 +2014,59 @@ let CLEDIT = false;        // edit mode on/off
 let CLEDITID = null;       // task id currently being edited in the form
 let CLTIER = "low";
 function saveCL(){ try{ localStorage.setItem("reccheck_checklist", JSON.stringify(CL)); }catch(e){} }
+/* How many columns the checklist should use, and how tall each one is.
+
+   Measured, not guessed: the space a column has is the gap between the top of the list
+   and the top of the audit button, which the flex layout has already settled. Both ends
+   are stable whatever the column count, so this does not chase its own tail — the row
+   below the list never moves because the list got shorter.
+
+   The width is capped so the card never eats the gutter that "Switch user" parks in. */
+const CL_COL = 268, CL_GAP = 22, CL_PAD = 18, CL_MAXCOLS = 4;
+function layoutChecklist(){
+  if(SCREEN !== "menu") return;
+  const list = $("#clList"), card = $("#checklist"), btn = $("#auditBtn"), ms = $("#menuScreen");
+  if(!list || !card || !btn || !ms) return;
+  const rows = list.children.length;
+  const setW = w => document.body.style.setProperty("--homeW", w + "px");
+  if(rows < 2){ document.body.style.setProperty("--clRows", "999"); setW(640); return; }
+
+  const rowH = list.children[0].getBoundingClientRect().height || 42;
+  const cs = getComputedStyle(card);
+  const chrome = parseFloat(cs.paddingBottom) + parseFloat(cs.marginBottom);
+  const avail = ms.getBoundingClientRect().bottom - list.getBoundingClientRect().top
+              - chrome - btn.getBoundingClientRect().height;
+  const perCol = Math.max(1, Math.floor(avail / rowH));
+
+  const landing = $("#landing").getBoundingClientRect().width
+                - parseFloat(getComputedStyle($("#landing")).paddingLeft) * 2;
+  /* "Switch user" parks in the gutter beside the card, and the gutter it needs is
+     measured against the WINDOW, not against #landing — the card is centred on screen,
+     so the space either side of it is what matters. Reserving against #landing instead
+     cost a whole column. Only reserved when that button is actually on screen; below
+     1000px it has already fallen back into the header row. */
+  const needGutter = window.innerWidth > 1000
+                     && getComputedStyle($("#userBtn")).display !== "none";
+  const roomForCard = Math.min(landing, needGutter ? window.innerWidth - 280 : Infinity);
+  const byWidth = Math.max(1, Math.floor((roomForCard - CL_PAD * 2 + CL_GAP) / (CL_COL + CL_GAP)));
+  const cap = Math.max(1, Math.min(byWidth, CL_MAXCOLS));
+  const apply = c => {
+    document.body.style.setProperty("--clRows", String(Math.ceil(rows / c)));
+    /* never NARROWER than the familiar single-column card — adding a second column must
+       not make the block shrink; it just splits the same 640px into two */
+    setW(c === 1 ? 640
+        : Math.min(Math.max(640, Math.round(c * CL_COL + (c - 1) * CL_GAP + CL_PAD * 2)),
+                   Math.round(roomForCard)));
+  };
+
+  let cols = Math.max(1, Math.min(Math.ceil(rows / perCol), cap));
+  apply(cols);
+  /* Arithmetic on an assumed row height is off by a row often enough to matter — rows
+     are not all the same height once a task title wraps. So rather than trust the sum,
+     look: while it still does not fit and there is width for another column, take it.
+     Bounded by the width cap, so this always ends. */
+  while(cols < cap && list.scrollHeight > list.clientHeight + 1) apply(++cols);
+}
 /* Whether there is more list under the fold. Cheap enough to run on every scroll, and
    it has to run on render and on resize too: both change the answer without a scroll. */
 function paintListFade(){
@@ -2004,7 +2087,8 @@ function renderChecklist(){
   $("#clHelp").style.display = CLEDIT ? "" : "none";
   if(CLEDIT) $("#clHelp").innerHTML = t("cl.help");
   $("#clDone").style.display = CLEDIT ? "" : "none";
-  if(!CL.length){ box.append(el("div","clEmpty", t("cl.empty"))); pushOverlay(); paintOverlayBtn(); return; }
+  if(!CL.length){ box.append(el("div","clEmpty", t("cl.empty"))); pushOverlay(); paintOverlayBtn();
+                  layoutChecklist(); paintListFade(); return; }
   pushOverlay();
   paintOverlayBtn();
   for(const task of clSorted()){
@@ -2041,6 +2125,7 @@ function renderChecklist(){
     row.append(btns);
     box.append(row);
   }
+  layoutChecklist();
   paintListFade();
 }
 let OVON = false;
@@ -4395,7 +4480,7 @@ document.addEventListener("click", e => { if(!e.target.closest(".mcat")) documen
 (() => {
   const box = $("#clList");
   if(box) box.addEventListener("scroll", paintListFade, {passive: true});
-  window.addEventListener("resize", paintListFade);
+  window.addEventListener("resize", () => { layoutChecklist(); paintListFade(); });
 })();
 $("#userBtn").onclick = e => { e.stopPropagation(); openProfiles(); };
 $("#userBtn").onmouseenter = () => { clearTimeout(UPTIPT); UPTIPT = setTimeout(upShowTip, 1000); };
