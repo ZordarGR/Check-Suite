@@ -32,7 +32,7 @@ contextBridge.exposeInMainWorld("reccheckShortcuts", {
   diag: (ms) => ipcRenderer.invoke("sc-diag", ms),
   helper: () => ipcRenderer.invoke("sc-helper"),
   tauLog: () => ipcRenderer.invoke("sc-taulog"),
-  tauEnterSet: (on) => ipcRenderer.invoke("sc-tauenter-set", on),
+  tauEnterSet: (on, delay) => ipcRenderer.invoke("sc-tauenter-set", on, delay),
   focusSet: (on, needle) => ipcRenderer.invoke("sc-focus-set", on, needle),
   focusPick: (ms) => ipcRenderer.invoke("sc-focus-pick", ms),
   clear: (action) => ipcRenderer.invoke("sc-clear", action),
