@@ -1,11 +1,11 @@
 {
-  "version": "1.17.7",
+  "version": "1.17.8",
   "type": "html",
   "engine": "1.17.6",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.6/RecCheck-Setup.exe",
   "setupSha256": "31f8275dc257e3c2966f95b00ef9faa3eafb0d99c5f78f46a782a5f545703edd",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "b43fa84789b0021b5ad40711151d7fd83a0018f46569d7af845f92d0a4880e1a",
-  "notes": "A guest who changes rooms keeps their nickname. The report only lists rooms that were charged, so a room somebody moved out of is simply absent from it — the nickname used to sit there for ever while the new room got none."
+  "sha256": "c913c6bf89841781da92dcc5ef650096638672dbc8d58c7af4d40aec82677f5e",
+  "notes": "The room pills are grouped by colour under DEPARTED / TURNOVER / ARRIVED headings instead of interleaved — three short blocks to read rather than a chequerboard to decode."
 }
