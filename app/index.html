@@ -1303,7 +1303,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.8";
+const APP_VERSION = "1.17.9";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1444,7 +1444,6 @@ en: {
   "mv.h.dep": "DEPARTED", "mv.h.arr": "ARRIVED", "mv.h.turn": "TURNOVER",
   "mv.guess": "occupant changed — inferred",
   "mv.from": "from the rate list of {d}",
-  "mv.cut": "left earlier than the list said — another guest was charging to this room",
   "mv.guessNote": "Dashed rooms are inferred from the guest name changing, not from real dates. Load any rate list in Tax Check — it carries every in-house guest's departure date, so one list answers for the nights ahead of it too.",
   "extra.dupe": "You have already added that serial by hand.",
   "extra.inReport": "That serial IS in tonight's report — close this and search for it.",
@@ -1640,7 +1639,6 @@ gr: {
   "mv.h.dep": "ΑΝΑΧΩΡΗΣΑΝ", "mv.h.arr": "ΑΦΙΞΕΙΣ", "mv.h.turn": "ΑΛΛΑΓΗ",
   "mv.guess": "άλλαξε ο ένοικος — εκτίμηση",
   "mv.from": "από τη λίστα δωματίων της {d}",
-  "mv.cut": "έφυγε νωρίτερα από ό,τι έλεγε η λίστα — άλλος πελάτης χρέωνε σε αυτό το δωμάτιο",
   "mv.guessNote": "Τα διακεκομμένα προκύπτουν από αλλαγή ονόματος, όχι από πραγματικές ημερομηνίες. Φόρτωσε οποιαδήποτε λίστα δωματίων στο Tax Check — έχει την ημερομηνία αναχώρησης κάθε ενοίκου, οπότε μία λίστα απαντά και για τις επόμενες βραδιές.",
   "extra.dupe": "Αυτός ο σειριακός έχει ήδη καταχωρηθεί χειροκίνητα.",
   "extra.inReport": "Αυτός ο σειριακός ΥΠΑΡΧΕΙ στην αποψινή αναφορά — κλείσε και αναζήτησέ τον.",
@@ -1913,7 +1911,6 @@ function syncRooms(){
     }
   }
   saveRooms();
-  ledgerReconcile(tonight, rd);
   if(dropped.length)
     setTimeout(() => toast(t("n.reset") + dropped.join(" · "), true), 700);
   /* Never silently: moving someone's label between rooms is exactly the kind of thing
@@ -4119,29 +4116,11 @@ function sameGuest(a, b){
   if(!A.length || !B.length) return true;
   return A.some(w => B.indexOf(w) >= 0);
 }
-/* The rate list is printed occasionally; the department report is opened every night.
-   So the nightly report is what keeps the ledger honest: if a room is charging under a
-   different guest than the one our ledger still has staying there, that stay ended by
-   this night, whatever date was printed on the list. Only shortens a stay, never
-   invents or extends one, and a later rate list overwrites it outright. */
-function ledgerReconcile(byRoom, night){
-  if(!night) return;
-  const led = loadMoves();
-  let touched = false;
-  for(const room of Object.keys(byRoom)){
-    const m = led[room];
-    if(!m) continue;
-    const g = byRoom[room];
-    for(const a of Object.keys(m)){
-      const A = Number(a), r = m[a];
-      if(!(A <= night && (r.d || 0) > night)) continue;   // not claiming this night
-      if(sameGuest(r.n, g)) continue;                     // same person: nothing to say
-      r.d = night; r.cut = "dept";
-      touched = true;
-    }
-  }
-  if(touched) saveLedger(led);
-}
+/* The second stay-shortening rule, removed for the same reason as the one in saveMoves:
+   it ended a stay whenever a room charged under a name the ledger did not recognise. The
+   desk does not want early checkouts deduced — it wants the dates protel holds, and it
+   handles any difference itself. A tolerant name comparison deciding someone had left was
+   a guess dressed as a correction, and it changed stored dates on the strength of it. */
 function dShort(k){
   k = Number(k) || 0;
   if(!k) return "";
@@ -4158,20 +4137,19 @@ function roomMoves(){
   if(!night) return out;
   const led = loadMoves();
   for(const room of Object.keys(led)){
-    let arr = false, dep = false, from = 0, cut = false;
+    let arr = false, dep = false, from = 0;
     const who = [];
     for(const a of Object.keys(led[room])){
       const r = led[room][a], A = Number(a), D = r.d || 0;
       if(A === night){ arr = true; from = Math.max(from, r.seen || 0); if(r.n) who.push("\u2192 " + r.n); }
       if(D === night){
         dep = true; from = Math.max(from, r.seen || 0);
-        if(r.cut) cut = true;
         if(r.n) who.push("\u2190 " + r.n);
       }
     }
     if(!arr && !dep) continue;
     out[room] = {kind: (arr && dep) ? "turn" : (arr ? "arr" : "dep"), who: who, sure: true,
-                 from: from, cut: cut};
+                 from: from};
   }
   /* A room no rate list has ever covered: all the department report alone can say is
      that the name under it changed. Never overrides a real date. */
@@ -4209,8 +4187,7 @@ function renderMoves(){
       const pill = el("div","mvPill mv-" + m.kind + (m.sure ? "" : " guess"), room);
       pill.title = t("mv." + m.kind) + (m.sure ? "" : " · " + t("mv.guess"))
                  + (m.who.length ? "\n" + m.who.join("\n") : "")
-                 + (m.from ? "\n" + t("mv.from", {d: dShort(m.from)}) : "")
-                 + (m.cut ? "\n" + t("mv.cut") : "");
+                 + (m.from ? "\n" + t("mv.from", {d: dShort(m.from)}) : "");
       grid.append(pill);
     }
     box.append(grid);
@@ -4973,30 +4950,22 @@ function saveMoves(rate){
   let wrote=0,why="";
   try{
     const led=loadLedger(), night=rate.dateKey||0;
-    /* Truncating a stay is only ever allowed on a date the print actually gave us. A
-       date inferred from the newest arrival is good enough to stamp a reservation with,
-       and nowhere near good enough to declare someone's stay over. */
-    const sure=!!night&&rate.dateSure!==false;
+    /* Record the dates the list actually carries, and nothing else.
+       There used to be a rule here that shortened a stay whenever a room's arrival date
+       did not match what was stored — meant to catch early checkouts. It keyed on the
+       arrival, so an arrival that parsed even slightly differently read as "different
+       reservation, the old one must be over" and cut a running stay back to the list's own
+       date. On the night of 30/08 it manufactured 83 departures against 1 arrival, with
+       every false departure landing exactly on the list date. Rooms 73, 75, 91, 98, 120,
+       125 and 128 were all cut to 30/08 while protel had them staying to September.
+       The desk does not want early checkouts inferred; it wants the dates in the system. */
     for(const room of Object.keys(rate.all)){
-      const seenArr={};
       for(const r of rate.all[room]){
         const a=dkey(r.arr), d=dkey(r.dep);
         if(!a)continue;
-        seenArr[a]=1;
         const m=led[room]=led[room]||{};
         // a later list wins: that is how an extended stay corrects its departure date
         if(!m[a]||night>=(m[a].seen||0)){m[a]={d:d||0,n:r.name||"",seen:night};wrote++;}
-      }
-      /* This list says who was in that room on this night. Any reservation we still hold
-         that claims the same room on the same night, under a different arrival date, is
-         contradicted by it and must have ended by now — two guests cannot both be in one
-         room. Only rooms the list actually mentions are touched, so a partial print can
-         never truncate a stay it simply did not include. */
-      const m=led[room]||{};
-      if(sure)for(const a of Object.keys(m)){
-        const A=Number(a);
-        if(seenArr[A])continue;
-        if(A<=night&&(m[a].d||0)>night){ m[a].d=night; m[a].cut=1; }
       }
     }
     /* keep it bounded without needing a clock: drop anything that ended long before the

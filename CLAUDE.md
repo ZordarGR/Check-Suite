@@ -3,7 +3,7 @@
 Read `.reccheck-notes.md` for the project itself — architecture, the release process, the
 landmines, the version history. This file is only about how to work with him.
 
-## His three rules, stated by him
+## His rules, stated by him
 
 **1. Never guess at a vague prompt. Ask, as many times as it takes.**
 He would rather answer a question than receive the wrong thing built well. Two misses came
@@ -32,6 +32,33 @@ He rephrased it himself to the above. Keep it in this form.
 He is right more often than not — he found the τ intermittency himself after three releases
 of my guessing — so this is not licence to argue. It is licence to say plainly when
 something is wrong, including when he has just asserted it.
+
+**4. Build what he asked for. Nothing beside it.**
+If a better approach suggests itself, put it to him and wait. No answer is not permission —
+without an explicit yes, do nothing.
+
+This rule exists because two features he never asked for silently corrupted his data: a
+rule that shortened a stay when a room's arrival date did not match the ledger, and a
+second that ended a stay when a room charged under an unrecognised name. Both were invented
+to catch "early checkouts", which the desk does not care about and handles its own way. On
+the night of 30/08 they turned protel's real dates into 83 departures against 1 arrival.
+Reasonable-sounding additions are the dangerous kind, because nothing checks them against a
+requirement that was never made.
+
+**Record the data the system holds. Do not deduce, correct or improve it.**
+
+## The hard constraint
+
+**protel is not his.** It is vendor-managed software on the hotel's PC, which is also not
+his. Nothing this tool does may risk breaking protel's operation — not "probably fine",
+not "small risk". That is the entire reason RecCheck is an external tool that reads
+reports rather than anything that touches protel's installation, files or data.
+
+The same rule governs the machine: nothing installed, nothing configured, no admin. Every
+build, test and release happens in the cloud container.
+
+When something new would interact with protel at all, say plainly what touches it and what
+does not, and let him decide. Do not fold that judgement into a recommendation.
 
 ## What follows from those
 
