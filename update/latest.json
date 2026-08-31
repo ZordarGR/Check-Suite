@@ -1,11 +1,11 @@
 {
-  "version": "1.17.9",
-  "type": "html",
-  "engine": "1.17.6",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.6/RecCheck-Setup.exe",
-  "setupSha256": "31f8275dc257e3c2966f95b00ef9faa3eafb0d99c5f78f46a782a5f545703edd",
+  "version": "1.17.10",
+  "type": "full",
+  "engine": "1.17.10",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.10/RecCheck-Setup.exe",
+  "setupSha256": "e56e6b19da6b303c8143b85cc0e7b09b2b99f917eb03ade839259cf73b4f640e",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "05da9cae6f49f621c27426254a6b6c785a5bbbcbc9ca88d75177b8a514ba701e",
-  "notes": "The ledger records the dates protel holds and nothing else. Two rules that shortened a stay on inference — one on a mismatched arrival date, one on an unrecognised name — are gone; between them they turned one night into 83 departures against 1 arrival."
+  "sha256": "bcfdb2b0ceab8d928f0580cf0f591b85cb539e1d2bce104f2d71f675f433dcd1",
+  "notes": "Caps Lock shows on screen. The keyboard has no light for it and this PC draws nothing, so the state used to flip silently mid-passport. The icon now flashes in the middle of the screen the moment it changes. It can be switched off in PROTEL SHORTCUTS."
 }

@@ -1303,7 +1303,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.9";
+const APP_VERSION = "1.17.10";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1378,6 +1378,9 @@ en: {
   "sc.tauEnterOn": "The helper waits for protel to react, then presses Enter \u2014 the same way the invoice run times its own keys.",
   "sc.tauEnterWait": "wait",
   "sc.tauEnterOff": "The \u03c4 is sent on its own. Press Enter yourself, and not too quickly.",
+  "sc.capsLabel": "Show Caps Lock on screen",
+  "sc.capsOn": "The moment Caps Lock changes, the icon flashes in the middle of the screen for 1.5 seconds. The key itself is untouched.",
+  "sc.capsOff": "Caps Lock changes silently. Nothing watches the keyboard.",
   "sc.moves": "Why the room pills say what they say",
   "dbg.menu": "DEBUG", "dbg.title": "DEBUG",
   "dbg.intro": "Diagnostics for the \u03c4 shortcut and the helper behind it. Nothing here changes anything \u2014 it only reports.",
@@ -1569,6 +1572,9 @@ gr: {
   "sc.tauEnterOn": "Ο βοηθός περιμένει να αντιδράσει το protel και μετά πατάει Enter — όπως ακριβώς κάνει και η ακολουθία του τιμολογίου.",
   "sc.tauEnterWait": "αναμονή",
   "sc.tauEnterOff": "Το τ στέλνεται μόνο του. Πάτα εσύ το Enter, και όχι πολύ γρήγορα.",
+  "sc.capsLabel": "Ένδειξη Caps Lock στην οθόνη",
+  "sc.capsOn": "Μόλις αλλάξει το Caps Lock, το εικονίδιο εμφανίζεται στο κέντρο της οθόνης για 1,5 δευτερόλεπτο. Το ίδιο το πλήκτρο δεν θίγεται.",
+  "sc.capsOff": "Το Caps Lock αλλάζει σιωπηρά. Τίποτα δεν παρακολουθεί το πληκτρολόγιο.",
   "sc.moves": "Γιατί λένε αυτό τα πλακίδια δωματίων",
   "dbg.menu": "DEBUG", "dbg.title": "DEBUG",
   "dbg.intro": "Διαγνωστικά για τη συντόμευση τ και τον βοηθό πίσω της. Τίποτα εδώ δεν αλλάζει κάτι — μόνο αναφέρει.",
@@ -2440,6 +2446,7 @@ function renderShortcuts(){
   });
   renderFocusGate();
   renderTauEnter();
+  renderCaps();
 }
 /* ---- the Enter that follows the τ ----
    The τ is one keypress and protel takes a moment to react to it before it will accept
@@ -2478,6 +2485,33 @@ function renderTauEnter(){
   num.onchange = () => {
     const v = parseInt(num.value, 10);
     push(Number.isInteger(v) && v >= 0 && v <= 2000 ? v : undefined);
+  };
+}
+/* ---- Caps Lock on screen ----
+   No light on the keyboard and nothing drawn by this machine, so the state changes
+   silently in the middle of a passport entry. Only the helper's hook can see the key
+   while protel has the focus. It is a switch because the hook is what sees it: turning
+   this off on a mouse-only profile takes the keyboard hook back out of the input path
+   entirely, rather than leaving it installed with nothing to do. */
+function renderCaps(){
+  const box = $("#scCapsBox");
+  if(!box) return;
+  const sc = window.reccheckShortcuts;
+  const cp = (SCSTATE && SCSTATE.caps) || {on: true};
+  box.innerHTML =
+    '<div class="scFocus">' +
+      '<label class="scFocusTop"><input type="checkbox" id="scCapsOn"' + (cp.on ? " checked" : "") + '>' +
+        escapeHtml(t("sc.capsLabel")) + '</label>' +
+      '<div class="scFocusSub" id="scCapsSub">' +
+        escapeHtml(cp.on ? t("sc.capsOn") : t("sc.capsOff")) + '</div>' +
+    '</div>';
+  const chk = $("#scCapsOn"), sub = $("#scCapsSub");
+  chk.onchange = async () => {
+    const st = await sc.capsSet(chk.checked).catch(() => null);
+    const on = st ? st.on : chk.checked;
+    if(SCSTATE) SCSTATE.caps = {on};
+    chk.checked = on;
+    sub.textContent = on ? t("sc.capsOn") : t("sc.capsOff");
   };
 }
 /* ---- the shortcuts belong to protel ----
@@ -2852,6 +2886,7 @@ function openShortcuts(){
       '<div id="scBody"></div>' +
       '<div id="scFocusBox"></div>' +
       '<div id="scTauBox"></div>' +
+      '<div id="scCapsBox"></div>' +
       '<div id="scHelp" style="margin-top:12px;font-size:12px;line-height:1.5"></div>' +
       (st.available ? "" : '<div class="err">' + t("sc.unavailable") + '</div>') +
       '<div class="actions"><button class="btn amber" id="scOk">' + t("sc.done") + '</button></div>');
