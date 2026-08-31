@@ -1,12 +1,18 @@
-## RecCheck 1.17.6 — Windows
+## RecCheck 1.17.10 — Windows
 
 Nightly POS receipt audit for the protel checkcharge1 report (.oxps). Everything runs locally — no data leaves the machine.
 
-### Alt + N
+### Caps Lock on screen
 
-A third thing you can bind to a spare mouse button: **Alt + N**, protel's *new* on the passport screen. One press starts the next guest without reaching for the keyboard.
+This keyboard has no Caps Lock light and the PC draws nothing of its own, so the state could flip silently in the middle of a passport entry and only show up in the typing.
 
-It sits in *PROTEL SHORTCUTS* alongside the τ and Alt + F4, and works the same way — bind it to any side button or key combination, and it obeys the same "only while protel is in front" setting as the rest.
+Now the moment it changes, the icon flashes in the **middle of the screen** — the same **A** the laptops draw, struck through when it goes off — at 35% opacity for a second and a half, then it is gone. Nothing sits on screen the rest of the time.
+
+It has its own window, so it is there whether or not the checklist overlay is up, and it stays after the night's tasks are ticked and the overlay puts itself away.
+
+**It can be switched off** in *PROTEL SHORTCUTS*. That switch matters: seeing the key requires the helper's keyboard hook, which was not installed before on a mouse-only set of shortcuts. It passes every key straight through and swallows nothing, but turning this off takes it back out rather than leaving it there with nothing to do.
+
+Nothing is written to protel, nothing is read from it, and no key other than Caps Lock is looked at.
 
 ### Install
 
