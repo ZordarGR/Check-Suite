@@ -201,6 +201,15 @@ function focusSpec(){
   const f = focusConfig();
   return f.on ? ["focus=" + f.needle] : [];
 }
+/* This keyboard has no Caps Lock light and Windows draws nothing either, so the state
+   changes silently under a passport entry. Only the helper's hook can see the key while
+   protel has the focus, so the helper reports it and the app flashes it. */
+function capsConfig(){
+  let c = {};
+  try{ c = hub.readConfig(); }catch(e){}
+  return {on: c.capsFlash !== false};          // absent config means on
+}
+function capsSpec(){ return capsConfig().on ? ["caps=on"] : []; }
 function seqSpec(){
   const q = seqConfig();
   return "seq:" + q.keys.join(",") + "@" + q.gap;
@@ -293,15 +302,39 @@ function tauStart(){
   try{ binds = activeBinds(); }catch(e){}
   const specs = ACTIONS.filter(a => binds[a])
     .map(a => binds[a] + "=" + (a === "seq" ? seqSpec() : a === "tau" ? tauSpec() : a));
-  if(!specs.length){                        // nothing bound in this profile — don't hook at all
+  const caps = capsConfig();
+  /* nothing bound and nothing to watch — don't hook at all */
+  if(!specs.length && !caps.on){
     TAUINFO = {state: "idle", exe: exe};
+    capsHide();
     return;
   }
   /* The gate is passed to the helper, never applied here: only the hook thread knows
      what was in front at the instant of the press. */
-  const args = ["bind", String(process.pid)].concat(focusSpec()).concat(specs);
+  const args = ["bind", String(process.pid)].concat(focusSpec()).concat(capsSpec()).concat(specs);
   try{
-    const child = spawn(exe, args, {stdio: "ignore", windowsHide: true});
+    /* stdout is only opened when something is expected on it. The helper writes one
+       short line per Caps Lock change and nothing else; a full pipe would stall the
+       hook thread, so the lines are read as they arrive and never buffered up. */
+    const child = spawn(exe, args,
+      {stdio: ["ignore", caps.on ? "pipe" : "ignore", "ignore"], windowsHide: true});
+    if(caps.on && child.stdout){
+      let buf = "";
+      child.stdout.setEncoding("utf8");
+      child.stdout.on("data", d => {
+        buf += d;
+        if(buf.length > 4096) buf = buf.slice(-1024);   // never grow on unexpected output
+        let i;
+        while((i = buf.indexOf("\n")) >= 0){
+          const line = buf.slice(0, i).trim();
+          buf = buf.slice(i + 1);
+          if(line === "CAPS:1" || line === "CAPS:0"){
+            if(TAU === child) capsFlash(line === "CAPS:1");
+          }
+        }
+      });
+      child.stdout.on("error", () => {});
+    }
     TAU = child;
     const started = Date.now();
     TAUINFO = {state: "running", exe: exe, pid: child.pid, specs: args.slice(2), since: started};
@@ -312,6 +345,7 @@ function tauStart(){
       TAU = null;
       TAUINFO = {state: "exited", exe: exe, code: code, signal: signal,
                  specs: specs, ranMs: Date.now() - started};
+      capsHide();
     });
     child.on("error", (err) => {
       if(TAU !== child) return;
@@ -375,6 +409,55 @@ function createOverlay(){
   });
   overlayWin.on("blur", () => { if(INTERACT) setInteract(false); });
   overlayWin.on("closed", () => { overlayWin = null; INTERACT = false; });
+}
+/* ---- Caps Lock flash: its own window, so it is there whether or not the checklist
+   overlay is up and stays after the night's tasks are ticked and that one puts itself
+   away. Transparent, click-through and never focusable — protel keeps the keyboard.
+   Created on the first flash and then kept hidden between them rather than rebuilt,
+   because a window built from scratch cannot animate in fast enough to be read. ---- */
+let capsWin = null, CAPS_LAST = null;
+function capsBounds(){
+  /* Dead centre of the screen itself, not of the work area: "centre" means centre,
+     and the taskbar must not push the icon off it. bounds, not workArea, for that. */
+  const b = screen.getPrimaryDisplay().bounds;
+  const W = 170, H = 170;
+  return {x: Math.round(b.x + (b.width - W) / 2), y: Math.round(b.y + (b.height - H) / 2),
+          width: W, height: H};
+}
+function createCaps(){
+  if(capsWin) return;
+  capsWin = new BrowserWindow(Object.assign(capsBounds(), {
+    transparent: true, frame: false, alwaysOnTop: true, skipTaskbar: true,
+    focusable: false, resizable: false, movable: false, hasShadow: false, show: false,
+    webPreferences: {contextIsolation: true, preload: path.join(__dirname, "caps-preload.js")}
+  }));
+  capsWin.setIgnoreMouseEvents(true);
+  capsWin.setAlwaysOnTop(true, "screen-saver");
+  capsWin.loadURL(pathToFileURL(path.join(__dirname, "caps.html")).toString());
+  capsWin.webContents.once("did-finish-load", () => {
+    /* a change that landed while the page was still loading must not be lost */
+    if(capsWin && CAPS_LAST !== null) capsFlash(CAPS_LAST);
+  });
+  capsWin.on("closed", () => { capsWin = null; });
+}
+function capsFlash(on){
+  if(process.platform !== "win32") return;
+  if(!capsConfig().on) return;
+  CAPS_LAST = !!on;
+  if(!capsWin){ createCaps(); return; }        // did-finish-load replays it
+  try{
+    if(!capsWin.webContents.isLoading()){
+      capsWin.setBounds(capsBounds());          // the work area can change under us
+      capsWin.showInactive();
+      capsWin.setAlwaysOnTop(true, "screen-saver");
+      capsWin.webContents.send("caps-flash", {on: !!on});
+      CAPS_LAST = null;
+    }
+  }catch(e){}
+}
+function capsHide(){
+  if(capsWin){ try{ capsWin.destroy(); }catch(e){} capsWin = null; }
+  CAPS_LAST = null;
 }
 function destroyOverlay(){
   if(overlayWin){ try{ overlayWin.destroy(); }catch(e){} overlayWin = null; }
@@ -543,9 +626,22 @@ ipcMain.handle("sc-get", () => {
   try{
     const {list, active} = readProfiles();
     return {profiles: list, active, seq: seqConfig(), focus: focusConfig(),
-            tauEnter: tauEnterConfig(),
+            tauEnter: tauEnterConfig(), caps: capsConfig(),
             available: process.platform === "win32" && !!tauPath()};
   }catch(e){ return {profiles: [], active: null, available: false}; }
+});
+/* The pill has finished fading — put the window away until the next change. */
+ipcMain.handle("caps-gone", () => {
+  try{ if(capsWin) capsWin.hide(); }catch(e){}
+  return true;
+});
+/* Whether the Caps Lock change is flashed. Turning it off also takes the keyboard hook
+   back out of the input path, since nothing else on a mouse-only profile needs it. */
+ipcMain.handle("sc-caps-set", (_e, on) => {
+  try{ const c = hub.readConfig(); c.capsFlash = !!on; hub.writeConfig(c); }catch(e){}
+  if(!capsConfig().on) capsHide();
+  tauStart();                                  // the helper takes this at spawn time
+  return capsConfig();
 });
 /* Whether the helper presses the Enter after the τ, and how long it waits first. */
 ipcMain.handle("sc-tauenter-set", (_e, on, delay) => {

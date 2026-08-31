@@ -2,12 +2,15 @@
 //   rc-tbind.exe detect <parentPid>
 //       -> waits for a middle/X1/X2 press or a key combo, prints "BTN:<code>"
 //          or "KEY:<mods>-<vk>", exits
-//   rc-tbind.exe bind <parentPid> [focus=<needle>] <trigger>=<action> [<trigger>=<action> ...]
+//   rc-tbind.exe bind <parentPid> [focus=<needle>] [caps=on] <trigger>=<action> [...]
 //       -> swallows each trigger system-wide and performs its action instead.
 //          With focus=<needle> a trigger only fires while the window in front matches
 //          that needle on its process name, class or title; anywhere else the press is
 //          passed through untouched, so the button stays a button. A window we cannot
 //          read anything about is allowed: the gate never blocks what it cannot see.
+//          With caps=on it also prints "CAPS:1" / "CAPS:0" the instant Caps Lock is
+//          toggled anywhere on the machine, so the app can show it. This observes only:
+//          the key is never swallowed and never altered, and no other key is reported.
 //   rc-tbind.exe fg <parentPid> [delayMs]
 //       -> waits, then prints "FG<tab>exe<tab>class<tab>title" for whatever is in front,
 //          so the gate can be pointed at the real protel window instead of a guess
@@ -106,6 +109,7 @@ static class TBind {
   const uint WM_QUIT       = 0x0012;
   const uint WM_APP_SEND   = 0x8000 + 1;
   const uint WM_APP_BLOCK  = 0x8000 + 2;
+  const uint WM_APP_CAPS   = 0x8000 + 3;
   const uint KEYEVENTF_UNICODE = 0x0004, KEYEVENTF_KEYUP = 0x0002, KEYEVENTF_EXTENDEDKEY = 0x0001;
   const uint WM_INPUTLANGCHANGEREQUEST = 0x0050;
   const uint KLF_ACTIVATE = 1;
@@ -115,6 +119,7 @@ static class TBind {
   const ushort VK_T = 0x54, VK_F4 = 0x73, VK_RETURN = 0x0D, VK_N = 0x4E;
   const int VK_SHIFT = 0x10, VK_CONTROL = 0x11, VK_MENU = 0x12;
   const int VK_LWIN = 0x5B, VK_RWIN = 0x5C;
+  const int VK_CAPITAL = 0x14;
   const char TAU = 'τ';
   const long GREEK = 0x0408;
 
@@ -142,6 +147,7 @@ static class TBind {
   [DllImport("user32.dll")] static extern uint GetQueueStatus(uint flags);
   [DllImport("user32.dll")] static extern uint MapVirtualKey(uint code, uint mapType);
   [DllImport("user32.dll")] static extern short GetAsyncKeyState(int vk);
+  [DllImport("user32.dll")] static extern short GetKeyState(int vk);
   [DllImport("user32.dll")] static extern bool GetGUIThreadInfo(uint idThread, ref GUITHREADINFO gui);
   [DllImport("user32.dll")] static extern int GetKeyboardLayoutList(int n, [Out] IntPtr[] list);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr hWnd, StringBuilder s, int n);
@@ -165,6 +171,16 @@ static class TBind {
   static HookProc keepMouse, keepKeys;   // prevent the delegates from being garbage-collected
   static IntPtr hook = IntPtr.Zero, kbHook = IntPtr.Zero;
   static int mode = 0;                   // 1 = detect, 2 = bind
+  /* Caps Lock has no light on this keyboard and Windows shows nothing, so the app draws
+     it. The hook is the only thing that sees the key while protel has the focus.
+     The state is TRACKED, not read back: a low-level hook fires before Windows has
+     applied the toggle, so reading it there returns the value the press is about to
+     replace. Seeded once from the OS, then flipped on each press — and the hook sees
+     every press on the machine, injected ones included, so it cannot drift. Auto-repeat
+     sends a run of DOWNs for one physical press and toggles once, hence capsDown. */
+  static bool capsReport = false;
+  static bool capsOn = false;
+  static bool capsDown = false;
   static uint mainTid = 0;
   static Thread watchdog;                // static ref so it can never be collected
   class Bind { public int action; public ushort[] keys; public int gap; public bool thenEnter; }
@@ -668,6 +684,18 @@ static class TBind {
         bool down = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
         bool up   = msg == WM_KEYUP   || msg == WM_SYSKEYUP;
         KBDLLHOOKSTRUCT k = (KBDLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(KBDLLHOOKSTRUCT));
+        /* Before every other test, and outside the injected filter: a Caps Lock toggled
+           by anything at all is still a Caps Lock the user needs to see. Nothing is
+           returned from here — the key carries on to whatever has the focus untouched. */
+        if(capsReport && k.vkCode == VK_CAPITAL){
+          if(down){
+            if(!capsDown){
+              capsDown = true;
+              capsOn = !capsOn;
+              PostThreadMessage(mainTid, WM_APP_CAPS, (IntPtr)(capsOn ? 1 : 0), IntPtr.Zero);
+            }
+          }else if(up) capsDown = false;
+        }
         if((k.flags & LLKHF_INJECTED) == 0 && !IsModifierVk(k.vkCode)){
           if(mode == 1 && down){
             try{ Console.Out.Write("KEY:" + CurMods() + "-" + k.vkCode + "\n"); Console.Out.Flush(); }catch(Exception){}
@@ -823,7 +851,7 @@ static class TBind {
     try{ string p = CrashPath(); if(p != null) System.IO.File.Delete(p); }catch(Exception){}
   }
 
-  const string VER = "v8";
+  const string VER = "v9";
 
   static int Main(string[] args){
     int parentPid;
@@ -874,6 +902,9 @@ static class TBind {
       for(int i = 2; i < args.Length; i++){
         /* "focus=PROTEL" — everything else is a trigger. An empty value means the gate
            is off, which is also what happens when the argument is absent. */
+        /* "caps=on" — report Caps Lock changes on stdout. Installs the keyboard hook
+           on its own, so it works for a profile whose triggers are all mouse buttons. */
+        if(args[i] == "caps=on"){ capsReport = true; continue; }
         if(args[i].StartsWith("focus=")){
           string needle = args[i].Substring(6).Trim();
           focusNeedle = needle.Length > 0 ? needle.ToUpperInvariant() : null;
@@ -881,7 +912,7 @@ static class TBind {
         }
         ParseBind(args[i]);
       }
-      if(binds.Count == 0) return 2;
+      if(binds.Count == 0 && !capsReport) return 2;
     }else return 2;
 
     ClearCrash();
@@ -919,9 +950,16 @@ static class TBind {
     keepKeys  = KeyCallback;
     hook = SetWindowsHookEx(WH_MOUSE_LL, keepMouse, mod, 0);
     // the keyboard hook is only worth installing when something actually needs it
-    bool wantKeys = mode == 1;
+    bool wantKeys = mode == 1 || capsReport;
     foreach(string key in binds.Keys) if(key.Length > 0 && key[0] == 'k') wantKeys = true;
     if(wantKeys) kbHook = SetWindowsHookEx(WH_KEYBOARD_LL, keepKeys, mod, 0);
+    /* The one read of the OS's own toggle. Best effort: if it is wrong the very first
+       flash says the wrong word and every one after it is right, because from here the
+       state is the hook's. Report it at once so the app starts from the truth too. */
+    if(capsReport){
+      capsOn = (GetKeyState(VK_CAPITAL) & 1) != 0;
+      try{ Console.Out.Write("CAPS:" + (capsOn ? 1 : 0) + "\n"); Console.Out.Flush(); }catch(Exception){}
+    }
     if(hook == IntPtr.Zero && kbHook == IntPtr.Zero) return 3;
 
     MSG msg;
@@ -931,6 +969,10 @@ static class TBind {
       try{
         if(msg.message == WM_APP_SEND){ QueueSend(msg.wParam.ToInt32()); continue; }
         if(msg.message == WM_APP_BLOCK){ LogBlocked(); continue; }
+        if(msg.message == WM_APP_CAPS){
+          try{ Console.Out.Write("CAPS:" + msg.wParam.ToInt32() + "\n"); Console.Out.Flush(); }catch(Exception){}
+          continue;
+        }
         TranslateMessage(ref msg);
         DispatchMessage(ref msg);
       }catch(Exception e){ WriteCrash("loop", e); }
