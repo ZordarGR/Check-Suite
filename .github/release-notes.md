@@ -1,18 +1,20 @@
-## RecCheck 1.17.10 — Windows
+## RecCheck 1.17.11 — Windows
 
 Nightly POS receipt audit for the protel checkcharge1 report (.oxps). Everything runs locally — no data leaves the machine.
 
-### Caps Lock on screen
+### The helper stands on its own
 
-This keyboard has no Caps Lock light and the PC draws nothing of its own, so the state could flip silently in the middle of a passport entry and only show up in the typing.
+`rc-tbind.exe` used to be a child of RecCheck: it started when you opened the app and died with it. It does not any more. It starts with Windows and keeps running with RecCheck closed.
 
-Now the moment it changes, the icon flashes in the **middle of the screen** — the same **A** the laptops draw, struck through when it goes off — at 35% opacity for a second and a half, then it is gone. Nothing sits on screen the rest of the time.
+**Caps Lock, always.** This keyboard has no Caps Lock light and the PC draws no on-screen notice, so the state could flip silently in the middle of a passport entry. Now the icon — the same **A** the laptops draw, struck through when it goes off — flashes in the middle of the screen at 35% for a second and a half, whether or not RecCheck is open. It has to run at login for that, which is what changed here.
 
-It has its own window, so it is there whether or not the checklist overlay is up, and it stays after the night's tasks are ticked and the overlay puts itself away.
+**protel's shortcuts still belong to RecCheck.** They fire only while RecCheck is running, and the helper works that out from your machine rather than being told. The **mouse hook goes in only while RecCheck is up and comes straight back out when you close it** — so a PC with RecCheck closed carries no mouse hook at all, exactly the scope it had when RecCheck started the helper itself.
 
-**It can be switched off** in *PROTEL SHORTCUTS*. That switch matters: seeing the key requires the helper's keyboard hook, which was not installed before on a mouse-only set of shortcuts. It passes every key straight through and swallows nothing, but turning this off takes it back out rather than leaving it there with nothing to do.
+**It can be switched off** in *PROTEL SHORTCUTS* → *Start with Windows*. Off means the helper only runs while RecCheck is open, and nothing starts at login. Uninstalling RecCheck removes the login entry too.
 
-Nothing is written to protel, nothing is read from it, and no key other than Caps Lock is looked at.
+Your bindings now travel in a small file the helper re-reads when it changes, instead of on its command line — changing a shortcut in the app takes effect without restarting anything.
+
+Nothing is written to protel and nothing is read from it.
 
 ### Install
 

@@ -201,15 +201,10 @@ function focusSpec(){
   const f = focusConfig();
   return f.on ? ["focus=" + f.needle] : [];
 }
-/* This keyboard has no Caps Lock light and Windows draws nothing either, so the state
-   changes silently under a passport entry. Only the helper's hook can see the key while
-   protel has the focus, so the helper reports it and the app flashes it. */
-function capsConfig(){
-  let c = {};
-  try{ c = hub.readConfig(); }catch(e){}
-  return {on: c.capsFlash !== false};          // absent config means on
+function focusSpec(){
+  const f = focusConfig();
+  return f.on ? ["focus=" + f.needle] : [];
 }
-function capsSpec(){ return capsConfig().on ? ["caps=on"] : []; }
 function seqSpec(){
   const q = seqConfig();
   return "seq:" + q.keys.join(",") + "@" + q.gap;
@@ -256,7 +251,7 @@ function activeBinds(){
   const p = list.find(x => x.id === active);
   return (p && p.binds) || {};
 }
-let TAU = null, TAU_DETECT = null;
+let TAU_DETECT = null;          // the short-lived `detect` child; the standalone is not ours to hold
 /* Why the shortcuts are or are not working, in a form the app can show the user.
    Every failure below used to end in an empty catch, so a machine where the helper
    never starts looked exactly like one where nothing was bound. */
@@ -268,7 +263,56 @@ function tauPath(){
   for(const c of cands){ try{ if(fs.existsSync(c)) return c; }catch(e){} }
   return null;
 }
-function tauStop(){ if(TAU){ try{ TAU.kill(); }catch(e){} TAU = null; } }
+/* rc-tbind is NOT a child of this app any more. It starts at Windows login, keeps the
+   Caps Lock indicator going with RecCheck closed, and only fires protel's shortcuts
+   while RecCheck is also running — it works that out from our process, we do not tell
+   it. So there is no child handle to kill here: asking it to stand down is a verb. */
+function tauStop(){ return helperVerb("stop"); }
+/* One short line on stdout: "RCTBIND <on|off> <running|stopped> <ver>". */
+function helperVerb(verb){
+  return new Promise(res => {
+    const exe = tauPath();
+    if(process.platform !== "win32" || !exe){ res({available: false, on: false, running: false}); return; }
+    let out = "", done = false;
+    const fin = () => {
+      if(done) return; done = true;
+      const m = /^RCTBIND\s+(on|off)\s+(running|stopped)\s+(\S+)/m.exec(out);
+      res(m ? {available: true, on: m[1] === "on", running: m[2] === "running", ver: m[3]}
+            : {available: true, on: false, running: false, err: (out.trim() || "no answer").slice(0, 120)});
+    };
+    try{
+      const child = spawn(exe, [verb], {windowsHide: true});
+      child.stdout.on("data", d => { out += d; });
+      child.on("exit", fin);
+      child.on("error", fin);
+      setTimeout(fin, 4000);                  // never leave the settings panel waiting
+    }catch(e){ fin(); }
+  });
+}
+/* The bindings used to travel on the command line, because this app started the helper.
+   It does not any more, so they travel in a file the helper re-reads when its write time
+   changes. One token per line — the same words that used to be arguments. */
+function bindsPath(){
+  const base = process.env.LOCALAPPDATA;
+  if(!base) return null;
+  return path.join(base, "RecCheck", "rc-tbind-binds.txt");
+}
+function writeBinds(){
+  const f = bindsPath();
+  if(!f) return false;
+  let binds = {};
+  try{ binds = activeBinds(); }catch(e){}
+  const lines = ["# written by RecCheck — edited here has no effect, use the app"]
+    .concat(focusSpec())
+    .concat(ACTIONS.filter(a => binds[a])
+      .map(a => binds[a] + "=" + (a === "seq" ? seqSpec() : a === "tau" ? tauSpec() : a)));
+  try{
+    const fs = require("fs");
+    fs.mkdirSync(path.dirname(f), {recursive: true});
+    fs.writeFileSync(f, lines.join("\r\n") + "\r\n");
+    return true;
+  }catch(e){ return false; }
+}
 /* kill any rc-tbind left over from a previous run (incl. crashed/old versions) */
 function tauKillStrays(cb){
   if(process.platform !== "win32"){ if(cb) cb(); return; }
@@ -293,71 +337,29 @@ function tauCrash(){
     return txt.trim().split(/\r?\n/).slice(0, 4).join(" | ").slice(0, 400) || null;
   }catch(e){ return null; }
 }
+/* Publish the current bindings and make sure the helper is running. It may already be
+   — started at login, or left over from before this app opened — and that is the normal
+   case now rather than the exception. Spawned DETACHED and unref'd: it has to outlive
+   us, which is the entire point of the change. */
 function tauStart(){
-  tauStop();
   if(process.platform !== "win32"){ TAUINFO = {state: "not-windows"}; return; }
   const exe = tauPath();
   if(!exe){ TAUINFO = {state: "no-exe"}; return; }
-  let binds = {};
-  try{ binds = activeBinds(); }catch(e){}
-  const specs = ACTIONS.filter(a => binds[a])
-    .map(a => binds[a] + "=" + (a === "seq" ? seqSpec() : a === "tau" ? tauSpec() : a));
-  const caps = capsConfig();
-  /* nothing bound and nothing to watch — don't hook at all */
-  if(!specs.length && !caps.on){
-    TAUINFO = {state: "idle", exe: exe};
-    capsHide();
-    return;
-  }
-  /* The gate is passed to the helper, never applied here: only the hook thread knows
-     what was in front at the instant of the press. */
-  const args = ["bind", String(process.pid)].concat(focusSpec()).concat(capsSpec()).concat(specs);
-  try{
-    /* stdout is only opened when something is expected on it. The helper writes one
-       short line per Caps Lock change and nothing else; a full pipe would stall the
-       hook thread, so the lines are read as they arrive and never buffered up. */
-    const child = spawn(exe, args,
-      {stdio: ["ignore", caps.on ? "pipe" : "ignore", "ignore"], windowsHide: true});
-    if(caps.on && child.stdout){
-      let buf = "";
-      child.stdout.setEncoding("utf8");
-      child.stdout.on("data", d => {
-        buf += d;
-        if(buf.length > 4096) buf = buf.slice(-1024);   // never grow on unexpected output
-        let i;
-        while((i = buf.indexOf("\n")) >= 0){
-          const line = buf.slice(0, i).trim();
-          buf = buf.slice(i + 1);
-          if(line === "CAPS:1" || line === "CAPS:0"){
-            if(TAU === child) capsFlash(line === "CAPS:1");
-          }
-        }
-      });
-      child.stdout.on("error", () => {});
+  const wrote = writeBinds();
+  helperVerb("status").then(st => {
+    TAUINFO = {state: st.running ? "running" : "stopped", exe: exe, boot: !!st.on,
+               ver: st.ver, binds: wrote ? bindsPath() : "COULD NOT WRITE", err: st.err};
+    if(st.available && !st.running){
+      try{
+        const child = spawn(exe, ["run"], {detached: true, stdio: "ignore", windowsHide: true});
+        child.unref();
+        TAUINFO = Object.assign({}, TAUINFO, {state: "started", pid: child.pid});
+      }catch(e){
+        TAUINFO = Object.assign({}, TAUINFO, {state: "spawn-failed",
+                   err: (e && (e.code || e.message)) || "unknown"});
+      }
     }
-    TAU = child;
-    const started = Date.now();
-    TAUINFO = {state: "running", exe: exe, pid: child.pid, specs: args.slice(2), since: started};
-    /* Only report on the child we still consider current: tauStop() clears TAU before
-       the kill lands, so a replaced helper's exit must not overwrite its successor. */
-    child.on("exit", (code, signal) => {
-      if(TAU !== child) return;
-      TAU = null;
-      TAUINFO = {state: "exited", exe: exe, code: code, signal: signal,
-                 specs: specs, ranMs: Date.now() - started};
-      capsHide();
-    });
-    child.on("error", (err) => {
-      if(TAU !== child) return;
-      TAU = null;
-      TAUINFO = {state: "spawn-failed", exe: exe, specs: specs,
-                 err: (err && (err.code || err.message)) || "unknown"};
-    });
-  }catch(e){
-    TAU = null;
-    TAUINFO = {state: "spawn-failed", exe: exe, specs: specs,
-               err: (e && (e.code || e.message)) || "unknown"};
-  }
+  }).catch(() => {});
 }
 function announceOverlayState(){
   if(win && !win.isDestroyed()) win.webContents.send("overlay-state-changed", !!overlayWin);
@@ -410,55 +412,6 @@ function createOverlay(){
   overlayWin.on("blur", () => { if(INTERACT) setInteract(false); });
   overlayWin.on("closed", () => { overlayWin = null; INTERACT = false; });
 }
-/* ---- Caps Lock flash: its own window, so it is there whether or not the checklist
-   overlay is up and stays after the night's tasks are ticked and that one puts itself
-   away. Transparent, click-through and never focusable — protel keeps the keyboard.
-   Created on the first flash and then kept hidden between them rather than rebuilt,
-   because a window built from scratch cannot animate in fast enough to be read. ---- */
-let capsWin = null, CAPS_LAST = null;
-function capsBounds(){
-  /* Dead centre of the screen itself, not of the work area: "centre" means centre,
-     and the taskbar must not push the icon off it. bounds, not workArea, for that. */
-  const b = screen.getPrimaryDisplay().bounds;
-  const W = 170, H = 170;
-  return {x: Math.round(b.x + (b.width - W) / 2), y: Math.round(b.y + (b.height - H) / 2),
-          width: W, height: H};
-}
-function createCaps(){
-  if(capsWin) return;
-  capsWin = new BrowserWindow(Object.assign(capsBounds(), {
-    transparent: true, frame: false, alwaysOnTop: true, skipTaskbar: true,
-    focusable: false, resizable: false, movable: false, hasShadow: false, show: false,
-    webPreferences: {contextIsolation: true, preload: path.join(__dirname, "caps-preload.js")}
-  }));
-  capsWin.setIgnoreMouseEvents(true);
-  capsWin.setAlwaysOnTop(true, "screen-saver");
-  capsWin.loadURL(pathToFileURL(path.join(__dirname, "caps.html")).toString());
-  capsWin.webContents.once("did-finish-load", () => {
-    /* a change that landed while the page was still loading must not be lost */
-    if(capsWin && CAPS_LAST !== null) capsFlash(CAPS_LAST);
-  });
-  capsWin.on("closed", () => { capsWin = null; });
-}
-function capsFlash(on){
-  if(process.platform !== "win32") return;
-  if(!capsConfig().on) return;
-  CAPS_LAST = !!on;
-  if(!capsWin){ createCaps(); return; }        // did-finish-load replays it
-  try{
-    if(!capsWin.webContents.isLoading()){
-      capsWin.setBounds(capsBounds());          // the work area can change under us
-      capsWin.showInactive();
-      capsWin.setAlwaysOnTop(true, "screen-saver");
-      capsWin.webContents.send("caps-flash", {on: !!on});
-      CAPS_LAST = null;
-    }
-  }catch(e){}
-}
-function capsHide(){
-  if(capsWin){ try{ capsWin.destroy(); }catch(e){} capsWin = null; }
-  CAPS_LAST = null;
-}
 function destroyOverlay(){
   if(overlayWin){ try{ overlayWin.destroy(); }catch(e){} overlayWin = null; }
   INTERACT = false;
@@ -509,7 +462,25 @@ app.whenReady().then(() => {
   try{ if(hub.readConfig().overlayOn) createOverlay(); }catch(e){}
   buildTray();
   applyHotkeys();
-  tauKillStrays(() => tauStart());
+  /* Kill anything left from an older build FIRST — a pre-1.17.11 helper does not have
+     the caps window, so the new one's single-instance check cannot see it, and two
+     helpers would mean two sets of hooks. Then publish the bindings and bring the
+     standalone up. It is spawned detached, so it outlives us. */
+  tauKillStrays(() => {
+    tauStart();
+    /* 1.17.10 drew the Caps Lock icon inside this app and shipped with it ON. 1.17.11
+       moved it into the helper, which only survives RecCheck closing if it starts at
+       login. Carry that setting across exactly ONCE, so a feature he already had does
+       not go quiet the night the update lands. After this, unticking it stays unticked. */
+    try{
+      const c = hub.readConfig();
+      if(!c.bootMigrated){
+        c.bootMigrated = true;
+        hub.writeConfig(c);
+        if(c.capsFlash !== false) setTimeout(() => helperVerb("install"), 1500);
+      }
+    }catch(e){}
+  });
   MANUAL_SHOWN = true;                        // startup check never pops the window
   updater.check().then(info => {
     if(info && win && !win.isDestroyed())
@@ -622,27 +593,20 @@ ipcMain.handle("overlay-ihotkey-set", (_e, acc) => {
   if(!acc) applyHotkeys();
   return true;
 });
-ipcMain.handle("sc-get", () => {
+ipcMain.handle("sc-get", async () => {
   try{
     const {list, active} = readProfiles();
+    /* The login entry's state is read back FROM the helper, never mirrored over here —
+       a copy in this app's config could only ever drift from what is actually set. */
     return {profiles: list, active, seq: seqConfig(), focus: focusConfig(),
-            tauEnter: tauEnterConfig(), caps: capsConfig(),
+            tauEnter: tauEnterConfig(), boot: await helperVerb("status"),
             available: process.platform === "win32" && !!tauPath()};
   }catch(e){ return {profiles: [], active: null, available: false}; }
 });
-/* The pill has finished fading — put the window away until the next change. */
-ipcMain.handle("caps-gone", () => {
-  try{ if(capsWin) capsWin.hide(); }catch(e){}
-  return true;
-});
-/* Whether the Caps Lock change is flashed. Turning it off also takes the keyboard hook
-   back out of the input path, since nothing else on a mouse-only profile needs it. */
-ipcMain.handle("sc-caps-set", (_e, on) => {
-  try{ const c = hub.readConfig(); c.capsFlash = !!on; hub.writeConfig(c); }catch(e){}
-  if(!capsConfig().on) capsHide();
-  tauStart();                                  // the helper takes this at spawn time
-  return capsConfig();
-});
+/* On writes the login entry and starts the helper; off removes it and stops it. This is
+   the switch for the whole standalone: with it off, nothing starts with Windows and the
+   Caps Lock indicator only exists while RecCheck itself is open. */
+ipcMain.handle("sc-boot-set", (_e, on) => helperVerb(on ? "install" : "uninstall"));
 /* Whether the helper presses the Enter after the τ, and how long it waits first. */
 ipcMain.handle("sc-tauenter-set", (_e, on, delay) => {
   try{
@@ -697,11 +661,14 @@ ipcMain.handle("sc-focus-pick", (_e, delayMs) => new Promise(res => {
   }catch(e){ finish(); }
 }));
 /* listen for one trigger and store it against an action in the active profile */
-ipcMain.handle("sc-detect", (_e, action) => new Promise(res => {
+ipcMain.handle("sc-detect", (_e, action) => new Promise(async res => {
   if(process.platform !== "win32" || !tauPath() || ACTIONS.indexOf(action) < 0){ res(null); return; }
   try{ if(TAU_DETECT) TAU_DETECT.kill(); }catch(e){}
   TAU_DETECT = null;
-  tauStop();                                   // release the hooks while listening
+  /* The standalone has to stand down first, or its own hooks would swallow the very
+     press we are trying to read. AWAITED, not fired and hoped for: it is a separate
+     process now, so "asked it to stop" and "it has stopped" are not the same moment. */
+  await tauStop();
   let out = "", done = false;
   const finish = v => { if(done) return; done = true; TAU_DETECT = null; tauStart(); res(v); };
   try{
@@ -850,7 +817,10 @@ ipcMain.handle("overlay-tick", (_e, id) => {
 ipcMain.handle("overlay-exit-interact", () => { setInteract(false); return true; });
 app.on("will-quit", () => {
   try{ globalShortcut.unregisterAll(); }catch(e){}
-  tauStop();
+  /* The helper is NOT stopped here. It outliving this app is the whole point of it: the
+     Caps Lock indicator has to keep working with RecCheck closed. It notices we are gone
+     within two seconds and takes the mouse hook back out on its own, so protel is left
+     with exactly what it had before — no hook it did not have while we were running. */
   try{ if(TAU_DETECT) TAU_DETECT.kill(); }catch(e){}
 });
 

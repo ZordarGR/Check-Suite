@@ -2,15 +2,30 @@
 //   rc-tbind.exe detect <parentPid>
 //       -> waits for a middle/X1/X2 press or a key combo, prints "BTN:<code>"
 //          or "KEY:<mods>-<vk>", exits
-//   rc-tbind.exe bind <parentPid> [focus=<needle>] [caps=on] <trigger>=<action> [...]
-//       -> swallows each trigger system-wide and performs its action instead.
-//          With focus=<needle> a trigger only fires while the window in front matches
-//          that needle on its process name, class or title; anywhere else the press is
-//          passed through untouched, so the button stays a button. A window we cannot
-//          read anything about is allowed: the gate never blocks what it cannot see.
-//          With caps=on it also prints "CAPS:1" / "CAPS:0" the instant Caps Lock is
-//          toggled anywhere on the machine, so the app can show it. This observes only:
-//          the key is never swallowed and never altered, and no other key is reported.
+//   rc-tbind.exe run
+//       -> THE STANDALONE. Starts at Windows login, owes RecCheck nothing, and never
+//          exits because RecCheck closed. It does two unrelated jobs:
+//
+//          CAPS LOCK, ALWAYS. This keyboard has no Caps Lock light and the PC draws no
+//          OSD, so the state flips silently mid-passport. The keyboard hook is always
+//          installed and always draws the indicator, RecCheck running or not.
+//
+//          PROTEL SHORTCUTS, ONLY ALONGSIDE RECCHECK. The bindings live in a file
+//          RecCheck writes (see BindsPath). The MOUSE hook is installed only while
+//          RecCheck.exe is actually running and taken back out the moment it is not, so
+//          a machine with RecCheck closed carries no mouse hook at all -- exactly the
+//          scope it had when RecCheck spawned this as a child. Keyboard triggers are
+//          gated the same way, by an explicit check, because that hook stays up for the
+//          Caps Lock job.
+//
+//          With focus=<needle> in the binds file a trigger only fires while the window
+//          in front matches that needle on its process name, class or title; anywhere
+//          else the press is passed through untouched, so the button stays a button. A
+//          window we cannot read anything about is allowed: the gate never blocks what
+//          it cannot see.
+//   rc-tbind.exe install / uninstall / stop / status
+//       -> add or remove the login entry (HKCU Run: no admin, nothing installed), and
+//          report "RCTBIND <on|off> <running|stopped> <version>"
 //   rc-tbind.exe fg <parentPid> [delayMs]
 //       -> waits, then prints "FG<tab>exe<tab>class<tab>title" for whatever is in front,
 //          so the gate can be pointed at the real protel window instead of a guess
@@ -40,6 +55,18 @@
 //     message loop via PostThreadMessage, never inside the hook
 //   * the parent watchdog is an independent thread that hard-exits the process,
 //     so the helper dies with RecCheck even if the loop is somehow wedged
+//
+// Design notes (v10 — it stands on its own):
+//   * ONE background process, one hook per job, one login entry. A second program for
+//     the Caps Lock icon would have meant a second keyboard hook on the machine.
+//   * the mouse hook's lifetime still matches RecCheck's, so nothing about what sits in
+//     protel's mouse path changed when this became a login program
+//   * the drawing is raw gdi32 by hand -- no WinForms, no System.Drawing. Mono's class
+//     library is larger than .NET Framework 4.8's and a member that exists only in Mono
+//     compiles here and kills the method on first call there. P/Invoke carries no such
+//     risk. See build-check.py.
+//   * the hook callbacks still only classify and post; the drawing happens on the
+//     message loop. A hook that draws is a hook that can wedge the desktop.
 //
 // Design notes (v8 — the shortcuts belong to protel):
 //   * the focus check runs on the hook thread, so it is cached per window handle and
@@ -99,6 +126,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
+using Microsoft.Win32;
 
 static class TBind {
   const int WH_MOUSE_LL    = 14, WH_KEYBOARD_LL = 13;
@@ -109,7 +137,9 @@ static class TBind {
   const uint WM_QUIT       = 0x0012;
   const uint WM_APP_SEND   = 0x8000 + 1;
   const uint WM_APP_BLOCK  = 0x8000 + 2;
-  const uint WM_APP_CAPS   = 0x8000 + 3;
+  const uint WM_APP_CAPS   = 0x8000 + 3;   // Caps Lock changed; the loop draws it
+  const uint WM_APP_HOST   = 0x8000 + 4;   // RecCheck came up or went away
+  const uint WM_APP_BINDS  = 0x8000 + 5;   // the binds file changed; re-read it
   const uint KEYEVENTF_UNICODE = 0x0004, KEYEVENTF_KEYUP = 0x0002, KEYEVENTF_EXTENDEDKEY = 0x0001;
   const uint WM_INPUTLANGCHANGEREQUEST = 0x0050;
   const uint KLF_ACTIVATE = 1;
@@ -120,6 +150,27 @@ static class TBind {
   const int VK_SHIFT = 0x10, VK_CONTROL = 0x11, VK_MENU = 0x12;
   const int VK_LWIN = 0x5B, VK_RWIN = 0x5C;
   const int VK_CAPITAL = 0x14;
+
+  /* ---- the Caps Lock indicator's window ---- */
+  const string CAPS_CLASS = "RcTbindCapsWnd";
+  const string RUNK = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+  const string RUNV = "RecCheckHelper";
+  const uint WS_POPUP = 0x80000000;
+  const uint WS_EX_LAYERED = 0x00080000, WS_EX_TRANSPARENT = 0x00000020;
+  const uint WS_EX_TOPMOST = 0x00000008, WS_EX_TOOLWINDOW = 0x00000080;
+  const uint WS_EX_NOACTIVATE = 0x08000000;
+  const uint LWA_COLORKEY = 0x00000001, LWA_ALPHA = 0x00000002;
+  const uint SWP_NOACTIVATE = 0x0010, SWP_SHOWWINDOW = 0x0040;
+  const uint WM_DESTROY = 0x0002, WM_PAINT = 0x000F, WM_TIMER = 0x0113, WM_CLOSE = 0x0010;
+  const int  SW_HIDE = 0, SM_CXSCREEN = 0, SM_CYSCREEN = 1;
+  const uint PS_GEOMETRIC = 0x00010000, PS_SOLID = 0, BS_SOLID = 0;
+  const int  ALTERNATE = 1, NULL_PEN = 8;
+  const int  CAPS_W = 170, CAPS_H = 170;
+  const byte CAPS_ALPHA = 89;               // 35% of 255, the spec
+  const uint CAPS_KEY   = 0x00FF00FF;       // colour-keyed away; never drawn by the glyph
+  const uint CAPS_DARK  = 0x00161210;       // COLORREF is 0x00BBGGRR -> #101216
+  const uint CAPS_WHITE = 0x00FFFFFF;
+  const uint CAPS_HOLD_MS = 1500, CAPS_FADE_MS = 40;
   const char TAU = 'τ';
   const long GREEK = 0x0408;
 
@@ -148,6 +199,34 @@ static class TBind {
   [DllImport("user32.dll")] static extern uint MapVirtualKey(uint code, uint mapType);
   [DllImport("user32.dll")] static extern short GetAsyncKeyState(int vk);
   [DllImport("user32.dll")] static extern short GetKeyState(int vk);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern ushort RegisterClassEx(ref WNDCLASSEX c);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+  static extern IntPtr CreateWindowEx(uint exStyle, string cls, string name, uint style,
+                                      int x, int y, int w, int h,
+                                      IntPtr parent, IntPtr menu, IntPtr inst, IntPtr param);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr DefWindowProc(IntPtr h, uint m, IntPtr w, IntPtr l);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindow(string cls, string name);
+  [DllImport("user32.dll")] static extern void PostQuitMessage(int code);
+  [DllImport("user32.dll")] static extern bool SetLayeredWindowAttributes(IntPtr h, uint key, byte alpha, uint flags);
+  [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int w, int hh, uint flags);
+  [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int cmd);
+  [DllImport("user32.dll")] static extern bool InvalidateRect(IntPtr h, IntPtr r, bool erase);
+  [DllImport("user32.dll")] static extern IntPtr SetTimer(IntPtr h, IntPtr id, uint ms, IntPtr fn);
+  [DllImport("user32.dll")] static extern bool KillTimer(IntPtr h, IntPtr id);
+  [DllImport("user32.dll")] static extern int GetSystemMetrics(int i);
+  [DllImport("user32.dll")] static extern IntPtr BeginPaint(IntPtr h, out PAINTSTRUCT ps);
+  [DllImport("user32.dll")] static extern bool EndPaint(IntPtr h, ref PAINTSTRUCT ps);
+  [DllImport("user32.dll")] static extern int FillRect(IntPtr hdc, ref RECT r, IntPtr brush);
+  [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr h, out RECT r);
+  [DllImport("gdi32.dll")] static extern IntPtr CreateSolidBrush(uint color);
+  [DllImport("gdi32.dll")] static extern IntPtr GetStockObject(int i);
+  [DllImport("gdi32.dll")] static extern IntPtr ExtCreatePen(uint style, uint width, ref LOGBRUSH lb, uint n, IntPtr a);
+  [DllImport("gdi32.dll")] static extern IntPtr SelectObject(IntPtr hdc, IntPtr obj);
+  [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr obj);
+  [DllImport("gdi32.dll")] static extern int SetPolyFillMode(IntPtr hdc, int mode);
+  [DllImport("gdi32.dll")] static extern bool PolyPolygon(IntPtr hdc, CPOINT[] pts, int[] counts, int n);
+  [DllImport("gdi32.dll")] static extern bool MoveToEx(IntPtr hdc, int x, int y, IntPtr old);
+  [DllImport("gdi32.dll")] static extern bool LineTo(IntPtr hdc, int x, int y);
   [DllImport("user32.dll")] static extern bool GetGUIThreadInfo(uint idThread, ref GUITHREADINFO gui);
   [DllImport("user32.dll")] static extern int GetKeyboardLayoutList(int n, [Out] IntPtr[] list);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr hWnd, StringBuilder s, int n);
@@ -163,24 +242,50 @@ static class TBind {
   [StructLayout(LayoutKind.Sequential)] struct MSG { public IntPtr hwnd; public uint message; public IntPtr wParam, lParam; public uint time; public POINT pt; }
   [StructLayout(LayoutKind.Sequential)] struct MSLLHOOKSTRUCT { public POINT pt; public uint mouseData, flags, time; public IntPtr extra; }
   [StructLayout(LayoutKind.Sequential)] struct KBDLLHOOKSTRUCT { public uint vkCode, scanCode, flags, time; public IntPtr extra; }
+  [StructLayout(LayoutKind.Sequential)] struct CPOINT { public int x, y; public CPOINT(int a, int b){ x = a; y = b; } }
+  [StructLayout(LayoutKind.Sequential)] struct LOGBRUSH { public uint lbStyle; public uint lbColor; public IntPtr lbHatch; }
+  [StructLayout(LayoutKind.Sequential)] struct PAINTSTRUCT { public IntPtr hdc; public int fErase; public RECT rcPaint;
+    public int fRestore, fIncUpdate;
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)] public byte[] rgbReserved; }
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] struct WNDCLASSEX {
+    public uint cbSize, style; public IntPtr lpfnWndProc; public int cbClsExtra, cbWndExtra;
+    public IntPtr hInstance, hIcon, hCursor, hbrBackground;
+    public string lpszMenuName, lpszClassName; public IntPtr hIconSm; }
   [StructLayout(LayoutKind.Sequential)] struct MOUSEINPUT { public int dx, dy; public uint mouseData, dwFlags, time; public IntPtr dwExtraInfo; }
   [StructLayout(LayoutKind.Sequential)] struct KEYBDINPUT { public ushort wVk, wScan; public uint dwFlags, time; public IntPtr dwExtraInfo; }
   [StructLayout(LayoutKind.Explicit)] struct InputUnion { [FieldOffset(0)] public MOUSEINPUT mi; [FieldOffset(0)] public KEYBDINPUT ki; }
   [StructLayout(LayoutKind.Sequential)] struct INPUT { public uint type; public InputUnion u; }
 
   static HookProc keepMouse, keepKeys;   // prevent the delegates from being garbage-collected
+  delegate IntPtr WndProcD(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+  static WndProcD keepWndProc;           // same reason: the OS holds a raw pointer to it
+
+  /* ---- Caps Lock: always on, RecCheck or no RecCheck ----
+     The state is TRACKED, not read back. A low-level hook fires BEFORE Windows applies
+     the toggle, so reading the key there returns the value the press is about to
+     replace. Seeded once from GetKeyState at start and flipped on each press; the hook
+     sees every press on the machine, injected ones included, so it cannot drift.
+     capsDown is here because auto-repeat sends a run of DOWNs for one physical press. */
+  static bool capsOn = false, capsDown = false;
+  static IntPtr capsWnd = IntPtr.Zero;
+  static byte capsAlpha = CAPS_ALPHA;
+  static readonly IntPtr T_HOLD = (IntPtr)1, T_FADE = (IntPtr)2;
+
+  /* ---- is RecCheck up? ----
+     The shortcuts are RecCheck's; the Caps Lock icon is not. Only the first is gated. */
+  static volatile bool hostUp = false;
+
+  /* The capital A the laptop OSDs draw, as one polygon with the counter punched out.
+     Coordinates are the app icon's 150-unit glyph offset by a 10-unit margin, so the
+     two are the same shape. ALTERNATE fill makes the second contour a hole. */
+  static readonly CPOINT[] GLYPH = new CPOINT[] {
+    new CPOINT( 85,  30), new CPOINT(128, 132), new CPOINT(110, 132), new CPOINT(100, 109),
+    new CPOINT( 70, 109), new CPOINT( 60, 132), new CPOINT( 42, 132),
+    new CPOINT( 76,  93), new CPOINT( 94,  93), new CPOINT( 85,  72)
+  };
+  static readonly int[] GLYPH_N = new int[] { 7, 3 };
   static IntPtr hook = IntPtr.Zero, kbHook = IntPtr.Zero;
   static int mode = 0;                   // 1 = detect, 2 = bind
-  /* Caps Lock has no light on this keyboard and Windows shows nothing, so the app draws
-     it. The hook is the only thing that sees the key while protel has the focus.
-     The state is TRACKED, not read back: a low-level hook fires before Windows has
-     applied the toggle, so reading it there returns the value the press is about to
-     replace. Seeded once from the OS, then flipped on each press — and the hook sees
-     every press on the machine, injected ones included, so it cannot drift. Auto-repeat
-     sends a run of DOWNs for one physical press and toggles once, hence capsDown. */
-  static bool capsReport = false;
-  static bool capsOn = false;
-  static bool capsDown = false;
   static uint mainTid = 0;
   static Thread watchdog;                // static ref so it can never be collected
   class Bind { public int action; public ushort[] keys; public int gap; public bool thenEnter; }
@@ -653,7 +758,14 @@ static class TBind {
             }
             if(mode == 2){
               int idx;
-              if(down && binds.TryGetValue("m" + CurMods() + "-" + btn, out idx)){
+              /* The shortcuts are RecCheck's. With RecCheck closed the button is just a
+                 button. The mouse hook is normally taken out entirely in that state --
+                 this is the belt to that pair of braces, for the instant between
+                 RecCheck exiting and the loop unhooking. The release bookkeeping below
+                 stays OUTSIDE the gate: a press swallowed while RecCheck was up must
+                 still have its release swallowed after it goes away, or the target sees
+                 half a click. */
+              if(down && hostUp && binds.TryGetValue("m" + CurMods() + "-" + btn, out idx)){
                 /* Not protel in front: let the button be a button. Nothing is swallowed
                    here, so the release below is not swallowed either. */
                 string what;
@@ -684,15 +796,16 @@ static class TBind {
         bool down = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
         bool up   = msg == WM_KEYUP   || msg == WM_SYSKEYUP;
         KBDLLHOOKSTRUCT k = (KBDLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(KBDLLHOOKSTRUCT));
-        /* Before every other test, and outside the injected filter: a Caps Lock toggled
-           by anything at all is still a Caps Lock the user needs to see. Nothing is
-           returned from here — the key carries on to whatever has the focus untouched. */
-        if(capsReport && k.vkCode == VK_CAPITAL){
+        /* CAPS LOCK, before every other test and outside the injected filter: a Caps
+           Lock toggled by anything at all is still one the user needs to see, and this
+           job does not care whether RecCheck is running. Nothing is returned from here
+           -- the key carries on to whatever has the focus, untouched. */
+        if(k.vkCode == VK_CAPITAL){
           if(down){
             if(!capsDown){
               capsDown = true;
               capsOn = !capsOn;
-              PostThreadMessage(mainTid, WM_APP_CAPS, (IntPtr)(capsOn ? 1 : 0), IntPtr.Zero);
+              PostUi(WM_APP_CAPS, IntPtr.Zero);
             }
           }else if(up) capsDown = false;
         }
@@ -704,7 +817,9 @@ static class TBind {
           }
           if(mode == 2){
             int idx;
-            if(down && binds.TryGetValue("k" + CurMods() + "-" + k.vkCode, out idx)){
+            /* Same gate as the mouse. This hook stays installed with RecCheck closed
+               because Caps Lock needs it, so the check has to be explicit here. */
+            if(down && hostUp && binds.TryGetValue("k" + CurMods() + "-" + k.vkCode, out idx)){
               string what;
               if(!TargetFocused(out what)){
                 PostThreadMessage(mainTid, WM_APP_BLOCK, IntPtr.Zero, IntPtr.Zero);
@@ -720,6 +835,161 @@ static class TBind {
       }
     }catch(Exception){}
     return CallNextHookEx(kbHook, nCode, wParam, lParam);
+  }
+
+  /* ---------------- the Caps Lock indicator ---------------- */
+
+  static void CapsFlash(){
+    if(capsWnd == IntPtr.Zero) return;         // no window: no icon, everything else fine
+    KillTimer(capsWnd, T_HOLD);
+    KillTimer(capsWnd, T_FADE);
+    capsAlpha = CAPS_ALPHA;
+    SetLayeredWindowAttributes(capsWnd, CAPS_KEY, capsAlpha, LWA_COLORKEY | LWA_ALPHA);
+    /* the screen can change size under us, so centre on every flash rather than once */
+    int x = (GetSystemMetrics(SM_CXSCREEN) - CAPS_W) / 2;
+    int y = (GetSystemMetrics(SM_CYSCREEN) - CAPS_H) / 2;
+    SetWindowPos(capsWnd, (IntPtr)(-1), x, y, CAPS_W, CAPS_H, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    InvalidateRect(capsWnd, IntPtr.Zero, true);
+    SetTimer(capsWnd, T_HOLD, CAPS_HOLD_MS, IntPtr.Zero);
+  }
+
+  static void CapsPaint(){
+    PAINTSTRUCT ps;
+    IntPtr hdc = BeginPaint(capsWnd, out ps);
+    IntPtr keyBrush = IntPtr.Zero, fill = IntPtr.Zero, white = IntPtr.Zero;
+    IntPtr pen = IntPtr.Zero, penHi = IntPtr.Zero, penLo = IntPtr.Zero;
+    IntPtr oldPen = IntPtr.Zero, oldBrush = IntPtr.Zero;
+    try{
+      RECT rc;
+      GetClientRect(capsWnd, out rc);
+      keyBrush = CreateSolidBrush(CAPS_KEY);
+      FillRect(hdc, ref rc, keyBrush);       // everything not drawn on becomes transparent
+
+      LOGBRUSH lb = new LOGBRUSH();
+      lb.lbStyle = BS_SOLID; lb.lbColor = CAPS_WHITE; lb.lbHatch = IntPtr.Zero;
+      pen   = ExtCreatePen(PS_GEOMETRIC | PS_SOLID, 9, ref lb, 0, IntPtr.Zero);
+      white = CreateSolidBrush(CAPS_WHITE);
+      fill  = CreateSolidBrush(CAPS_DARK);
+      SetPolyFillMode(hdc, ALTERNATE);
+      /* TWO PASSES, and the order is the point. GDI strokes ON TOP of its fill, which
+         closes the counter of the A up almost solid at this pen width. The app's icon
+         puts the stroke BEHIND the fill (SVG paint-order="stroke"), so: pass one draws
+         the silhouette in white, pen and brush both, giving the outline; pass two lays
+         the exact glyph over it in dark with no pen, which reopens the counter. Checked
+         against the app's own icon side by side in a browser before shipping. */
+      oldPen = SelectObject(hdc, pen);
+      oldBrush = SelectObject(hdc, white);
+      PolyPolygon(hdc, GLYPH, GLYPH_N, 2);
+      SelectObject(hdc, GetStockObject(NULL_PEN));
+      SelectObject(hdc, fill);
+      PolyPolygon(hdc, GLYPH, GLYPH_N, 2);
+
+      if(!capsOn){
+        /* struck through for off — white with a dark core, so it stays readable where
+           it crosses the letter */
+        lb.lbColor = CAPS_WHITE;
+        penHi = ExtCreatePen(PS_GEOMETRIC | PS_SOLID, 17, ref lb, 0, IntPtr.Zero);
+        SelectObject(hdc, penHi);
+        MoveToEx(hdc, 32, 138, IntPtr.Zero); LineTo(hdc, 138, 32);
+        lb.lbColor = CAPS_DARK;
+        penLo = ExtCreatePen(PS_GEOMETRIC | PS_SOLID, 8, ref lb, 0, IntPtr.Zero);
+        SelectObject(hdc, penLo);
+        MoveToEx(hdc, 32, 138, IntPtr.Zero); LineTo(hdc, 138, 32);
+      }
+      if(oldPen   != IntPtr.Zero) SelectObject(hdc, oldPen);
+      if(oldBrush != IntPtr.Zero) SelectObject(hdc, oldBrush);
+    }catch(Exception){
+      /* a failed paint must never cost the hooks or the loop */
+    }finally{
+      if(pen      != IntPtr.Zero) DeleteObject(pen);
+      if(penHi    != IntPtr.Zero) DeleteObject(penHi);
+      if(penLo    != IntPtr.Zero) DeleteObject(penLo);
+      if(fill     != IntPtr.Zero) DeleteObject(fill);
+      if(white    != IntPtr.Zero) DeleteObject(white);
+      if(keyBrush != IntPtr.Zero) DeleteObject(keyBrush);
+      EndPaint(capsWnd, ref ps);
+    }
+  }
+
+  static IntPtr CapsWndProc(IntPtr h, uint msg, IntPtr w, IntPtr l){
+    try{
+      if(msg == WM_APP_CAPS){ CapsFlash(); return IntPtr.Zero; }
+      if(msg == WM_PAINT){ CapsPaint(); return IntPtr.Zero; }
+      if(msg == WM_TIMER){
+        if(w == T_HOLD){
+          KillTimer(capsWnd, T_HOLD);
+          SetTimer(capsWnd, T_FADE, CAPS_FADE_MS, IntPtr.Zero);
+          return IntPtr.Zero;
+        }
+        if(w == T_FADE){
+          int a = capsAlpha - 12;
+          if(a <= 0){
+            KillTimer(capsWnd, T_FADE);
+            ShowWindow(capsWnd, SW_HIDE);
+            capsAlpha = CAPS_ALPHA;
+          }else{
+            capsAlpha = (byte)a;
+            SetLayeredWindowAttributes(capsWnd, CAPS_KEY, capsAlpha, LWA_COLORKEY | LWA_ALPHA);
+          }
+          return IntPtr.Zero;
+        }
+      }
+      if(msg == WM_APP_HOST){ SetHost(w != IntPtr.Zero); return IntPtr.Zero; }
+      if(msg == WM_APP_BINDS){ LoadBinds(); return IntPtr.Zero; }
+      if(msg == WM_CLOSE || msg == WM_DESTROY){ PostQuitMessage(0); return IntPtr.Zero; }
+    }catch(Exception){}
+    return DefWindowProc(h, msg, w, l);
+  }
+
+  /* RecCheck came up or went away. The MOUSE hook's lifetime is tied to it, so a
+     machine with RecCheck closed carries no mouse hook at all — the same scope it had
+     when RecCheck spawned this as its own child. The keyboard hook is not touched: it
+     belongs to the Caps Lock job, which does not care. Runs on the loop thread, because
+     a low-level hook belongs to the thread that installs it and only this one pumps. */
+  /* Route to the window when there is one, and to the message loop when there is not.
+     If the indicator's window cannot be created, that must cost the Caps Lock icon and
+     NOTHING ELSE — protel's shortcuts are the critical half of this program and they do
+     not need a window at all. */
+  static void PostUi(uint msg, IntPtr w){
+    if(capsWnd != IntPtr.Zero) PostMessage(capsWnd, msg, w, IntPtr.Zero);
+    else PostThreadMessage(mainTid, msg, w, IntPtr.Zero);
+  }
+
+  static void SetHost(bool up){
+    if(up == hostUp) return;
+    hostUp = up;
+    try{
+      if(up){
+        if(hook == IntPtr.Zero) hook = SetWindowsHookEx(WH_MOUSE_LL, keepMouse, GetModuleHandle(null), 0);
+        LoadBinds();                 // they may have changed while we were not watching
+      }else{
+        if(hook != IntPtr.Zero){ UnhookWindowsHookEx(hook); hook = IntPtr.Zero; }
+        swallowedBtn.Clear();        // nothing may stay half-swallowed across the change
+      }
+    }catch(Exception){}
+  }
+
+  static bool CreateCapsWindow(){
+    try{
+      IntPtr inst = GetModuleHandle(null);
+      keepWndProc = CapsWndProc;
+      WNDCLASSEX wc = new WNDCLASSEX();
+      wc.cbSize = (uint)Marshal.SizeOf(typeof(WNDCLASSEX));
+      wc.lpfnWndProc = Marshal.GetFunctionPointerForDelegate(keepWndProc);
+      wc.hInstance = inst;
+      wc.lpszClassName = CAPS_CLASS;
+      if(RegisterClassEx(ref wc) == 0) return false;
+      capsWnd = CreateWindowEx(
+        WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+        CAPS_CLASS, "RecCheck Caps Lock", WS_POPUP,
+        (GetSystemMetrics(SM_CXSCREEN) - CAPS_W) / 2,
+        (GetSystemMetrics(SM_CYSCREEN) - CAPS_H) / 2, CAPS_W, CAPS_H,
+        IntPtr.Zero, IntPtr.Zero, inst, IntPtr.Zero);
+      if(capsWnd == IntPtr.Zero) return false;
+      SetLayeredWindowAttributes(capsWnd, CAPS_KEY, CAPS_ALPHA, LWA_COLORKEY | LWA_ALPHA);
+      capsOn = (GetKeyState(VK_CAPITAL) & 1) != 0;   // the one read of the OS's own toggle
+      return true;
+    }catch(Exception){ return false; }
   }
 
   /* "m4=altf4", "m1-4=tau" (Ctrl + X1), "k3-84=tau", "m5=seq:13,13,39,13,13@120"
@@ -851,10 +1121,154 @@ static class TBind {
     try{ string p = CrashPath(); if(p != null) System.IO.File.Delete(p); }catch(Exception){}
   }
 
-  const string VER = "v9";
+  /* ---------------- the binds file, the login entry, and RecCheck ---------------- */
+
+  /* RecCheck used to hand the bindings over on the command line, because RecCheck
+     started this process. It does not any more — this one starts at login — so the
+     bindings arrive in a file instead, in the same folder as the logs. One token per
+     line, exactly the words that used to be arguments:
+         focus=PROTEL
+         m4=tau:50
+         m3=altf4
+     Re-read whenever the file's write time changes, so changing a binding in the app
+     takes effect without restarting anything. */
+  static string BindsPath(){
+    try{
+      string b = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+      if(b == null || b.Length == 0) return null;
+      return System.IO.Path.Combine(System.IO.Path.Combine(b, "RecCheck"), "rc-tbind-binds.txt");
+    }catch(Exception){ return null; }
+  }
+  static DateTime bindsStamp = DateTime.MinValue;
+  static bool BindsChanged(){
+    try{
+      string f = BindsPath();
+      if(f == null) return false;
+      DateTime t = System.IO.File.Exists(f) ? System.IO.File.GetLastWriteTimeUtc(f) : DateTime.MinValue;
+      if(t == bindsStamp) return false;
+      bindsStamp = t;
+      return true;
+    }catch(Exception){ return false; }
+  }
+  /* Read on the message-loop thread, never on the watcher: the hook callbacks run on
+     this thread too, so rebuilding the table here cannot race one of them. */
+  static void LoadBinds(){
+    try{
+      string f = BindsPath();
+      binds.Clear();
+      bindList.Clear();
+      focusNeedle = null;
+      if(f == null || !System.IO.File.Exists(f)) return;
+      foreach(string raw in System.IO.File.ReadAllLines(f)){
+        string line = (raw ?? "").Trim();
+        if(line.Length == 0 || line[0] == '#') continue;
+        if(line.StartsWith("focus=")){
+          string needle = line.Substring(6).Trim();
+          focusNeedle = needle.Length > 0 ? needle.ToUpperInvariant() : null;
+          continue;
+        }
+        ParseBind(line);
+      }
+    }catch(Exception){}
+  }
+
+  /* RecCheck's own process. Nothing is read from it and nothing is sent to it — its
+     mere presence is the whole signal. */
+  static bool HostRunning(){
+    try{
+      Process[] ps = Process.GetProcessesByName("RecCheck");
+      bool any = ps.Length > 0;
+      foreach(Process q in ps){ try{ q.Dispose(); }catch(Exception){} }
+      return any;
+    }catch(Exception){ return false; }
+  }
+
+  static string ExePath(){
+    try{ return Process.GetCurrentProcess().MainModule.FileName; }catch(Exception){ return null; }
+  }
+  static bool BootOn(){
+    try{
+      RegistryKey k = Registry.CurrentUser.OpenSubKey(RUNK, false);
+      if(k == null) return false;
+      object v = k.GetValue(RUNV);
+      k.Close();
+      return v != null;
+    }catch(Exception){ return false; }
+  }
+  static bool BootSet(bool on){
+    try{
+      RegistryKey k = Registry.CurrentUser.CreateSubKey(RUNK);
+      if(k == null) return false;
+      if(on){
+        string x = ExePath();
+        if(x == null){ k.Close(); return false; }
+        k.SetValue(RUNV, "\"" + x + "\" run");
+      }else{
+        try{ k.DeleteValue(RUNV, false); }catch(Exception){}
+      }
+      k.Close();
+      return true;
+    }catch(Exception){ return false; }
+  }
+  static bool AlreadyRunning(){ return FindWindow(CAPS_CLASS, null) != IntPtr.Zero; }
+  static void StopRunning(){
+    IntPtr other = FindWindow(CAPS_CLASS, null);
+    if(other != IntPtr.Zero) PostMessage(other, WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+  }
+  static void SpawnSelf(){
+    try{
+      string x = ExePath();
+      if(x == null) return;
+      ProcessStartInfo si = new ProcessStartInfo(x, "run");
+      si.UseShellExecute = false;
+      si.CreateNoWindow = true;
+      Process.Start(si);
+    }catch(Exception){}
+  }
+  static void Say(string t){
+    try{ Console.Out.Write(t + "\n"); Console.Out.Flush(); }catch(Exception){}
+  }
+
+  const string VER = "v10";
 
   static int Main(string[] args){
     int parentPid;
+    /* ---- the login entry. HKCU, so no admin and nothing is "installed". ---- */
+    if(args.Length >= 1 && args[0] == "status"){
+      Say("RCTBIND " + (BootOn() ? "on" : "off") + " "
+                     + (AlreadyRunning() ? "running" : "stopped") + " " + VER);
+      return 0;
+    }
+    if(args.Length >= 1 && args[0] == "install"){
+      bool ok = BootSet(true);
+      if(!AlreadyRunning()) SpawnSelf();
+      Say("RCTBIND " + (ok ? "on" : "on-failed") + " running " + VER);
+      return ok ? 0 : 1;
+    }
+    if(args.Length >= 1 && args[0] == "stop"){
+      /* Stand down without touching the login entry. RecCheck asks for this while it
+         listens for a button to bind, so the standalone's own hooks cannot swallow the
+         press being detected. It is started again the moment detection finishes. */
+      StopRunning();
+      Say("RCTBIND " + (BootOn() ? "on" : "off") + " stopped " + VER);
+      return 0;
+    }
+    if(args.Length >= 1 && args[0] == "uninstall"){
+      bool ok = BootSet(false);
+      StopRunning();
+      Say("RCTBIND " + (ok ? "off" : "off-failed") + " stopped " + VER);
+      return ok ? 0 : 1;
+    }
+    if(args.Length >= 1 && args[0] == "run"){
+      ClearCrash();
+      try{
+        AppDomain.CurrentDomain.UnhandledException += delegate(object sender, UnhandledExceptionEventArgs ue){
+          WriteCrash("unhandled", ue.ExceptionObject as Exception);
+        };
+      }catch(Exception){}
+      try{ return RunStandalone(); }
+      catch(Exception e){ WriteCrash("run", e); return 5; }
+    }
     if(args.Length >= 1 && args[0] == "ping"){
       /* Reached only if the file exists, is allowed to execute and the runtime is
          present. Anything that stops those says so by this line never arriving. */
@@ -896,23 +1310,6 @@ static class TBind {
         Console.Out.Flush();
       }catch(Exception){}
       return 0;
-    }else if(args.Length >= 3 && args[0] == "bind"){
-      mode = 2;
-      if(!int.TryParse(args[1], out parentPid)) return 2;
-      for(int i = 2; i < args.Length; i++){
-        /* "focus=PROTEL" — everything else is a trigger. An empty value means the gate
-           is off, which is also what happens when the argument is absent. */
-        /* "caps=on" — report Caps Lock changes on stdout. Installs the keyboard hook
-           on its own, so it works for a profile whose triggers are all mouse buttons. */
-        if(args[i] == "caps=on"){ capsReport = true; continue; }
-        if(args[i].StartsWith("focus=")){
-          string needle = args[i].Substring(6).Trim();
-          focusNeedle = needle.Length > 0 ? needle.ToUpperInvariant() : null;
-          continue;
-        }
-        ParseBind(args[i]);
-      }
-      if(binds.Count == 0 && !capsReport) return 2;
     }else return 2;
 
     ClearCrash();
@@ -928,6 +1325,63 @@ static class TBind {
       WriteCrash("main", e);
       return 5;                                // "it crashed", with the reason on disk
     }
+  }
+
+  /* THE STANDALONE. No parent, no watchdog that kills it: it starts at login and stays
+     until Windows goes down or someone asks it to stop. */
+  static int RunStandalone(){
+    mainTid = GetCurrentThreadId();
+    mode = 2;
+    if(AlreadyRunning()) return 0;             // one instance; a boot launch wins
+    /* Not fatal. Without the window there is no Caps Lock icon and no cross-process
+       single-instance check, but the shortcuts still work, which matters more. */
+    if(!CreateCapsWindow()) WriteCrash("caps-window", null);
+
+    LoadBinds();
+    BindsChanged();                            // prime the timestamp against a re-read
+
+    IntPtr mod = GetModuleHandle(null);
+    keepMouse = MouseCallback;
+    keepKeys  = KeyCallback;
+    /* the keyboard hook is unconditional: Caps Lock is this program's other job */
+    kbHook = SetWindowsHookEx(WH_KEYBOARD_LL, keepKeys, mod, 0);
+    if(kbHook == IntPtr.Zero) return 3;
+    SetHost(HostRunning());                    // installs the mouse hook if RecCheck is up
+
+    watchdog = new Thread(delegate(){          // independent of the loop, by design
+      for(;;){
+        Thread.Sleep(2000);
+        try{
+          bool up = HostRunning();
+          if(up != hostUp) PostUi(WM_APP_HOST, (IntPtr)(up ? 1 : 0));
+          if(BindsChanged()) PostUi(WM_APP_BINDS, IntPtr.Zero);
+        }catch(Exception){}
+      }
+    });
+    watchdog.IsBackground = true;
+    watchdog.Start();
+
+    MSG m;
+    while(GetMessage(out m, IntPtr.Zero, 0, 0) > 0){
+      /* One bad message must not cost the user their shortcuts for the rest of the
+         night. Record it and keep pumping. */
+      try{
+        if(m.message == WM_APP_SEND){ QueueSend(m.wParam.ToInt32()); continue; }
+        if(m.message == WM_APP_BLOCK){ LogBlocked(); continue; }
+        /* These normally arrive at the window and are handled in CapsWndProc. They only
+           come through here when there is no window — see PostUi. */
+        if(m.hwnd == IntPtr.Zero){
+          if(m.message == WM_APP_CAPS){ CapsFlash(); continue; }
+          if(m.message == WM_APP_HOST){ SetHost(m.wParam != IntPtr.Zero); continue; }
+          if(m.message == WM_APP_BINDS){ LoadBinds(); continue; }
+        }
+        TranslateMessage(ref m);
+        DispatchMessage(ref m);
+      }catch(Exception e){ WriteCrash("loop", e); }
+    }
+    if(hook   != IntPtr.Zero) UnhookWindowsHookEx(hook);
+    if(kbHook != IntPtr.Zero) UnhookWindowsHookEx(kbHook);
+    return 0;
   }
 
   static int Run(int parentPid){
@@ -950,16 +1404,9 @@ static class TBind {
     keepKeys  = KeyCallback;
     hook = SetWindowsHookEx(WH_MOUSE_LL, keepMouse, mod, 0);
     // the keyboard hook is only worth installing when something actually needs it
-    bool wantKeys = mode == 1 || capsReport;
+    bool wantKeys = mode == 1;
     foreach(string key in binds.Keys) if(key.Length > 0 && key[0] == 'k') wantKeys = true;
     if(wantKeys) kbHook = SetWindowsHookEx(WH_KEYBOARD_LL, keepKeys, mod, 0);
-    /* The one read of the OS's own toggle. Best effort: if it is wrong the very first
-       flash says the wrong word and every one after it is right, because from here the
-       state is the hook's. Report it at once so the app starts from the truth too. */
-    if(capsReport){
-      capsOn = (GetKeyState(VK_CAPITAL) & 1) != 0;
-      try{ Console.Out.Write("CAPS:" + (capsOn ? 1 : 0) + "\n"); Console.Out.Flush(); }catch(Exception){}
-    }
     if(hook == IntPtr.Zero && kbHook == IntPtr.Zero) return 3;
 
     MSG msg;
@@ -969,10 +1416,6 @@ static class TBind {
       try{
         if(msg.message == WM_APP_SEND){ QueueSend(msg.wParam.ToInt32()); continue; }
         if(msg.message == WM_APP_BLOCK){ LogBlocked(); continue; }
-        if(msg.message == WM_APP_CAPS){
-          try{ Console.Out.Write("CAPS:" + msg.wParam.ToInt32() + "\n"); Console.Out.Flush(); }catch(Exception){}
-          continue;
-        }
         TranslateMessage(ref msg);
         DispatchMessage(ref msg);
       }catch(Exception e){ WriteCrash("loop", e); }

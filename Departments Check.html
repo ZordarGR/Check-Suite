@@ -1303,7 +1303,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.10";
+const APP_VERSION = "1.17.11";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1378,9 +1378,11 @@ en: {
   "sc.tauEnterOn": "The helper waits for protel to react, then presses Enter \u2014 the same way the invoice run times its own keys.",
   "sc.tauEnterWait": "wait",
   "sc.tauEnterOff": "The \u03c4 is sent on its own. Press Enter yourself, and not too quickly.",
-  "sc.capsLabel": "Show Caps Lock on screen",
-  "sc.capsOn": "The moment Caps Lock changes, the icon flashes in the middle of the screen for 1.5 seconds. The key itself is untouched.",
-  "sc.capsOff": "Caps Lock changes silently. Nothing watches the keyboard.",
+  "sc.bootLabel": "Start with Windows",
+  "sc.bootOn": "The helper starts at login and keeps running with RecCheck closed, so the Caps Lock indicator is always there. protel's shortcuts still need RecCheck open \u2014 the helper puts the mouse hook back only while it is.",
+  "sc.bootOff": "The helper runs only while RecCheck is open. Close RecCheck and the Caps Lock indicator goes with it.",
+  "sc.bootMissing": "Not available \u2014 rc-tbind.exe was not found next to the app.",
+  "sc.bootStopped": "Set to start with Windows, but it is not running right now.",
   "sc.moves": "Why the room pills say what they say",
   "dbg.menu": "DEBUG", "dbg.title": "DEBUG",
   "dbg.intro": "Diagnostics for the \u03c4 shortcut and the helper behind it. Nothing here changes anything \u2014 it only reports.",
@@ -1572,9 +1574,11 @@ gr: {
   "sc.tauEnterOn": "Ο βοηθός περιμένει να αντιδράσει το protel και μετά πατάει Enter — όπως ακριβώς κάνει και η ακολουθία του τιμολογίου.",
   "sc.tauEnterWait": "αναμονή",
   "sc.tauEnterOff": "Το τ στέλνεται μόνο του. Πάτα εσύ το Enter, και όχι πολύ γρήγορα.",
-  "sc.capsLabel": "Ένδειξη Caps Lock στην οθόνη",
-  "sc.capsOn": "Μόλις αλλάξει το Caps Lock, το εικονίδιο εμφανίζεται στο κέντρο της οθόνης για 1,5 δευτερόλεπτο. Το ίδιο το πλήκτρο δεν θίγεται.",
-  "sc.capsOff": "Το Caps Lock αλλάζει σιωπηρά. Τίποτα δεν παρακολουθεί το πληκτρολόγιο.",
+  "sc.bootLabel": "Εκκίνηση με τα Windows",
+  "sc.bootOn": "Ο βοηθός ξεκινά με τη σύνδεση και συνεχίζει με το RecCheck κλειστό, οπότε η ένδειξη Caps Lock υπάρχει πάντα. Οι συντομεύσεις του protel χρειάζονται ακόμα ανοιχτό το RecCheck — ο βοηθός βάζει το άγκιστρο του ποντικιού μόνο όσο είναι.",
+  "sc.bootOff": "Ο βοηθός τρέχει μόνο όσο είναι ανοιχτό το RecCheck. Κλείνοντάς το, φεύγει και η ένδειξη Caps Lock.",
+  "sc.bootMissing": "Μη διαθέσιμο — το rc-tbind.exe δεν βρέθηκε δίπλα στην εφαρμογή.",
+  "sc.bootStopped": "Έχει οριστεί να ξεκινά με τα Windows, αλλά αυτή τη στιγμή δεν τρέχει.",
   "sc.moves": "Γιατί λένε αυτό τα πλακίδια δωματίων",
   "dbg.menu": "DEBUG", "dbg.title": "DEBUG",
   "dbg.intro": "Διαγνωστικά για τη συντόμευση τ και τον βοηθό πίσω της. Τίποτα εδώ δεν αλλάζει κάτι — μόνο αναφέρει.",
@@ -2446,7 +2450,7 @@ function renderShortcuts(){
   });
   renderFocusGate();
   renderTauEnter();
-  renderCaps();
+  renderBoot();
 }
 /* ---- the Enter that follows the τ ----
    The τ is one keypress and protel takes a moment to react to it before it will accept
@@ -2487,31 +2491,41 @@ function renderTauEnter(){
     push(Number.isInteger(v) && v >= 0 && v <= 2000 ? v : undefined);
   };
 }
-/* ---- Caps Lock on screen ----
-   No light on the keyboard and nothing drawn by this machine, so the state changes
-   silently in the middle of a passport entry. Only the helper's hook can see the key
-   while protel has the focus. It is a switch because the hook is what sees it: turning
-   this off on a mouse-only profile takes the keyboard hook back out of the input path
-   entirely, rather than leaving it installed with nothing to do. */
-function renderCaps(){
-  const box = $("#scCapsBox");
+/* ---- the helper stands on its own ----
+   rc-tbind is not part of this app any more: it starts at Windows login and keeps the
+   Caps Lock indicator going with RecCheck closed, because the state flips silently
+   mid-passport whether or not anyone has the tool open. protel's shortcuts are the other
+   half of its job and they still belong to RecCheck — the helper only puts the mouse
+   hook back while RecCheck is actually running, so a machine with the tool closed
+   carries no mouse hook at all.
+
+   The state shown is the helper's own, read back from it, never a copy kept over here
+   that could say "on" while the thing itself is off. */
+function renderBoot(){
+  const box = $("#scBootBox");
   if(!box) return;
   const sc = window.reccheckShortcuts;
-  const cp = (SCSTATE && SCSTATE.caps) || {on: true};
+  const bt = (SCSTATE && SCSTATE.boot) || {on: false, available: false, running: false};
+  const say = st => !st.available ? t("sc.bootMissing")
+                  : !st.on ? t("sc.bootOff")
+                  : (st.running ? t("sc.bootOn") : t("sc.bootStopped"));
   box.innerHTML =
     '<div class="scFocus">' +
-      '<label class="scFocusTop"><input type="checkbox" id="scCapsOn"' + (cp.on ? " checked" : "") + '>' +
-        escapeHtml(t("sc.capsLabel")) + '</label>' +
-      '<div class="scFocusSub" id="scCapsSub">' +
-        escapeHtml(cp.on ? t("sc.capsOn") : t("sc.capsOff")) + '</div>' +
+      '<label class="scFocusTop"><input type="checkbox" id="scBootOn"' +
+        (bt.on ? " checked" : "") + (bt.available === false ? " disabled" : "") + '>' +
+        escapeHtml(t("sc.bootLabel")) + '</label>' +
+      '<div class="scFocusSub" id="scBootSub">' + escapeHtml(say(bt)) + '</div>' +
     '</div>';
-  const chk = $("#scCapsOn"), sub = $("#scCapsSub");
+  const chk = $("#scBootOn"), sub = $("#scBootSub");
   chk.onchange = async () => {
-    const st = await sc.capsSet(chk.checked).catch(() => null);
-    const on = st ? st.on : chk.checked;
-    if(SCSTATE) SCSTATE.caps = {on};
-    chk.checked = on;
-    sub.textContent = on ? t("sc.capsOn") : t("sc.capsOff");
+    const want = chk.checked;
+    chk.disabled = true;
+    const st = await sc.bootSet(want).catch(() => null);
+    chk.disabled = false;
+    const now = st || {on: want, available: true, running: want};
+    if(SCSTATE) SCSTATE.boot = now;
+    chk.checked = !!now.on;
+    sub.textContent = say(now);
   };
 }
 /* ---- the shortcuts belong to protel ----
@@ -2886,7 +2900,7 @@ function openShortcuts(){
       '<div id="scBody"></div>' +
       '<div id="scFocusBox"></div>' +
       '<div id="scTauBox"></div>' +
-      '<div id="scCapsBox"></div>' +
+      '<div id="scBootBox"></div>' +
       '<div id="scHelp" style="margin-top:12px;font-size:12px;line-height:1.5"></div>' +
       (st.available ? "" : '<div class="err">' + t("sc.unavailable") + '</div>') +
       '<div class="actions"><button class="btn amber" id="scOk">' + t("sc.done") + '</button></div>');
