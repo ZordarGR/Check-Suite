@@ -569,6 +569,17 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
 .match.watch{background:rgba(245,180,83,.16);border-color:var(--amber);
   box-shadow:0 0 0 1px var(--amber),0 4px 20px rgba(245,180,83,.28)}
 .match .state.watch,.rrow .tag.watch{background:#4a3a12;color:#ffd98a;border:1px solid var(--amber-dim)}
+/* A receipt on a room that is leaving today. The charge was made before they came to
+   the desk, so it has to be settled before they walk — the one thing on this screen you
+   must never skim past. Marked on the whole bar, not just a corner of it. */
+.match.left{background:linear-gradient(90deg,rgba(248,113,113,.20),rgba(248,113,113,.06) 65%);
+  border-color:var(--red);box-shadow:inset 4px 0 0 var(--red),0 4px 20px rgba(248,113,113,.22)}
+.match.left .room{color:#ffd7d7}
+.match .leftArrow{color:var(--red);font-size:19px;font-weight:800;line-height:1;flex:0 0 auto;
+  margin-left:2px;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+/* the watch highlight is amber and would fight it — departing wins, it is the harder fact */
+.match.left.watch{background:linear-gradient(90deg,rgba(248,113,113,.20),rgba(248,113,113,.06) 65%);
+  border-color:var(--red);box-shadow:inset 4px 0 0 var(--red),0 4px 20px rgba(248,113,113,.22)}
 .rrow.watch{background:linear-gradient(90deg,rgba(245,180,83,.13),rgba(245,180,83,.03) 70%)}
 
 /* ---------- update button (Electron only) ---------- */
@@ -1303,7 +1314,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.11";
+const APP_VERSION = "1.17.12";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1454,6 +1465,8 @@ en: {
   "extra.inReport": "That serial IS in tonight's report — close this and search for it.",
   "search.hint": "Type the receipt's full serial number · Enter confirms the match",
   "search.many": " matches — pick one with its checkbox", "search.reversed": "REVERSED at the POS — nothing to check",
+  "tag.leaving": "LEAVING TODAY",
+  "tag.leavingTitle": "This room is on today's departure list and the receipt is under the same name — the charge was made before check-out. Settle it before they leave.",
   "search.void": "VOID — consolidated by {by}, not counted",
   "room.ph": "room…", "room.hint": "room № · Enter = OK · ↑↓ rows · ←→ OK/⚠ · Esc",
   "acc.extra": " · incl. {n} added by hand", "acc.void": " · {n} void",
@@ -1654,6 +1667,8 @@ gr: {
   "extra.inReport": "Αυτός ο σειριακός ΥΠΑΡΧΕΙ στην αποψινή αναφορά — κλείσε και αναζήτησέ τον.",
   "search.hint": "Πληκτρολογήστε ολόκληρο τον σειριακό αριθμό · Enter επιβεβαιώνει το ταίριασμα",
   "search.many": " ταιριάσματα — επιλέξτε ένα με το κουτάκι του", "search.reversed": "ΑΚΥΡΩΜΕΝΗ στο POS — δεν χρειάζεται έλεγχο",
+  "tag.leaving": "ΦΕΥΓΕΙ ΣΗΜΕΡΑ",
+  "tag.leavingTitle": "Το δωμάτιο είναι στη σημερινή λίστα αναχωρήσεων και η απόδειξη είναι στο ίδιο όνομα — η χρέωση έγινε πριν το check-out. Τακτοποιήστε την πριν φύγουν.",
   "search.void": "ΑΚΥΡΗ — ενοποιήθηκε από {by}, δεν μετράει",
   "room.ph": "δωμ…", "room.hint": "№ δωματίου · Enter = OK · ↑↓ γραμμές · ←→ OK/⚠ · Esc",
   "acc.extra": " · μαζί με {n} χειροκίνητες", "acc.void": " · {n} άκυρες",
@@ -3965,6 +3980,7 @@ function searchInput(){
   inp().classList.remove("nomatch");
   if(!q) return;
 
+  LEAVING = leavingIndex();          // once per search, not once per card
   const ms = findMatches(q);
   const xs = findExtras(q);
   currentMatches = ms;               // Enter confirms a report receipt; an entry you
@@ -3986,6 +4002,40 @@ function searchInput(){
   for(const x of xs) box.append(extraMatchCard(x));
 }
 
+/* ---- a receipt on a room that is leaving today ----
+   His case, in his words: sixteen rooms were due out on 01/09 and they did not all leave
+   at 11:00. Some charged something to the room and only then came to the desk. A receipt
+   like that has to be settled before they walk out, so it is the one thing on this
+   screen that must not be skimmed past.
+
+   The NAME is part of the test, not decoration. A room leaving today may already have
+   been re-let to somebody arriving today, and that new guest's receipt is ordinary. Only
+   a receipt under the departing guest's own name counts. sameName() is the strict
+   comparison — the same one the nickname transfer uses — because marking the wrong
+   receipt red is worse than marking none at all.
+
+   Built once per search, not once per card: the ledger comes out of localStorage. */
+function leavingIndex(){
+  const out = {};
+  const night = MODEL ? dateNum(MODEL.reportDate) : 0;
+  if(!night) return out;                       // no night, no claim
+  const led = loadMoves();
+  for(const room of Object.keys(led)){
+    for(const a of Object.keys(led[room])){
+      const e = led[room][a];
+      if((e.d || 0) !== night) continue;        // not on today's departure list
+      (out[room] = out[room] || []).push(e.n || "");
+    }
+  }
+  return out;
+}
+let LEAVING = {};
+function isLeaving(room, name){
+  const names = LEAVING[room];
+  if(!names) return false;
+  for(const n of names) if(n && sameName(n, name)) return true;
+  return false;
+}
 function matchCard(r){
   const c = el("div","match");
   c.append(el("span","dept", r.dept));
@@ -4002,6 +4052,13 @@ function matchCard(r){
   c.append(el("span","split", rateSplitStr(r.voided ? r.posRates : effRates(r))));
   c.append(el("span","amt", numToMoney(r.voided ? r.posTotal : effTotal(r))));
 
+  const leaving = isLeaving(effRoom(r), gname);
+  if(leaving){
+    c.classList.add("left");
+    const lt = el("span","state missing", t("tag.leaving"));
+    lt.title = t("tag.leavingTitle");
+    c.append(lt);
+  }
   const ws = watchFor(effRoom(r));
   if(ws.length){
     c.classList.add("watch");
@@ -4024,6 +4081,14 @@ function matchCard(r){
     wb.title = "Flag a problem with this receipt";
     wb.onclick = e => { e.stopPropagation(); openRowMenu(wb, r); };
     c.append(wb);
+  }
+  if(leaving){
+    /* Right where the eye already goes to tick the box. aria-hidden because the pill
+       above already says LEAVING TODAY in words — a reader would hear it twice. */
+    const ar = el("span","leftArrow","\u2192");
+    ar.setAttribute("aria-hidden","true");
+    ar.title = t("tag.leavingTitle");
+    c.append(ar);
   }
   if(status !== "cancelled" && status !== "void"){
     const cb = document.createElement("input");

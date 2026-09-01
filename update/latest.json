@@ -1,11 +1,11 @@
 {
-  "version": "1.17.11",
-  "type": "full",
+  "version": "1.17.12",
+  "type": "html",
   "engine": "1.17.11",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.11/RecCheck-Setup.exe",
   "setupSha256": "384bb225fb7fddb912cfd04de9102e55641ad26a5f85da18d6e2e231c5762561",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "1f939712fd48d7fb0bde2e9607635710ae02671c2e2a57ad483f5a2a6fa16175",
-  "notes": "The helper stands on its own. It starts with Windows, so the Caps Lock indicator is there whether or not RecCheck is open. protel's shortcuts still need RecCheck running — the mouse hook goes in only while it is, and comes back out when it closes."
+  "sha256": "eadd34f9639d40226c454c7a8875e09cf505af46731d9a3d59d24d5383164271",
+  "notes": "A receipt on a room that is leaving today is marked in red, with an arrow beside its checkbox. Only the departing guest's own name is marked — a new arrival's receipt in the same room is left alone."
 }
