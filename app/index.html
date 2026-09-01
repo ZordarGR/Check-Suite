@@ -5059,11 +5059,79 @@ function loadLedger(){
   }catch(e){}
   return out;
 }
+/* ---- room moves ----
+   protel prints a room move as a NEW STAY on the new room, dated from the move. Verified
+   against his real Rate Check for 01/09: rooms 148, 263 and 535 were moves, and their
+   rows are byte-for-byte the same shape as a genuine arrival — same eight columns, same
+   x positions, arrival = today. Occupancy, rate, board and agent say nothing either. The
+   report simply does not carry the fact. So a move cannot be RECORDED from it; it can
+   only be worked out, and he asked for it to be, on 01/09.
+
+   The comparison is the one HE specified for the nickname transfer in 1.17.7: the same
+   name, exactly, in a different room, on the night before. The ledger is already the
+   daily name cache that needs — it keeps the guest name per stay and `seen`, the night a
+   list last confirmed it — so nothing new is stored to make this work.
+
+   Two guards, both of them his, both load-bearing:
+     * the old room still showing that name in TONIGHT's list is NOT a move — that is one
+       party across two rooms, and this file has seven such groups (families in adjoining
+       rooms). Without this guard every one of them would read as a move.
+     * an ambiguous match moves NOTHING. Two candidates and it stays an arrival.
+
+   These live here rather than reusing the copies in the department block: that is a
+   separate <script> IIFE and nothing crosses between them. Keep the two in step. */
+function mvSameName(a, b){
+  const n = x => String(x || "").trim().replace(/\s+/g, " ").toUpperCase();
+  const A = n(a);
+  return !!A && A === n(b);
+}
+function mvPrevNight(k){
+  if(!k) return 0;
+  const dt = new Date(Date.UTC(Math.floor(k / 10000), Math.floor(k / 100) % 100 - 1, k % 100));
+  dt.setUTCDate(dt.getUTCDate() - 1);
+  return dt.getUTCFullYear() * 10000 + (dt.getUTCMonth() + 1) * 100 + dt.getUTCDate();
+}
+/* Reads the ledger as it stood BEFORE tonight's list is written into it, which is the
+   only moment "where was this name last night" can still be answered. */
+function detectMoves(led, rate, night){
+  const out = [];
+  const prev = mvPrevNight(night);
+  if(!night || !prev) return out;
+  const tonight = {};                       // room -> the names tonight's list puts there
+  for(const room of Object.keys(rate.all))
+    tonight[room] = rate.all[room].map(x => (x.name || "").trim());
+  for(const room of Object.keys(rate.all)){
+    for(const x of rate.all[room]){
+      if(dkey(x.arr) !== night) continue;   // only rows protel is calling an arrival today
+      const name = (x.name || "").trim();
+      if(!name) continue;
+      const from = [];
+      for(const src of Object.keys(led)){
+        if(src === room) continue;
+        for(const a of Object.keys(led[src])){
+          const e = led[src][a], A = Number(a), D = e.d || 0;
+          if(e.mv) continue;                          // already vacated by an earlier move
+          if(!mvSameName(e.n, name)) continue;
+          const wasThere = (e.seen === prev) || (A <= prev && prev < D);
+          if(!wasThere) continue;
+          if((tonight[src] || []).some(nm => mvSameName(nm, name))) continue;  // still there
+          from.push({src: src, key: a});
+        }
+      }
+      if(from.length !== 1) continue;                 // ambiguous moves nothing at all
+      out.push({to: room, arr: dkey(x.arr), from: from[0].src, key: from[0].key, name: name});
+    }
+  }
+  return out;
+}
 function saveMoves(rate){
   if(!rate||!rate.all)return null;
   let wrote=0,why="";
   try{
     const led=loadLedger(), night=rate.dateKey||0;
+    /* Worked out BEFORE the write loop: afterwards the ledger already says the guest is
+       in the new room and the question can no longer be asked. */
+    const moves=detectMoves(led, rate, night);
     /* Record the dates the list actually carries, and nothing else.
        There used to be a rule here that shortened a stay whenever a room's arrival date
        did not match what was stored — meant to catch early checkouts. It keyed on the
@@ -5092,12 +5160,24 @@ function saveMoves(rate){
       for(const a of Object.keys(led[room]))if((led[room][a].d||0)<floor)delete led[room][a];
       if(!Object.keys(led[room]).length)delete led[room];
     }
+    /* Apply what was worked out above. The old stay is MARKED VACATED, not given a
+       departure date: the guest did leave that room, but protel never called it a
+       departure and inventing one would put a pill on his panel that his own list does
+       not have. `mv` simply stops the stale stay asserting anything — which is what was
+       silently firing a departure on that room weeks later. */
+    for(const m of moves){
+      const dst=led[m.to]&&led[m.to][m.arr];
+      if(dst)dst.from=m.from;                  // this stay began as a move out of that room
+      const src=led[m.from]&&led[m.from][m.key];
+      if(src)src.mv=night;                     // vacated by a room move on this night
+    }
     localStorage.setItem(MOVES_KEY,JSON.stringify(led));
     /* What this list actually put in the ledger, so DEBUG can answer "why no pills?"
        without anyone having to guess at it a second time. */
     let rooms=0,res=0;for(const r of Object.keys(led)){rooms++;res+=Object.keys(led[r]).length;}
     try{localStorage.setItem("reccheck_moves_last",JSON.stringify({
       biz:rate.bizDate||"(none in the header)", key:night||0, sure:!!rate.dateSure,
+      moves:moves.map(m=>m.from+"\u2192"+m.to),
       listRooms:Object.keys(rate.all).length, wrote:wrote,
       ledgerRooms:rooms, ledgerRes:res}));}catch(e){}
     return {night:night, sure:!!rate.dateSure, rooms:Object.keys(rate.all).length, res:res};
