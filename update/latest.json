@@ -1,11 +1,11 @@
 {
-  "version": "1.17.10",
+  "version": "1.17.11",
   "type": "full",
-  "engine": "1.17.10",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.10/RecCheck-Setup.exe",
-  "setupSha256": "e56e6b19da6b303c8143b85cc0e7b09b2b99f917eb03ade839259cf73b4f640e",
+  "engine": "1.17.11",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.11/RecCheck-Setup.exe",
+  "setupSha256": "384bb225fb7fddb912cfd04de9102e55641ad26a5f85da18d6e2e231c5762561",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "bcfdb2b0ceab8d928f0580cf0f591b85cb539e1d2bce104f2d71f675f433dcd1",
-  "notes": "Caps Lock shows on screen. The keyboard has no light for it and this PC draws nothing, so the state used to flip silently mid-passport. The icon now flashes in the middle of the screen the moment it changes. It can be switched off in PROTEL SHORTCUTS."
+  "sha256": "1f939712fd48d7fb0bde2e9607635710ae02671c2e2a57ad483f5a2a6fa16175",
+  "notes": "The helper stands on its own. It starts with Windows, so the Caps Lock indicator is there whether or not RecCheck is open. protel's shortcuts still need RecCheck running — the mouse hook goes in only while it is, and comes back out when it closes."
 }
