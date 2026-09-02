@@ -1,20 +1,30 @@
-## RecCheck 1.17.11 — Windows
+## RecCheck 1.17.13 — Windows
 
 Nightly POS receipt audit for the protel checkcharge1 report (.oxps). Everything runs locally — no data leaves the machine.
 
-### The helper stands on its own
+### A room move is no longer counted as an arrival
 
-`rc-tbind.exe` used to be a child of RecCheck: it started when you opened the app and died with it. It does not any more. It starts with Windows and keeps running with RecCheck closed.
+protel prints a room move as a **new stay on the new room, dated today** — the row is identical to a genuine arrival in every column, so the report cannot tell them apart. On 01/09 that meant 29 arrivals where 26 people actually arrived.
 
-**Caps Lock, always.** This keyboard has no Caps Lock light and the PC draws no on-screen notice, so the state could flip silently in the middle of a passport entry. Now the icon — the same **A** the laptops draw, struck through when it goes off — flashes in the middle of the screen at 35% for a second and a half, whether or not RecCheck is open. It has to run at login for that, which is what changed here.
+Moves now get their own blue **MOVED** group in the movements panel. A room counts as a move when the same guest name, exactly, was in a *different* room the night before and is not still charging there. Two guards, both deliberate: one party spread across two adjoining rooms is not a move, and an ambiguous match moves nothing at all.
 
-**protel's shortcuts still belong to RecCheck.** They fire only while RecCheck is running, and the helper works that out from your machine rather than being told. The **mouse hook goes in only while RecCheck is up and comes straight back out when you close it** — so a PC with RecCheck closed carries no mouse hook at all, exactly the scope it had when RecCheck started the helper itself.
+The room they came from stops claiming a departure it never had.
 
-**It can be switched off** in *PROTEL SHORTCUTS* → *Start with Windows*. Off means the helper only runs while RecCheck is open, and nothing starts at login. Uninstalling RecCheck removes the login entry too.
+### Departures that have receipts carry a dot
 
-Your bindings now travel in a small file the helper re-reads when it changes, instead of on its command line — changing a shortcut in the app takes effect without restarting anything.
+A **·** on a DEPARTED pill means that room also appears in tonight's department check — the paper you can throw away. Live receipts only: cancelled and POS-reversed ones do not count.
 
-Nothing is written to protel and nothing is read from it.
+### The τ is faster, and the millisecond box is gone
+
+The log showed a τ press costing 0.9–1.7 seconds, of which the Enter delay was 10–20 ms. It was the one setting with no effect on anything, sitting in front of you while the three that cost real time were hardcoded. Those are fixed now: a 150 ms wait that never once observed what it was waiting for is down to 30, and the layout switch is checked four times as often. The Enter itself still happens, and can still be turned off.
+
+### The shortcuts dialog uses the window
+
+It was a 420-pixel strip with a scrollbar no matter how wide your screen was. It now flows into columns like the checklist does.
+
+### The movement memory can be started again
+
+If the room movements panel is ever wrong, *PROTEL SHORTCUTS → Room movements memory → Start it again* clears it. The next rate list rebuilds it from what protel prints. Until now there was no way back.
 
 ### Install
 

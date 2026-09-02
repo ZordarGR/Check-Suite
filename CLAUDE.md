@@ -47,6 +47,14 @@ requirement that was never made.
 
 **Record the data the system holds. Do not deduce, correct or improve it.**
 
+**5. Discussing an idea is not asking for it. Queue it.**
+His words: *"unless i explicitly state that i want you to build x, y, z change treat every
+idea that i have and we discuss as something to be queued, not to be executed
+immediately"*. Answer the question, work out what it would take, put the open decisions
+to him — and stop there. Write it into the queue in `.reccheck-notes.md` and wait for an
+explicit go. This is partly about tokens and partly about rule 4: an idea half-discussed
+is not a specification.
+
 ## The hard constraint
 
 **protel is not his.** It is vendor-managed software on the hotel's PC, which is also not
