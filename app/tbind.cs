@@ -23,6 +23,13 @@
 //          else the press is passed through untouched, so the button stays a button. A
 //          window we cannot read anything about is allowed: the gate never blocks what
 //          it cannot see.
+//   rc-tbind.exe scan <parentPid> [delayMs]
+//       -> waits, then prints the control tree of whatever window is in front: class,
+//          control id, size, caption, and for list controls the row count INCLUDING rows
+//          scrolled out of sight. READ-ONLY in the strict sense: every message is a
+//          getter, nothing is written, and protel's state is identical afterwards. It is
+//          not zero-touch — asking a control a question makes code run in protel's UI
+//          thread — so it reports its own cost at the end, and it runs only when asked.
 //   rc-tbind.exe install / uninstall / stop / status
 //       -> add or remove the login entry (HKCU Run: no admin, nothing installed), and
 //          report "RCTBIND <on|off> <running|stopped> <version>"
@@ -150,6 +157,8 @@ static class TBind {
   const int VK_SHIFT = 0x10, VK_CONTROL = 0x11, VK_MENU = 0x12;
   const int VK_LWIN = 0x5B, VK_RWIN = 0x5C;
   const int VK_CAPITAL = 0x14;
+  const uint WM_GETTEXT = 0x000D, WM_GETTEXTLENGTH = 0x000E;
+  const uint LVM_GETITEMCOUNT = 0x1004, LB_GETCOUNT = 0x018B, CB_GETCOUNT = 0x0146, TVM_GETCOUNT = 0x1105;
 
   /* ---- the Caps Lock indicator's window ---- */
   const string CAPS_CLASS = "RcTbindCapsWnd";
@@ -206,6 +215,14 @@ static class TBind {
   [DllImport("user32.dll")] static extern uint MapVirtualKey(uint code, uint mapType);
   [DllImport("user32.dll")] static extern short GetAsyncKeyState(int vk);
   [DllImport("user32.dll")] static extern short GetKeyState(int vk);
+  [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr hWnd, EnumProc fn, IntPtr lParam);
+  [DllImport("user32.dll")] static extern int GetDlgCtrlID(IntPtr hWnd);
+  [DllImport("user32.dll")] static extern IntPtr GetParent(IntPtr hWnd);
+  [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hWnd, out RECT r);
+  [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hWnd);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SendMessageTimeoutW")]
+  static extern IntPtr SendMessageTimeoutText(IntPtr hWnd, uint msg, IntPtr wParam, StringBuilder lParam,
+                                              uint flags, uint timeout, out IntPtr result);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern ushort RegisterClassEx(ref WNDCLASSEX c);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)]
   static extern IntPtr CreateWindowEx(uint exStyle, string cls, string name, uint style,
@@ -265,6 +282,7 @@ static class TBind {
 
   static HookProc keepMouse, keepKeys;   // prevent the delegates from being garbage-collected
   delegate IntPtr WndProcD(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+  delegate bool EnumProc(IntPtr hWnd, IntPtr lParam);
   static WndProcD keepWndProc;           // same reason: the OS holds a raw pointer to it
 
   /* ---- Caps Lock: always on, RecCheck or no RecCheck ----
@@ -1137,6 +1155,112 @@ static class TBind {
     try{ string p = CrashPath(); if(p != null) System.IO.File.Delete(p); }catch(Exception){}
   }
 
+  /* ---- what the window in front is made of ----
+     Answers the one question a screenshot cannot: are protel's lists real Windows
+     controls, or does protel paint them itself? If they are real, a list control reports
+     its row count even for rows scrolled out of sight — which decides whether anything
+     built on this can know a WHOLE list or only the part on screen. If nothing comes
+     back, the next stop is UI Automation, then OCR.
+
+     READ-ONLY, in his sense of the word: every call is a question, nothing is written,
+     and protel holds exactly what it held before. It is NOT zero-touch — asking a control
+     for its text or its row count runs code on protel's UI thread that would not
+     otherwise have run. That is why it counts its own messages and times itself: he ships
+     this to a live desk on the understanding that if it makes protel slower the code
+     comes out again, and that decision needs a number, not a feeling.
+
+     The structural half (enumerate, class, id, rectangle, visibility) sends nothing at
+     all and costs protel literally zero — if the cost ever has to go, that half can stay. */
+  static StringBuilder SCAN = null;
+  static int scanSeen = 0, scanMsgs = 0;
+  const int SCAN_MAX = 500;
+  static int Depth(IntPtr h, IntPtr root){
+    int d = 0;
+    for(IntPtr p = h; p != IntPtr.Zero && p != root && d < 20; p = GetParent(p)) d++;
+    return d;
+  }
+  static string CtrlText(IntPtr h){
+    try{
+      IntPtr res;
+      scanMsgs++;
+      if(SendMessageTimeout(h, WM_GETTEXTLENGTH, IntPtr.Zero, IntPtr.Zero,
+                            SMTO_ABORTIFHUNG, 120, out res) == IntPtr.Zero) return "";
+      int len = res.ToInt32();
+      if(len <= 0) return "";
+      if(len > 300) len = 300;
+      StringBuilder b = new StringBuilder(len + 2);
+      scanMsgs++;
+      SendMessageTimeoutText(h, WM_GETTEXT, (IntPtr)(len + 1), b, SMTO_ABORTIFHUNG, 200, out res);
+      return b.ToString().Replace("\r", " ").Replace("\n", " ").Replace("\t", " ");
+    }catch(Exception){ return ""; }
+  }
+  /* the number the whole idea depends on: rows HELD, not rows visible. One message and
+     one integer back, whether the list holds ten rows or ten thousand. */
+  static int RowCount(IntPtr h, string cls){
+    uint msg = 0;
+    string c = cls.ToUpperInvariant();
+    if(c.IndexOf("SYSLISTVIEW32") >= 0) msg = LVM_GETITEMCOUNT;
+    else if(c.IndexOf("SYSTREEVIEW32") >= 0) msg = TVM_GETCOUNT;
+    else if(c.IndexOf("COMBOBOX") >= 0) msg = CB_GETCOUNT;
+    else if(c.IndexOf("LISTBOX") >= 0) msg = LB_GETCOUNT;
+    if(msg == 0) return -1;                     // not a list: nothing is sent at all
+    try{
+      IntPtr res;
+      scanMsgs++;
+      if(SendMessageTimeout(h, msg, IntPtr.Zero, IntPtr.Zero, SMTO_ABORTIFHUNG, 250, out res) == IntPtr.Zero)
+        return -1;
+      return res.ToInt32();
+    }catch(Exception){ return -1; }
+  }
+  static void ScanOne(IntPtr h, IntPtr root){
+    StringBuilder cls = new StringBuilder(160);
+    try{ GetClassName(h, cls, cls.Capacity); }catch(Exception){}
+    RECT r = new RECT();
+    try{ GetWindowRect(h, out r); }catch(Exception){}
+    int id = 0;
+    try{ id = GetDlgCtrlID(h); }catch(Exception){}
+    bool vis = false;
+    try{ vis = IsWindowVisible(h); }catch(Exception){}
+    int rows = RowCount(h, cls.ToString());
+    string txt = CtrlText(h);
+    if(txt.Length > 120) txt = txt.Substring(0, 120) + "\u2026";
+    SCAN.Append(new string(' ', Depth(h, root) * 2));
+    SCAN.Append(Hex(h) + "\tid=" + id + "\t" + cls
+                + "\t" + (r.right - r.left) + "x" + (r.bottom - r.top)
+                + (vis ? "" : "\thidden")
+                + (rows >= 0 ? "\tROWS=" + rows : "")
+                + (txt.Length > 0 ? "\t\"" + txt + "\"" : "")
+                + "\n");
+  }
+  static void ScanForeground(){
+    IntPtr fg = IntPtr.Zero;
+    try{ fg = GetForegroundWindow(); }catch(Exception){}
+    if(fg == IntPtr.Zero){ SCAN.Append("no foreground window\n"); return; }
+    string exe, cls, txt;
+    ForegroundOf(fg, out exe, out cls, out txt);
+    SCAN.Append("rc-tbind " + VER + " window scan  " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "\n");
+    SCAN.Append("front: " + exe + " | " + cls + " | " + txt + "\n\n");
+    scanSeen = 0; scanMsgs = 0;
+    int t0 = Environment.TickCount;
+    ScanOne(fg, fg);
+    EnumProc keep = delegate(IntPtr h, IntPtr lp){
+      if(scanSeen++ >= SCAN_MAX) return false;
+      ScanOne(h, fg);
+      return true;
+    };
+    try{ EnumChildWindows(fg, keep, IntPtr.Zero); }
+    catch(Exception e){ SCAN.Append("enumerate failed: " + e.Message + "\n"); }
+    int took = Environment.TickCount - t0;
+    SCAN.Append("\n" + scanSeen + " child window(s)"
+                + (scanSeen >= SCAN_MAX ? " \u2014 stopped at the cap" : "") + "\n");
+    /* THE COST, in his own terms. This is the line that decides whether the probe stays. */
+    SCAN.Append(scanMsgs + " message(s) asked of protel, whole sweep took " + took + " ms\n");
+    SCAN.Append("Nothing was written. If protel felt slower during that, this is what did it.\n");
+    if(scanSeen == 0)
+      SCAN.Append("\nNo child windows at all, so this window is painted rather than built from\n"
+                  + "controls: there is nothing here to read by window. UI Automation next.\n");
+  }
+
   /* ---------------- the binds file, the login entry, and RecCheck ---------------- */
 
   /* RecCheck used to hand the bindings over on the command line, because RecCheck
@@ -1245,7 +1369,7 @@ static class TBind {
     try{ Console.Out.Write(t + "\n"); Console.Out.Flush(); }catch(Exception){}
   }
 
-  const string VER = "v11";
+  const string VER = "v12";
 
   static int Main(string[] args){
     int parentPid;
@@ -1284,6 +1408,24 @@ static class TBind {
       }catch(Exception){}
       try{ return RunStandalone(); }
       catch(Exception e){ WriteCrash("run", e); return 5; }
+    }
+    if(args.Length >= 2 && args[0] == "scan"){
+      /* Read-only, one shot, installs nothing. Waits so the user can bring the window
+         they care about to the front, then reports what it is built from. */
+      int spid;
+      if(!int.TryParse(args[1], out spid)) return 2;
+      int swait = 5000;
+      if(args.Length >= 3) int.TryParse(args[2], out swait);
+      if(swait < 0) swait = 0;
+      if(swait > 60000) swait = 60000;
+      Thread.Sleep(swait);
+      SCAN = new StringBuilder();
+      try{ ScanForeground(); }catch(Exception e){ SCAN.Append("EXCEPTION: " + e.Message + "\n"); }
+      /* NOT TrimEnd(): mcs binds it happily here, and whether .NET Framework 4.8 has the
+         same overload is exactly the bet that killed ParseBind once. Say() adds its own
+         newline and a spare one costs nothing. */
+      Say(SCAN.ToString());
+      return 0;
     }
     if(args.Length >= 1 && args[0] == "ping"){
       /* Reached only if the file exists, is allowed to execute and the runtime is

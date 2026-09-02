@@ -1330,7 +1330,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.13";
+const APP_VERSION = "1.17.14";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1415,6 +1415,10 @@ en: {
   "sc.bootMissing": "Not available \u2014 rc-tbind.exe was not found next to the app.",
   "sc.bootStopped": "Set to start with Windows, but it is not running right now.",
   "sc.moves": "Why the room pills say what they say",
+  "sc.scan": "What the window in front is built from",
+  "sc.scanHint": "Read-only. It asks each control what it is and what it holds \u2014 nothing is written and protel keeps exactly what it had. It is not free, though: the report ends with how many questions it asked protel and how long that took.",
+  "sc.scanWait": "Bring the protel window you want forward\u2026 {n}",
+  "sc.scanNone": "Nothing came back \u2014 the helper could not run the scan.",
   "dbg.menu": "DEBUG", "dbg.title": "DEBUG",
   "dbg.intro": "Diagnostics for the \u03c4 shortcut and the helper behind it. Nothing here changes anything \u2014 it only reports.",
   "dbg.lock": "Hide this menu again",
@@ -1620,6 +1624,10 @@ gr: {
   "sc.bootMissing": "Μη διαθέσιμο — το rc-tbind.exe δεν βρέθηκε δίπλα στην εφαρμογή.",
   "sc.bootStopped": "Έχει οριστεί να ξεκινά με τα Windows, αλλά αυτή τη στιγμή δεν τρέχει.",
   "sc.moves": "Γιατί λένε αυτό τα πλακίδια δωματίων",
+  "sc.scan": "Από τι αποτελείται το μπροστινό παράθυρο",
+  "sc.scanHint": "Μόνο ανάγνωση. Ρωτάει κάθε στοιχείο τι είναι και τι περιέχει — τίποτα δεν γράφεται και το protel κρατάει ακριβώς ό,τι είχε. Δεν είναι όμως δωρεάν: η αναφορά τελειώνει με το πόσες ερωτήσεις έγιναν στο protel και πόσο κράτησαν.",
+  "sc.scanWait": "Φέρε μπροστά το παράθυρο του protel που θέλεις… {n}",
+  "sc.scanNone": "Δεν επέστρεψε τίποτα — ο βοηθός δεν μπόρεσε να τρέξει τη σάρωση.",
   "dbg.menu": "DEBUG", "dbg.title": "DEBUG",
   "dbg.intro": "Διαγνωστικά για τη συντόμευση τ και τον βοηθό πίσω της. Τίποτα εδώ δεν αλλάζει κάτι — μόνο αναφέρει.",
   "dbg.lock": "Απόκρυψη ξανά",
@@ -2892,7 +2900,9 @@ function openDebug(){
     '</div>' +
     '<div style="display:flex;gap:8px;align-items:center;margin-top:8px">' +
       '<button class="btn" id="scMoves" style="flex:1">' + t("sc.moves") + '</button>' +
+      '<button class="btn" id="scScan" style="flex:1">' + t("sc.scan") + '</button>' +
     '</div>' +
+    '<div class="err" style="color:var(--faint)">' + t("sc.scanHint") + '</div>' +
     '<div class="err" style="color:var(--faint)">' + t("sc.testHint") + '</div>' +
     '<pre id="scDiag" style="display:none"></pre>' +
     '<div class="actions">' +
@@ -2931,6 +2941,34 @@ function openDebug(){
       copy.style.display = "";
       copy.onclick = () => { try{ navigator.clipboard.writeText(log); }catch(e){} };
     }else copy.style.display = "none";
+  };
+  /* ---- the window scan ----
+     Read-only in the strict sense: every message is a getter, nothing is written, protel
+     holds exactly what it held before. NOT zero-touch — asking a control for its text or
+     row count runs code on protel's UI thread — which is why the report ends with how
+     many messages it asked and how long the sweep took. He is running this on a live desk
+     on the understanding that if protel feels slower, this comes out; that decision needs
+     the number, so the number is printed with the answer. */
+  $("#scScan").onclick = async () => {
+    const pre = $("#scDiag"), copy = $("#scCopy"), b = $("#scScan");
+    if(!sc || b.dataset.busy) return;
+    b.dataset.busy = "1";
+    copy.style.display = "none";
+    pre.style.display = "";
+    let left = 6;
+    pre.textContent = t("sc.scanWait", {n: left});
+    const tick = setInterval(() => {
+      left--;
+      if(left > 0) pre.textContent = t("sc.scanWait", {n: left});
+    }, 1000);
+    const rep = await sc.scan(6000).catch(() => null);
+    clearInterval(tick);
+    delete b.dataset.busy;
+    pre.textContent = rep || t("sc.scanNone");
+    if(rep){
+      copy.style.display = "";
+      copy.onclick = () => { try{ navigator.clipboard.writeText(rep); }catch(e){} };
+    }
   };
   $("#scMoves").onclick = () => {
     const pre = $("#scDiag"), copy = $("#scCopy");

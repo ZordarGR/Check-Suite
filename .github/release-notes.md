@@ -1,30 +1,18 @@
-## RecCheck 1.17.13 — Windows
+## RecCheck 1.17.14 — Windows
 
 Nightly POS receipt audit for the protel checkcharge1 report (.oxps). Everything runs locally — no data leaves the machine.
 
-### A room move is no longer counted as an arrival
+### A read-only look at what a protel window is made of
 
-protel prints a room move as a **new stay on the new room, dated today** — the row is identical to a genuine arrival in every column, so the report cannot tell them apart. On 01/09 that meant 29 arrivals where 26 people actually arrived.
+In **DEBUG → What the window in front is built from**. Press it, bring the protel window you care about forward, and it prints the control tree: class, id, size, caption, and for list controls **the number of rows the list holds — including the ones scrolled out of sight**.
 
-Moves now get their own blue **MOVED** group in the movements panel. A room counts as a move when the same guest name, exactly, was in a *different* room the night before and is not still charging there. Two guards, both deliberate: one party spread across two adjoining rooms is not a move, and an ambiguous match moves nothing at all.
+That last number is the point. It decides whether anything built on live reading could ever know a *whole* list, or only the part on screen. If nothing comes back, these lists are painted rather than built from controls, and the answer is that this approach cannot work.
 
-The room they came from stops claiming a departure it never had.
+**Read-only in the strict sense.** Every message is a getter — a length, a caption, a count. Nothing is written, no key is sent, no window is moved or changed, and protel holds exactly what it held before.
 
-### Departures that have receipts carry a dot
+**It is not free, and it says so.** Asking a control a question runs code on protel's own UI thread. So the report ends with **how many questions it asked and how long the sweep took**. If protel feels slower while it runs, that line is what did it — and it is the number this feature will be kept or removed on.
 
-A **·** on a DEPARTED pill means that room also appears in tonight's department check — the paper you can throw away. Live receipts only: cancelled and POS-reversed ones do not count.
-
-### The τ is faster, and the millisecond box is gone
-
-The log showed a τ press costing 0.9–1.7 seconds, of which the Enter delay was 10–20 ms. It was the one setting with no effect on anything, sitting in front of you while the three that cost real time were hardcoded. Those are fixed now: a 150 ms wait that never once observed what it was waiting for is down to 30, and the layout switch is checked four times as often. The Enter itself still happens, and can still be turned off.
-
-### The shortcuts dialog uses the window
-
-It was a 420-pixel strip with a scrollbar no matter how wide your screen was. It now flows into columns like the checklist does.
-
-### The movement memory can be started again
-
-If the room movements panel is ever wrong, *PROTEL SHORTCUTS → Room movements memory → Start it again* clears it. The next rate list rebuilds it from what protel prints. Until now there was no way back.
+It runs once, only when you press the button. It installs nothing, watches nothing, and writes nothing to disk.
 
 ### Install
 
