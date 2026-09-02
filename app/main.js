@@ -722,6 +722,23 @@ ipcMain.handle("sc-diag", (_e, delayMs) => new Promise(res => {
     setTimeout(() => { try{ child.kill(); }catch(e){} finish(); }, wait + 20000);
   }catch(e){ finish(); }
 }));
+/* The read-only window scan. One shot, installs nothing, spawns a short-lived helper
+   that walks the window in front and prints what it is built from — plus, at the end,
+   how many messages it asked of protel and how long the sweep took. That last line is
+   the whole basis on which he decides whether this stays. */
+ipcMain.handle("sc-scan", (_e, delayMs) => new Promise(res => {
+  if(process.platform !== "win32" || !tauPath()){ res(null); return; }
+  const wait = Math.max(1000, Math.min(30000, +delayMs || 6000));
+  let out = "", done = false;
+  const finish = () => { if(done) return; done = true; res(out || null); };
+  try{
+    const child = spawn(tauPath(), ["scan", String(process.pid), String(wait)], {windowsHide: true});
+    child.stdout.on("data", d => { out += d; });
+    child.on("exit", finish);
+    child.on("error", finish);
+    setTimeout(() => { try{ child.kill(); }catch(e){} finish(); }, wait + 30000);
+  }catch(e){ finish(); }
+}));
 /* Ask the helper to say hello and report what came back, alongside what the bound
    helper is currently doing. This is the difference between "you have not bound
    anything", "the file is not on disk", "Windows will not start it" and "it starts

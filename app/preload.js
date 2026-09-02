@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld("reccheckShortcuts", {
   detect: (action) => ipcRenderer.invoke("sc-detect", action),
   cancel: () => ipcRenderer.invoke("sc-cancel"),
   diag: (ms) => ipcRenderer.invoke("sc-diag", ms),
+  scan: (ms) => ipcRenderer.invoke("sc-scan", ms),
   helper: () => ipcRenderer.invoke("sc-helper"),
   tauLog: () => ipcRenderer.invoke("sc-taulog"),
   tauEnterSet: (on, delay) => ipcRenderer.invoke("sc-tauenter-set", on, delay),

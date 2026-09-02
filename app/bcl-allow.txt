@@ -8,7 +8,14 @@
 # So: adding a line to this file is the moment to confirm the member exists in
 # .NET Framework 4.8. Nothing else in this build will tell you.
 #
-# Reviewed for 1.17.11 (v10). Regenerate deliberately, never wholesale.
+# Reviewed for 1.17.14 (v12). Regenerate deliberately, never wholesale.
+#
+# v12 added the read-only window scan. Everything it brought in is either our own
+# identifier or a user32 P/Invoke name -- EnumChildWindows, GetDlgCtrlID, GetParent,
+# GetWindowRect, IsWindowVisible, SendMessageTimeoutW -- and P/Invoke carries no BCL
+# risk. NOTE: String.TrimEnd() was deliberately NOT used; mcs binds a parameterless
+# overload that .NET Framework 4.8 may not have, and this guard cannot tell overloads
+# apart. That is the same shape as the Split() call that once killed ParseBind.
 #
 # v10 added the Caps Lock window and the login entry. The framework surface that
 # came with it, each confirmed present in .NET Framework 4.8 and not Mono-only:
@@ -39,7 +46,9 @@
 <Module>
 <QueueSend>c__AnonStorey0
 <Run>c__AnonStorey1
+<Run>c__AnonStorey2
 <RunStandalone>m__2
+<ScanForeground>c__AnonStorey1
 a
 ACT_ALTF4
 ACT_ALTN
@@ -99,6 +108,7 @@ capsOn
 CapsPaint
 capsWnd
 CapsWndProc
+CB_GETCOUNT
 cbClsExtra
 cbSize
 cbWndExtra
@@ -123,6 +133,7 @@ CreateDirectory
 CreateSolidBrush
 CreateSubKey
 CreateWindowEx
+CtrlText
 cur
 CurMods
 CurrentUser
@@ -132,6 +143,7 @@ DefWindowProc
 Delete
 DeleteObject
 DeleteValue
+Depth
 Describe
 DIAG
 Dictionary`2
@@ -150,7 +162,9 @@ EndInvoke
 EndPaint
 Enter
 entry
+EnumChildWindows
 Enumerator
+EnumProc
 Environment
 erase
 Exception
@@ -202,6 +216,7 @@ GetClientRect
 GetCurrentProcess
 GetCurrentThreadId
 GetDirectoryName
+GetDlgCtrlID
 GetEnumerator
 GetFolderPath
 GetForegroundWindow
@@ -213,6 +228,7 @@ GetKeyState
 GetLastWriteTimeUtc
 GetMessage
 GetModuleHandle
+GetParent
 GetProcessById
 GetProcessesByName
 GetQueueStatus
@@ -220,6 +236,7 @@ GetStockObject
 GetSystemMetrics
 GetTypeFromHandle
 GetValue
+GetWindowRect
 GetWindowText
 GetWindowThreadProcessId
 GLYPH
@@ -278,6 +295,7 @@ Invoke
 IsExtendedVk
 IsModifierVk
 IsVolatile
+IsWindowVisible
 KBDLLHOOKSTRUCT
 kbHook
 keepKeys
@@ -303,6 +321,7 @@ lastBlocked
 LastIndexOf
 LayoutList
 lb
+LB_GETCOUNT
 lbColor
 lbHatch
 lbStyle
@@ -317,10 +336,12 @@ LoadBinds
 LoadKeyboardLayout
 LogBlocked
 LOGBRUSH
+lp
 lParam
 lpfnWndProc
 lpszClassName
 lpszMenuName
+LVM_GETITEMCOUNT
 LWA_ALPHA
 LWA_COLORKEY
 m
@@ -412,6 +433,8 @@ RestoreLayout
 result
 rgbReserved
 right
+root
+RowCount
 Run
 RUNK
 RunStandalone
@@ -421,8 +444,14 @@ RUNV
 s
 SameLang
 Say
+SCAN
 scan
+SCAN_MAX
 scanCode
+ScanForeground
+scanMsgs
+ScanOne
+scanSeen
 scKey
 SelectObject
 SendAltKey
@@ -431,6 +460,8 @@ SendGreekT
 SendInput
 sendLock
 SendMessageTimeout
+SendMessageTimeoutText
+SendMessageTimeoutW
 SendSequence
 set_CreateNoWindow
 set_IsBackground
@@ -502,6 +533,7 @@ Trim
 TryEnter
 TryGetValue
 TryParse
+TVM_GETCOUNT
 txt
 Type
 type
@@ -544,6 +576,8 @@ WM_APP_HOST
 WM_APP_SEND
 WM_CLOSE
 WM_DESTROY
+WM_GETTEXT
+WM_GETTEXTLENGTH
 WM_INPUTLANGCHANGEREQUEST
 WM_KEYDOWN
 WM_KEYUP

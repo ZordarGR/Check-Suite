@@ -1,11 +1,11 @@
 {
-  "version": "1.17.13",
+  "version": "1.17.14",
   "type": "full",
-  "engine": "1.17.13",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.13/RecCheck-Setup.exe",
-  "setupSha256": "eaf20dbef11b0d6441104484c95def6f739a373bc7e6af0707900578beb26151",
+  "engine": "1.17.14",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.14/RecCheck-Setup.exe",
+  "setupSha256": "b9f2b522d00b132b740e2e1ab52a65d79be04686703689e1b3c32465d6ad0acd",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "e39d54787eb046fa3ed858eac35208963f72d9ea27f9f1f5f4d78ca81027e14f",
-  "notes": "Room moves show as MOVED instead of counting as arrivals. Departures whose room has receipts carry a dot. The shortcuts dialog uses the whole window. The τ is faster — the millisecond box is gone because it was never the thing that was slow. And the movement memory can be started again."
+  "sha256": "77425ec300b6cd1ae8abfb080c9dbef9161c791d4e67eb7c612db3c1d72ab6ea",
+  "notes": "A read-only window scan, in DEBUG. It asks the window in front what it is built from and whether its lists can report a full row count. Nothing is written to protel. It reports how many questions it asked and how long they took, so the cost is a number rather than a feeling."
 }
