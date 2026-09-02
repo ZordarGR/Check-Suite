@@ -47,7 +47,12 @@ requirement that was never made.
 
 **Record the data the system holds. Do not deduce, correct or improve it.**
 
-**5. Discussing an idea is not asking for it. Queue it.**
+**5. Discussing an idea is not asking for it. Queue it — but fix bugs on sight.**
+His amendment, 02/09: *"bug fixes are built right then and there, dont wait for my call"*.
+So the rule cuts one way only. A NEW behaviour, however obviously good, waits for an
+explicit go. Something that is already meant to work and does not is fixed immediately,
+without asking. If it is not clear which one it is, it is a feature — ask.
+
 His words: *"unless i explicitly state that i want you to build x, y, z change treat every
 idea that i have and we discuss as something to be queued, not to be executed
 immediately"*. Answer the question, work out what it would take, put the open decisions
