@@ -1330,7 +1330,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.14";
+const APP_VERSION = "1.17.15";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -2114,11 +2114,23 @@ function toastReceipt(r){
   t._h = setTimeout(() => t.className = "", 3400);
 }
 
-/* ---------- sense of time: the working night runs 07:00 → 07:00 ---------- */
-const NIGHT_ROLLOVER_H = 7;
+/* ---------- sense of time: two boundaries, because two different things roll over ----------
+   The WORKING NIGHT is protel's date: it turns at 03:30. Everything that answers "which
+   night is this report for" reads this one — the welcome line, "last night" / "N nights
+   ago", the TONIGHT badge in the file browser, the past-report warning in Tax Check.
+
+   The SHIFT still ends at 07:00. The checklist ticks and the desktop overlay clear then,
+   because those are about the shift being stood, not about protel's date. */
+const NIGHT_ROLLOVER_H = 3.5;      // working night — protel's date turns at 03:30
+const SHIFT_ROLLOVER_H = 7;        // checklist + overlay ticks — the shift ends at 07:00
+function dayKeyAt(h, ms){
+  const d = new Date((ms === undefined ? Date.now() : ms) - h * 3600e3);
+  return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+}
 function businessNightDate(){ return new Date(Date.now() - NIGHT_ROLLOVER_H * 3600e3); }
-function bnKey(){ const d = businessNightDate(); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); }
-function bnKeyOf(ms){ const d = new Date(ms - NIGHT_ROLLOVER_H * 3600e3); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); }
+function bnKey(){ return dayKeyAt(NIGHT_ROLLOVER_H); }
+function bnKeyOf(ms){ return dayKeyAt(NIGHT_ROLLOVER_H, ms); }
+function shiftKey(){ return dayKeyAt(SHIFT_ROLLOVER_H); }
 function nightsAgoKey(key){                       // how many nights before the current working night
   if(!key) return null;
   const b = businessNightDate();
@@ -3110,17 +3122,21 @@ function paintSevSel(){
     b.innerHTML = t(bm.lbl) + (b.dataset.tier === CLTIER ? ' <span class="chk">✓</span>' : "");
   });
 }
+/* The ticks clear at 07:00, the end of the shift — not at 03:30 when protel's date turns.
+   Only ever forward: the stored key was written by the single old boundary, so between
+   03:30 and 07:00 it reads one day ahead of this one, and a plain !== would wipe his
+   ticks once, mid-shift, on the upgrade. A clock that jumped back does not clear either. */
 function clNightCheck(){
-  const k = String(bnKey());
+  const k = shiftKey(), ks = String(k);
   let stored = null;
   try{ stored = localStorage.getItem("reccheck_cl_night"); }catch(e){}
-  if(stored !== k){
-    try{ localStorage.setItem("reccheck_cl_night", k); }catch(e){}
-    if(stored !== null && CL.some(x => x.done)){   // a new working night began — fresh ticks
-      CL.forEach(x => { x.done = false; });
-      saveCL();
-      renderChecklist();
-    }
+  if(stored === ks) return;
+  try{ localStorage.setItem("reccheck_cl_night", ks); }catch(e){}
+  const prev = Number(stored);
+  if(stored !== null && prev && k > prev && CL.some(x => x.done)){   // a new shift began — fresh ticks
+    CL.forEach(x => { x.done = false; });
+    saveCL();
+    renderChecklist();
   }
 }
 function clSubmit(){
@@ -4417,7 +4433,7 @@ function renderMoves(){
      can throw away. Live ones only: a receipt cancelled or reversed at the POS is not
      something he is holding to file. Built once, not once per pill. */
   const withRec = new Set();
-  if(MODEL) for(const r of liveReceipts()){ const rm = effRoom(r); if(rm) withRec.add(String(rm)); }
+  if(MODEL) for(const r of checkableList()){ const rm = effRoom(r); if(rm) withRec.add(String(rm)); }
   for(const kind of ["dep", "turn", "move", "arr"]){
     const of = rooms.filter(r => mv[r].kind === kind);
     if(!of.length) continue;
@@ -5581,8 +5597,9 @@ el('file-tax').addEventListener('change',e=>loadTax(e.target.files[0]));
 el('taxBack').addEventListener('click',()=>{ if(window.rcShowAudit) window.rcShowAudit(); });
 window.__taSetLang=function(l){ if(l!==LANG) setLang(l); el('taxBack').textContent='← '+(l==='el'?'ΕΛΕΓΧΟΣ':'AUDIT'); };
 
-/* time safeguard: warn when a loaded report is for a past working night (07:00 rollover) */
-function bnk(){const d=new Date(Date.now()-7*3600e3);return d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();}
+/* time safeguard: warn when a loaded report is for a past working night. Separate scope
+   from the audit half, so the 03:30 boundary is repeated here rather than shared. */
+function bnk(){const d=new Date(Date.now()-3.5*3600e3);return d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();}
 function timeGuardHTML(){
   let h='';const B=bnk();
   if(RATE&&RATE.dateKey&&RATE.dateKey<B)h+=`<div class="banner warn">⚠ ${t('tw_pastrate',dfmt(RATE.dateKey),dfmt(B))}</div>`;

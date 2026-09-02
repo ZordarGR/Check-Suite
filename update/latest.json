@@ -1,11 +1,11 @@
 {
-  "version": "1.17.14",
-  "type": "full",
+  "version": "1.17.15",
+  "type": "html",
   "engine": "1.17.14",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.14/RecCheck-Setup.exe",
   "setupSha256": "b9f2b522d00b132b740e2e1ab52a65d79be04686703689e1b3c32465d6ad0acd",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "77425ec300b6cd1ae8abfb080c9dbef9161c791d4e67eb7c612db3c1d72ab6ea",
-  "notes": "A read-only window scan, in DEBUG. It asks the window in front what it is built from and whether its lists can report a full row count. Nothing is written to protel. It reports how many questions it asked and how long they took, so the cost is a number rather than a feeling."
+  "sha256": "178f1dd17c08cb9b5170ffc51d7f659fb1c8091517dbc381ede9aeb62ec77adc",
+  "notes": "The movements panel was crashing on an undefined call and drew nothing but its title. Fixed. The working night now turns at 03:30 with protel's date; the checklist ticks and the desktop overlay still clear at 07:00, at the end of the shift."
 }
