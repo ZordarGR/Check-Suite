@@ -319,6 +319,14 @@ body.hasMoves main{max-width:1330px}
 .mvPill.mv-dep{background:rgba(248,113,113,.14);border-color:var(--red-dim);color:var(--red)}
 .mvPill.mv-arr{background:rgba(74,222,128,.13);border-color:#1f6b3d;color:var(--green)}
 .mvPill.mv-turn{background:rgba(245,180,83,.15);border-color:#7a5522;color:var(--amber)}
+/* A move is not an arrival. protel prints one as a new stay on the new room dated today,
+   so the report cannot tell them apart — this is the only thing on the panel worked out
+   rather than read, and it gets its own colour so that is never in doubt. */
+.mvPill.mv-move{background:rgba(96,165,250,.14);border-color:#2c4f7c;color:#93c5fd}
+/* a departure whose room also has receipts tonight — the paper to throw away */
+.mvPill.rec{position:relative}
+.mvPill.rec::after{content:"";position:absolute;top:3px;right:4px;width:5px;height:5px;
+  border-radius:50%;background:currentColor;opacity:.95}
 .mvPill.guess{border-style:dashed;opacity:.72}
 /* a heading per colour, so the eye reads three short blocks instead of a chequerboard */
 .mvGroup{display:flex;align-items:baseline;gap:7px;margin:12px 0 6px;font-family:var(--mono);
@@ -328,6 +336,7 @@ body.hasMoves main{max-width:1330px}
 .mvGroup.mv-dep{color:var(--red)}
 .mvGroup.mv-arr{color:var(--green)}
 .mvGroup.mv-turn{color:var(--amber)}
+.mvGroup.mv-move{color:#93c5fd}
 .mvNote{margin-top:9px;font-size:10.5px;line-height:1.45;color:var(--faint)}
 @media (max-width:1180px){
   #bodyRow{flex-direction:column}
@@ -340,10 +349,6 @@ body.hasMoves main{max-width:1330px}
 .scFocusTop{display:flex;align-items:center;gap:9px;font-size:13px;cursor:pointer}
 .scFocusTop input{width:15px;height:15px;accent-color:var(--amber);cursor:pointer}
 .scFocusSub{margin:7px 0 9px;font-size:11.5px;line-height:1.5;color:var(--dim);font-family:var(--mono)}
-.scTauMs{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--dim);font-family:var(--mono)}
-.scTauMs input{width:68px;background:var(--panel2);border:1px solid var(--line);border-radius:7px;color:var(--txt);
-  font-family:var(--mono);font-size:12.5px;padding:5px 8px}
-.scTauMs input:focus{outline:none;border-color:var(--amber)}
 #notThereBtn{display:none}
 #notThereBtn.show{display:inline-block}
 .xWho{margin:-6px 0 10px;font-size:12px;color:#4fd1c5;font-family:var(--mono)}
@@ -447,6 +452,17 @@ body.hasMoves main{max-width:1330px}
   max-height:calc(100vh - 32px);overflow-y:auto;overscroll-behavior:contain;
   box-shadow:0 24px 60px rgba(0,0,0,.7)}
 #modal.wide{width:min(780px,94vw)}
+/* The 1.17.4-1.17.5 work made the HOME SCREEN flow into columns and fixed the modal's
+   HEIGHT; dialog WIDTH was never in scope, so this one stayed a 420 px strip with a
+   scrollbar on a wide window. The cards flow now, the same way the checklist does. */
+#modal.cards{width:min(1100px,95vw)}
+#modal.cards .scCards{display:grid;gap:12px;
+  grid-template-columns:repeat(auto-fit,minmax(300px,1fr));align-items:start}
+/* the cards carry their own top margin for the old single-column stack; inside the grid
+   the gap does that job and the margin would double it */
+#modal.cards .scCards > .scRow,
+#modal.cards .scCards > * > .scFocus{margin-top:0}
+@media (max-width:760px){ #modal.cards .scCards{grid-template-columns:1fr} }
 /* on-screen print preview — mirrors the @media print sheet styling on white paper */
 #pvPaper{background:#fff;color:#000;border-radius:6px;max-height:62vh;overflow:auto;padding:20px 22px;
   font-family:"Segoe UI",Arial,sans-serif;font-size:12px;box-shadow:inset 0 0 0 1px #ccc}
@@ -1314,7 +1330,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.12";
+const APP_VERSION = "1.17.13";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1387,8 +1403,12 @@ en: {
   "sc.focusSelf": "That was RecCheck, not protel. Start it again and bring protel forward before the count ends.",
   "sc.tauEnterLabel": "Press Enter for me after the \u03c4",
   "sc.tauEnterOn": "The helper waits for protel to react, then presses Enter \u2014 the same way the invoice run times its own keys.",
-  "sc.tauEnterWait": "wait",
   "sc.tauEnterOff": "The \u03c4 is sent on its own. Press Enter yourself, and not too quickly.",
+  "sc.ledgerLabel": "Room movements memory",
+  "sc.ledgerSub": "{rooms} rooms, {res} stays. Everything the movements panel shows comes from here. A stay recorded under a wrong date can never be corrected by a later list \u2014 only cleared.",
+  "sc.ledgerClear": "Start it again",
+  "sc.ledgerConfirm": "Sure? This cannot be undone \u2014 click again",
+  "sc.ledgerDone": "Cleared. The next rate list starts it again from what protel prints.",
   "sc.bootLabel": "Start with Windows",
   "sc.bootOn": "The helper starts at login and keeps running with RecCheck closed, so the Caps Lock indicator is always there. protel's shortcuts still need RecCheck open \u2014 the helper puts the mouse hook back only while it is.",
   "sc.bootOff": "The helper runs only while RecCheck is open. Close RecCheck and the Caps Lock indicator goes with it.",
@@ -1457,7 +1477,9 @@ en: {
   "extra.knownAs": "in that room:",
   "mv.title": "ROOM MOVEMENTS",
   "mv.dep": "left today", "mv.arr": "arrived today", "mv.turn": "left and re-let same day",
-  "mv.h.dep": "DEPARTED", "mv.h.arr": "ARRIVED", "mv.h.turn": "TURNOVER",
+  "mv.move": "moved in from another room today — not a new arrival",
+  "mv.rec": "has receipts in tonight's report",
+  "mv.h.dep": "DEPARTED", "mv.h.arr": "ARRIVED", "mv.h.turn": "TURNOVER", "mv.h.move": "MOVED",
   "mv.guess": "occupant changed — inferred",
   "mv.from": "from the rate list of {d}",
   "mv.guessNote": "Dashed rooms are inferred from the guest name changing, not from real dates. Load any rate list in Tax Check — it carries every in-house guest's departure date, so one list answers for the nights ahead of it too.",
@@ -1587,6 +1609,11 @@ gr: {
   "sc.tauEnterOn": "Ο βοηθός περιμένει να αντιδράσει το protel και μετά πατάει Enter — όπως ακριβώς κάνει και η ακολουθία του τιμολογίου.",
   "sc.tauEnterWait": "αναμονή",
   "sc.tauEnterOff": "Το τ στέλνεται μόνο του. Πάτα εσύ το Enter, και όχι πολύ γρήγορα.",
+  "sc.ledgerLabel": "Μνήμη κινήσεων δωματίων",
+  "sc.ledgerSub": "{rooms} δωμάτια, {res} διαμονές. Ό,τι δείχνει ο πίνακας κινήσεων προέρχεται από εδώ. Μια διαμονή καταγεγραμμένη σε λάθος ημερομηνία δεν διορθώνεται ποτέ από επόμενη λίστα — μόνο σβήνεται.",
+  "sc.ledgerClear": "Ξεκίνα την από την αρχή",
+  "sc.ledgerConfirm": "Σίγουρα; Δεν αναιρείται — πάτα ξανά",
+  "sc.ledgerDone": "Καθαρίστηκε. Η επόμενη λίστα δωματίων την ξαναχτίζει από ό,τι τυπώνει το protel.",
   "sc.bootLabel": "Εκκίνηση με τα Windows",
   "sc.bootOn": "Ο βοηθός ξεκινά με τη σύνδεση και συνεχίζει με το RecCheck κλειστό, οπότε η ένδειξη Caps Lock υπάρχει πάντα. Οι συντομεύσεις του protel χρειάζονται ακόμα ανοιχτό το RecCheck — ο βοηθός βάζει το άγκιστρο του ποντικιού μόνο όσο είναι.",
   "sc.bootOff": "Ο βοηθός τρέχει μόνο όσο είναι ανοιχτό το RecCheck. Κλείνοντάς το, φεύγει και η ένδειξη Caps Lock.",
@@ -1659,7 +1686,9 @@ gr: {
   "extra.knownAs": "στο δωμάτιο:",
   "mv.title": "ΚΙΝΗΣΕΙΣ ΔΩΜΑΤΙΩΝ",
   "mv.dep": "αναχώρησε σήμερα", "mv.arr": "άφιξη σήμερα", "mv.turn": "έφυγε και ξαναδόθηκε την ίδια μέρα",
-  "mv.h.dep": "ΑΝΑΧΩΡΗΣΑΝ", "mv.h.arr": "ΑΦΙΞΕΙΣ", "mv.h.turn": "ΑΛΛΑΓΗ",
+  "mv.move": "μετακόμισε από άλλο δωμάτιο σήμερα — δεν είναι νέα άφιξη",
+  "mv.rec": "έχει αποδείξεις στην αποψινή αναφορά",
+  "mv.h.dep": "ΑΝΑΧΩΡΗΣΑΝ", "mv.h.arr": "ΑΦΙΞΕΙΣ", "mv.h.turn": "ΑΛΛΑΓΗ", "mv.h.move": "ΜΕΤΑΚΙΝΗΣΕΙΣ",
   "mv.guess": "άλλαξε ο ένοικος — εκτίμηση",
   "mv.from": "από τη λίστα δωματίων της {d}",
   "mv.guessNote": "Τα διακεκομμένα προκύπτουν από αλλαγή ονόματος, όχι από πραγματικές ημερομηνίες. Φόρτωσε οποιαδήποτε λίστα δωματίων στο Tax Check — έχει την ημερομηνία αναχώρησης κάθε ενοίκου, οπότε μία λίστα απαντά και για τις επόμενες βραδιές.",
@@ -2466,6 +2495,54 @@ function renderShortcuts(){
   renderFocusGate();
   renderTauEnter();
   renderBoot();
+  renderLedgerReset();
+}
+/* ---- start the movement ledger again ----
+   Offered twice and never taken up, so it was never built: until now there has been NO
+   way back from a ledger that holds something wrong. Everything the panel says comes out
+   of `reccheck_moves_v2`, and an entry written under a wrong arrival key can never be
+   overwritten by a later list — only added to. This clears it. The next rate list starts
+   it again from what protel prints.
+
+   It asks first, and it says what will be lost, because the ledger is the only record of
+   nights whose rate list is not on disk any more. */
+function renderLedgerReset(){
+  const box = $("#scLedgerBox");
+  if(!box) return;
+  let rooms = 0, res = 0;
+  try{
+    const led = loadMoves();
+    for(const r of Object.keys(led)){ rooms++; res += Object.keys(led[r]).length; }
+  }catch(e){}
+  box.innerHTML =
+    '<div class="scFocus">' +
+      '<div class="scFocusTop">' + escapeHtml(t("sc.ledgerLabel")) + '</div>' +
+      '<div class="scFocusSub" id="scLedgerSub">' +
+        escapeHtml(t("sc.ledgerSub", {rooms: rooms, res: res})) + '</div>' +
+      '<button class="btn" id="scLedgerClear" style="margin-top:9px">' +
+        escapeHtml(t("sc.ledgerClear")) + '</button>' +
+    '</div>';
+  const btn = $("#scLedgerClear"), sub = $("#scLedgerSub");
+  let armed = false;
+  btn.onclick = () => {
+    if(!armed){
+      armed = true;
+      btn.textContent = t("sc.ledgerConfirm");
+      btn.classList.add("amber");
+      setTimeout(() => {
+        if(!armed) return;
+        armed = false; btn.textContent = t("sc.ledgerClear"); btn.classList.remove("amber");
+      }, 5000);
+      return;
+    }
+    armed = false;
+    try{ localStorage.removeItem(MOVES_KEY); }catch(e){}
+    try{ localStorage.removeItem("reccheck_moves_last"); }catch(e){}
+    btn.textContent = t("sc.ledgerClear");
+    btn.classList.remove("amber");
+    sub.textContent = t("sc.ledgerDone");
+    try{ renderMoves(); }catch(e){}
+  };
 }
 /* ---- the Enter that follows the τ ----
    The τ is one keypress and protel takes a moment to react to it before it will accept
@@ -2484,26 +2561,21 @@ function renderTauEnter(){
         escapeHtml(t("sc.tauEnterLabel")) + '</label>' +
       '<div class="scFocusSub" id="scTauSub">' +
         escapeHtml(te.on ? t("sc.tauEnterOn") : t("sc.tauEnterOff")) + '</div>' +
-      '<label class="scTauMs" id="scTauMsRow">' + escapeHtml(t("sc.tauEnterWait")) +
-        ' <input type="number" id="scTauMs" min="0" max="2000" step="10" value="' + (+te.delay || 0) + '"> ms</label>' +
     '</div>';
-  const chk = $("#scTauOn"), num = $("#scTauMs"), sub = $("#scTauSub"), row = $("#scTauMsRow");
-  const paint = st => {
-    sub.textContent = st.on ? t("sc.tauEnterOn") : t("sc.tauEnterOff");
-    row.style.display = st.on ? "" : "none";
-    num.value = +st.delay || 0;
-  };
-  paint(te);
-  const push = async delay => {
-    const st = await sc.tauEnterSet(chk.checked, delay).catch(() => null);
+  /* The millisecond box is GONE, and it should never come back on a guess. It was made
+     settable because this side could not know what protel needed and could not test on
+     Windows — a hedge, not a decision. His own log settled it on 02/09: a tau press costs
+     922-1656 ms, of which that number was 10-20. It was the one knob with no leverage,
+     put in front of him, while the three that cost real time stayed hardcoded. Those are
+     fixed properly in the helper now. His words: "if you are the one who has to change
+     the delay for enter, why have you put the scale on the settings?" */
+  const chk = $("#scTauOn"), sub = $("#scTauSub");
+  chk.onchange = async () => {
+    const st = await sc.tauEnterSet(chk.checked, undefined).catch(() => null);
     if(st && SCSTATE) SCSTATE.tauEnter = st;
-    paint(st || {on: chk.checked, delay: te.delay});
-  };
-  chk.onchange = () => push(undefined);
-  /* Only on change, never per keystroke: every write respawns the helper. */
-  num.onchange = () => {
-    const v = parseInt(num.value, 10);
-    push(Number.isInteger(v) && v >= 0 && v <= 2000 ? v : undefined);
+    const on = st ? st.on : chk.checked;
+    chk.checked = on;
+    sub.textContent = on ? t("sc.tauEnterOn") : t("sc.tauEnterOff");
   };
 }
 /* ---- the helper stands on its own ----
@@ -2912,13 +2984,17 @@ function openShortcuts(){
       '<p class="scIntro">' + t("sc.intro") + '</p>' +
       '<div class="err" style="color:var(--faint)">' +
         t("up.scActive", {n: (scActiveProfile() || {}).name || "-"}) + '</div>' +
-      '<div id="scBody"></div>' +
-      '<div id="scFocusBox"></div>' +
-      '<div id="scTauBox"></div>' +
-      '<div id="scBootBox"></div>' +
+      '<div class="scCards" id="scBody"></div>' +
+      '<div class="scCards">' +
+        '<div id="scFocusBox"></div>' +
+        '<div id="scTauBox"></div>' +
+        '<div id="scBootBox"></div>' +
+        '<div id="scLedgerBox"></div>' +
+      '</div>' +
       '<div id="scHelp" style="margin-top:12px;font-size:12px;line-height:1.5"></div>' +
       (st.available ? "" : '<div class="err">' + t("sc.unavailable") + '</div>') +
       '<div class="actions"><button class="btn amber" id="scOk">' + t("sc.done") + '</button></div>');
+    $("#modal").classList.add("cards");     // let the cards use the window's width
     renderShortcuts();
     refreshHelperStatus();
     $("#scOk").onclick = closeModal;
@@ -3778,7 +3854,7 @@ function openRowMenu(anchor, r){
 
 /* ---------- modal ---------- */
 function openModal(html){ const bg = $("#modalBg"); $("#modal").innerHTML = html; bg.classList.add("open"); }
-function closeModal(){ $("#modalBg").classList.remove("open"); $("#modal").classList.remove("wide"); armEnterGuard(); $("#snInput").focus(); }
+function closeModal(){ $("#modalBg").classList.remove("open"); $("#modal").classList.remove("wide", "cards"); armEnterGuard(); $("#snInput").focus(); }
 $("#modalBg").addEventListener("click", e => { if(e.target.id === "modalBg") closeModal(); });
 /* every prompt: Enter = its default (amber) button, Esc = cancel/close */
 function modalDefaultBtn(){
@@ -4253,17 +4329,28 @@ function roomMoves(){
   for(const room of Object.keys(led)){
     let arr = false, dep = false, from = 0;
     const who = [];
+    let moved = null;
     for(const a of Object.keys(led[room])){
       const r = led[room][a], A = Number(a), D = r.d || 0;
-      if(A === night){ arr = true; from = Math.max(from, r.seen || 0); if(r.n) who.push("\u2192 " + r.n); }
+      /* A stay the guest was MOVED OUT of. It is kept, because it is what protel printed,
+         but it no longer asserts anything: the room did not depart, the guest simply is
+         not in it. Without this the old room fires a departure on the original date. */
+      if(r.mv) continue;
+      if(A === night){
+        arr = true; from = Math.max(from, r.seen || 0);
+        if(r.from) moved = r.from;              // arrived here by moving out of that room
+        if(r.n) who.push((r.from ? "\u21b3 " : "\u2192 ") + r.n + (r.from ? "  (" + r.from + " \u2192 " + room + ")" : ""));
+      }
       if(D === night){
         dep = true; from = Math.max(from, r.seen || 0);
         if(r.n) who.push("\u2190 " + r.n);
       }
     }
     if(!arr && !dep) continue;
-    out[room] = {kind: (arr && dep) ? "turn" : (arr ? "arr" : "dep"), who: who, sure: true,
-                 from: from};
+    /* A move that also departs tonight is still a turnover — the room changed hands
+       twice and that is the louder fact. */
+    const kind = (arr && dep) ? "turn" : (arr ? (moved ? "move" : "arr") : "dep");
+    out[room] = {kind: kind, who: who, sure: true, from: from, movedFrom: moved};
   }
   /* A room no rate list has ever covered: all the department report alone can say is
      that the name under it changed. Never overrides a real date. */
@@ -4288,7 +4375,12 @@ function renderMoves(){
      group, as it always was — but interleaving the three kinds turned the panel into a
      chequerboard you had to decode pill by pill, which is the opposite of the point.
      The headings also retire the legend: a colour under the word for it needs no key. */
-  for(const kind of ["dep", "turn", "arr"]){
+  /* Departures whose room also has receipts in tonight's department check — the paper he
+     can throw away. Live ones only: a receipt cancelled or reversed at the POS is not
+     something he is holding to file. Built once, not once per pill. */
+  const withRec = new Set();
+  if(MODEL) for(const r of liveReceipts()){ const rm = effRoom(r); if(rm) withRec.add(String(rm)); }
+  for(const kind of ["dep", "turn", "move", "arr"]){
     const of = rooms.filter(r => mv[r].kind === kind);
     if(!of.length) continue;
     const head = el("div","mvGroup mv-" + kind);
@@ -4298,8 +4390,10 @@ function renderMoves(){
     const grid = el("div","mvGrid");
     for(const room of of){
       const m = mv[room];
-      const pill = el("div","mvPill mv-" + m.kind + (m.sure ? "" : " guess"), room);
+      const rec = kind === "dep" && withRec.has(String(room));
+      const pill = el("div","mvPill mv-" + m.kind + (m.sure ? "" : " guess") + (rec ? " rec" : ""), room);
       pill.title = t("mv." + m.kind) + (m.sure ? "" : " · " + t("mv.guess"))
+                 + (rec ? " · " + t("mv.rec") : "")
                  + (m.who.length ? "\n" + m.who.join("\n") : "")
                  + (m.from ? "\n" + t("mv.from", {d: dShort(m.from)}) : "");
       grid.append(pill);

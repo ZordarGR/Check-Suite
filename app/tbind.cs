@@ -171,6 +171,13 @@ static class TBind {
   const uint CAPS_DARK  = 0x00161210;       // COLORREF is 0x00BBGGRR -> #101216
   const uint CAPS_WHITE = 0x00FFFFFF;
   const uint CAPS_HOLD_MS = 1500, CAPS_FADE_MS = 40;
+
+  /* Measured on his machine, 02/09: a tau press cost 922-1656 ms, of which the Enter gap
+     he had been tuning was 10-20 ms. These three numbers are where the time actually
+     went. Do NOT reorder Win+Space behind SendMessageTimeout to chase more — v7 put it
+     first because asking protel directly failed, and that ordering is a fix. */
+  const int ARRIVE_MS = 30;                  // was 150, and it observed nothing in 6 of 6
+  const int HOP_MS = 5, HOP_TICKS = 40;      // was 20 x 10 — the same 200 ms window
   const char TAU = 'τ';
   const long GREEK = 0x0408;
 
@@ -501,8 +508,12 @@ static class TBind {
     int tries = count > 4 ? 4 : count;          // never cycle forever hunting a layout
     for(int i = 0; i < tries; i++){
       PressWinSpace();
-      for(int w = 0; w < 10; w++){
-        Thread.Sleep(20);
+      /* Same 200 ms window as before, checked every 5 ms instead of every 20. The shell
+         usually lands the switch well inside the first tick, and the old granularity
+         meant paying up to 20 ms for a hop that had already happened — three times per
+         press, since the restore polls the same way. */
+      for(int w = 0; w < HOP_TICKS; w++){
+        Thread.Sleep(HOP_MS);
         if(ThreadHasLang(tid, hkl)){
           D("    Win+Space landed on the target after " + (i + 1) + " press(es)");
           return true;
@@ -539,7 +550,7 @@ static class TBind {
       int tries = count > 1 ? (count > 4 ? 4 : count) : 2;
       for(int i = 0; i < tries && !ThreadHasLang(tid, cur); i++){
         PressWinSpace();
-        for(int w = 0; w < 10 && !ThreadHasLang(tid, cur); w++) Thread.Sleep(20);
+        for(int w = 0; w < HOP_TICKS && !ThreadHasLang(tid, cur); w++) Thread.Sleep(HOP_MS);
       }
     }catch(Exception){}
     if(!ThreadHasLang(tid, cur))
@@ -564,9 +575,14 @@ static class TBind {
        problem from Greek because that path neither hops nor restores.
 
        So: wait for the key to APPEAR, then for it to LEAVE, then settle. */
+    /* 150 ms here, and on his machine it NEVER observed the key: six consecutive presses
+       from the 02/09 log all report "never showed up", and all six then had the key taken
+       in ~0 ms. It was 150 ms of pure waste on every single press. Cut to 30, which still
+       covers a key that genuinely does show up late; the wait that actually protects the
+       tau is the DRAIN loop below, which is untouched. */
     int t = 0;
-    for(; t < 150 && !KeyQueued(); t += 3) Thread.Sleep(3);         // arrive
-    if(!KeyQueued() && t >= 150)
+    for(; t < ARRIVE_MS && !KeyQueued(); t += 3) Thread.Sleep(3);   // arrive
+    if(!KeyQueued() && t >= ARRIVE_MS)
       D("  the key never showed up in the queue within " + t + " ms");
     else D("  key reached the queue after ~" + t + " ms");
     /* Generous on purpose. A busy protel — one still drawing the preview of the invoice
@@ -1229,7 +1245,7 @@ static class TBind {
     try{ Console.Out.Write(t + "\n"); Console.Out.Flush(); }catch(Exception){}
   }
 
-  const string VER = "v10";
+  const string VER = "v11";
 
   static int Main(string[] args){
     int parentPid;

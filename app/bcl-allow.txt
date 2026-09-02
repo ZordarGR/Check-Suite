@@ -59,6 +59,7 @@ Append
 AppendLine
 AppendTauLog
 args
+ARRIVE_MS
 AsyncCallback
 attach
 attached
@@ -242,6 +243,8 @@ hk
 hkl
 hook
 HookProc
+HOP_MS
+HOP_TICKS
 HopTo
 HopViaWinSpace
 HostRunning
