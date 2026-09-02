@@ -1,11 +1,11 @@
 {
-  "version": "1.17.15",
-  "type": "full",
-  "engine": "1.17.15",
+  "version": "1.17.16",
+  "type": "html",
+  "engine": "1.17.14",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.15/RecCheck-Setup.exe",
   "setupSha256": "936f34ecf267809da59d597c207f5873aa0eb973d3117a49b495657cddece42e",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "178f1dd17c08cb9b5170ffc51d7f659fb1c8091517dbc381ede9aeb62ec77adc",
-  "notes": "The movements panel was crashing on an undefined call and drew nothing but its title. Fixed. The working night now turns at 03:30 with protel's date; the checklist ticks and the desktop overlay still clear at 07:00, at the end of the shift."
+  "sha256": "7f9b08ea07a900b82270599cfab76a060591cdbb5d5e9e955f934c131e6601d7",
+  "notes": "A layout sweep. The DEBUG dialog was a 420 px strip its own buttons could not fit in — it clipped its labels and side-scrolled. And the audit half's header styling was leaking into the Tax Check page, rendering its title as a sticky amber monospace bar on one unbreakable line, which pushed the whole page past the window between 901 and 1090 px wide."
 }
