@@ -463,6 +463,14 @@ body.hasMoves main{max-width:1330px}
 #modal.cards .scCards > .scRow,
 #modal.cards .scCards > * > .scFocus{margin-top:0}
 @media (max-width:760px){ #modal.cards .scCards{grid-template-columns:1fr} }
+/* DEBUG's buttons carry whole sentences ("Why the room pills say what they say") and
+   .btn is white-space:nowrap, so a flex row of them had no min-content it could shrink
+   to: in the 420 px dialog the row ran 183 px past the edge and the whole dialog
+   side-scrolled, clipping its own text. A grid reflows instead of overflowing, at any
+   width, however long a label gets. */
+#modal .dbgGrid{display:grid;gap:8px;align-items:start;margin-top:12px;
+  grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+#modal .dbgGrid .btn{width:100%;white-space:normal}
 /* on-screen print preview — mirrors the @media print sheet styling on white paper */
 #pvPaper{background:#fff;color:#000;border-radius:6px;max-height:62vh;overflow:auto;padding:20px 22px;
   font-family:"Segoe UI",Arial,sans-serif;font-size:12px;box-shadow:inset 0 0 0 1px #ccc}
@@ -643,9 +651,28 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
   }
 #taxScreen *{box-sizing:border-box}
 #taxScreen{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+/* The audit half styles its app chrome on the bare `header` selector, and the tax screen
+   has a <header> of its own — so the tax page's title block has been rendering as a
+   sticky, blurred, bordered flex BAR all along, laying its title and its sentence out
+   side by side instead of stacked. That is what pushed the page past the window between
+   901 and ~1090 px, where the help panel takes 300 px of the width. It is a title and a
+   paragraph; nothing else. */
+#taxScreen header{display:block;position:static;top:auto;z-index:auto;gap:0;
+  background:none;border:0;backdrop-filter:none;padding:0;}
 #taxScreen .wrap{max-width:1080px;margin:0 auto;padding:22px 20px 60px;}
-#taxScreen .topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;}
-#taxScreen header h1{font-size:19px;margin:0 0 3px;letter-spacing:.2px;}#taxScreen header h1 span{color:var(--accent);}
+/* The help panel pushes this page 300 px right from 901 px up, which leaves a 909 px
+   window 597 px of column. The topbar could not shrink into that — no wrap, and a
+   flex-shrink:0 language switcher — so the whole tax page side-scrolled between
+   901 and ~1090 px. Wrapping costs nothing at full width and cannot overflow. */
+#taxScreen .topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;}
+#taxScreen .topbar > header{min-width:0;flex:1 1 320px;}
+/* Same leak as the header itself: the audit's `header h1` is amber, monospace, 600 and
+   white-space:nowrap, and only the properties re-declared here were ever overriding it.
+   So the tax page's title has been rendering in the audit's identity, on one unbreakable
+   line that ran under the menu button. It states them all now. */
+#taxScreen header h1{font-size:19px;margin:0 0 3px;letter-spacing:.2px;
+  font-family:inherit;font-weight:600;color:var(--txt);white-space:normal;cursor:default;}
+#taxScreen header h1 span{color:var(--accent);font-weight:inherit;}
 #taxScreen header p{margin:0;color:var(--muted);font-size:13px;max-width:720px;}
 #taxScreen .langsw{display:flex;gap:6px;flex-shrink:0;}
 #taxScreen .langsw button{padding:4px;border:1px solid var(--line);background:var(--panel2);border-radius:7px;cursor:pointer;line-height:0;opacity:.5;transition:.15s;}
@@ -1330,7 +1357,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.15";
+const APP_VERSION = "1.17.16";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -2905,14 +2932,14 @@ function openDebug(){
     '<h3>' + t("dbg.title") + '</h3>' +
     '<p class="scIntro">' + t("dbg.intro") + '</p>' +
     '<div id="dbgHelp" style="margin-top:2px;font-size:12px;line-height:1.5"></div>' +
-    '<div style="display:flex;gap:8px;align-items:center;margin-top:16px">' +
-      '<button class="btn" id="scTest" style="flex:1">' + t("sc.test") + '</button>' +
-      '<button class="btn" id="scLog" style="flex:1">' + t("sc.log") + '</button>' +
+    '<div class="dbgGrid">' +
+      '<button class="btn" id="scTest">' + t("sc.test") + '</button>' +
+      '<button class="btn" id="scLog">' + t("sc.log") + '</button>' +
       '<button class="btn small" id="scCopy" style="display:none">' + t("sc.testCopy") + '</button>' +
     '</div>' +
-    '<div style="display:flex;gap:8px;align-items:center;margin-top:8px">' +
-      '<button class="btn" id="scMoves" style="flex:1">' + t("sc.moves") + '</button>' +
-      '<button class="btn" id="scScan" style="flex:1">' + t("sc.scan") + '</button>' +
+    '<div class="dbgGrid" style="margin-top:8px">' +
+      '<button class="btn" id="scMoves">' + t("sc.moves") + '</button>' +
+      '<button class="btn" id="scScan">' + t("sc.scan") + '</button>' +
     '</div>' +
     '<div class="err" style="color:var(--faint)">' + t("sc.scanHint") + '</div>' +
     '<div class="err" style="color:var(--faint)">' + t("sc.testHint") + '</div>' +
@@ -2921,6 +2948,7 @@ function openDebug(){
       '<button class="btn" id="dbgLock">' + t("dbg.lock") + '</button>' +
       '<button class="btn amber" id="dbgOk">' + t("sc.done") + '</button>' +
     '</div>');
+  $("#modal").classList.add("wide");   // the reports are wide monospace; 420 px strangled them
   refreshHelperStatus("#dbgHelp", true);
   $("#scTest").onclick = async () => {
     const b = $("#scTest"), pre = $("#scDiag"), copy = $("#scCopy");
