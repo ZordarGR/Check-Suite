@@ -1,11 +1,11 @@
 {
-  "version": "1.17.19",
+  "version": "1.17.20",
   "type": "html",
   "engine": "1.17.18",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.18/RecCheck-Setup.exe",
   "setupSha256": "a85dfde6754d5ff37ba935a2f6c6da3237c6121d4a621987bac72e91b9b55ff8",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "1e2ab2fdc2e01425b707c731efa4829d8bc03047c5df51914d8233293023e21a",
-  "notes": "Legacy mode, in PROTEL SHORTCUTS. Untick it and the Rate Check slot comes off the Tax Check screen; tick it and the slot is back exactly as it was. It only hides — no file, no ledger and no parsed list is touched — and it ships on."
+  "sha256": "3b27ca74a2a7662c9b0edc5fc4d80c1538bf0b9f566fa76b490bf738e167b104",
+  "notes": "Legacy mode is under OPTIONS now, with the language and the folders, instead of in PROTEL SHORTCUTS. That menu is about protel's keys; where the tool's lists come from is not."
 }
