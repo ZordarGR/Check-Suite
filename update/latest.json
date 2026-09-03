@@ -1,11 +1,11 @@
 {
-  "version": "1.17.18",
-  "type": "full",
+  "version": "1.17.19",
+  "type": "html",
   "engine": "1.17.18",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.18/RecCheck-Setup.exe",
   "setupSha256": "a85dfde6754d5ff37ba935a2f6c6da3237c6121d4a621987bac72e91b9b55ff8",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "041a71e6d0d86e7f318e431b02f6590d68a30d502d0178ce5841f6afbc8d4923",
-  "notes": "The first half of reading protel live, and it sends protel nothing at all: Windows reports when a protel window opens or closes and RecCheck writes down the caption Windows already holds. DEBUG shows what it saw. Kept for the night only and cleared at 07:00 with the shift. Also: the 07:00 reset no longer summons the overlay to tell you it happened."
+  "sha256": "1e2ab2fdc2e01425b707c731efa4829d8bc03047c5df51914d8233293023e21a",
+  "notes": "Legacy mode, in PROTEL SHORTCUTS. Untick it and the Rate Check slot comes off the Tax Check screen; tick it and the slot is back exactly as it was. It only hides — no file, no ledger and no parsed list is touched — and it ships on."
 }

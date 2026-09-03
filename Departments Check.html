@@ -1357,7 +1357,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.18";
+const APP_VERSION = "1.17.19";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1443,6 +1443,9 @@ en: {
   "sc.bootStopped": "Set to start with Windows, but it is not running right now.",
   "sc.moves": "Why the room pills say what they say",
   "sc.scan": "What the window in front is built from",
+  "sc.legacyLabel": "Legacy mode \u2014 feed the lists from XPS files",
+  "sc.legacyOn": "On. The Rate Check slot is on the Tax Check screen and works exactly as it always has.",
+  "sc.legacyOff": "Off. The Rate Check slot is hidden. Nothing is deleted \u2014 tick this again and it comes straight back, ledger and all.",
   "sc.watch": "What protel opened tonight",
   "sc.watchHint": "Zero-touch \u2014 nothing at all is sent to protel. Windows tells RecCheck when a protel window opens or closes, and the caption is the one Windows already holds. Kept for the night only and cleared at 07:00 with the shift.",
   "sc.watchNone": "Nothing recorded this shift. It only watches once a protel window has been picked as the target (PROTEL SHORTCUTS \u2192 only while protel is in front), and it clears itself at 07:00.",
@@ -1655,6 +1658,9 @@ gr: {
   "sc.bootStopped": "Έχει οριστεί να ξεκινά με τα Windows, αλλά αυτή τη στιγμή δεν τρέχει.",
   "sc.moves": "Γιατί λένε αυτό τα πλακίδια δωματίων",
   "sc.scan": "Από τι αποτελείται το μπροστινό παράθυρο",
+  "sc.legacyLabel": "Παλαιά λειτουργία — τροφοδότηση των λιστών από αρχεία XPS",
+  "sc.legacyOn": "Ενεργή. Η υποδοχή Rate Check είναι στην οθόνη Tax Check και δουλεύει όπως πάντα.",
+  "sc.legacyOff": "Ανενεργή. Η υποδοχή Rate Check είναι κρυμμένη. Δεν διαγράφεται τίποτα — ξανατσεκάρετέ το και επιστρέφει, μαζί με το ημερολόγιο.",
   "sc.watch": "Τι άνοιξε το protel απόψε",
   "sc.watchHint": "Μηδενική επαφή — τίποτα δεν στέλνεται στο protel. Τα Windows λένε στο RecCheck όταν ανοίγει ή κλείνει παράθυρο του protel, και ο τίτλος είναι αυτός που έχουν ήδη. Κρατιέται μόνο για τη νύχτα και σβήνει στις 07:00 με τη βάρδια.",
   "sc.watchNone": "Δεν καταγράφηκε τίποτα αυτή τη βάρδια. Παρακολουθεί μόνο αφού οριστεί το παράθυρο του protel ως στόχος, και σβήνει μόνο του στις 07:00.",
@@ -2548,6 +2554,7 @@ function renderShortcuts(){
   renderFocusGate();
   renderTauEnter();
   renderBoot();
+  renderLegacyBox();
   renderLedgerReset();
 }
 /* ---- start the movement ledger again ----
@@ -2559,6 +2566,38 @@ function renderShortcuts(){
 
    It asks first, and it says what will be lost, because the ledger is the only record of
    nights whose rate list is not on disk any more. */
+/* ---- legacy mode ----
+   His words: "make it a toggle from the settings, hide the rate check when the legacy
+   mode is unticked, re-show it when it is". Purely what is on screen — unticking it
+   hides the Rate Check slot and deletes nothing, so ticking it again brings the slot
+   and the ledger back untouched. It ships ON: until the live read of protel can fill
+   these lists, the files are the only thing that can, and his answer on that was that
+   the files stay as the fallback. */
+const LEGACY_KEY = "reccheck_legacy";
+function legacyOn(){
+  try{ return localStorage.getItem(LEGACY_KEY) !== "0"; }catch(e){ return true; }
+}
+function setLegacy(on){
+  try{ localStorage.setItem(LEGACY_KEY, on ? "1" : "0"); }catch(e){}
+  try{ if(window.__taLegacy) window.__taLegacy(on); }catch(e){}
+}
+function renderLegacyBox(){
+  const box = $("#scLegacyBox");
+  if(!box) return;
+  const on = legacyOn();
+  box.innerHTML =
+    '<div class="scFocus">' +
+      '<label class="scFocusTop"><input type="checkbox" id="scLegacyOn"' + (on ? " checked" : "") + '>' +
+        escapeHtml(t("sc.legacyLabel")) + '</label>' +
+      '<div class="scFocusSub" id="scLegacySub">' +
+        escapeHtml(t(on ? "sc.legacyOn" : "sc.legacyOff")) + '</div>' +
+    '</div>';
+  const chk = $("#scLegacyOn"), sub = $("#scLegacySub");
+  chk.onchange = () => {
+    setLegacy(chk.checked);
+    sub.textContent = t(chk.checked ? "sc.legacyOn" : "sc.legacyOff");
+  };
+}
 function renderLedgerReset(){
   const box = $("#scLedgerBox");
   if(!box) return;
@@ -3090,6 +3129,7 @@ function openShortcuts(){
         '<div id="scFocusBox"></div>' +
         '<div id="scTauBox"></div>' +
         '<div id="scBootBox"></div>' +
+        '<div id="scLegacyBox"></div>' +
         '<div id="scLedgerBox"></div>' +
       '</div>' +
       '<div id="scHelp" style="margin-top:12px;font-size:12px;line-height:1.5"></div>' +
@@ -5676,6 +5716,19 @@ el('file-tax').addEventListener('change',e=>loadTax(e.target.files[0]));
 });
 el('taxBack').addEventListener('click',()=>{ if(window.rcShowAudit) window.rcShowAudit(); });
 window.__taSetLang=function(l){ if(l!==LANG) setLang(l); el('taxBack').textContent='← '+(l==='el'?'ΕΛΕΓΧΟΣ':'AUDIT'); };
+/* ---- legacy mode: whether the Rate Check slot is on screen ----
+   Owned by the settings toggle in the other half, which writes the key and calls this so
+   the change lands without a reload. Read at boot too, because this half is a separate
+   scope that starts on its own. Hiding it is all this does — no file, no ledger and no
+   parsed list is touched, so ticking it again restores the screen exactly. */
+function applyLegacy(on){
+  const s = el('slot-rate');
+  if(s) s.style.display = on ? '' : 'none';
+}
+function legacyOn(){
+  try{ return localStorage.getItem('reccheck_legacy') !== '0'; }catch(e){ return true; }
+}
+window.__taLegacy = function(on){ applyLegacy(!!on); };
 
 /* time safeguard: warn when a loaded report is for a past working night. Separate scope
    from the audit half, so the 03:30 boundary is repeated here rather than shared. */
@@ -5692,7 +5745,7 @@ window.__taSimulate=function(rk,tk){RATE=rk?{kind:'rate',dateKey:rk,bizDate:dfmt
 
 /* ============ boot ============ */
 function pruneZeroMem(){const mem=loadMem();let ch=false;for(const room of Object.keys(mem)){const rec=mem[room];for(const d of Object.keys(rec)){const e=rec[d];if(((e.arr||0)+(e.auto||0)+(e.man||0))===0){delete rec[d];ch=true;}}if(!Object.keys(rec).length){delete mem[room];ch=true;}}if(ch)saveMem(mem);}
-(function boot(){el('taxBack').textContent='← '+(LANG==='el'?'ΕΛΕΓΧΟΣ':'AUDIT');pruneZeroMem();const mem=loadMem();const ds=recentDates(mem,7);if(ds.length)EXPANDED.add(ds[0]);applyStatic();renderMemory();el('memsec').style.display=ds.length?'block':'none';})();
+(function boot(){el('taxBack').textContent='← '+(LANG==='el'?'ΕΛΕΓΧΟΣ':'AUDIT');applyLegacy(legacyOn());pruneZeroMem();const mem=loadMem();const ds=recentDates(mem,7);if(ds.length)EXPANDED.add(ds[0]);applyStatic();renderMemory();el('memsec').style.display=ds.length?'block':'none';})();
 })();
 </script>
 </body>
