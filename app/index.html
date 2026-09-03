@@ -1357,7 +1357,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.16";
+const APP_VERSION = "1.17.17";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -4434,14 +4434,23 @@ function roomMoves(){
     const kind = (arr && dep) ? "turn" : (arr ? (moved ? "move" : "arr") : "dep");
     out[room] = {kind: kind, who: who, sure: true, from: from, movedFrom: moved};
   }
-  /* A room no rate list has ever covered: all the department report alone can say is
-     that the name under it changed. Never overrides a real date. */
-  for(const room of Object.keys(ROOMS)){
-    if(out[room]) continue;
-    const e = ROOMS[room];
-    if(e && e.movedOn && e.movedOn === MODEL.reportDate)
-      out[room] = {kind: "turn", who: e.guest ? [e.guest] : [], sure: false, from: 0};
-  }
+  /* There was a second pass here that added a dashed TURNOVER pill for any room whose
+     name in the department report differed from the name cached for it — "the report
+     alone can say the name under it changed". It was wrong, and on 02/09 it was loudly
+     wrong: the last rate list loaded was 31/08, so every genuine changeover of 01/09 and
+     02/09 read as a name change, and dozens of rooms with no arrival or departure on
+     that night at all (65, 94, 124, 129 among them) were asserted to have LEFT AND BEEN
+     RE-LET the same day. Dashed or not, a turnover pill claims a departure.
+
+     That is a deduction, from exactly the evidence that manufactured 83 phantom
+     departures on 30/08: a room charging under an unrecognised name. His rule is
+     standing and it is not qualified — record the data the system holds, do not deduce,
+     correct or improve it. A name change is not a date. The panel says only what the
+     ledger's arrival and departure dates say.
+
+     ROOMS[].movedOn is still stamped by syncRooms; nothing reads it now. It is left in
+     place because it is a fact the report carries, and showing it as its own thing —
+     not as a departure — is a separate question. */
   return out;
 }
 function renderMoves(){
@@ -4459,9 +4468,21 @@ function renderMoves(){
      The headings also retire the legend: a colour under the word for it needs no key. */
   /* Departures whose room also has receipts in tonight's department check — the paper he
      can throw away. Live ones only: a receipt cancelled or reversed at the POS is not
-     something he is holding to file. Built once, not once per pill. */
+     something he is holding to file. Built once, not once per pill.
+
+     Matched on the DEPARTING GUEST'S NAME, not on the room number. A room number alone
+     marks the wrong stay the moment the room has turned over: with no rate list loaded
+     since the guest arrived, the room shows as a departure while the department report
+     already carries the NEW occupant's receipts, and every one of those dots lands on
+     paper he must not throw away. Same rule as the red mark in the search results, and
+     deliberately the same index behind it — "dont accidentally mark the arrival
+     receipts". */
+  LEAVING = leavingIndex();
   const withRec = new Set();
-  if(MODEL) for(const r of checkableList()){ const rm = effRoom(r); if(rm) withRec.add(String(rm)); }
+  if(MODEL) for(const r of checkableList()){
+    const rm = effRoom(r);
+    if(rm && isLeaving(String(rm), r.guest)) withRec.add(String(rm));
+  }
   for(const kind of ["dep", "turn", "move", "arr"]){
     const of = rooms.filter(r => mv[r].kind === kind);
     if(!of.length) continue;
