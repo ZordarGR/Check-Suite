@@ -1,11 +1,11 @@
 {
-  "version": "1.17.23",
-  "type": "full",
+  "version": "1.17.24",
+  "type": "html",
   "engine": "1.17.23",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.23/RecCheck-Setup.exe",
   "setupSha256": "d733a9df982f600d296fe5ad7ead1afa161d13589048bff4d8160f0c6ffc24b1",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "4cde09e0dc669b968df791ef245cc5e1a459245e38a2b508682544896d160782",
-  "notes": "The watcher can now see protel's report windows — it was dropping every one of them, because protel is MDI and they are child windows. It also watches every protel process rather than the first one found. And every charge in the department check now takes its room's name instead of only the ones whose room you corrected; a nickname still wins where you set one, and whatever was printed on the charge stays on the tooltip."
+  "sha256": "5529e8073736ce0c075191467cbeab8ad9294651582f16af5110cf25c329c055",
+  "notes": "Room movements memory — start it again — is under OPTIONS now, beside legacy mode and the language, instead of in PROTEL SHORTCUTS. Still two clicks, and it says what the ledger holds before you touch it."
 }
