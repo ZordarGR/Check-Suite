@@ -1359,7 +1359,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.24";
+const APP_VERSION = "1.17.25";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -2168,11 +2168,34 @@ function toastReceipt(r){
    because those are about the shift being stood, not about protel's date. */
 const NIGHT_ROLLOVER_H = 3.5;      // working night — protel's date turns at 03:30
 const SHIFT_ROLLOVER_H = 7;        // checklist + overlay ticks — the shift ends at 07:00
+/* Which day a moment belongs to, by the clock on the wall.
+
+   This used to be `new Date(now - h hours)` — subtract a span of ABSOLUTE time, then read
+   the local date off the result. That is a whole hour wrong on the two nights the clock
+   moves, because an hour of local time vanishes in March and repeats in October, so
+   "seven hours ago" stops landing where 07:00 is. The reset would have gone at 08:00 one
+   night in spring and 06:00 one night in autumn.
+
+   Comparing the local hour against the boundary and stepping the local DATE back cannot
+   drift: the boundary is 07:00 by the wall clock every night, including those two. On the
+   spring night 03:30 does not exist, so the working night turns at the first local time
+   that does — which is right, not a compromise.
+
+   The reset itself was never the fragile part. It stores the day key and compares, on a
+   30 s poll, so a machine that was asleep or an app that was closed at 07:00 still clears
+   on the next look, and the clock being corrected by its time server just gets re-read.
+   That half stays exactly as it was. */
+function dayAt(h, ms){
+  const d = new Date(ms === undefined ? Date.now() : ms);
+  const hh = Math.floor(h), mm = Math.round((h - hh) * 60);
+  if(d.getHours() < hh || (d.getHours() === hh && d.getMinutes() < mm)) d.setDate(d.getDate() - 1);
+  return d;
+}
 function dayKeyAt(h, ms){
-  const d = new Date((ms === undefined ? Date.now() : ms) - h * 3600e3);
+  const d = dayAt(h, ms);
   return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
 }
-function businessNightDate(){ return new Date(Date.now() - NIGHT_ROLLOVER_H * 3600e3); }
+function businessNightDate(){ return dayAt(NIGHT_ROLLOVER_H); }
 function bnKey(){ return dayKeyAt(NIGHT_ROLLOVER_H); }
 function bnKeyOf(ms){ return dayKeyAt(NIGHT_ROLLOVER_H, ms); }
 function shiftKey(){ return dayKeyAt(SHIFT_ROLLOVER_H); }
@@ -5796,7 +5819,7 @@ window.__taLegacy = function(on){ applyLegacy(!!on); };
 
 /* time safeguard: warn when a loaded report is for a past working night. Separate scope
    from the audit half, so the 03:30 boundary is repeated here rather than shared. */
-function bnk(){const d=new Date(Date.now()-3.5*3600e3);return d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();}
+function bnk(){const d=new Date();if(d.getHours()<3||(d.getHours()===3&&d.getMinutes()<30))d.setDate(d.getDate()-1);return d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();}
 function timeGuardHTML(){
   let h='';const B=bnk();
   if(RATE&&RATE.dateKey&&RATE.dateKey<B)h+=`<div class="banner warn">⚠ ${t('tw_pastrate',dfmt(RATE.dateKey),dfmt(B))}</div>`;

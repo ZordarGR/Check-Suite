@@ -22,7 +22,7 @@ const sandbox = {
   Number, String, localStorage: null, console
 };
 const mk = (body) => new Function("Date","Number","String","localStorage","CL","saveCL","renderChecklist",
-  consts + "\n" + lift("dayKeyAt") + "\n" + lift("bnKey") + "\n" + lift("shiftKey")
+  consts + "\n" + lift("dayAt") + "\n" + lift("dayKeyAt") + "\n" + lift("bnKey") + "\n" + lift("shiftKey")
   + "\n" + lift("bnKeyOf") + "\n" + lift("businessNightDate") + "\n" + lift("clNightCheck")
   + "\n" + body);
 
