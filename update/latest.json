@@ -1,11 +1,11 @@
 {
-  "version": "1.17.22",
-  "type": "html",
-  "engine": "1.17.18",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.18/RecCheck-Setup.exe",
-  "setupSha256": "a85dfde6754d5ff37ba935a2f6c6da3237c6121d4a621987bac72e91b9b55ff8",
+  "version": "1.17.23",
+  "type": "full",
+  "engine": "1.17.23",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.23/RecCheck-Setup.exe",
+  "setupSha256": "d733a9df982f600d296fe5ad7ead1afa161d13589048bff4d8160f0c6ffc24b1",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "26c40b78a2320d9e739bfece96f7d6d7ed12b8d3c50d6a362336c88ebd946847",
-  "notes": "A reservation printed open-ended (31/12/99) could delete every stay in the ledger, and do it again on every later rate list, with nothing on screen to say why. It was not happening on your ledger, but it could have on any night protel printed one. The cull is anchored to the list's own date now, and a stay with no departure date is kept instead of dropped."
+  "sha256": "4cde09e0dc669b968df791ef245cc5e1a459245e38a2b508682544896d160782",
+  "notes": "The watcher can now see protel's report windows — it was dropping every one of them, because protel is MDI and they are child windows. It also watches every protel process rather than the first one found. And every charge in the department check now takes its room's name instead of only the ones whose room you corrected; a nickname still wins where you set one, and whatever was printed on the charge stays on the tooltip."
 }

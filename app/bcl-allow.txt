@@ -8,7 +8,7 @@
 # So: adding a line to this file is the moment to confirm the member exists in
 # .NET Framework 4.8. Nothing else in this build will tell you.
 #
-# Reviewed for 1.17.18 (v13). Regenerate deliberately, never wholesale.
+# Reviewed for 1.17.23 (v14). Regenerate deliberately, never wholesale.
 #
 # v12 added the read-only window scan. Everything it brought in is either our own
 # identifier or a user32 P/Invoke name -- EnumChildWindows, GetDlgCtrlID, GetParent,
@@ -129,6 +129,7 @@ CompilerGeneratedAttribute
 Component
 Concat
 Console
+ContainsKey
 counts
 CPOINT
 CrashPath
@@ -175,6 +176,7 @@ ev
 EVENT_OBJECT_HIDE
 EVENT_OBJECT_SHOW
 evHook
+evHooks
 Exception
 exe
 ExePath
@@ -297,6 +299,7 @@ IDisposable
 idObject
 idThread
 idx
+InArray
 IndexOf
 INPUT
 inputs
@@ -427,6 +430,7 @@ ProcessModule
 ProcessStartInfo
 ProcName
 ProtelPid
+ProtelPids
 ps
 PS_GEOMETRIC
 PS_SOLID
@@ -573,6 +577,7 @@ UnhookWindowsHookEx
 UnhookWinEvent
 up
 user32.dll
+v
 ValueType
 VER
 vk
@@ -591,6 +596,7 @@ w
 WaitCallback
 WaitKeyDrained
 WATCH_MAX
+WATCH_MAX_PIDS
 watchdog
 watchHavePid
 WatchLoop
@@ -599,6 +605,7 @@ watchSeen
 watchShift
 watchThread
 watchWantPid
+watchWantPids
 WH_KEYBOARD_LL
 WH_MOUSE_LL
 what

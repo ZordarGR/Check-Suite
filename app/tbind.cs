@@ -1366,10 +1366,14 @@ static class TBind {
      His other decision was to record the protel user where protel shows it. Nothing on
      this half exposes a user — a caption is all there is — so there is nothing to record
      yet. It arrives with the half that reads fields, and it is not to be softened. */
-  static IntPtr evHook = IntPtr.Zero;
-  static WinEventProc keepEv;                    // must outlive the hook or the GC eats it
-  static volatile uint watchWantPid = 0;         // 0 = nothing to watch, so no hook at all
-  static volatile uint watchHavePid = 0;
+  /* One hook PER protel process. It used to be one hook on the first process whose name
+     matched, which is fine on his PC — PROT32 is a single process — and wrong anywhere
+     protel is launched as more than one. His words: "not every user is me". */
+  static readonly System.Collections.Generic.Dictionary<uint, IntPtr> evHooks =
+    new System.Collections.Generic.Dictionary<uint, IntPtr>();
+  static WinEventProc keepEv;                    // must outlive the hooks or the GC eats it
+  static volatile uint[] watchWantPids = new uint[0];
+  const int WATCH_MAX_PIDS = 8;                  // a needle that matches half the machine hooks nothing silly
   static int watchSeen = 0;
   static string watchShift = "";
   static Thread watchThread;
@@ -1413,62 +1417,92 @@ static class TBind {
   }
   /* Runs on the watcher thread. Everything it touches is message-free — see the note by
      the constants for why that is true only for TOP-LEVEL windows. */
+  /* CHILD WINDOWS ARE INCLUDED. They were dropped on the belief that reading one would
+     cost protel a message, and that was wrong in the way that mattered: Windows
+     documents GetWindowText as returning ANOTHER PROCESS'S cached caption without
+     sending WM_GETTEXT, and it is only a window owned by the CALLING process that gets
+     a message. Top-level or child makes no difference to that; having a caption does.
+     A child control with text but no caption comes back empty, which is exactly the
+     entry we do not want anyway.
+
+     This is why protel's reports were invisible. protel is MDI: "Departure Report for
+     02/09/26" is an OWL_Window child of MDIClient, so the old guard dropped every report
+     he opened and kept only popups and dialogs.
+
+     Documented behaviour, not measured here — there is no Windows in this container. If
+     the log fills with report names and protel does not slow down, it held.
+
+     Nothing without a caption is recorded now, open or close. With children included
+     that is not tidying, it is what keeps the log readable at all. */
   static void WinEventCallback(IntPtr hHook, uint ev, IntPtr hwnd, int idObject, int idChild, uint tid, uint time){
     try{
-      if(idObject != OBJID_WINDOW || idChild != 0) return;   // a control is not a window
+      if(idObject != OBJID_WINDOW || idChild != 0) return;   // a part of a control is not a window
       if(hwnd == IntPtr.Zero) return;
-      if(GetAncestor(hwnd, GA_ROOT) != hwnd) return;         // child: reading it would cost protel
       if(watchSeen >= WATCH_MAX) return;
       StringBuilder cls = new StringBuilder(160), txt = new StringBuilder(320);
       try{ GetClassName(hwnd, cls, cls.Capacity); }catch(Exception){}
       try{ GetWindowText(hwnd, txt, txt.Capacity); }catch(Exception){}
       string t = txt.ToString();
-      /* A nameless window closing says nothing anyone can use, and protel produces a lot
-         of them. Openings are kept whether or not they carry a caption. */
-      if(ev == EVENT_OBJECT_HIDE && t.Length == 0) return;
+      if(t.Length == 0) return;                              // no caption, nothing to say
+      bool top = false;
+      try{ top = (GetAncestor(hwnd, GA_ROOT) == hwnd); }catch(Exception){}
       watchSeen++;
       AppendWatch(DateTime.Now.ToString("HH:mm:ss") + "  " + (ev == EVENT_OBJECT_SHOW ? "OPEN " : "CLOSE")
-        + "  class=\"" + cls.ToString() + "\"  title=\"" + t + "\"\r\n");
+        + "  " + (top ? "window" : "child ") + "  class=\"" + cls.ToString() + "\"  title=\"" + t + "\"\r\n");
     }catch(Exception){}
   }
   /* protel's process id, or 0. With no focus= target configured there is no protel to
      identify, and the watcher stays off rather than logging the whole desktop. */
-  static uint ProtelPid(){
+  /* EVERY process matching the needle, not the first one found. With no focus= target
+     configured there is no protel to identify, and the watcher stays off rather than
+     logging the whole desktop. */
+  static uint[] ProtelPids(){
     string needle = focusNeedle;
-    if(needle == null || needle.Length == 0) return 0;
-    uint found = 0;
+    if(needle == null || needle.Length == 0) return new uint[0];
+    System.Collections.Generic.List<uint> found = new System.Collections.Generic.List<uint>();
     try{
       Process[] all = Process.GetProcesses();
       for(int i = 0; i < all.Length; i++){
         try{
-          if(found == 0){
+          if(found.Count < WATCH_MAX_PIDS){
             string n = all[i].ProcessName;
-            if(n != null && n.ToUpperInvariant().IndexOf(needle) >= 0) found = (uint)all[i].Id;
+            if(n != null && n.ToUpperInvariant().IndexOf(needle) >= 0) found.Add((uint)all[i].Id);
           }
         }catch(Exception){}
         try{ all[i].Dispose(); }catch(Exception){}
       }
-    }catch(Exception){ return 0; }
-    return found;
+    }catch(Exception){ return new uint[0]; }
+    return found.ToArray();
   }
   /* Its own thread and its own pump. An out-of-context WinEvent is delivered to the
      thread that installed the hook and needs a message loop to arrive; PeekMessage is a
      message loop. A 100 ms tick is far inside the 400 ms the design waits before reading
      anything, and keeps every part of this off the thread the shortcuts live on. */
+  static bool InArray(uint[] a, uint v){
+    for(int i = 0; i < a.Length; i++) if(a[i] == v) return true;
+    return false;
+  }
   static void WatchLoop(){
     MSG m;
+    keepEv = WinEventCallback;                                          // once, and it stays alive
     try{ PeekMessage(out m, IntPtr.Zero, 0, 0, 0); }catch(Exception){}   // force the queue to exist
     for(;;){
       try{
-        uint want = watchWantPid;
-        if(want != watchHavePid){
-          if(evHook != IntPtr.Zero){ UnhookWinEvent(evHook); evHook = IntPtr.Zero; }
-          watchHavePid = want;
-          if(want != 0){
-            keepEv = WinEventCallback;
-            evHook = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_HIDE, IntPtr.Zero, keepEv,
-                                     want, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
-          }
+        uint[] want = watchWantPids;
+        /* processes that have gone away, or stopped matching */
+        System.Collections.Generic.List<uint> drop = new System.Collections.Generic.List<uint>();
+        foreach(uint have in evHooks.Keys) if(!InArray(want, have)) drop.Add(have);
+        for(int i = 0; i < drop.Count; i++){
+          IntPtr h = evHooks[drop[i]];
+          if(h != IntPtr.Zero) UnhookWinEvent(h);
+          evHooks.Remove(drop[i]);
+        }
+        /* processes newly worth watching */
+        for(int i = 0; i < want.Length; i++){
+          if(evHooks.ContainsKey(want[i])) continue;
+          IntPtr h = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_HIDE, IntPtr.Zero, keepEv,
+                                     want[i], 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+          if(h != IntPtr.Zero) evHooks[want[i]] = h;
         }
         while(PeekMessage(out m, IntPtr.Zero, 0, 0, PM_REMOVE)){
           TranslateMessage(ref m);
@@ -1525,7 +1559,7 @@ static class TBind {
     try{ Console.Out.Write(t + "\n"); Console.Out.Flush(); }catch(Exception){}
   }
 
-  const string VER = "v13";
+  const string VER = "v14";
 
   static int Main(string[] args){
     int parentPid;
@@ -1685,10 +1719,10 @@ static class TBind {
           bool up = HostRunning();
           if(up != hostUp) PostUi(WM_APP_HOST, (IntPtr)(up ? 1 : 0));
           if(BindsChanged()) PostUi(WM_APP_BINDS, IntPtr.Zero);
-          /* Which process to watch, re-answered every two seconds: protel restarts, and
+          /* Which processes to watch, re-answered every two seconds: protel restarts, and
              a stale pid watches nothing. Costs one process enumeration, same as the
              RecCheck check above it. */
-          watchWantPid = ProtelPid();
+          watchWantPids = ProtelPids();
         }catch(Exception){}
       }
     });
