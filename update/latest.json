@@ -1,11 +1,11 @@
 {
-  "version": "1.17.16",
+  "version": "1.17.17",
   "type": "html",
   "engine": "1.17.14",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.15/RecCheck-Setup.exe",
   "setupSha256": "936f34ecf267809da59d597c207f5873aa0eb973d3117a49b495657cddece42e",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "7f9b08ea07a900b82270599cfab76a060591cdbb5d5e9e955f934c131e6601d7",
-  "notes": "A layout sweep. The DEBUG dialog was a 420 px strip its own buttons could not fit in — it clipped its labels and side-scrolled. And the audit half's header styling was leaking into the Tax Check page, rendering its title as a sticky amber monospace bar on one unbreakable line, which pushed the whole page past the window between 901 and 1090 px wide."
+  "sha256": "075a869d60cc74eae803364e9442d386cd6b2e96da61ed9dc05bba22955db9f3",
+  "notes": "The room pills no longer deduce. A room whose name in the department report differed from the cached name was being asserted to have left and been re-let the same day, even with no arrival or departure on that night at all — with the last rate list two nights old that was dozens of phantom departures. And the receipts dot now matches the departing guest's name instead of the room number, so it stops landing on the new occupant's paper."
 }
