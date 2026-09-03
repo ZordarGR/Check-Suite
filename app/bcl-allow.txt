@@ -8,7 +8,7 @@
 # So: adding a line to this file is the moment to confirm the member exists in
 # .NET Framework 4.8. Nothing else in this build will tell you.
 #
-# Reviewed for 1.17.14 (v12). Regenerate deliberately, never wholesale.
+# Reviewed for 1.17.18 (v13). Regenerate deliberately, never wholesale.
 #
 # v12 added the read-only window scan. Everything it brought in is either our own
 # identifier or a user32 P/Invoke name -- EnumChildWindows, GetDlgCtrlID, GetParent,
@@ -40,6 +40,7 @@
 <>f__mg$cache2
 <>f__mg$cache3
 <>f__mg$cache4
+<>f__mg$cache5
 <>m__0
 <Main>m__0
 <Main>m__1
@@ -58,6 +59,7 @@ action
 ActivateKeyboardLayout
 Add
 add_UnhandledException
+AddHours
 after
 allowPost
 alpha
@@ -65,8 +67,10 @@ AlreadyRunning
 ALTERNATE
 AppDomain
 Append
+AppendAllText
 AppendLine
 AppendTauLog
+AppendWatch
 args
 ARRIVE_MS
 AsyncCallback
@@ -167,6 +171,10 @@ Enumerator
 EnumProc
 Environment
 erase
+ev
+EVENT_OBJECT_HIDE
+EVENT_OBJECT_SHOW
+evHook
 Exception
 exe
 ExePath
@@ -191,6 +199,7 @@ FocusedOf
 focusNeedle
 ForegroundOf
 fRestore
+GA_ROOT
 gap
 gdi32.dll
 get_Capacity
@@ -201,6 +210,7 @@ get_CurrentDomain
 get_ExceptionObject
 get_FileName
 get_HasExited
+get_Id
 get_Item
 get_Keys
 get_Length
@@ -210,6 +220,7 @@ get_Now
 get_Out
 get_ProcessName
 get_TickCount
+GetAncestor
 GetAsyncKeyState
 GetClassName
 GetClientRect
@@ -230,6 +241,7 @@ GetMessage
 GetModuleHandle
 GetParent
 GetProcessById
+GetProcesses
 GetProcessesByName
 GetQueueStatus
 GetStockObject
@@ -253,6 +265,7 @@ hCursor
 hdc
 Hex
 hh
+hHook
 hIcon
 hIconSm
 hInstance
@@ -279,7 +292,9 @@ IAsyncResult
 id
 idAttach
 idAttachTo
+idChild
 IDisposable
+idObject
 idThread
 idx
 IndexOf
@@ -298,6 +313,7 @@ IsVolatile
 IsWindowVisible
 KBDLLHOOKSTRUCT
 kbHook
+keepEv
 keepKeys
 keepMouse
 keepWndProc
@@ -380,6 +396,7 @@ NULL_PEN
 obj
 Object
 object
+OBJID_WINDOW
 old
 on
 op_Equality
@@ -393,7 +410,9 @@ parent
 parentPid
 ParseBind
 Path
+PeekMessage
 pid
+PM_REMOVE
 POINT
 PolyPolygon
 PostMessage
@@ -407,6 +426,7 @@ Process
 ProcessModule
 ProcessStartInfo
 ProcName
+ProtelPid
 ps
 PS_GEOMETRIC
 PS_SOLID
@@ -423,11 +443,13 @@ rcCaret
 rcPaint
 ReadAllLines
 ReadAllText
+ReadLine
 RECT
 RegisterClassEx
 Registry
 RegistryKey
 Remove
+remove
 Replace
 RestoreLayout
 result
@@ -474,6 +496,8 @@ SetTimer
 SetValue
 SetWindowPos
 SetWindowsHookEx
+SetWinEventHook
+ShiftKey
 ShowWindow
 size
 SizeOf
@@ -488,6 +512,7 @@ Split
 Start
 StartsWith
 StopRunning
+StreamReader
 String
 StringBuilder
 style
@@ -514,6 +539,7 @@ TargetFocused
 TAU
 TauLogPath
 TBind
+TextReader
 TextWriter
 thenEnter
 Thread
@@ -544,6 +570,7 @@ UInt32
 UnhandledExceptionEventArgs
 UnhandledExceptionEventHandler
 UnhookWindowsHookEx
+UnhookWinEvent
 up
 user32.dll
 ValueType
@@ -563,12 +590,24 @@ vkCode
 w
 WaitCallback
 WaitKeyDrained
+WATCH_MAX
 watchdog
+watchHavePid
+WatchLoop
+WatchPath
+watchSeen
+watchShift
+watchThread
+watchWantPid
 WH_KEYBOARD_LL
 WH_MOUSE_LL
 what
 where
 width
+WINEVENT_OUTOFCONTEXT
+WINEVENT_SKIPOWNPROCESS
+WinEventCallback
+WinEventProc
 WM_APP_BINDS
 WM_APP_BLOCK
 WM_APP_CAPS

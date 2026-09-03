@@ -544,12 +544,15 @@ ipcMain.handle("overlay-data", (_e, d) => {
   overlayData = d;
   if(overlayWin){
     try{ overlayWin.setBounds(overlayBounds((d && d.tasks || []).length + (INTERACT ? 1 : 0), d && d.cfg)); }catch(e){}
-    /* The overlay hides itself once the last task is ticked. Untick anything — or let
-       07:00 clear the night — and it comes straight back. showInactive keeps it from
-       stealing focus from protel. */
+    /* The overlay hides itself once the last task is ticked. Untick anything and it comes
+       straight back — showInactive keeps it from stealing focus from protel.
+       The 07:00 reset is the exception: it unticks the whole night by itself, and being
+       shown the overlay for it is not wanted ("ill know it has happened"), so that push
+       arrives flagged quiet and a hidden overlay stays hidden. One already on screen is
+       left alone in both cases. */
     const tasks = (d && d.tasks) || [];
     const finished = tasks.length > 0 && tasks.every(t => t.done);
-    if(!finished){
+    if(!finished && !(d && d.quiet)){
       try{ if(!overlayWin.isVisible()) overlayWin.showInactive(); }catch(e){}
     }
     overlayWin.webContents.send("overlay-data", d);
@@ -775,6 +778,22 @@ ipcMain.handle("sc-taulog", () => {
     // newest first, and only as much as anyone will actually read
     const runs = txt.split(/(?==== tau press )/).filter(x => x.trim());
     return runs.slice(-6).reverse().join("\n").slice(0, 20000) || null;
+  }catch(e){ return null; }
+});
+/* What protel opened tonight — the zero-touch half of the live read. The helper records
+   it from WinEvents with nothing sent to protel at all, and clears it at 07:00 with the
+   shift. Read straight off disk; the helper is not disturbed to produce it. */
+ipcMain.handle("sc-watchlog", () => {
+  try{
+    const fs = require("fs");
+    const base = process.env.LOCALAPPDATA;
+    if(!base) return null;
+    const txt = fs.readFileSync(path.join(base, "RecCheck", "rc-tbind-watch.log"), "utf8");
+    if(!txt.trim()) return null;
+    /* Keep the head — it names the shift — and the most recent tail, which is the part
+       worth reading. A whole shift fits well inside this; the cap is for the pathological
+       night, so the dialog stays a dialog. */
+    return txt.length > 40000 ? txt.slice(0, 400) + "\n   …\n" + txt.slice(-36000) : txt;
   }catch(e){ return null; }
 });
 ipcMain.handle("sc-cancel", () => { try{ if(TAU_DETECT) TAU_DETECT.kill(); }catch(e){} return true; });
