@@ -1358,7 +1358,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.21";
+const APP_VERSION = "1.17.22";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -5449,15 +5449,34 @@ function saveMoves(rate){
         if(!m[a]||night>=(m[a].seen||0)){m[a]={d:d||0,n:r.name||"",seen:night};wrote++;}
       }
     }
-    /* keep it bounded without needing a clock: drop anything that ended long before the
-       newest departure the ledger knows about */
-    let newest=0;
-    for(const room of Object.keys(led))
-      for(const a of Object.keys(led[room]))newest=Math.max(newest,led[room][a].d||0);
-    const floor=newest-10000;                      // ~a year in YYYYMMDD arithmetic
-    for(const room of Object.keys(led)){
-      for(const a of Object.keys(led[room]))if((led[room][a].d||0)<floor)delete led[room][a];
-      if(!Object.keys(led[room]).length)delete led[room];
+    /* Keep the ledger bounded without needing a clock — but anchored to a date no single
+       row can drag.
+
+       This used to take the floor from the NEWEST DEPARTURE IN THE LEDGER minus a year,
+       which handed the decision to whatever the furthest-future row happened to say.
+       protel prints an open-ended reservation as 31/12/99, and dkey reads a two-digit
+       year as 20xx (5288), so ONE such row set newest to 20991231 and the floor to
+       20981231 — deleting every real 2026 stay, surviving the cull itself because its own
+       date is above the floor, and doing the same again on every later rate list. The
+       ledger would have come back empty for ever with nothing on screen to say why.
+       Reproduced against this exact code before changing it.
+
+       The list's own business date is a real date and cannot be dragged by a row. With no
+       date, nothing is pruned at all: an unbounded ledger is a bad day, a wiped one is a
+       lost night.
+
+       And a stay is no longer dropped merely for having NO departure date. `d||0` put
+       every such entry below any positive floor. A stay protel printed without a
+       departure is a stay whose departure protel has not stated — not an old one. */
+    if(night){
+      const floor=night-10000;                     // ~a year in YYYYMMDD arithmetic
+      for(const room of Object.keys(led)){
+        for(const a of Object.keys(led[room])){
+          const dd=led[room][a].d||0;
+          if(dd&&dd<floor)delete led[room][a];
+        }
+        if(!Object.keys(led[room]).length)delete led[room];
+      }
     }
     /* Apply what was worked out above. The old stay is MARKED VACATED, not given a
        departure date: the guest did leave that room, but protel never called it a

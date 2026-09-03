@@ -1,11 +1,11 @@
 {
-  "version": "1.17.21",
+  "version": "1.17.22",
   "type": "html",
   "engine": "1.17.18",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.18/RecCheck-Setup.exe",
   "setupSha256": "a85dfde6754d5ff37ba935a2f6c6da3237c6121d4a621987bac72e91b9b55ff8",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "2d6225245073dcfa160d8d3cdacb45a4d2aed4e64de3fa3fb6544059b0c3f36a",
-  "notes": "DEBUG now lists EVERY pill tonight with the date of the rate list that wrote it, and counts how many were written by a list older than the newest one. The old report cut its list at 40 rows, which is why the phantom departures were half-diagnosed: a date that is simply out of date looks exactly like a date that was invented."
+  "sha256": "26c40b78a2320d9e739bfece96f7d6d7ed12b8d3c50d6a362336c88ebd946847",
+  "notes": "A reservation printed open-ended (31/12/99) could delete every stay in the ledger, and do it again on every later rate list, with nothing on screen to say why. It was not happening on your ledger, but it could have on any night protel printed one. The cull is anchored to the list's own date now, and a stay with no departure date is kept instead of dropped."
 }
