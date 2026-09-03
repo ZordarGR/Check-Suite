@@ -804,6 +804,7 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
           <button class="msubItem" id="mLang"><span class="mLabel"></span><span class="mSub"></span></button>
           <button class="msubItem" id="mDirDept"><span class="mLabel"></span><span class="mSub" id="mDirDeptSub"></span></button>
           <button class="msubItem" id="mDirTax"><span class="mLabel"></span><span class="mSub" id="mDirTaxSub"></span></button>
+          <button class="msubItem" id="mLegacy"><span class="mLabel"></span><span class="mSub"></span></button>
           <button class="msubItem" id="mHelp"><span class="mLabel"></span><span class="mSub"></span></button>
           <button class="msubItem" id="mExport"><span class="mLabel"></span><span class="mSub"></span></button>
           <button class="msubItem" id="mImport"><span class="mLabel"></span><span class="mSub"></span></button>
@@ -1357,7 +1358,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.19";
+const APP_VERSION = "1.17.20";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1443,9 +1444,6 @@ en: {
   "sc.bootStopped": "Set to start with Windows, but it is not running right now.",
   "sc.moves": "Why the room pills say what they say",
   "sc.scan": "What the window in front is built from",
-  "sc.legacyLabel": "Legacy mode \u2014 feed the lists from XPS files",
-  "sc.legacyOn": "On. The Rate Check slot is on the Tax Check screen and works exactly as it always has.",
-  "sc.legacyOff": "Off. The Rate Check slot is hidden. Nothing is deleted \u2014 tick this again and it comes straight back, ledger and all.",
   "sc.watch": "What protel opened tonight",
   "sc.watchHint": "Zero-touch \u2014 nothing at all is sent to protel. Windows tells RecCheck when a protel window opens or closes, and the caption is the one Windows already holds. Kept for the night only and cleared at 07:00 with the shift.",
   "sc.watchNone": "Nothing recorded this shift. It only watches once a protel window has been picked as the target (PROTEL SHORTCUTS \u2192 only while protel is in front), and it clears itself at 07:00.",
@@ -1484,6 +1482,9 @@ en: {
   "menu.lang": "LANGUAGE — ENGLISH", "menu.langSub": "αλλαγή σε ΕΛΛΗΝΙΚΑ",
   "menu.dirDept": "DIRECTORY — DEPARTMENT CHECK", "menu.dirTax": "DIRECTORY — TAX CHECK",
   "menu.dirNone": "no reports folder chosen yet",
+  "menu.legacy": "LEGACY MODE \u2014 XPS FILES",
+  "menu.legacyOn": "on \u2014 the Rate Check slot is shown",
+  "menu.legacyOff": "off \u2014 the Rate Check slot is hidden",
   "menu.help": "HELP", "menu.helpSub": "opens the support page (GitHub)",
   "menu.title": "Menu",
   "land.export": "⇅ Export data", "land.import": "Import data…",
@@ -1658,9 +1659,6 @@ gr: {
   "sc.bootStopped": "Έχει οριστεί να ξεκινά με τα Windows, αλλά αυτή τη στιγμή δεν τρέχει.",
   "sc.moves": "Γιατί λένε αυτό τα πλακίδια δωματίων",
   "sc.scan": "Από τι αποτελείται το μπροστινό παράθυρο",
-  "sc.legacyLabel": "Παλαιά λειτουργία — τροφοδότηση των λιστών από αρχεία XPS",
-  "sc.legacyOn": "Ενεργή. Η υποδοχή Rate Check είναι στην οθόνη Tax Check και δουλεύει όπως πάντα.",
-  "sc.legacyOff": "Ανενεργή. Η υποδοχή Rate Check είναι κρυμμένη. Δεν διαγράφεται τίποτα — ξανατσεκάρετέ το και επιστρέφει, μαζί με το ημερολόγιο.",
   "sc.watch": "Τι άνοιξε το protel απόψε",
   "sc.watchHint": "Μηδενική επαφή — τίποτα δεν στέλνεται στο protel. Τα Windows λένε στο RecCheck όταν ανοίγει ή κλείνει παράθυρο του protel, και ο τίτλος είναι αυτός που έχουν ήδη. Κρατιέται μόνο για τη νύχτα και σβήνει στις 07:00 με τη βάρδια.",
   "sc.watchNone": "Δεν καταγράφηκε τίποτα αυτή τη βάρδια. Παρακολουθεί μόνο αφού οριστεί το παράθυρο του protel ως στόχος, και σβήνει μόνο του στις 07:00.",
@@ -1703,6 +1701,9 @@ gr: {
   "menu.lang": "ΓΛΩΣΣΑ — ΕΛΛΗΝΙΚΑ", "menu.langSub": "switch to ENGLISH",
   "menu.dirDept": "ΦΑΚΕΛΟΣ — ΕΛΕΓΧΟΣ ΤΜΗΜΑΤΩΝ", "menu.dirTax": "ΦΑΚΕΛΟΣ — ΕΛΕΓΧΟΣ ΤΑ",
   "menu.dirNone": "δεν έχει οριστεί φάκελος αναφορών",
+  "menu.legacy": "ΠΑΛΑΙΑ ΛΕΙΤΟΥΡΓΙΑ — ΑΡΧΕΙΑ XPS",
+  "menu.legacyOn": "ενεργή — η υποδοχή Rate Check φαίνεται",
+  "menu.legacyOff": "ανενεργή — η υποδοχή Rate Check κρύβεται",
   "menu.help": "ΒΟΗΘΕΙΑ", "menu.helpSub": "ανοίγει τη σελίδα υποστήριξης (GitHub)",
   "menu.title": "Μενού",
   "land.export": "⇅ Εξαγωγή δεδομένων", "land.import": "Εισαγωγή δεδομένων…",
@@ -1822,6 +1823,7 @@ function applyLang(){
   mi("#mLang", "menu.lang", "menu.langSub");
   mi("#mDirDept", "menu.dirDept", null);
   mi("#mDirTax", "menu.dirTax", null);
+  paintLegacy();
   paintHelp();
   mi("#mHelp", "menu.help", "menu.helpSub");
   paintDirSub();
@@ -2554,7 +2556,6 @@ function renderShortcuts(){
   renderFocusGate();
   renderTauEnter();
   renderBoot();
-  renderLegacyBox();
   renderLedgerReset();
 }
 /* ---- start the movement ledger again ----
@@ -2581,22 +2582,15 @@ function setLegacy(on){
   try{ localStorage.setItem(LEGACY_KEY, on ? "1" : "0"); }catch(e){}
   try{ if(window.__taLegacy) window.__taLegacy(on); }catch(e){}
 }
-function renderLegacyBox(){
-  const box = $("#scLegacyBox");
-  if(!box) return;
+/* It lives under OPTIONS, with the language and the folders. It was briefly under PROTEL
+   SHORTCUTS, next to the ledger reset — which was wrong and he said so: that menu is
+   about protel's keys and this is about where the tool's lists come from. */
+function paintLegacy(){
+  const b = $("#mLegacy");
+  if(!b) return;
   const on = legacyOn();
-  box.innerHTML =
-    '<div class="scFocus">' +
-      '<label class="scFocusTop"><input type="checkbox" id="scLegacyOn"' + (on ? " checked" : "") + '>' +
-        escapeHtml(t("sc.legacyLabel")) + '</label>' +
-      '<div class="scFocusSub" id="scLegacySub">' +
-        escapeHtml(t(on ? "sc.legacyOn" : "sc.legacyOff")) + '</div>' +
-    '</div>';
-  const chk = $("#scLegacyOn"), sub = $("#scLegacySub");
-  chk.onchange = () => {
-    setLegacy(chk.checked);
-    sub.textContent = t(chk.checked ? "sc.legacyOn" : "sc.legacyOff");
-  };
+  b.querySelector(".mLabel").textContent = t("menu.legacy");
+  b.querySelector(".mSub").textContent = t(on ? "menu.legacyOn" : "menu.legacyOff");
 }
 function renderLedgerReset(){
   const box = $("#scLedgerBox");
@@ -3129,7 +3123,6 @@ function openShortcuts(){
         '<div id="scFocusBox"></div>' +
         '<div id="scTauBox"></div>' +
         '<div id="scBootBox"></div>' +
-        '<div id="scLegacyBox"></div>' +
         '<div id="scLedgerBox"></div>' +
       '</div>' +
       '<div id="scHelp" style="margin-top:12px;font-size:12px;line-height:1.5"></div>' +
@@ -4890,6 +4883,7 @@ $("#aDept").onclick = async () => {
 };
 $("#aTax").onclick = () => showScreen("tax");
 $("#mLang").onclick = () => setLang(LANG === "en" ? "gr" : "en");
+$("#mLegacy").onclick = () => { setLegacy(!legacyOn()); paintLegacy(); };
 $("#mDirDept").onclick = () => fbPickDir("dept");
 $("#mDirTax").onclick = () => fbPickDir("tax");
 $("#mEditChecklist").onclick = () => { CLEDIT = true; renderChecklist(); document.querySelectorAll(".mcat").forEach(c => c.classList.remove("open")); setTimeout(() => $("#clText").focus(), 60); };
