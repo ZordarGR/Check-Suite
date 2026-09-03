@@ -805,6 +805,7 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
           <button class="msubItem" id="mDirDept"><span class="mLabel"></span><span class="mSub" id="mDirDeptSub"></span></button>
           <button class="msubItem" id="mDirTax"><span class="mLabel"></span><span class="mSub" id="mDirTaxSub"></span></button>
           <button class="msubItem" id="mLegacy"><span class="mLabel"></span><span class="mSub"></span></button>
+          <button class="msubItem" id="mLedger"><span class="mLabel"></span><span class="mSub"></span></button>
           <button class="msubItem" id="mHelp"><span class="mLabel"></span><span class="mSub"></span></button>
           <button class="msubItem" id="mExport"><span class="mLabel"></span><span class="mSub"></span></button>
           <button class="msubItem" id="mImport"><span class="mLabel"></span><span class="mSub"></span></button>
@@ -1358,7 +1359,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.23";
+const APP_VERSION = "1.17.24";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1482,6 +1483,7 @@ en: {
   "menu.lang": "LANGUAGE — ENGLISH", "menu.langSub": "αλλαγή σε ΕΛΛΗΝΙΚΑ",
   "menu.dirDept": "DIRECTORY — DEPARTMENT CHECK", "menu.dirTax": "DIRECTORY — TAX CHECK",
   "menu.dirNone": "no reports folder chosen yet",
+  "menu.ledger": "ROOM MOVEMENTS MEMORY \u2014 START IT AGAIN",
   "menu.legacy": "LEGACY MODE \u2014 XPS FILES",
   "menu.legacyOn": "on \u2014 the Rate Check slot is shown",
   "menu.legacyOff": "off \u2014 the Rate Check slot is hidden",
@@ -1701,6 +1703,7 @@ gr: {
   "menu.lang": "ΓΛΩΣΣΑ — ΕΛΛΗΝΙΚΑ", "menu.langSub": "switch to ENGLISH",
   "menu.dirDept": "ΦΑΚΕΛΟΣ — ΕΛΕΓΧΟΣ ΤΜΗΜΑΤΩΝ", "menu.dirTax": "ΦΑΚΕΛΟΣ — ΕΛΕΓΧΟΣ ΤΑ",
   "menu.dirNone": "δεν έχει οριστεί φάκελος αναφορών",
+  "menu.ledger": "ΜΝΗΜΗ ΚΙΝΗΣΕΩΝ — ΞΕΚΙΝΑ ΑΠΟ ΤΗΝ ΑΡΧΗ",
   "menu.legacy": "ΠΑΛΑΙΑ ΛΕΙΤΟΥΡΓΙΑ — ΑΡΧΕΙΑ XPS",
   "menu.legacyOn": "ενεργή — η υποδοχή Rate Check φαίνεται",
   "menu.legacyOff": "ανενεργή — η υποδοχή Rate Check κρύβεται",
@@ -1824,6 +1827,7 @@ function applyLang(){
   mi("#mDirDept", "menu.dirDept", null);
   mi("#mDirTax", "menu.dirTax", null);
   paintLegacy();
+  paintLedger();
   paintHelp();
   mi("#mHelp", "menu.help", "menu.helpSub");
   paintDirSub();
@@ -2556,7 +2560,6 @@ function renderShortcuts(){
   renderFocusGate();
   renderTauEnter();
   renderBoot();
-  renderLedgerReset();
 }
 /* ---- start the movement ledger again ----
    Offered twice and never taken up, so it was never built: until now there has been NO
@@ -2592,44 +2595,41 @@ function paintLegacy(){
   b.querySelector(".mLabel").textContent = t("menu.legacy");
   b.querySelector(".mSub").textContent = t(on ? "menu.legacyOn" : "menu.legacyOff");
 }
-function renderLedgerReset(){
-  const box = $("#scLedgerBox");
-  if(!box) return;
+/* Under OPTIONS, with legacy mode and the language. It sat in PROTEL SHORTCUTS next to
+   the bind rows, which was the same misplacement he called out for legacy mode — that
+   menu is about protel's keys, and the movements ledger is not one. Two clicks still, and
+   the second one has five seconds to arrive. */
+let LEDARMED = false, LEDTIMER = null;
+function paintLedger(){
+  const b = $("#mLedger");
+  if(!b) return;
   let rooms = 0, res = 0;
   try{
     const led = loadMoves();
     for(const r of Object.keys(led)){ rooms++; res += Object.keys(led[r]).length; }
   }catch(e){}
-  box.innerHTML =
-    '<div class="scFocus">' +
-      '<div class="scFocusTop">' + escapeHtml(t("sc.ledgerLabel")) + '</div>' +
-      '<div class="scFocusSub" id="scLedgerSub">' +
-        escapeHtml(t("sc.ledgerSub", {rooms: rooms, res: res})) + '</div>' +
-      '<button class="btn" id="scLedgerClear" style="margin-top:9px">' +
-        escapeHtml(t("sc.ledgerClear")) + '</button>' +
-    '</div>';
-  const btn = $("#scLedgerClear"), sub = $("#scLedgerSub");
-  let armed = false;
-  btn.onclick = () => {
-    if(!armed){
-      armed = true;
-      btn.textContent = t("sc.ledgerConfirm");
-      btn.classList.add("amber");
-      setTimeout(() => {
-        if(!armed) return;
-        armed = false; btn.textContent = t("sc.ledgerClear"); btn.classList.remove("amber");
-      }, 5000);
-      return;
-    }
-    armed = false;
-    try{ localStorage.removeItem(MOVES_KEY); }catch(e){}
-    try{ localStorage.removeItem("reccheck_moves_last"); }catch(e){}
-    btn.textContent = t("sc.ledgerClear");
-    btn.classList.remove("amber");
-    sub.textContent = t("sc.ledgerDone");
-    try{ renderMoves(); }catch(e){}
-  };
+  b.querySelector(".mLabel").textContent = LEDARMED ? t("sc.ledgerConfirm") : t("menu.ledger");
+  b.querySelector(".mSub").textContent = t("sc.ledgerSub", {rooms: rooms, res: res});
+  b.classList.toggle("danger", LEDARMED);
 }
+function ledgerClick(){
+  if(!LEDARMED){
+    LEDARMED = true;
+    paintLedger();
+    clearTimeout(LEDTIMER);
+    LEDTIMER = setTimeout(() => { LEDARMED = false; paintLedger(); }, 5000);
+    return;
+  }
+  clearTimeout(LEDTIMER);
+  LEDARMED = false;
+  try{ localStorage.removeItem(MOVES_KEY); }catch(e){}
+  try{ localStorage.removeItem("reccheck_moves_last"); }catch(e){}
+  paintLedger();
+  const b = $("#mLedger");
+  if(b) b.querySelector(".mSub").textContent = t("sc.ledgerDone");
+  try{ renderMoves(); }catch(e){}
+}
+
 /* ---- the Enter that follows the τ ----
    The τ is one keypress and protel takes a moment to react to it before it will accept
    the Enter that always comes next. Pressed by hand that Enter beats protel there and is
@@ -3123,7 +3123,6 @@ function openShortcuts(){
         '<div id="scFocusBox"></div>' +
         '<div id="scTauBox"></div>' +
         '<div id="scBootBox"></div>' +
-        '<div id="scLedgerBox"></div>' +
       '</div>' +
       '<div id="scHelp" style="margin-top:12px;font-size:12px;line-height:1.5"></div>' +
       (st.available ? "" : '<div class="err">' + t("sc.unavailable") + '</div>') +
@@ -4935,6 +4934,7 @@ $("#aDept").onclick = async () => {
 $("#aTax").onclick = () => showScreen("tax");
 $("#mLang").onclick = () => setLang(LANG === "en" ? "gr" : "en");
 $("#mLegacy").onclick = () => { setLegacy(!legacyOn()); paintLegacy(); };
+$("#mLedger").onclick = ledgerClick;
 $("#mDirDept").onclick = () => fbPickDir("dept");
 $("#mDirTax").onclick = () => fbPickDir("tax");
 $("#mEditChecklist").onclick = () => { CLEDIT = true; renderChecklist(); document.querySelectorAll(".mcat").forEach(c => c.classList.remove("open")); setTimeout(() => $("#clText").focus(), 60); };

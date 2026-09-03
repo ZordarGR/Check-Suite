@@ -1,1 +1,3 @@
 __pycache__/
+test/browser/h-sweep.html
+test/browser/*.png
