@@ -1358,7 +1358,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.22";
+const APP_VERSION = "1.17.23";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -3765,12 +3765,24 @@ function receiptRow(r){
   }else sn.textContent = r.sn;
   row.append(sn);
 
-  const roomFixed = !!(st.corr && st.corr.room);
-  const gname = roomFixed ? (guestFor(effRoom(r)) || r.guest || "") : (r.guest || "");
+  /* Every charge resolves through its ROOM to that room's name — not only the ones whose
+     room was corrected, which is all this used to do. His words: "give the tool the
+     ability to understand which charge in the department check belong to which room and
+     render the proper name given".
+
+     A nickname still wins where one is set: they are not retired here, they are simply
+     stopped from being the only way a room gets a decent name. When protel's own first
+     and last names arrive they become guestFor's source, and the nicknames stop
+     mattering on their own rather than being taken away.
+
+     The receipt's OWN name is never lost. Wherever the name shown differs from the one
+     printed on the charge, the printed one is on the tooltip — which matters most on a
+     turnover, where the room's name tonight is not the name that made the charge. */
+  const gname = guestFor(effRoom(r)) || r.guest || "";
   const nick = nickFor(effRoom(r));
   const nm = el("div","name" + (nick ? " nick" : ""), nick || gname);
   nm.title = (nick ? gname + t("n.nickedTitle") : gname) +
-             (roomFixed && r.guest && gname !== r.guest ? "  ·  ⌫ " + r.guest : "");
+             (r.guest && gname !== r.guest ? "  ·  ⌫ " + r.guest : "");
   row.append(nm);
 
   const split = el("div","split");
@@ -4173,8 +4185,10 @@ function extraMatchCard(x){
   c.append(el("span","dept", x.dept === "UNASSIGNED" ? t("extra.unassigned") : x.dept));
   c.append(el("span","room", x.room || "—"));
   c.append(el("span","msn", x.sn));
+  /* same rule for a receipt added by hand: the room decides the name, the nickname
+     overrides it, and what was typed in is the last resort rather than the first */
   const nick = x.room ? nickFor(x.room) : null;
-  const nm = x.room ? (nick || x.guest || guestFor(x.room)) : null;
+  const nm = x.room ? (nick || guestFor(x.room) || x.guest) : null;
   if(nm) c.append(el("span","name" + (nick ? " nick" : ""), nm));
   c.append(el("span","split", rateSplitStr({"24%": x.v24, "13%": x.v13})));
   c.append(el("span","amt", numToMoney(extraTotal(x))));
