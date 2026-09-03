@@ -1,11 +1,11 @@
 {
-  "version": "1.17.20",
+  "version": "1.17.21",
   "type": "html",
   "engine": "1.17.18",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.18/RecCheck-Setup.exe",
   "setupSha256": "a85dfde6754d5ff37ba935a2f6c6da3237c6121d4a621987bac72e91b9b55ff8",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "3b27ca74a2a7662c9b0edc5fc4d80c1538bf0b9f566fa76b490bf738e167b104",
-  "notes": "Legacy mode is under OPTIONS now, with the language and the folders, instead of in PROTEL SHORTCUTS. That menu is about protel's keys; where the tool's lists come from is not."
+  "sha256": "2d6225245073dcfa160d8d3cdacb45a4d2aed4e64de3fa3fb6544059b0c3f36a",
+  "notes": "DEBUG now lists EVERY pill tonight with the date of the rate list that wrote it, and counts how many were written by a list older than the newest one. The old report cut its list at 40 rows, which is why the phantom departures were half-diagnosed: a date that is simply out of date looks exactly like a date that was invented."
 }

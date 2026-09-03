@@ -1358,7 +1358,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.20";
+const APP_VERSION = "1.17.21";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -4594,17 +4594,54 @@ function movesReport(){
          + (res ? ", " + minA + " .. " + maxD : " — EMPTY"));
   const mv = roomMoves(), hit = Object.keys(mv);
   L.push("tonight       : " + (hit.length ? hit.length + " pills — " + hit.join(" ") : "no pills"));
+  /* Every pill, with the stay behind it and the DATE OF THE LIST THAT WROTE IT.
+     The old report printed "stays near this night" and cut it at 40 rows, which is why
+     the first diagnosis of the phantom departures was made on a truncated list and got
+     it half right. A pill this panel draws must always appear here — if the panel says
+     36 and this says 36, they are the same 36. The `seen` column is the point: a stay
+     last written by an old rate list is a date protel may have moved on from, and that
+     is what a phantom departure IS now that nothing is deduced any more. */
   if(night && res){
+    const newest = last && last.key ? Number(last.key) : 0;
+    const rows = [];
+    let stale = 0;
+    for(const r of Object.keys(mv)){
+      const m = mv[r];
+      const entries = led[r] || {};
+      for(const a of Object.keys(entries)){
+        const e = entries[a], A = Number(a), D = e.d || 0;
+        if(e.mv) continue;
+        if(A !== night && D !== night) continue;
+        const seen = e.seen || 0;
+        const old = newest && seen && seen < newest;
+        if(old) stale++;
+        rows.push("  " + (r + "      ").slice(0, 6) + (m.kind + "    ").slice(0, 5)
+                  + A + " -> " + (D || "?") + "   written by the list of "
+                  + (seen || "?") + (old ? "  << OLDER THAN THE NEWEST LIST" : "")
+                  + "   " + (e.n || ""));
+      }
+    }
+    L.push("");
+    L.push("every pill tonight, and the list that wrote it:");
+    L.push(rows.length ? rows.slice(0, 200).join("\n") : "  none");
+    if(rows.length > 200) L.push("  … " + (rows.length - 200) + " more not shown");
+    if(newest){
+      L.push("");
+      L.push(stale + " of " + rows.length + " were last written by a list older than "
+             + newest + ". protel may have changed those dates since.");
+    }
     L.push("");
     L.push("stays whose arrival or departure lands near this night:");
     const near = [];
     for(const r of rooms) for(const a of Object.keys(led[r])){
       const A = Number(a), e = led[r][a], D = e.d || 0;
       if(Math.abs(A - night) <= 3 || Math.abs(D - night) <= 3)
-        near.push("  " + r + "\t" + A + " -> " + (D || "?") + "\t" + (e.n || ""));
+        near.push("  " + r + "\t" + A + " -> " + (D || "?") + "\t" + (e.n || "")
+                  + "\t" + (e.mv ? "(vacated by a move)" : ""));
     }
-    L.push(near.length ? near.slice(0, 40).join("\n")
+    L.push(near.length ? near.slice(0, 120).join("\n")
                        : "  none — every stay in the ledger is more than three days from this night");
+    if(near.length > 120) L.push("  … " + (near.length - 120) + " more not shown");
   }
   return L.join("\n");
 }
