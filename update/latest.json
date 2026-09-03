@@ -1,11 +1,11 @@
 {
-  "version": "1.17.17",
-  "type": "html",
-  "engine": "1.17.14",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.15/RecCheck-Setup.exe",
-  "setupSha256": "936f34ecf267809da59d597c207f5873aa0eb973d3117a49b495657cddece42e",
+  "version": "1.17.18",
+  "type": "full",
+  "engine": "1.17.18",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.18/RecCheck-Setup.exe",
+  "setupSha256": "a85dfde6754d5ff37ba935a2f6c6da3237c6121d4a621987bac72e91b9b55ff8",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "075a869d60cc74eae803364e9442d386cd6b2e96da61ed9dc05bba22955db9f3",
-  "notes": "The room pills no longer deduce. A room whose name in the department report differed from the cached name was being asserted to have left and been re-let the same day, even with no arrival or departure on that night at all — with the last rate list two nights old that was dozens of phantom departures. And the receipts dot now matches the departing guest's name instead of the room number, so it stops landing on the new occupant's paper."
+  "sha256": "041a71e6d0d86e7f318e431b02f6590d68a30d502d0178ce5841f6afbc8d4923",
+  "notes": "The first half of reading protel live, and it sends protel nothing at all: Windows reports when a protel window opens or closes and RecCheck writes down the caption Windows already holds. DEBUG shows what it saw. Kept for the night only and cleared at 07:00 with the shift. Also: the 07:00 reset no longer summons the overlay to tell you it happened."
 }

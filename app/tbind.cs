@@ -147,6 +147,30 @@ static class TBind {
   const uint WM_APP_CAPS   = 0x8000 + 3;   // Caps Lock changed; the loop draws it
   const uint WM_APP_HOST   = 0x8000 + 4;   // RecCheck came up or went away
   const uint WM_APP_BINDS  = 0x8000 + 5;   // the binds file changed; re-read it
+  /* ---- the zero-touch half of the live protel read (v13) ----
+     SetWinEventHook with WINEVENT_OUTOFCONTEXT: the callback runs in THIS process and
+     Windows marshals the events to us. Nothing is injected into protel, no message is
+     sent to it, and protel does not run a line of our code.
+
+     Both reads in the callback are message-free as well. GetClassName answers from the
+     window class, kernel side. GetWindowText on a TOP-LEVEL window belonging to another
+     process returns the caption Windows already has cached and does NOT send WM_GETTEXT
+     — which is only true for top-level windows, and is the reason this refuses anything
+     with an ancestor. So this half costs protel literally nothing, which is why it is
+     the half being built first.
+
+     It runs on its OWN THREAD with its own message pump, never the loop thread. A
+     low-level hook callback that is late gets its hook torn down by Windows, and the
+     loop thread is where the mouse and keyboard hooks live — protel's shortcuts are the
+     critical half of this program and nothing here may be able to delay them. */
+  const uint EVENT_OBJECT_SHOW      = 0x8002;
+  const uint EVENT_OBJECT_HIDE      = 0x8003;
+  const uint WINEVENT_OUTOFCONTEXT  = 0x0000;
+  const uint WINEVENT_SKIPOWNPROCESS= 0x0002;
+  const int  OBJID_WINDOW           = 0;
+  const uint GA_ROOT                = 2;
+  const uint PM_REMOVE              = 1;
+  const int  WATCH_MAX              = 4000;   // one shift of windows, with room to spare
   const uint KEYEVENTF_UNICODE = 0x0004, KEYEVENTF_KEYUP = 0x0002, KEYEVENTF_EXTENDEDKEY = 0x0001;
   const uint WM_INPUTLANGCHANGEREQUEST = 0x0050;
   const uint KLF_ACTIVATE = 1;
@@ -199,6 +223,11 @@ static class TBind {
   [DllImport("user32.dll", SetLastError = true)] static extern uint SendInput(uint n, INPUT[] inputs, int size);
   [DllImport("kernel32.dll")] static extern IntPtr GetModuleHandle(string name);
   [DllImport("user32.dll")] static extern int GetMessage(out MSG msg, IntPtr hWnd, uint min, uint max);
+  [DllImport("user32.dll")] static extern bool PeekMessage(out MSG msg, IntPtr hWnd, uint min, uint max, uint remove);
+  delegate void WinEventProc(IntPtr hHook, uint ev, IntPtr hwnd, int idObject, int idChild, uint tid, uint time);
+  [DllImport("user32.dll")] static extern IntPtr SetWinEventHook(uint min, uint max, IntPtr mod, WinEventProc fn, uint pid, uint tid, uint flags);
+  [DllImport("user32.dll")] static extern bool UnhookWinEvent(IntPtr h);
+  [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr h, uint flags);
   [DllImport("user32.dll")] static extern bool TranslateMessage(ref MSG msg);
   [DllImport("user32.dll")] static extern IntPtr DispatchMessage(ref MSG msg);
   [DllImport("user32.dll")] static extern bool PostThreadMessage(uint tid, uint msg, IntPtr w, IntPtr l);
@@ -1323,6 +1352,133 @@ static class TBind {
     }catch(Exception){ return false; }
   }
 
+  /* ================= the window watcher — reads nothing from protel =================
+     What it records: that a protel window opened or closed, when, its class and the
+     caption Windows already holds for it. No field is read, no control is asked
+     anything, nothing is written anywhere near protel.
+
+     Retention is his decision of 03/09: TONIGHT ONLY, CLEARED AT 07:00. That is the
+     SHIFT boundary — the same clock as the checklist ticks — and deliberately not the
+     03:30 working night: the wipe follows the shift being stood. The file names the
+     shift it belongs to, so a helper restarted mid-shift keeps that night's lines and
+     the first write of a new shift throws the old ones away.
+
+     His other decision was to record the protel user where protel shows it. Nothing on
+     this half exposes a user — a caption is all there is — so there is nothing to record
+     yet. It arrives with the half that reads fields, and it is not to be softened. */
+  static IntPtr evHook = IntPtr.Zero;
+  static WinEventProc keepEv;                    // must outlive the hook or the GC eats it
+  static volatile uint watchWantPid = 0;         // 0 = nothing to watch, so no hook at all
+  static volatile uint watchHavePid = 0;
+  static int watchSeen = 0;
+  static string watchShift = "";
+  static Thread watchThread;
+
+  /* 07:00, the shift boundary. Mirrors SHIFT_ROLLOVER_H in the page — change one, change
+     both. Not the 03:30 working night. */
+  static string ShiftKey(){
+    try{ return DateTime.Now.AddHours(-7.0).ToString("yyyy-MM-dd"); }catch(Exception){ return ""; }
+  }
+  static string WatchPath(){
+    try{
+      string b = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+      if(b == null || b.Length == 0) return null;
+      return System.IO.Path.Combine(System.IO.Path.Combine(b, "RecCheck"), "rc-tbind-watch.log");
+    }catch(Exception){ return null; }
+  }
+  static void AppendWatch(string line){
+    try{
+      string p = WatchPath();
+      if(p == null) return;
+      string k = ShiftKey();
+      System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(p));
+      /* First write of this run: adopt the shift the file already names, so a restart
+         mid-shift does not throw away what the shift has seen so far. */
+      if(watchShift.Length == 0 && System.IO.File.Exists(p)){
+        try{
+          using(System.IO.StreamReader sr = new System.IO.StreamReader(p)){
+            string first = sr.ReadLine();
+            if(first != null && k.Length > 0 && first.IndexOf(k) >= 0) watchShift = k;
+          }
+        }catch(Exception){}
+      }
+      if(watchShift != k){
+        watchShift = k;
+        watchSeen = 0;
+        System.IO.File.WriteAllText(p, "rc-tbind watch " + VER + "  shift of " + k
+          + "  (cleared at 07:00, nothing is read from protel)\r\n");
+      }
+      System.IO.File.AppendAllText(p, line);
+    }catch(Exception){}
+  }
+  /* Runs on the watcher thread. Everything it touches is message-free — see the note by
+     the constants for why that is true only for TOP-LEVEL windows. */
+  static void WinEventCallback(IntPtr hHook, uint ev, IntPtr hwnd, int idObject, int idChild, uint tid, uint time){
+    try{
+      if(idObject != OBJID_WINDOW || idChild != 0) return;   // a control is not a window
+      if(hwnd == IntPtr.Zero) return;
+      if(GetAncestor(hwnd, GA_ROOT) != hwnd) return;         // child: reading it would cost protel
+      if(watchSeen >= WATCH_MAX) return;
+      StringBuilder cls = new StringBuilder(160), txt = new StringBuilder(320);
+      try{ GetClassName(hwnd, cls, cls.Capacity); }catch(Exception){}
+      try{ GetWindowText(hwnd, txt, txt.Capacity); }catch(Exception){}
+      string t = txt.ToString();
+      /* A nameless window closing says nothing anyone can use, and protel produces a lot
+         of them. Openings are kept whether or not they carry a caption. */
+      if(ev == EVENT_OBJECT_HIDE && t.Length == 0) return;
+      watchSeen++;
+      AppendWatch(DateTime.Now.ToString("HH:mm:ss") + "  " + (ev == EVENT_OBJECT_SHOW ? "OPEN " : "CLOSE")
+        + "  class=\"" + cls.ToString() + "\"  title=\"" + t + "\"\r\n");
+    }catch(Exception){}
+  }
+  /* protel's process id, or 0. With no focus= target configured there is no protel to
+     identify, and the watcher stays off rather than logging the whole desktop. */
+  static uint ProtelPid(){
+    string needle = focusNeedle;
+    if(needle == null || needle.Length == 0) return 0;
+    uint found = 0;
+    try{
+      Process[] all = Process.GetProcesses();
+      for(int i = 0; i < all.Length; i++){
+        try{
+          if(found == 0){
+            string n = all[i].ProcessName;
+            if(n != null && n.ToUpperInvariant().IndexOf(needle) >= 0) found = (uint)all[i].Id;
+          }
+        }catch(Exception){}
+        try{ all[i].Dispose(); }catch(Exception){}
+      }
+    }catch(Exception){ return 0; }
+    return found;
+  }
+  /* Its own thread and its own pump. An out-of-context WinEvent is delivered to the
+     thread that installed the hook and needs a message loop to arrive; PeekMessage is a
+     message loop. A 100 ms tick is far inside the 400 ms the design waits before reading
+     anything, and keeps every part of this off the thread the shortcuts live on. */
+  static void WatchLoop(){
+    MSG m;
+    try{ PeekMessage(out m, IntPtr.Zero, 0, 0, 0); }catch(Exception){}   // force the queue to exist
+    for(;;){
+      try{
+        uint want = watchWantPid;
+        if(want != watchHavePid){
+          if(evHook != IntPtr.Zero){ UnhookWinEvent(evHook); evHook = IntPtr.Zero; }
+          watchHavePid = want;
+          if(want != 0){
+            keepEv = WinEventCallback;
+            evHook = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_HIDE, IntPtr.Zero, keepEv,
+                                     want, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+          }
+        }
+        while(PeekMessage(out m, IntPtr.Zero, 0, 0, PM_REMOVE)){
+          TranslateMessage(ref m);
+          DispatchMessage(ref m);
+        }
+      }catch(Exception e){ WriteCrash("watch", e); }
+      Thread.Sleep(100);
+    }
+  }
+
   static string ExePath(){
     try{ return Process.GetCurrentProcess().MainModule.FileName; }catch(Exception){ return null; }
   }
@@ -1369,7 +1525,7 @@ static class TBind {
     try{ Console.Out.Write(t + "\n"); Console.Out.Flush(); }catch(Exception){}
   }
 
-  const string VER = "v12";
+  const string VER = "v13";
 
   static int Main(string[] args){
     int parentPid;
@@ -1425,6 +1581,16 @@ static class TBind {
          same overload is exactly the bet that killed ParseBind once. Say() adds its own
          newline and a spare one costs nothing. */
       Say(SCAN.ToString());
+      return 0;
+    }
+    /* What protel opened tonight. Nothing was read from protel to produce it — see the
+       note by the WinEvent constants. */
+    if(args.Length >= 1 && args[0] == "watchlog"){
+      try{
+        string wp = WatchPath();
+        if(wp == null || !System.IO.File.Exists(wp)) Say("(nothing recorded this shift)");
+        else Say(System.IO.File.ReadAllText(wp));
+      }catch(Exception e){ Say("watchlog failed: " + e.Message); }
       return 0;
     }
     if(args.Length >= 1 && args[0] == "ping"){
@@ -1506,6 +1672,12 @@ static class TBind {
     if(kbHook == IntPtr.Zero) return 3;
     SetHost(HostRunning());                    // installs the mouse hook if RecCheck is up
 
+    /* The window watcher lives on its own thread so nothing it does can delay a
+       low-level hook callback and get the shortcuts torn down by Windows. */
+    watchThread = new Thread(new ThreadStart(WatchLoop));
+    watchThread.IsBackground = true;
+    watchThread.Start();
+
     watchdog = new Thread(delegate(){          // independent of the loop, by design
       for(;;){
         Thread.Sleep(2000);
@@ -1513,6 +1685,10 @@ static class TBind {
           bool up = HostRunning();
           if(up != hostUp) PostUi(WM_APP_HOST, (IntPtr)(up ? 1 : 0));
           if(BindsChanged()) PostUi(WM_APP_BINDS, IntPtr.Zero);
+          /* Which process to watch, re-answered every two seconds: protel restarts, and
+             a stale pid watches nothing. Costs one process enumeration, same as the
+             RecCheck check above it. */
+          watchWantPid = ProtelPid();
         }catch(Exception){}
       }
     });

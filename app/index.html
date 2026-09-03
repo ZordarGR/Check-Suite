@@ -1357,7 +1357,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.17";
+const APP_VERSION = "1.17.18";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1443,6 +1443,9 @@ en: {
   "sc.bootStopped": "Set to start with Windows, but it is not running right now.",
   "sc.moves": "Why the room pills say what they say",
   "sc.scan": "What the window in front is built from",
+  "sc.watch": "What protel opened tonight",
+  "sc.watchHint": "Zero-touch \u2014 nothing at all is sent to protel. Windows tells RecCheck when a protel window opens or closes, and the caption is the one Windows already holds. Kept for the night only and cleared at 07:00 with the shift.",
+  "sc.watchNone": "Nothing recorded this shift. It only watches once a protel window has been picked as the target (PROTEL SHORTCUTS \u2192 only while protel is in front), and it clears itself at 07:00.",
   "sc.scanHint": "Read-only. It asks each control what it is and what it holds \u2014 nothing is written and protel keeps exactly what it had. It is not free, though: the report ends with how many questions it asked protel and how long that took.",
   "sc.scanWait": "Bring the protel window you want forward\u2026 {n}",
   "sc.scanNone": "Nothing came back \u2014 the helper could not run the scan.",
@@ -1652,6 +1655,9 @@ gr: {
   "sc.bootStopped": "Έχει οριστεί να ξεκινά με τα Windows, αλλά αυτή τη στιγμή δεν τρέχει.",
   "sc.moves": "Γιατί λένε αυτό τα πλακίδια δωματίων",
   "sc.scan": "Από τι αποτελείται το μπροστινό παράθυρο",
+  "sc.watch": "Τι άνοιξε το protel απόψε",
+  "sc.watchHint": "Μηδενική επαφή — τίποτα δεν στέλνεται στο protel. Τα Windows λένε στο RecCheck όταν ανοίγει ή κλείνει παράθυρο του protel, και ο τίτλος είναι αυτός που έχουν ήδη. Κρατιέται μόνο για τη νύχτα και σβήνει στις 07:00 με τη βάρδια.",
+  "sc.watchNone": "Δεν καταγράφηκε τίποτα αυτή τη βάρδια. Παρακολουθεί μόνο αφού οριστεί το παράθυρο του protel ως στόχος, και σβήνει μόνο του στις 07:00.",
   "sc.scanHint": "Μόνο ανάγνωση. Ρωτάει κάθε στοιχείο τι είναι και τι περιέχει — τίποτα δεν γράφεται και το protel κρατάει ακριβώς ό,τι είχε. Δεν είναι όμως δωρεάν: η αναφορά τελειώνει με το πόσες ερωτήσεις έγιναν στο protel και πόσο κράτησαν.",
   "sc.scanWait": "Φέρε μπροστά το παράθυρο του protel που θέλεις… {n}",
   "sc.scanNone": "Δεν επέστρεψε τίποτα — ο βοηθός δεν μπόρεσε να τρέξει τη σάρωση.",
@@ -2940,8 +2946,10 @@ function openDebug(){
     '<div class="dbgGrid" style="margin-top:8px">' +
       '<button class="btn" id="scMoves">' + t("sc.moves") + '</button>' +
       '<button class="btn" id="scScan">' + t("sc.scan") + '</button>' +
+      '<button class="btn" id="scWatch">' + t("sc.watch") + '</button>' +
     '</div>' +
     '<div class="err" style="color:var(--faint)">' + t("sc.scanHint") + '</div>' +
+    '<div class="err" style="color:var(--faint)">' + t("sc.watchHint") + '</div>' +
     '<div class="err" style="color:var(--faint)">' + t("sc.testHint") + '</div>' +
     '<pre id="scDiag" style="display:none"></pre>' +
     '<div class="actions">' +
@@ -2976,6 +2984,21 @@ function openDebug(){
     if(!sc) return;
     const log = await sc.tauLog().catch(() => null);
     pre.textContent = log || t("sc.logNone");
+    pre.style.display = "";
+    if(log){
+      copy.style.display = "";
+      copy.onclick = () => { try{ navigator.clipboard.writeText(log); }catch(e){} };
+    }else copy.style.display = "none";
+  };
+  /* ---- what protel opened tonight ----
+     The zero-touch half of the live read. Nothing is asked of protel to produce this:
+     Windows reports the window opening, and the caption is the one it already holds. So
+     unlike the scan there is no cost line, because there is no cost. */
+  $("#scWatch").onclick = async () => {
+    const pre = $("#scDiag"), copy = $("#scCopy");
+    if(!sc || !sc.watchLog) return;
+    const log = await sc.watchLog().catch(() => null);
+    pre.textContent = log || t("sc.watchNone");
     pre.style.display = "";
     if(log){
       copy.style.display = "";
@@ -3122,9 +3145,16 @@ function clCanMove(task, dir){
   const i = list.indexOf(task), j = i + dir;
   return i >= 0 && j >= 0 && j < list.length && !!list[j].done === !!task.done;
 }
+/* The overlay puts itself away once the last task is ticked, and main brings it straight
+   back the moment the list stops being finished. That is right for an untick he made and
+   wrong for the 07:00 reset, which unticks the whole night on its own — his words: "when
+   the overlay reset happens dont show it, ill know it has happened". This flags that one
+   push as quiet; main then leaves a hidden overlay hidden. An overlay already on screen
+   is never touched either way. */
+let OVQUIET = false;
 function pushOverlay(){
   if(!window.reccheckOverlay) return;
-  window.reccheckOverlay.setData({tasks: clSorted().map(x => ({id: x.id, text: x.text, done: !!x.done, tier: x.tier})), cfg: OVCFG, lang: LANG}).catch(() => {});
+  window.reccheckOverlay.setData({tasks: clSorted().map(x => ({id: x.id, text: x.text, done: !!x.done, tier: x.tier})), cfg: OVCFG, lang: LANG, quiet: OVQUIET}).catch(() => {});
 }
 function paintOverlayBtn(){
   const b = $("#clOverlay");
@@ -3164,7 +3194,8 @@ function clNightCheck(){
   if(stored !== null && prev && k > prev && CL.some(x => x.done)){   // a new shift began — fresh ticks
     CL.forEach(x => { x.done = false; });
     saveCL();
-    renderChecklist();
+    OVQUIET = true;                              // clear the ticks without summoning the overlay
+    try{ renderChecklist(); } finally{ OVQUIET = false; }
   }
 }
 function clSubmit(){
