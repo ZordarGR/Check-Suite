@@ -1,11 +1,11 @@
 {
-  "version": "1.17.25",
-  "type": "html",
-  "engine": "1.17.23",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.23/RecCheck-Setup.exe",
-  "setupSha256": "d733a9df982f600d296fe5ad7ead1afa161d13589048bff4d8160f0c6ffc24b1",
+  "version": "1.17.26",
+  "type": "full",
+  "engine": "1.17.26",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.26/RecCheck-Setup.exe",
+  "setupSha256": "177621065f2a6d8667fa8f8ee7db80d75b5810f4cde1b38582a920a49c6b4b69",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "33252da72beca044fe5849705a21ad72c5dfe8bce89333ba1124cbb16661a131",
-  "notes": "The working night and the shift reset now hold on the two nights the clock moves. Both were worked out as \"now minus so many hours\", which is a whole hour wrong when an hour of local time vanishes or repeats — the reset would have gone at 06:00 one night in autumn and 08:00 one night in spring. They are compared against the wall clock now."
+  "sha256": "74eb85ec946af24ef69d91e312681c71025ce2a02917cc42e20d9571d095e854",
+  "notes": "The watcher now also records when protel's own title bar changes, which is how it learns which report you opened and for which date \u2014 still with nothing sent to protel. And DEBUG can read the rows of the list in the window in front. That one is not free and says so, and it feeds nothing yet: it is there so we can see whether the rows come back at all before anything is built on them."
 }

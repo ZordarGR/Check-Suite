@@ -171,6 +171,34 @@ static class TBind {
   const uint GA_ROOT                = 2;
   const uint PM_REMOVE              = 1;
   const int  WATCH_MAX              = 4000;   // one shift of windows, with room to spare
+  const uint EVENT_OBJECT_NAMECHANGE= 0x800C;   // a window's caption changed
+  /* MDI puts the MAXIMISED child's title into the FRAME's caption:
+     "… protel Hotel Management Suite 2024 - [Departure Report for 02/09/26]". The frame is
+     top-level, so reading that caption costs protel nothing — which makes a name change on
+     it the free way to know which report he just opened, and on which date. */
+
+  /* ---- reading a list's rows (v15) ----
+     LVM_GETITEMTEXT fills a caller-supplied buffer, and for a control in ANOTHER process
+     that buffer has to live in that process — hence OpenProcess/VirtualAllocEx/Write/Read.
+     This is the part that is NOT free, and it is why the probe reports its own cost.
+
+     It was nearly built on MSAA instead, which allocates nothing in protel. That was
+     rejected after trying it: Mono here ships no Accessibility.dll, so IAccessible would
+     have to be hand-declared as a COM vtable that cannot be tested anywhere in this
+     container — and a slot declared one position out does not fail, it calls a DIFFERENT
+     method on protel. accSelect and accDoDefaultAction are in that vtable. Every call
+     below is a documented getter with a signature the compiler checks; the worst a
+     mistake here can do is read nothing. */
+  const uint LVM_GETITEMTEXTW = 0x1073, LVM_GETITEMTEXTA = 0x102D, LVM_GETHEADER = 0x101F;
+  const uint HDM_GETITEMCOUNT = 0x1200;
+  const uint PROCESS_VM_OPERATION = 0x0008, PROCESS_VM_READ = 0x0010, PROCESS_VM_WRITE = 0x0020;
+  /* IsWow64Process REQUIRES a query right on the handle. Without it the call fails, and a
+     failed call that nobody checks decides protel's bitness by accident. */
+  const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
+  const uint MEM_COMMIT = 0x1000, MEM_RESERVE = 0x2000, MEM_RELEASE = 0x8000, PAGE_READWRITE = 0x04;
+  /* Stop reading well before RecCheck would give up on the helper and kill it. A kill
+     cannot be caught, and the scratch pages would stay in protel until protel closes. */
+  const int READ_BUDGET_MS = 5000;
   const uint KEYEVENTF_UNICODE = 0x0004, KEYEVENTF_KEYUP = 0x0002, KEYEVENTF_EXTENDEDKEY = 0x0001;
   const uint WM_INPUTLANGCHANGEREQUEST = 0x0050;
   const uint KLF_ACTIVATE = 1;
@@ -228,6 +256,14 @@ static class TBind {
   [DllImport("user32.dll")] static extern IntPtr SetWinEventHook(uint min, uint max, IntPtr mod, WinEventProc fn, uint pid, uint tid, uint flags);
   [DllImport("user32.dll")] static extern bool UnhookWinEvent(IntPtr h);
   [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr h, uint flags);
+  [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
+  [DllImport("kernel32.dll", SetLastError = true)] static extern bool CloseHandle(IntPtr h);
+  [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr VirtualAllocEx(IntPtr proc, IntPtr addr, UIntPtr size, uint type, uint protect);
+  [DllImport("kernel32.dll", SetLastError = true)] static extern bool VirtualFreeEx(IntPtr proc, IntPtr addr, UIntPtr size, uint type);
+  [DllImport("kernel32.dll", SetLastError = true)] static extern bool WriteProcessMemory(IntPtr proc, IntPtr addr, byte[] buf, UIntPtr n, out UIntPtr wrote);
+  [DllImport("kernel32.dll", SetLastError = true)] static extern bool ReadProcessMemory(IntPtr proc, IntPtr addr, byte[] buf, UIntPtr n, out UIntPtr read);
+  [DllImport("kernel32.dll", SetLastError = true)] static extern bool IsWow64Process(IntPtr proc, out bool wow64);
+  [DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
   [DllImport("user32.dll")] static extern bool TranslateMessage(ref MSG msg);
   [DllImport("user32.dll")] static extern IntPtr DispatchMessage(ref MSG msg);
   [DllImport("user32.dll")] static extern bool PostThreadMessage(uint tid, uint msg, IntPtr w, IntPtr l);
@@ -1352,6 +1388,233 @@ static class TBind {
     }catch(Exception){ return false; }
   }
 
+  /* ================= reading a list's rows — this one is NOT free =================
+     A probe, and deliberately only a probe: it reads a few rows out of the list in the
+     window in front and reports them WITH ITS OWN COST, the same terms the window scan
+     shipped on. Nothing is wired to the ledger until this has been seen to work on his
+     machine, because none of it can be run in the container it was written in.
+
+     Every message sent is a documented getter. The buffer LVM_GETITEMTEXT fills has to
+     live in the target's address space, so a scratch page is allocated there and freed
+     again; protel's own memory is never written. */
+  static StringBuilder READ = new StringBuilder();
+  static int readMsgs = 0;
+
+  /* The LVITEM the control will read. Its layout is the TARGET's, not ours: pszText is a
+     pointer, so a 64-bit helper talking to 32-bit protel must lay out 32-bit fields or the
+     control reads the text pointer out of the padding and returns nothing. */
+  static byte[] BuildLvItem(bool target64, int row, int col, IntPtr text, int cch){
+    byte[] b = new byte[target64 ? 64 : 48];
+    PutI(b, 0, 1);                       // mask = LVIF_TEXT
+    PutI(b, 4, row);
+    PutI(b, 8, col);
+    if(target64){
+      PutL(b, 24, text.ToInt64());
+      PutI(b, 32, cch);
+    }else{
+      PutI(b, 20, (int)text.ToInt64());
+      PutI(b, 24, cch);
+    }
+    return b;
+  }
+  static void PutI(byte[] b, int at, int v){
+    b[at] = (byte)v; b[at+1] = (byte)(v >> 8); b[at+2] = (byte)(v >> 16); b[at+3] = (byte)(v >> 24);
+  }
+  static void PutL(byte[] b, int at, long v){
+    for(int i = 0; i < 8; i++) b[at+i] = (byte)(v >> (8*i));
+  }
+
+  /* Kept free of Win32 so the harness can pin the DECISION, not only the two layouts.
+     test/lvitem.cs proved both layouts were built correctly and still missed that the
+     wrong one was being picked — a test of the parts that never tested the choice. */
+  static bool TargetIs64(bool osIs64, bool targetWow){
+    if(!osIs64) return false;      // 32-bit Windows: nothing on it is 64-bit
+    return !targetWow;             // 64-bit Windows: WOW64 means the target is 32-bit
+  }
+  static IntPtr BiggestListView(IntPtr root){
+    listBest = IntPtr.Zero; listBestArea = 0;
+    try{ EnumChildWindows(root, ListPick, IntPtr.Zero); }catch(Exception){}
+    return listBest;
+  }
+  static IntPtr listBest = IntPtr.Zero;
+  static long listBestArea = 0;
+  static bool ListPick(IntPtr h, IntPtr p){
+    try{
+      StringBuilder c = new StringBuilder(80);
+      GetClassName(h, c, c.Capacity);
+      if(c.ToString().ToUpperInvariant().IndexOf("SYSLISTVIEW32") < 0) return true;
+      RECT r;
+      if(!GetWindowRect(h, out r)) return true;
+      long area = (long)(r.right - r.left) * (r.bottom - r.top);
+      if(area > listBestArea){ listBestArea = area; listBest = h; }
+    }catch(Exception){}
+    return true;
+  }
+
+  static void ReadForeground(int maxRows){
+    int t0 = Environment.TickCount;
+    readMsgs = 0;
+    IntPtr fg = GetForegroundWindow();
+    if(fg == IntPtr.Zero){ READ.Append("nothing is in front.\n"); return; }
+    string exe, cls, txt;
+    ForegroundOf(fg, out exe, out cls, out txt);
+    READ.Append("front: " + exe + " | " + cls + " | " + txt + "\n\n");
+    if(!MatchesNeedle(exe, cls, txt)){
+      READ.Append("That is not the window this is pointed at (focus=" + (focusNeedle == null ? "(none)" : focusNeedle)
+                  + "). Nothing was read.\n");
+      return;
+    }
+    IntPtr lv = BiggestListView(fg);
+    if(lv == IntPtr.Zero){ READ.Append("No SysListView32 anywhere in that window. Nothing was read.\n"); return; }
+
+    IntPtr res;
+    readMsgs++;
+    int rows = 0;
+    if(SendMessageTimeout(lv, LVM_GETITEMCOUNT, IntPtr.Zero, IntPtr.Zero, SMTO_ABORTIFHUNG, 250, out res) != IntPtr.Zero)
+      rows = res.ToInt32();
+    int cols = 0;
+    readMsgs++;
+    if(SendMessageTimeout(lv, LVM_GETHEADER, IntPtr.Zero, IntPtr.Zero, SMTO_ABORTIFHUNG, 250, out res) != IntPtr.Zero
+       && res != IntPtr.Zero){
+      readMsgs++;
+      IntPtr hres;
+      if(SendMessageTimeout(res, HDM_GETITEMCOUNT, IntPtr.Zero, IntPtr.Zero, SMTO_ABORTIFHUNG, 250, out hres) != IntPtr.Zero)
+        cols = hres.ToInt32();
+    }
+    if(cols <= 0) cols = 8;
+    if(cols > 16) cols = 16;
+    READ.Append("list " + Hex(lv) + "   " + rows + " row(s), " + cols + " column(s)\n\n");
+    if(rows <= 0){ READ.Append("Empty list. Nothing further was read.\n"); return; }
+
+    uint pid;
+    GetWindowThreadProcessId(lv, out pid);
+    IntPtr proc = OpenProcess(PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE
+                              | PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+    if(proc == IntPtr.Zero){
+      READ.Append("Could not open that process to give the control somewhere to write.\n"
+                + "Usually that means protel runs with more rights than RecCheck does.\n"
+                + "Nothing was read, and nothing was left behind.\n");
+      return;
+    }
+    /* protel's bitness decides the LVITEM layout, and getting it wrong hands the control a
+       null pointer to write its answer into. So it is ESTABLISHED, never assumed:
+       IsWow64Process is asked about the target AND about us, both return values are
+       checked, and if either call fails the read is refused rather than guessed.
+
+       This was wrong before the audit caught it. OpenProcess asked for no query right, so
+       IsWow64Process failed silently, its BOOL was discarded, `wow` stayed false, and a
+       64-bit helper laid out a 64-bit LVITEM for 32-bit protel — pszText read out of the
+       alignment padding as NULL. On an owner-drawn list that null reaches protel's own
+       LVN_GETDISPINFO handler. */
+    bool selfWow = false, targetWow = false, okSelf = false, okTarget = false;
+    try{ okSelf = IsWow64Process(GetCurrentProcess(), out selfWow); }catch(Exception){}
+    try{ okTarget = IsWow64Process(proc, out targetWow); }catch(Exception){}
+    if(!okSelf || !okTarget){
+      READ.Append("Could not establish whether protel is 32-bit or 64-bit.\n"
+                + "Guessing that decides where the list writes its answer, so nothing was read.\n");
+      CloseHandle(proc);
+      return;
+    }
+    bool osIs64 = (IntPtr.Size == 8) || selfWow;
+    bool target64 = TargetIs64(osIs64, targetWow);
+    READ.Append("protel is " + (target64 ? "64-bit" : "32-bit") + ", this helper is "
+                + (IntPtr.Size == 8 ? "64-bit" : "32-bit") + ", Windows is "
+                + (osIs64 ? "64-bit" : "32-bit") + "\n\n");
+
+    const int CCH = 512;
+    IntPtr text = VirtualAllocEx(proc, IntPtr.Zero, (UIntPtr)(CCH * 2), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    IntPtr item = VirtualAllocEx(proc, IntPtr.Zero, (UIntPtr)64, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if(text == IntPtr.Zero || item == IntPtr.Zero){
+      READ.Append("Could not get a scratch page in that process. Nothing was read.\n");
+      if(text != IntPtr.Zero) VirtualFreeEx(proc, text, UIntPtr.Zero, MEM_RELEASE);
+      if(item != IntPtr.Zero) VirtualFreeEx(proc, item, UIntPtr.Zero, MEM_RELEASE);
+      CloseHandle(proc);
+      return;
+    }
+    int show = rows < maxRows ? rows : maxRows;
+    bool wide = true, everGot = false;
+    bool ranOut = false;
+    /* try/FINALLY, not try/catch-then-free. A page allocated in ANOTHER process is not
+       reclaimed when this one exits — it stays in protel until protel closes. So the
+       frees must run on every path out of here, and the work must finish well inside the
+       window in which RecCheck would kill this helper for taking too long: a kill cannot
+       be caught, and it would leave those pages behind in protel for the rest of the day.
+       READ_BUDGET_MS is what keeps us far away from that. */
+    try{
+      /* Decide the character width on the WHOLE first row, not on its first cell. A list
+         whose first column is a checkbox or an icon has an empty cell 0 legitimately, and
+         deciding on that alone would flip to ANSI on a Unicode control and read garbage
+         for the rest of the night. Only a first row that comes back entirely empty is
+         evidence of the wrong message. */
+      string[] first = ReadRow(proc, lv, target64, 0, cols, text, item, CCH, true);
+      if(!AnyText(first)){
+        string[] alt = ReadRow(proc, lv, target64, 0, cols, text, item, CCH, false);
+        if(AnyText(alt)){ wide = false; first = alt; }
+      }
+      everGot = AnyText(first);
+      READ.Append("  row 0:  " + Join(first) + "\n");
+      for(int r = 1; r < show; r++){
+        if(Environment.TickCount - t0 > READ_BUDGET_MS){ ranOut = true; show = r; break; }
+        string[] cells = ReadRow(proc, lv, target64, r, cols, text, item, CCH, wide);
+        if(AnyText(cells)) everGot = true;
+        READ.Append("  row " + r + ":  " + Join(cells) + "\n");
+      }
+    }catch(Exception e){ READ.Append("EXCEPTION while reading: " + e.Message + "\n"); }
+    finally{
+      VirtualFreeEx(proc, text, UIntPtr.Zero, MEM_RELEASE);
+      VirtualFreeEx(proc, item, UIntPtr.Zero, MEM_RELEASE);
+      CloseHandle(proc);
+    }
+    int took = Environment.TickCount - t0;
+    if(ranOut)
+      READ.Append("\nStopped after " + READ_BUDGET_MS + " ms rather than keep asking. protel was\n"
+                + "answering slowly, and being killed mid-read would leave a page behind in it.\n");
+    READ.Append("\nread " + show + " of " + rows + " row(s) as " + (wide ? "Unicode" : "ANSI") + "\n");
+    READ.Append(readMsgs + " message(s) asked of protel, whole read took " + took + " ms\n");
+    READ.Append("A scratch page was allocated in protel and freed again. protel's own memory\n"
+              + "was never written, and every message sent was a getter.\n");
+    if(!everGot)
+      READ.Append("\nNOTHING CAME BACK. The list is real and counts its rows, but its text did not\n"
+                + "arrive — that is the answer this probe exists to get, and it means this route\n"
+                + "is the wrong one rather than that something is broken.\n");
+  }
+  static string[] ReadRow(IntPtr proc, IntPtr lv, bool target64, int row, int cols,
+                         IntPtr text, IntPtr item, int cch, bool wide){
+    string[] out2 = new string[cols];
+    for(int c = 0; c < cols; c++) out2[c] = ReadCell(proc, lv, target64, row, c, text, item, cch, wide);
+    return out2;
+  }
+  static bool AnyText(string[] cells){
+    for(int i = 0; i < cells.Length; i++) if(cells[i] != null && cells[i].Length > 0) return true;
+    return false;
+  }
+  static string Join(string[] cells){
+    StringBuilder b = new StringBuilder();
+    for(int i = 0; i < cells.Length; i++) b.Append("[" + cells[i] + "] ");
+    return b.ToString();
+  }
+  static string ReadCell(IntPtr proc, IntPtr lv, bool target64, int row, int col,
+                         IntPtr text, IntPtr item, int cch, bool wide){
+    try{
+      byte[] zero = new byte[cch * 2];
+      UIntPtr n;
+      WriteProcessMemory(proc, text, zero, (UIntPtr)(uint)zero.Length, out n);
+      byte[] li = BuildLvItem(target64, row, col, text, cch);
+      if(!WriteProcessMemory(proc, item, li, (UIntPtr)(uint)li.Length, out n)) return "";
+      IntPtr res;
+      readMsgs++;
+      if(SendMessageTimeout(lv, wide ? LVM_GETITEMTEXTW : LVM_GETITEMTEXTA,
+                            (IntPtr)row, item, SMTO_ABORTIFHUNG, 250, out res) == IntPtr.Zero) return "";
+      byte[] back = new byte[cch * 2];
+      if(!ReadProcessMemory(proc, text, back, (UIntPtr)(uint)back.Length, out n)) return "";
+      string got = wide ? System.Text.Encoding.Unicode.GetString(back)
+                        : System.Text.Encoding.Default.GetString(back);
+      int z = got.IndexOf('\0');
+      if(z >= 0) got = got.Substring(0, z);
+      return got.Replace("\r", " ").Replace("\n", " ").Replace("\t", " ");
+    }catch(Exception){ return ""; }
+  }
+
   /* ================= the window watcher — reads nothing from protel =================
      What it records: that a protel window opened or closed, when, its class and the
      caption Windows already holds for it. No field is read, no control is asked
@@ -1376,6 +1639,7 @@ static class TBind {
   const int WATCH_MAX_PIDS = 8;                  // a needle that matches half the machine hooks nothing silly
   static int watchSeen = 0;
   static string watchShift = "";
+  static string lastTitle = "";
   static Thread watchThread;
 
   /* 07:00, the shift boundary. Mirrors SHIFT_ROLLOVER_H in the page — change one, change
@@ -1436,6 +1700,11 @@ static class TBind {
      that is not tidying, it is what keeps the log readable at all. */
   static void WinEventCallback(IntPtr hHook, uint ev, IntPtr hwnd, int idObject, int idChild, uint tid, uint time){
     try{
+      /* The hook spans SHOW..NAMECHANGE because a name change is the one that tells us
+         which report is open; everything between them is filtered out here rather than
+         by a second hook per process. The marshalling is Windows' cost in OUR process,
+         not protel's. */
+      if(ev != EVENT_OBJECT_SHOW && ev != EVENT_OBJECT_HIDE && ev != EVENT_OBJECT_NAMECHANGE) return;
       if(idObject != OBJID_WINDOW || idChild != 0) return;   // a part of a control is not a window
       if(hwnd == IntPtr.Zero) return;
       if(watchSeen >= WATCH_MAX) return;
@@ -1447,7 +1716,14 @@ static class TBind {
       bool top = false;
       try{ top = (GetAncestor(hwnd, GA_ROOT) == hwnd); }catch(Exception){}
       watchSeen++;
-      AppendWatch(DateTime.Now.ToString("HH:mm:ss") + "  " + (ev == EVENT_OBJECT_SHOW ? "OPEN " : "CLOSE")
+      string what = ev == EVENT_OBJECT_SHOW ? "OPEN " : (ev == EVENT_OBJECT_HIDE ? "CLOSE" : "TITLE");
+      /* A caption that has not actually changed is not news. protel restates the frame's
+         title often; only the changes are worth a line. */
+      if(ev == EVENT_OBJECT_NAMECHANGE){
+        if(t == lastTitle) return;
+        lastTitle = t;
+      }
+      AppendWatch(DateTime.Now.ToString("HH:mm:ss") + "  " + what
         + "  " + (top ? "window" : "child ") + "  class=\"" + cls.ToString() + "\"  title=\"" + t + "\"\r\n");
     }catch(Exception){}
   }
@@ -1500,7 +1776,7 @@ static class TBind {
         /* processes newly worth watching */
         for(int i = 0; i < want.Length; i++){
           if(evHooks.ContainsKey(want[i])) continue;
-          IntPtr h = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_HIDE, IntPtr.Zero, keepEv,
+          IntPtr h = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_NAMECHANGE, IntPtr.Zero, keepEv,
                                      want[i], 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
           if(h != IntPtr.Zero) evHooks[want[i]] = h;
         }
@@ -1555,11 +1831,23 @@ static class TBind {
       Process.Start(si);
     }catch(Exception){}
   }
+  /* UTF-8 bytes, straight to the handle. Console.Out would encode through the console's
+     code page, which on a Greek Windows is not UTF-8 — and RecCheck reads this pipe as
+     UTF-8, so a guest name with Greek letters came back as mojibake. Nothing had carried
+     a non-ASCII character out of here until the list read did, which is why it never
+     showed. The stream is opened once and never disposed: Say is called more than once
+     per run, and disposing it would silence everything after the first line. */
+  static System.IO.Stream stdoutRaw = null;
   static void Say(string t){
-    try{ Console.Out.Write(t + "\n"); Console.Out.Flush(); }catch(Exception){}
+    try{
+      if(stdoutRaw == null) stdoutRaw = Console.OpenStandardOutput();
+      byte[] b = new System.Text.UTF8Encoding(false).GetBytes(t + "\n");
+      stdoutRaw.Write(b, 0, b.Length);
+      stdoutRaw.Flush();
+    }catch(Exception){}
   }
 
-  const string VER = "v14";
+  const string VER = "v15";
 
   static int Main(string[] args){
     int parentPid;
@@ -1619,6 +1907,25 @@ static class TBind {
     }
     /* What protel opened tonight. Nothing was read from protel to produce it — see the
        note by the WinEvent constants. */
+    /* Read a few rows out of the list in front. Not free — it says so itself. */
+    if(args.Length >= 2 && args[0] == "readlist"){
+      int rpid;
+      if(!int.TryParse(args[1], out rpid)) return 2;
+      int rwait = 5000, rmax = 5;
+      if(args.Length >= 3) int.TryParse(args[2], out rwait);
+      if(args.Length >= 4) int.TryParse(args[3], out rmax);
+      if(rwait < 0) rwait = 0;
+      if(rwait > 60000) rwait = 60000;
+      if(rmax < 1) rmax = 1;
+      if(rmax > 50) rmax = 50;
+      LoadBinds();                       // so focus= is known and the gate can refuse
+      Thread.Sleep(rwait);
+      READ = new StringBuilder();
+      READ.Append("rc-tbind " + VER + " list read  " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "\n");
+      try{ ReadForeground(rmax); }catch(Exception e){ READ.Append("EXCEPTION: " + e.Message + "\n"); }
+      Say(READ.ToString());
+      return 0;
+    }
     if(args.Length >= 1 && args[0] == "watchlog"){
       try{
         string wp = WatchPath();

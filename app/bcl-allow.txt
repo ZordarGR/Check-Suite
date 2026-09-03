@@ -8,7 +8,7 @@
 # So: adding a line to this file is the moment to confirm the member exists in
 # .NET Framework 4.8. Nothing else in this build will tell you.
 #
-# Reviewed for 1.17.23 (v14). Regenerate deliberately, never wholesale.
+# Reviewed for 1.17.26 (v15). Regenerate deliberately, never wholesale.
 #
 # v12 added the read-only window scan. Everything it brought in is either our own
 # identifier or a user32 P/Invoke name -- EnumChildWindows, GetDlgCtrlID, GetParent,
@@ -41,6 +41,7 @@
 <>f__mg$cache3
 <>f__mg$cache4
 <>f__mg$cache5
+<>f__mg$cache6
 <>m__0
 <Main>m__0
 <Main>m__1
@@ -51,6 +52,7 @@
 <RunStandalone>m__2
 <ScanForeground>c__AnonStorey1
 a
+access
 ACT_ALTF4
 ACT_ALTN
 ACT_SEQ
@@ -60,11 +62,13 @@ ActivateKeyboardLayout
 Add
 add_UnhandledException
 AddHours
+addr
 after
 allowPost
 alpha
 AlreadyRunning
 ALTERNATE
+AnyText
 AppDomain
 Append
 AppendAllText
@@ -74,12 +78,14 @@ AppendWatch
 args
 ARRIVE_MS
 AsyncCallback
+at
 attach
 attached
 AttachThreadInput
 b
 BeginInvoke
 BeginPaint
+BiggestListView
 Bind
 bindList
 binds
@@ -92,7 +98,10 @@ BootSet
 bottom
 brush
 BS_SOLID
+buf
+BuildLvItem
 ButtonOf
+Byte
 c
 callback
 CallNextHookEx
@@ -116,14 +125,19 @@ CB_GETCOUNT
 cbClsExtra
 cbSize
 cbWndExtra
+cch
+cells
 Char
 Clear
 ClearCrash
 Close
+CloseHandle
 cls
 cmd
 code
+col
 color
+cols
 Combine
 CompilerGeneratedAttribute
 Component
@@ -163,6 +177,7 @@ dx
 dy
 e
 Empty
+Encoding
 EndInvoke
 EndPaint
 Enter
@@ -174,6 +189,7 @@ Environment
 erase
 ev
 EVENT_OBJECT_HIDE
+EVENT_OBJECT_NAMECHANGE
 EVENT_OBJECT_SHOW
 evHook
 evHooks
@@ -209,6 +225,7 @@ get_Chars
 get_Count
 get_Current
 get_CurrentDomain
+get_Default
 get_ExceptionObject
 get_FileName
 get_HasExited
@@ -221,9 +238,12 @@ get_Message
 get_Now
 get_Out
 get_ProcessName
+get_Size
 get_TickCount
+get_Unicode
 GetAncestor
 GetAsyncKeyState
+GetBytes
 GetClassName
 GetClientRect
 GetCurrentProcess
@@ -247,6 +267,7 @@ GetProcesses
 GetProcessesByName
 GetQueueStatus
 GetStockObject
+GetString
 GetSystemMetrics
 GetTypeFromHandle
 GetValue
@@ -265,6 +286,7 @@ HashSet`1
 hbrBackground
 hCursor
 hdc
+HDM_GETITEMCOUNT
 Hex
 hh
 hHook
@@ -301,6 +323,7 @@ idThread
 idx
 InArray
 IndexOf
+inherit
 INPUT
 inputs
 InputUnion
@@ -314,6 +337,9 @@ IsExtendedVk
 IsModifierVk
 IsVolatile
 IsWindowVisible
+IsWow64Process
+item
+Join
 KBDLLHOOKSTRUCT
 kbHook
 keepEv
@@ -338,6 +364,7 @@ klid
 l
 lastBlocked
 LastIndexOf
+lastTitle
 LayoutList
 lb
 LB_GETCOUNT
@@ -349,6 +376,9 @@ line
 LineTo
 list
 List`1
+listBest
+listBestArea
+ListPick
 LLKHF_INJECTED
 LLMHF_INJECTED
 LoadBinds
@@ -360,7 +390,11 @@ lParam
 lpfnWndProc
 lpszClassName
 lpszMenuName
+lv
+LVM_GETHEADER
 LVM_GETITEMCOUNT
+LVM_GETITEMTEXTA
+LVM_GETITEMTEXTW
 LWA_ALPHA
 LWA_COLORKEY
 m
@@ -371,6 +405,10 @@ MapVirtualKey
 Marshal
 MatchesNeedle
 max
+maxRows
+MEM_COMMIT
+MEM_RELEASE
+MEM_RESERVE
 menu
 message
 method
@@ -400,13 +438,19 @@ obj
 Object
 object
 OBJID_WINDOW
+okSelf
+okTarget
 old
 on
 op_Equality
 op_Explicit
 op_Inequality
+OpenProcess
+OpenStandardOutput
 OpenSubKey
+osIs64
 p
+PAGE_READWRITE
 PAINTSTRUCT
 param
 parent
@@ -425,10 +469,16 @@ PostUi
 PressKeys
 PressTau
 PressWinSpace
+proc
 Process
+PROCESS_QUERY_LIMITED_INFORMATION
+PROCESS_VM_OPERATION
+PROCESS_VM_READ
+PROCESS_VM_WRITE
 ProcessModule
 ProcessStartInfo
 ProcName
+protect
 ProtelPid
 ProtelPids
 ps
@@ -437,17 +487,28 @@ PS_SOLID
 pt
 PtrToStructure
 pts
+PutI
+PutL
 QS_KEY
 QueueSend
 QueueUserWorkItem
 r
+ranOut
 rc-tbind
 rc-tbind.exe
 rcCaret
 rcPaint
+READ
+read
+READ_BUDGET_MS
 ReadAllLines
 ReadAllText
+ReadCell
+ReadForeground
 ReadLine
+readMsgs
+ReadProcessMemory
+ReadRow
 RECT
 RegisterClassEx
 Registry
@@ -460,6 +521,7 @@ result
 rgbReserved
 right
 root
+row
 RowCount
 Run
 RUNK
@@ -480,6 +542,7 @@ ScanOne
 scanSeen
 scKey
 SelectObject
+selfWow
 SendAltKey
 sender
 SendGreekT
@@ -515,7 +578,9 @@ SpecialFolder
 Split
 Start
 StartsWith
+stdoutRaw
 StopRunning
+Stream
 StreamReader
 String
 StringBuilder
@@ -539,10 +604,14 @@ System.Threading
 t
 T_FADE
 T_HOLD
+target64
 TargetFocused
+TargetIs64
+targetWow
 TAU
 TauLogPath
 TBind
+text
 TextReader
 TextWriter
 thenEnter
@@ -555,6 +624,7 @@ time
 timeout
 ToArray
 ToInt32
+ToInt64
 top
 ToString
 ToUpperInvariant
@@ -571,15 +641,19 @@ u
 ue
 UInt16
 UInt32
+UIntPtr
 UnhandledExceptionEventArgs
 UnhandledExceptionEventHandler
 UnhookWindowsHookEx
 UnhookWinEvent
 up
 user32.dll
+UTF8Encoding
 v
 ValueType
 VER
+VirtualAllocEx
+VirtualFreeEx
 vk
 VK_CAPITAL
 VK_CONTROL
@@ -610,6 +684,7 @@ WH_KEYBOARD_LL
 WH_MOUSE_LL
 what
 where
+wide
 width
 WINEVENT_OUTOFCONTEXT
 WINEVENT_SKIPOWNPROCESS
@@ -638,10 +713,13 @@ WM_XBUTTONDOWN
 WM_XBUTTONUP
 WNDCLASSEX
 WndProcD
+wow64
 wParam
 Write
 WriteAllText
 WriteCrash
+WriteProcessMemory
+wrote
 WS_EX_LAYERED
 WS_EX_NOACTIVATE
 WS_EX_TOOLWINDOW
