@@ -1,11 +1,11 @@
 {
-  "version": "1.17.24",
+  "version": "1.17.25",
   "type": "html",
   "engine": "1.17.23",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.23/RecCheck-Setup.exe",
   "setupSha256": "d733a9df982f600d296fe5ad7ead1afa161d13589048bff4d8160f0c6ffc24b1",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "5529e8073736ce0c075191467cbeab8ad9294651582f16af5110cf25c329c055",
-  "notes": "Room movements memory — start it again — is under OPTIONS now, beside legacy mode and the language, instead of in PROTEL SHORTCUTS. Still two clicks, and it says what the ledger holds before you touch it."
+  "sha256": "33252da72beca044fe5849705a21ad72c5dfe8bce89333ba1124cbb16661a131",
+  "notes": "The working night and the shift reset now hold on the two nights the clock moves. Both were worked out as \"now minus so many hours\", which is a whole hour wrong when an hour of local time vanishes or repeats — the reset would have gone at 06:00 one night in autumn and 08:00 one night in spring. They are compared against the wall clock now."
 }

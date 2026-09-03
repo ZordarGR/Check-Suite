@@ -3,9 +3,10 @@
 set -e
 cd "$(dirname "$0")/.."
 fail=0
-for t in scopecheck movespanel pills0209 report poison names nighttest quiet; do
+for t in scopecheck movespanel pills0209 report poison names nighttest dst quiet; do
   printf '\n=== %s ===\n' "$t"
-  node "test/$t.js" || fail=1
+  if [ "$t" = dst ]; then TZ=Europe/Athens node "test/$t.js" || fail=1;
+  else node "test/$t.js" || fail=1; fi
 done
 printf '\n'
 [ "$fail" = 0 ] && echo "all harnesses ran" || { echo "SOMETHING FAILED"; exit 1; }
