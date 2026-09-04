@@ -9,7 +9,7 @@ permissions:
   contents: write
 env:
   VERSION: v1.17.29
-  SETUP_SHA256: c048d9a0332c0ba0622c7d598b44371e0f1000e8f8997ba26cf9a23b5828b62f
+  SETUP_SHA256: 29e30681ea9e24949b2bb6f56594ff492f8c89c6511693a7ba3aab911465589f
 jobs:
   release:
     runs-on: ubuntu-latest

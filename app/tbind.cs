@@ -1124,7 +1124,8 @@ static class TBind {
   static int splashAngle = 0;
   static int splashLeftMs = 0;
   static bool splashSawGone = false;
-  static int splashBackMs = -1;
+  static bool splashBack = false, splashDone = false;
+  static int splashBackMs = 0, splashPollMs = 0, splashTotalMs = 0;
   static WndProcD keepSplashProc;
   static CPOINT[] SplashGlyph(){
     CPOINT[] g = new CPOINT[GLYPH.Length];
@@ -1192,7 +1193,13 @@ static class TBind {
       SelectObject(hdc, GetStockObject(NULL_PEN));
       SelectObject(hdc, back);
       PolyPolygon(hdc, g, GLYPH_N, 2);
+      /* Everything must be OUT of the DC before the finally deletes it. GDI silently
+         refuses to delete an object that is still selected, and this paints 25 times a
+         second for as long as the install takes -- one leaked brush per frame walks into
+         the 10,000-object quota, after which CreateSolidBrush starts returning null and
+         the overlay quietly falls apart. */
       SelectObject(hdc, GetStockObject(NULL_PEN));
+      SelectObject(hdc, GetStockObject(NULL_BRUSH_));
       if(pen != IntPtr.Zero) DeleteObject(pen);
     }catch(Exception){
     }finally{
@@ -1214,17 +1221,52 @@ static class TBind {
       return any;
     }catch(Exception){ return false; }
   }
+  /* ONCE A SECOND, not once a frame. Walking the whole process table 25 times a second,
+     on the machine, while it is extracting 300 MB, is a cost paid for nothing: RecCheck
+     does not come and go inside 40 ms. */
+  static bool SplashPollDue(int step){
+    splashPollMs -= step;
+    if(splashPollMs <= 0){ splashPollMs = 1000; return true; }
+    return false;
+  }
+  /* WHEN THIS ENDS, kept out of the window procedure so it can be driven without Windows.
+     Every one of its three exits is a case that only ever happens on his machine, mid
+     install, with nobody watching the code:
+
+       - RecCheck went away and came back  -> the normal one, after a moment for its
+         window to paint.
+       - RecCheck never went away          -> the update did not start. Twenty seconds is
+         already generous; waiting the full timeout would leave a ring on his screen for
+         four minutes over nothing.
+       - neither                           -> the hard timeout, so a failed install can
+         never strand it.
+
+     `splashBack` is a FLAG and the test is `<= 0`, deliberately. The first version ended
+     on `splashBackMs == 0` exactly, which works only because 40 happens to divide 1200 --
+     change either number to something that does not and the overlay would have hung until
+     the timeout. */
+  static bool SplashStep(int step, bool polled, bool here){
+    splashLeftMs -= step;
+    if(polled){
+      if(!splashSawGone){
+        if(!here) splashSawGone = true;
+        else if((splashTotalMs - splashLeftMs) > 20000) splashDone = true;
+      }else if(here && !splashBack){ splashBack = true; splashBackMs = 1200; }
+    }
+    if(splashBack){
+      splashBackMs -= step;
+      if(splashBackMs <= 0) splashDone = true;
+    }
+    return splashLeftMs <= 0 || splashDone;
+  }
   static IntPtr SplashWndProc(IntPtr h, uint msg, IntPtr w, IntPtr l){
     try{
       if(msg == WM_PAINT){ SplashPaint(); return IntPtr.Zero; }
       if(msg == WM_TIMER){
         splashAngle = (splashAngle + 6) % 360;
-        splashLeftMs -= SPLASH_STEP_MS;
-        bool here = RecCheckRunning();
-        if(!splashSawGone){ if(!here) splashSawGone = true; }
-        else if(here && splashBackMs < 0) splashBackMs = 1200;   // let its window paint first
-        if(splashBackMs > 0) splashBackMs -= SPLASH_STEP_MS;
-        if(splashLeftMs <= 0 || (splashBackMs >= 0 && splashBackMs <= 0)){
+        bool polled = SplashPollDue(SPLASH_STEP_MS);
+        bool here = polled && RecCheckRunning();
+        if(SplashStep(SPLASH_STEP_MS, polled, here)){
           KillTimer(splashWnd, T_HOLD);
           PostQuitMessage(0);
           return IntPtr.Zero;
@@ -1259,6 +1301,7 @@ static class TBind {
       if(splashWnd == IntPtr.Zero) return 1;
       SetLayeredWindowAttributes(splashWnd, CAPS_KEY, 235, LWA_COLORKEY | LWA_ALPHA);
       splashLeftMs = maxSeconds * 1000;
+      splashTotalMs = splashLeftMs;
       SetWindowPos(splashWnd, (IntPtr)(-1),
                    (GetSystemMetrics(SM_CXSCREEN) - SPLASH_W) / 2,
                    (GetSystemMetrics(SM_CYSCREEN) - SPLASH_H) / 2,

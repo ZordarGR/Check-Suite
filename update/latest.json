@@ -3,7 +3,7 @@
   "type": "full",
   "engine": "1.17.29",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.29/RecCheck-Setup.exe",
-  "setupSha256": "c048d9a0332c0ba0622c7d598b44371e0f1000e8f8997ba26cf9a23b5828b62f",
+  "setupSha256": "29e30681ea9e24949b2bb6f56594ff492f8c89c6511693a7ba3aab911465589f",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
   "sha256": "0852dcdf9634da8fbded60f8a3278259f7fffb37522e43a27381ce10c7e83b73",
