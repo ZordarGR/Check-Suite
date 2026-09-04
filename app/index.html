@@ -1364,7 +1364,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.29";
+const APP_VERSION = "1.17.30";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1498,8 +1498,8 @@ en: {
   "menu.dirNone": "no reports folder chosen yet",
   "menu.ledger": "ROOM MOVEMENTS MEMORY \u2014 START IT AGAIN",
   "menu.legacy": "LEGACY MODE \u2014 XPS FILES",
-  "menu.legacyOn": "on \u2014 the Rate Check slot is shown",
-  "menu.legacyOff": "off \u2014 the Rate Check slot is hidden",
+  "menu.legacyOn": "on \u2014 fed from xps files; the Rate Check slot is shown",
+  "menu.legacyOff": "off \u2014 fed from protel; the Rate Check slot is hidden",
   "menu.help": "HELP", "menu.helpSub": "opens the support page (GitHub)",
   "menu.title": "Menu",
   "land.export": "⇅ Export data", "land.import": "Import data…",
@@ -1722,8 +1722,8 @@ gr: {
   "menu.dirNone": "δεν έχει οριστεί φάκελος αναφορών",
   "menu.ledger": "ΜΝΗΜΗ ΚΙΝΗΣΕΩΝ — ΞΕΚΙΝΑ ΑΠΟ ΤΗΝ ΑΡΧΗ",
   "menu.legacy": "ΠΑΛΑΙΑ ΛΕΙΤΟΥΡΓΙΑ — ΑΡΧΕΙΑ XPS",
-  "menu.legacyOn": "ενεργή — η υποδοχή Rate Check φαίνεται",
-  "menu.legacyOff": "ανενεργή — η υποδοχή Rate Check κρύβεται",
+  "menu.legacyOn": "ενεργή — τροφοδοσία από αρχεία xps· η υποδοχή Rate Check φαίνεται",
+  "menu.legacyOff": "ανενεργή — τροφοδοσία από το protel· η υποδοχή Rate Check κρύβεται",
   "menu.help": "ΒΟΗΘΕΙΑ", "menu.helpSub": "ανοίγει τη σελίδα υποστήριξης (GitHub)",
   "menu.title": "Μενού",
   "land.export": "⇅ Εξαγωγή δεδομένων", "land.import": "Εισαγωγή δεδομένων…",
@@ -1932,6 +1932,47 @@ function loadRooms(){
 function saveRooms(){
   try{ localStorage.setItem(ROOMS_KEY, JSON.stringify(ROOMS)); }catch(e){}
 }
+/* THE PROTEL NAMES, straight into the room database. His call, 04/09.
+
+   Deliberately NOT the ingest below. That one exists for the .oxps and treats a room
+   whose name has changed as a room that has turned over: it stamps `movedOn` and DELETES
+   the nickname. Every room would trip it the first time this ran, because the uncut name
+   is by definition different from the cut one — and marking two hundred rooms as having
+   changed guest is exactly the shape of the 30/08 damage. A longer form of the same name
+   is not a change of guest. So this writes the name and the night it came from, and
+   touches nothing else: no movedOn, no nickname, no seen-date guard.
+
+   `liveKey` is what lets guestFor prefer this over the receipt's truncated name, and only
+   for the night it belongs to. */
+function ingestLiveNames(rate){
+  if(!rate || !rate.rooms || !rate.dateKey) return 0;
+  let wrote = 0;
+  for(const room of Object.keys(rate.rooms)){
+    const name = String(rate.rooms[room].name || "").trim();
+    if(!name) continue;
+    const e = ROOMS[room];
+    if(!e){ ROOMS[room] = {guest: name, seen: null, liveKey: rate.dateKey}; wrote++; continue; }
+    if(e.guest === name && e.liveKey === rate.dateKey) continue;
+    e.guest = name;
+    e.liveKey = rate.dateKey;
+    wrote++;
+  }
+  if(wrote) saveRooms();
+  return wrote;
+}
+/* The tax half is its own <script> IIFE and cannot see ROOMS; the live read lives there
+   and the room database lives here. This is the one door between them, the same shape as
+   __taLegacy going the other way. */
+window.__rcLiveNames = function(rate){
+  let n = 0;
+  try{ n = ingestLiveNames(rate); }catch(e){}
+  /* A report already loaded was drawn with the CUT names and its cards do not redraw on
+     their own. It cannot be redrawn from here either: renderAll() calls showScreen("app"),
+     so doing it now would throw him off the Tax Check screen he just pressed a button on,
+     mid-audit. The flag defers it to the moment he next arrives at the report. */
+  try{ if(n && MODEL) NAMES_STALE = true; }catch(e){}
+  return n;
+};
 /* feed tonight's report into the DB: rooms are the stable keys, guest names the
    changing part — a changed guest resets that room's nickname.
    Two guards keep this honest:
@@ -1984,6 +2025,20 @@ function syncRooms(){
     const e = ROOMS[room];
     if(!e){ ROOMS[room] = {guest: g, seen: MODEL.reportDate}; continue; }
     if(rd && e.seen && dateNum(e.seen) > rd) continue;   // older report — read-only
+    /* A NAME THAT CAME LIVE FROM PROTEL IS NOT A CHANGED GUEST.
+       It is the same person, in full; the receipt's is the truncation, and truncation is
+       the entire reason the live read exists. Without this, the first night both sources
+       are used every room looks "changed" at once, and the block below would mark them
+       all movedOn, delete every nickname, fire the watchlist on each, and then overwrite
+       the good name with the cut one. Four kinds of silent damage out of one comparison,
+       on his real data — the 30/08 shape exactly.
+
+       Two independent ways of recognising it, either sufficient: the stored name was read
+       for THIS night, or the receipt's name is that name's opening (which is what a cut
+       name is). The better name stays and nothing is inferred from the difference. */
+    const fromProtel = !!e.liveKey &&
+      ((rd && e.liveKey === rd) || (!!e.guest && !!g && e.guest.indexOf(g) === 0));
+    if(fromProtel){ e.seen = MODEL.reportDate; continue; }
     const changed = !!(e.guest && e.guest !== g);
     /* Stamped so the room can be marked as having turned over on a night whose rate
        list was never opened. It is weaker evidence than an arrival or departure date —
@@ -2098,6 +2153,22 @@ function openWatchChangePrompt(changes){
 }
 function nickFor(room){ const e = ROOMS[String(room)]; return (e && e.nick) ? e.nick : null; }
 function guestFor(room){
+  /* A name read live from protel BEATS the one on the receipt. It is the same guest —
+     the .oxps simply truncates it, and that truncation is the entire reason this exists.
+
+     Only for the night it was read for, though. `liveKey` is the business night of the
+     in-house list it came from; once the room turns over, last night's protel name is
+     not who is charging tonight, and preferring it then would put the wrong name on a
+     charge. With no report loaded there is nothing to disagree with, so it stands. */
+  const live = ROOMS[String(room)];
+  if(live && live.guest && live.liveKey){
+    /* With no report loaded there is nothing to disagree with. With one loaded, the live
+       name is preferred ONLY when it was read for that same night — an undated report
+       (dateNum 0) is not a match, because "we cannot tell which night this is" is not a
+       reason to put tonight's guest on it. */
+    if(!MODEL) return live.guest;
+    if(dateNum(MODEL.reportDate) === live.liveKey) return live.guest;
+  }
   if(MODEL){
     if(!MODEL._gm){
       const m = {};
@@ -3317,6 +3388,7 @@ function clSubmit(){
 /* ---------- screens + reports-folder browser ---------- */
 let SCREEN = "menu";
 let LASTFNAME = "";
+let NAMES_STALE = false;      // a live read landed better names under an open report
 /* each tool browses its own folder: "dept" = Department Check, "tax" = Tax Check */
 const FB = {tool: "dept",
             view: (function(){ try{ return localStorage.getItem("reccheck_fbview") || "list"; }catch(e){ return "list"; } })(),
@@ -3356,6 +3428,12 @@ function paintHelp(){
   }
 }
 function showScreen(which){
+  /* Cleared BEFORE renderAll, which calls back in here — otherwise this recurses. */
+  if(which === "app" && NAMES_STALE && MODEL){
+    NAMES_STALE = false;
+    renderAll(LASTFNAME || "");
+    return;
+  }
   SCREEN = which;
   /* The fit-to-window layout is the home screen's alone — see the CSS. */
   document.body.classList.toggle("onMenu", which === "menu");
@@ -5251,6 +5329,7 @@ const I18N={
   live_none:"Nothing came back. Open protel\u2019s in-house list \u2014 it does not have to be in front \u2014 and try again.",
   live_err:"protel said: ", live_got:"{0} of {1} rows \u2014 {2} rooms, {3} stays recorded for {4}. {5} messages, {6} ms.",
   live_cut:" Stopped early \u2014 protel was answering slowly.", live_cancel:" {0} cancelled row(s) ignored.",
+  live_named:" {0} room(s) took their name from protel, uncut.",
   live_wrong:"That is not the in-house list \u2014 the window it found says \u201c{0}\u201d. Nothing was recorded.",
   live_nodate:"No date in \u201c{0}\u201d, so there is no night to file these under. Nothing was recorded.",
   slot_rate:"Rate Check", slot_rate_sub:"in-house list · pre-EOD", slot_tax:"Tax Check", slot_tax_sub:"charges history · post-EOD",
@@ -5312,6 +5391,7 @@ const I18N={
   live_none:"Δεν ήρθε τίποτα. Άνοιξε τη λίστα παραμονών του protel — δεν χρειάζεται να είναι μπροστά — και ξαναδοκίμασε.",
   live_err:"το protel είπε: ", live_got:"{0} από {1} γραμμές — {2} δωμάτια, {3} διαμονές για {4}. {5} μηνύματα, {6} ms.",
   live_cut:" Σταμάτησε νωρίς — το protel απαντούσε αργά.", live_cancel:" {0} ακυρωμένες γραμμές αγνοήθηκαν.",
+  live_named:" {0} δωμάτια πήραν το όνομά τους από το protel, ακέραιο.",
   live_wrong:"Αυτή δεν είναι η λίστα παραμονών — το παράθυρο που βρέθηκε λέει «{0}». Δεν καταγράφηκε τίποτα.",
   live_nodate:"Δεν υπάρχει ημερομηνία στο «{0}», οπότε δεν υπάρχει νύχτα για να καταχωρηθούν. Δεν καταγράφηκε τίποτα.",
   slot_rate:"Rate Check", slot_rate_sub:"λίστα παραμονών · πριν το EOD", slot_tax:"Tax Check", slot_tax_sub:"ιστορικό χρεώσεων · μετά το EOD",
@@ -5944,6 +6024,7 @@ async function readInhouseLive(){
   if(!rate.count){ say.textContent = t('live_none'); return; }
   RATE = rate;
   const saved = saveMoves(rate);
+  const named = window.__rcLiveNames ? window.__rcLiveNames(rate) : 0;
   PAIR_OVERRIDE = null; ADJ_OPEN_OVERRIDE = null;
   el('fn-rate').textContent = p.title || biz;
   showMoveSave(saved);
@@ -5951,16 +6032,18 @@ async function readInhouseLive(){
   say.textContent = t('live_got', d.got || p.rows.length, d.rows || p.rows.length,
                       rate.count, (saved && saved.res) || 0, biz || '?', d.msgs || 0, d.ms || 0)
                   + (d.cut ? t('live_cut') : '')
-                  + (rate.cancelled ? t('live_cancel', rate.cancelled) : '');
+                  + (rate.cancelled ? t('live_cancel', rate.cancelled) : '')
+                  + (named ? t('live_named', named) : '');
   render();
 }
 async function loadRate(file){clearErr();el('fn-rate').textContent=file?file.name:'';el('mv-rate').textContent='';if(!file)return;try{const pages=await readOxps(file);const r=parseRate(pages);if(!r.count){showErr(t('err_norooms'));return;}RATE=r;showMoveSave(saveMoves(r));PAIR_OVERRIDE=null;ADJ_OPEN_OVERRIDE=null;el('slot-rate').classList.add('loaded');render();}catch(e){showErr(e.message==='notxps'?t('err_notxps'):t('err_read')+e.message);}}
 async function loadTax(file){clearErr();el('fn-tax').textContent=file?file.name:'';if(!file)return;try{const pages=await readOxps(file);const tokens=pagesToTokens(pages);const r=parseTax(tokens);if(!r.totalRooms){showErr(t('err_norooms'));return;}TAX=r;PAIR_OVERRIDE=null;ADJ_OPEN_OVERRIDE=null;ingestTax(r);if(r.fileDate)EXPANDED.add(r.fileDate);el('slot-tax').classList.add('loaded');render();}catch(e){showErr(e.message==='notxps'?t('err_notxps'):t('err_read')+e.message);}}
 /* Only where there is a helper to ask. In a browser, or on a machine without it, the row
    is not there at all rather than there and dead. */
+let LIVE_OK = false;
 try{
   if(window.reccheckShortcuts && window.reccheckShortcuts.inhouse){
-    el('liveRow').style.display = 'flex';
+    LIVE_OK = true;
     el('liveRead').textContent = t('live_read');
     el('liveRead').addEventListener('click', readInhouseLive);
   }
@@ -5985,6 +6068,12 @@ window.__taSetLang=function(l){ if(l!==LANG) setLang(l); el('taxBack').textConte
 function applyLegacy(on){
   const s = el('slot-rate');
   if(s) s.style.display = on ? '' : 'none';
+  /* His instruction, 04/09: legacy is the INITIAL STATE of all the tools — both checks
+     fed from xps files, not from protel. So legacy also decides whether the live read is
+     on offer at all, and it is the inverse of the slot: files in, protel out. The button
+     still needs a helper to talk to, so both have to be true. */
+  const lr = el('liveRow');
+  if(lr) lr.style.display = (!on && LIVE_OK) ? 'flex' : 'none';
 }
 function legacyOn(){
   try{ return localStorage.getItem('reccheck_legacy') !== '0'; }catch(e){ return true; }
