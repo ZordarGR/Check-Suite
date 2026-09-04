@@ -25,6 +25,7 @@ function runSync(rooms, receipts, reportDate, watch){
     lift("dateNum"),
     lift("prevNightKey"),
     lift("sameName"),
+    lift("isCutOf"),
     lift("syncRooms"),
     "return syncRooms();"
   ].join("\n");
@@ -38,8 +39,9 @@ function runSync(rooms, receipts, reportDate, watch){
 }
 
 /* --- guestFor: which name reaches the card --- */
-const guestFor = (rooms, model) => new Function("ROOMS","MODEL","String","Object",
-  lift("dateNum") + "\n" + lift("guestFor") + "\nreturn guestFor;")(rooms, model, String, Object);
+const guestFor = (rooms, model) => new Function("ROOMS","MODEL","String","Object","RegExp",
+  lift("dateNum") + "\n" + lift("isCutOf") + "\n" + lift("guestFor") + "\nreturn guestFor;")(
+    rooms, model, String, Object, RegExp);
 
 const R = () => ({"426": {guest: FULL, seen: null, liveKey: 20260904}});
 
@@ -53,7 +55,22 @@ g = guestFor(R(), {receipts: [{roomMain:"426", guest: "SOMEONE ELSE"}], reportDa
 ck("but NOT on a different night — the room may have turned over", g("426") === "SOMEONE ELSE");
 
 g = guestFor(R(), {receipts: [{roomMain:"426", guest: CUT}], reportDate: "?"});
-ck("and not on an undated report either",  g("426") === CUT);
+ck("and on an undated report, because the cut name says so", g("426") === FULL);
+
+/* THE ONE HE FOUND. He audits the night that has just ended; protel's in-house list
+   always says today. After midnight those are different days, and matching on the date
+   sent every name back to the cut one — the fix looked like it had done nothing. */
+g = guestFor(R(), {receipts: [{roomMain:"426", guest: CUT}], reportDate: "3/9/2026"});
+ck("a cut name still wins ACROSS the midnight boundary", g("426") === FULL);
+g = guestFor(R(), {receipts: [{roomMain:"426", guest: "ABBUSHI MIRIAM/OLIVER/NAHLA/HELENA"}],
+                   reportDate: "3/9/2026"});
+ck("an already-whole name is left alone",  g("426") === FULL);
+
+/* and the case the date guard existed for must still hold */
+g = guestFor(R(), {receipts: [{roomMain:"426", guest: "PAPADOPOULOS NIKOS"}], reportDate: "8/9/2026"});
+ck("a turned-over room keeps the receipt's guest", g("426") === "PAPADOPOULOS NIKOS");
+g = guestFor(R(), {receipts: [{roomMain:"426", guest: "ABB"}], reportDate: "8/9/2026"});
+ck("and three letters is not enough to claim a match", g("426") === "ABB");
 
 /* --- THE COLLISION. Load the Departments Check after a live read. --- */
 const withNick = {"426": {guest: FULL, seen: null, liveKey: 20260904, nick: "the loud ones"},
@@ -68,6 +85,13 @@ ck("the uncut name is NOT overwritten by the cut one",
    out.rooms["426"].guest === FULL && out.rooms["102"].guest === "ADCHMER/KAST FRANZISKA/ANDREAS");
 ck("the watchlist does not cry guest-changed",  !out.toast || !/426/.test(String(out.toast)));
 ck("and the room is stamped as seen tonight",   out.rooms["426"].seen === "4/9/2026");
+
+/* the guard must survive the .oxps spacing the cut name differently */
+const spaced = {"426": {guest: FULL, seen: null, liveKey: 20260904, nick: "the loud ones"}};
+out = runSync(spaced, [{roomMain: "426", guest: "  abbushi   miriam/oli  "}], "9/9/2026", []);
+ck("odd spacing and case still read as the truncation",
+   out.rooms["426"].nick === "the loud ones" && out.rooms["426"].guest === FULL
+   && !out.rooms["426"].movedOn);
 
 /* a REAL turnover must still be caught — the guard must not blind the detector */
 const turned = {"426": {guest: FULL, seen: null, liveKey: 20260904}};

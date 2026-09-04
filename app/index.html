@@ -1364,7 +1364,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.31";
+const APP_VERSION = "1.17.32";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -2063,8 +2063,10 @@ function syncRooms(){
        Two independent ways of recognising it, either sufficient: the stored name was read
        for THIS night, or the receipt's name is that name's opening (which is what a cut
        name is). The better name stays and nothing is inferred from the difference. */
-    const fromProtel = !!e.liveKey &&
-      ((rd && e.liveKey === rd) || (!!e.guest && !!g && e.guest.indexOf(g) === 0));
+    /* isCutOf, not a raw indexOf: it normalises case and spacing, so a receipt name that
+       differs only in whitespace still reads as the truncation it is instead of slipping
+       past this guard into the block that deletes his nicknames. */
+    const fromProtel = !!e.liveKey && ((rd && e.liveKey === rd) || isCutOf(g, e.guest));
     if(fromProtel){ e.seen = MODEL.reportDate; continue; }
     const changed = !!(e.guest && e.guest !== g);
     /* Stamped so the room can be marked as having turned over on a night whose rate
@@ -2179,31 +2181,45 @@ function openWatchChangePrompt(changes){
   };
 }
 function nickFor(room){ const e = ROOMS[String(room)]; return (e && e.nick) ? e.nick : null; }
+/* Is `short` what the .oxps made of `full`? A cut name is the opening of the whole one,
+   so this asks that directly instead of reasoning about dates. Four characters minimum,
+   so an initial does not match half the hotel. */
+function isCutOf(short, full){
+  const n = x => String(x || "").trim().replace(/\s+/g, " ").toUpperCase();
+  const a = n(short), b = n(full);
+  return a.length >= 4 && b.length > a.length && b.indexOf(a) === 0;
+}
 function guestFor(room){
   /* A name read live from protel BEATS the one on the receipt. It is the same guest —
      the .oxps simply truncates it, and that truncation is the entire reason this exists.
 
-     Only for the night it was read for, though. `liveKey` is the business night of the
-     in-house list it came from; once the room turns over, last night's protel name is
-     not who is charging tonight, and preferring it then would put the wrong name on a
-     charge. With no report loaded there is nothing to disagree with, so it stands. */
+     THE FIRST VERSION OF THIS ASKED THE WRONG QUESTION. It preferred the live name only
+     when the in-house list's date equalled the report's night, and he found what that
+     costs: he audits the night that has just ended, while protel's in-house list always
+     says TODAY. At one in the morning those are different days and every name fell back
+     to the cut one — the fix looked like it had done nothing.
+
+     So it asks about the NAMES instead. If the receipt's name is the opening of the
+     stored one, it is the same guest truncated and the whole name wins. If the room has
+     turned over, the new guest's name is not the opening of the old one and the receipt
+     wins, which is the case the date was there to protect. The date is still accepted
+     when it does match, for a name protel words differently rather than merely cuts. */
   const live = ROOMS[String(room)];
-  if(live && live.guest && live.liveKey){
-    /* With no report loaded there is nothing to disagree with. With one loaded, the live
-       name is preferred ONLY when it was read for that same night — an undated report
-       (dateNum 0) is not a match, because "we cannot tell which night this is" is not a
-       reason to put tonight's guest on it. */
-    if(!MODEL) return live.guest;
-    if(dateNum(MODEL.reportDate) === live.liveKey) return live.guest;
-  }
-  if(MODEL){
+  const onReceipt = (() => {
+    if(!MODEL) return null;
     if(!MODEL._gm){
       const m = {};
       for(const r of MODEL.receipts) if(r.roomMain && r.guest && m[r.roomMain] === undefined) m[r.roomMain] = r.guest;
       MODEL._gm = m;
     }
-    if(MODEL._gm[String(room)]) return MODEL._gm[String(room)];
+    return MODEL._gm[String(room)] || null;
+  })();
+  if(live && live.guest && live.liveKey){
+    if(!onReceipt) return live.guest;                          // nothing to disagree with
+    if(isCutOf(onReceipt, live.guest)) return live.guest;      // the same guest, in full
+    if(dateNum(MODEL.reportDate) === live.liveKey) return live.guest;
   }
+  if(onReceipt) return onReceipt;
   const e = ROOMS[String(room)];
   return (e && e.guest) || null;
 }
