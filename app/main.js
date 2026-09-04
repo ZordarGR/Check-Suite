@@ -490,6 +490,61 @@ app.whenReady().then(() => {
   setInterval(() => runCheck(false), 6 * 3600e3);
 });
 
+/* ---- the room database on disk ----
+
+   His call, 04/09: the rooms fed from protel persist in the tool's own directory rather
+   than only in localStorage. That REVERSES the 03/09 "tonight only" decision for names,
+   knowingly and on his instruction, so guest names now sit on the hotel's PC between
+   shifts. He asked for them not to sit there in plain sight.
+
+   WHAT THIS IS, SAID HONESTLY: obfuscation, not encryption. The key is in the program, so
+   anyone holding the exe holds the key. It stops the file being read by opening it, and
+   nothing stronger than that. He chose this knowing so, with a real key to come if the
+   app ever grows logins. It is never described to him as encryption anywhere.
+
+   localStorage stays the working store — synchronous, and the renderer boots off it. This
+   is a mirror written beside it, read back only to fill in what localStorage has lost.
+   Nothing here can cost the existing store: every path returns null on failure and the
+   renderer carries on with what it already had. */
+const ROOMS_FILE = "rooms.dat";
+const ROOMS_MAGIC = "RCR1";
+function roomsPath(){
+  const path2 = require("path");
+  return path2.join(app.getPath("userData"), ROOMS_FILE);
+}
+/* A repeating-key XOR over the bytes, with the length folded in so two saves of similar
+   data do not line up. Deliberately simple: something that LOOKS like real encryption
+   would be worse than something that plainly is not. */
+function roomsMask(buf){
+  const key = Buffer.from("RecCheck/Kernos/rooms/v1", "utf8");
+  const out = Buffer.allocUnsafe(buf.length);
+  for(let i = 0; i < buf.length; i++) out[i] = buf[i] ^ key[i % key.length] ^ ((i * 31) & 0xff);
+  return out;
+}
+ipcMain.handle("rooms-read", () => {
+  try{
+    const fs = require("fs");
+    const raw = fs.readFileSync(roomsPath());
+    if(raw.length < 4 || raw.slice(0, 4).toString("latin1") !== ROOMS_MAGIC) return null;
+    const txt = roomsMask(raw.slice(4)).toString("utf8");
+    const o = JSON.parse(txt);
+    return (o && typeof o === "object" && !Array.isArray(o)) ? o : null;
+  }catch(e){ return null; }
+});
+ipcMain.handle("rooms-write", (_e, obj) => {
+  try{
+    if(!obj || typeof obj !== "object" || Array.isArray(obj)) return false;
+    const fs = require("fs"), path2 = require("path");
+    const p = roomsPath();
+    fs.mkdirSync(path2.dirname(p), {recursive: true});
+    const body = roomsMask(Buffer.from(JSON.stringify(obj), "utf8"));
+    /* written beside and renamed, so a crash mid-write cannot leave half a database */
+    const tmp = p + ".tmp";
+    fs.writeFileSync(tmp, Buffer.concat([Buffer.from(ROOMS_MAGIC, "latin1"), body]));
+    fs.renameSync(tmp, p);
+    return true;
+  }catch(e){ return false; }
+});
 /* The overlay he asked for on 04/09: the icon centred with a donut ring around it in the
    update button's blue, instead of the nothing he watches now.
 
@@ -775,6 +830,48 @@ ipcMain.handle("sc-diag", (_e, delayMs) => new Promise(res => {
    cost — fewer columns, so fewer messages: six of sixteen over 250 rows is 1500 rather
    than 4000. Returns the helper's raw tab-separated answer; the page parses it, because
    the page is where the shape it has to become already lives. */
+/* ---- the lists the resident helper captured when protel opened them ----
+
+   The helper holds a WinEvent hook on protel and reads a list the moment it appears,
+   writing the rows to %LOCALAPPDATA%\\RecCheck\\rc-list-<tag>.tsv. This just hands those
+   files to the page.
+
+   NOTHING HERE LAUNCHES A PROCESS AND NOTHING HERE TOUCHES PROTEL. It is a file read, so
+   the page can ask as often as it likes, and a list he opened for two seconds is still
+   there to be collected minutes later. The mtime is returned so the page can tell a new
+   capture from one it has already taken. */
+ipcMain.handle("sc-listfile", (_e, tag) => {
+  try{
+    const t = String(tag || "").toUpperCase();
+    if(["IH", "MV", "AR", "DP"].indexOf(t) < 0) return null;
+    const fs = require("fs"), path2 = require("path");
+    const base = process.env.LOCALAPPDATA;
+    if(!base) return null;
+    const p = path2.join(base, "RecCheck", "rc-list-" + t + ".tsv");
+    const st = fs.statSync(p);
+    /* a list this old is not news; it is last night's, and the page has had it */
+    if(Date.now() - st.mtimeMs > 20 * 3600e3) return null;
+    return {tag: t, at: st.mtimeMs, text: fs.readFileSync(p, "utf8")};
+  }catch(e){ return null; }
+});
+/* The other three lists. Same shape as sc-inhouse — one verb per list, the helper picks
+   its own window by caption, and the answer is the same TSV with a different tag. */
+["moves", "arrivals", "departures"].forEach(verb => {
+  ipcMain.handle("sc-" + verb, (_e, maxRows) => new Promise(res => {
+    if(process.platform !== "win32" || !tauPath()){ res(null); return; }
+    const n = Math.max(1, Math.min(2000, +maxRows || 400));
+    const chunks = []; let done = false;
+    const finish = () => { if(done) return; done = true;
+      res(Buffer.concat(chunks).toString("utf8") || null); };
+    try{
+      const child = spawn(tauPath(), [verb, String(process.pid), "0", String(n)], {windowsHide: true});
+      child.stdout.on("data", d => { chunks.push(d); });
+      child.on("exit", finish);
+      child.on("error", finish);
+      setTimeout(() => { try{ child.kill(); }catch(e){} finish(); }, 30000);
+    }catch(e){ finish(); }
+  }));
+});
 ipcMain.handle("sc-inhouse", (_e, maxRows) => new Promise(res => {
   if(process.platform !== "win32" || !tauPath()){ res(null); return; }
   const n = Math.max(1, Math.min(2000, +maxRows || 400));

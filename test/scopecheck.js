@@ -54,6 +54,24 @@ for (const fn of ["renderMoves","roomMoves","movesReport"]) {
   console.log(fn.padEnd(12), missing.size ? "UNDEFINED -> " + [...missing].join(", ") : "all calls resolve");
 }
 
+/* ---- every <script> block must actually PARSE ----
+   Added after a duplicate `const` in the tax scope — one edit leaving the old
+   declarations behind and adding new ones — made that whole block a syntax error. The
+   page still loaded, the audit half still worked, and the tax half was simply dead: no
+   legacy toggle, no live read, no boot. Nothing here noticed, because every other check
+   reads the file as TEXT. new Function() is the cheapest thing that reads it as code. */
+{
+  const re = /<script[^>]*>([\s\S]*?)<\/script>/g;
+  let m, n = 0, bad = 0;
+  while((m = re.exec(src))){
+    n++;
+    try{ new Function(m[1]); }
+    catch(e){ bad++; console.log("syntax     BLOCK " + n + " DOES NOT PARSE — " + e.message); }
+  }
+  console.log("syntax     " + n + " script block(s), " + (bad ? bad + " BROKEN" : "all parse"));
+  if(bad) process.exitCode = 1;
+}
+
 /* ---- I18N.en vs I18N.el ----
    The check below this one only ever matched QUOTED, DOTTED keys ("menu.audit":), which
    is the shape T uses. I18N's keys are bare identifiers (live_read:), so every one of

@@ -84,6 +84,7 @@ AppendTauLog
 AppendWatch
 Arc
 args
+ArrCols
 ARRIVE_MS
 AsyncCallback
 at
@@ -100,6 +101,7 @@ binds
 BindsChanged
 BindsPath
 bindsStamp
+body
 Boolean
 BootOn
 BootSet
@@ -113,6 +115,7 @@ Byte
 c
 callback
 CallNextHookEx
+cap
 CAPS_ALPHA
 CAPS_CLASS
 CAPS_DARK
@@ -130,7 +133,7 @@ CapsPaint
 capsWnd
 CapsWndProc
 caption
-CaptionSaysInhouse
+CaptionMatches
 CB_GETCOUNT
 cbClsExtra
 cbSize
@@ -148,6 +151,7 @@ code
 col
 color
 cols
+ColsFor
 Combine
 CompilerGeneratedAttribute
 Component
@@ -173,6 +177,7 @@ DefWindowProc
 Delete
 DeleteObject
 DeleteValue
+DepCols
 Depth
 Describe
 DIAG
@@ -202,11 +207,17 @@ EnumWindows
 Environment
 erase
 ev
+EV_COOLDOWN_MS
 EVENT_OBJECT_HIDE
 EVENT_OBJECT_NAMECHANGE
 EVENT_OBJECT_SHOW
 evHook
 evHooks
+evLastAt
+evLastCap
+EvServiceReads
+evWantCap
+evWantTag
 Exception
 exe
 ExePath
@@ -223,7 +234,7 @@ fgWnd
 File
 FillRect
 fIncUpdate
-FindInhouseList
+FindTaggedList
 FindWindow
 flags
 Flush
@@ -325,6 +336,7 @@ HopTo
 HopViaWinSpace
 HostRunning
 hostUp
+huntNeedle
 hWnd
 hwnd
 hwndActive
@@ -357,7 +369,6 @@ ihPids
 InArray
 IndexOf
 inherit
-InhouseUnder
 INPUT
 inputs
 InputUnion
@@ -413,7 +424,9 @@ list
 List`1
 listBest
 listBestArea
+ListPath
 ListPick
+ListUnder
 LLKHF_INJECTED
 LLMHF_INJECTED
 LoadBinds
@@ -455,12 +468,14 @@ mi
 Microsoft.Win32
 min
 MinValue
+MissingFor
 mod
 mode
 Monitor
 MouseCallback
 mouseData
 MOUSEINPUT
+Move
 MoveNext
 MoveToEx
 ms
@@ -469,9 +484,12 @@ MSG
 msg
 MSLLHOOKSTRUCT
 MulticastDelegate
+MvCols
 n
 name
 nCode
+needle
+NeedleFor
 NULL_BRUSH_
 NULL_PEN
 obj
@@ -498,6 +516,7 @@ parentPid
 ParseBind
 Path
 PeekMessage
+PeekTagged
 pid
 PM_REMOVE
 POINT
@@ -528,6 +547,7 @@ PS_ENDCAP_ROUND_
 PS_GEOMETRIC
 PS_SOLID
 pt
+ptag
 PtrToStructure
 pts
 PutI
@@ -554,6 +574,7 @@ readMsgs
 ReadProcessMemory
 ReadRow
 ReadScope
+ReadTagged
 RecCheckRunning
 RECT
 RegisterClassEx
@@ -653,6 +674,7 @@ splashTotalMs
 splashWnd
 SplashWndProc
 Split
+Squash
 Start
 StartsWith
 stdoutRaw
@@ -682,6 +704,10 @@ System.Threading
 t
 T_FADE
 T_HOLD
+tag
+TagOfCaption
+tags
+TakeIfMatch
 target64
 TargetFocused
 TargetIs64
@@ -797,6 +823,7 @@ wParam
 Write
 WriteAllText
 WriteCrash
+WriteList
 WriteProcessMemory
 wrote
 WS_EX_LAYERED

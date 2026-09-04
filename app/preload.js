@@ -14,6 +14,12 @@ contextBridge.exposeInMainWorld("reccheckFiles", {
   perTool: true,
   onDirEvent: (cb) => ipcRenderer.on("reccheck-dir-event", (_e, profile) => cb(profile))
 });
+/* The room database mirrored into the app's own folder. Obfuscated, not encrypted — the
+   key is in the program. Named for what it is so nobody reading this assumes otherwise. */
+contextBridge.exposeInMainWorld("reccheckRooms", {
+  read: () => ipcRenderer.invoke("rooms-read"),
+  write: (obj) => ipcRenderer.invoke("rooms-write", obj)
+});
 contextBridge.exposeInMainWorld("reccheckOverlay", {
   toggle: () => ipcRenderer.invoke("overlay-toggle"),
   state: () => ipcRenderer.invoke("overlay-state"),
@@ -36,6 +42,12 @@ contextBridge.exposeInMainWorld("reccheckShortcuts", {
   watchLog: () => ipcRenderer.invoke("sc-watchlog"),
   readList: (ms, rows) => ipcRenderer.invoke("sc-readlist", ms, rows),
   inhouse: (rows) => ipcRenderer.invoke("sc-inhouse", rows),
+  moves: (rows) => ipcRenderer.invoke("sc-moves", rows),
+  arrivals: (rows) => ipcRenderer.invoke("sc-arrivals", rows),
+  departures: (rows) => ipcRenderer.invoke("sc-departures", rows),
+  /* what the resident helper captured when protel opened the list: a file read, no process
+     and no contact with protel at all */
+  listFile: (tag) => ipcRenderer.invoke("sc-listfile", tag),
   tauEnterSet: (on, delay) => ipcRenderer.invoke("sc-tauenter-set", on, delay),
   bootSet: (on) => ipcRenderer.invoke("sc-boot-set", on),
   focusSet: (on, needle) => ipcRenderer.invoke("sc-focus-set", on, needle),

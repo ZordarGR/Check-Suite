@@ -3,6 +3,7 @@
    maximised handed back the in-house list's rows under a caption naming neither, and
    nothing would have stopped those rows entering the ledger. Here the wrong list is
    pressed against the real click handler and the ledger has to come back untouched. */
+require("./fresh.js")();          // refuse to run against a stale copy
 const {chromium} = require("playwright-core");
 const path = require("path");
 
@@ -20,9 +21,24 @@ const ROWS = [
 /* legacy: ON is the shipped default and means "fed from xps files", so the live read is
    not on offer in it. Every press case below has to switch it off first — which is the
    point of the two cases that do not. */
-const bridgeFor = (payload, legacy) => `window.reccheckShortcuts={
+/* Two ways rows reach the page now, and the bridge serves both:
+
+   inhouse()  -- a read spawned on demand, which is what the button does.
+   listFile() -- what the RESIDENT helper captured when protel opened the window, handed
+                 over as a file. No process, no contact with protel, and it survives the
+                 window being closed two seconds later. This is what the loop uses.
+
+   window.__files is the captured set and window.__at its timestamps, both writable from a
+   test so a capture can appear or change mid-run the way protel makes them. */
+const bridgeFor = (payload, legacy, capture) => `
+window.__files = {IH: ${capture === undefined ? (payload === null ? "null" : JSON.stringify(payload)) : (capture === null ? "null" : JSON.stringify(capture))}, MV: null, AR: null, DP: null};
+window.__at = {IH: 1, MV: 1, AR: 1, DP: 1};
+window.reccheckShortcuts={
   get:()=>Promise.resolve({profiles:[],active:null,available:true}),
-  helper:()=>Promise.resolve({state:"started"})
+  helper:()=>Promise.resolve({state:"started"}),
+  listFile:(tag)=>{ window.__lf=(window.__lf||0)+1;
+    const t = window.__files[tag];
+    return Promise.resolve(t ? {tag: tag, at: window.__at[tag], text: t} : null); }
   ${payload === null ? "" : ",inhouse:()=>Promise.resolve(" + JSON.stringify(payload) + ")"}};
 try{ localStorage.setItem("reccheck_legacy", ${legacy ? '"1"' : '"0"'}); }catch(e){}`;
 
@@ -115,6 +131,153 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
     ck("the tax page does not side-scroll at " + W, over <= 0);
     await p.close();
   }
+
+  /* 6. THE PAGE NO LONGER DRIVES PROTEL. His words: "when a user opens protel the tool
+        knows and scans the list opened". The resident helper captures the rows on the
+        window event and leaves them in a file; the page collects the file. So a capture
+        that is already there is taken without the Tax Check ever being opened. */
+  p = await b.newPage();
+  await p.addInitScript(bridgeFor(IH("Guests inhouse: 04/09/26", ROWS), false));
+  await p.setViewportSize({width: 1280, height: 620});
+  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
+  await p.waitForTimeout(1200);
+  let after = await p.evaluate(() => ({
+    led: localStorage.getItem("reccheck_moves_v2") || "",
+    rooms: localStorage.getItem("reccheck_rooms") || ""
+  }));
+  ck("a capture is collected with no screen opened", after.led.indexOf('"426"') >= 0);
+  ck("and the names land with it",                   after.rooms.indexOf("NAHLA") >= 0);
+
+  /* the same capture must not be re-applied on every pass */
+  await p.evaluate(() => { window.__writes = 0;
+    const real = localStorage.setItem.bind(localStorage);
+    localStorage.setItem = (k, v) => { if(k === "reccheck_moves_v2") window.__writes++; real(k, v); }; });
+  await p.waitForTimeout(12000);
+  ck("an unchanged capture is not written again",
+     (await p.evaluate(() => window.__writes)) === 0);
+  const lf = await p.evaluate(() => window.__lf || 0);
+  ck("but the page did keep collecting (" + lf + " asks)", lf > 4);
+  await p.close();
+
+  /* 7. in legacy nothing is collected at all */
+  p = await b.newPage();
+  await p.addInitScript(bridgeFor(IH("Guests inhouse: 04/09/26", ROWS), true));
+  await p.setViewportSize({width: 1280, height: 620});
+  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
+  await p.waitForTimeout(250);
+  await p.evaluate(() => window.__t.showScreen("tax"));
+  await p.waitForTimeout(6000);
+  ck("legacy collects nothing, on any screen",
+     await p.evaluate(() => !localStorage.getItem("reccheck_moves_v2") && !window.__lf));
+  await p.close();
+
+  /* 8. A LIST HE OPENED FOR TWO SECONDS. The window is long gone by the time the page
+        looks — the point of capturing on the event is that the rows are not. */
+  p = await b.newPage();
+  await p.addInitScript(bridgeFor(IH("Guests inhouse: 04/09/26", ROWS), false, null));
+  await p.setViewportSize({width: 1280, height: 620});
+  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
+  await p.waitForTimeout(1000);
+  ck("nothing captured yet, nothing recorded",
+     await p.evaluate(() => !localStorage.getItem("reccheck_moves_v2")));
+  /* protel shows the list; the helper takes it; the window closes again */
+  await p.evaluate((txt) => { window.__files.IH = txt; window.__at.IH = 2; },
+                   IH("Guests inhouse: 04/09/26", ROWS));
+  await p.waitForTimeout(7000);
+  ck("a capture that appears later is collected",
+     (await p.evaluate(() => localStorage.getItem("reccheck_moves_v2") || "")).indexOf('"426"') >= 0);
+  await p.close();
+
+  /* 9. a capture the helper itself called incomplete must not reach the ledger */
+  const CUT = ["TITLE\tGuests inhouse: 04/09/26",
+    ...ROWS.map(r => "IH\t" + r.join("\t")),
+    "DONE\t2\t250\t83\t5000\tunicode\tcut-short"].join("\n");
+  p = await b.newPage();
+  await p.addInitScript(bridgeFor(CUT, false));
+  await p.setViewportSize({width: 1280, height: 620});
+  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
+  await p.waitForTimeout(1500);
+  ck("a cut-short capture writes NOTHING",
+     await p.evaluate(() => !localStorage.getItem("reccheck_moves_v2")));
+  /* but he can still force one by hand, where the line tells him what he is looking at */
+  await p.evaluate(() => window.__t.showScreen("tax"));
+  await p.click("#liveRead");
+  await p.waitForTimeout(600);
+  ck("a read he PRESSED still goes through",
+     (await p.evaluate(() => localStorage.getItem("reccheck_moves_v2") || "")).indexOf('"426"') >= 0);
+  ck("and warns him it stopped early",
+     /stopped early|σταμάτησε νωρίς/i.test(await p.evaluate(() => document.getElementById("liveSay").textContent)));
+  await p.close();
+
+  /* 10. collecting must not throw away a decision he made by clicking */
+  p = await b.newPage();
+  await p.addInitScript(bridgeFor(IH("Guests inhouse: 04/09/26", ROWS), false));
+  await p.setViewportSize({width: 1280, height: 620});
+  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
+  await p.waitForTimeout(1200);
+  await p.evaluate(() => { window.__tx.setPair({mine: true}); });
+  await p.evaluate(() => { window.__files.IH = ["TITLE\tGuests inhouse: 04/09/26",
+     "IH\tSOMEONE ELSE\t201\t2/0/0/0/0\t01/09/26\t09/09/26\tCI",
+     "DONE\t1\t1\t83\t47\tunicode\tcomplete"].join("\n"); window.__at.IH = 3; });
+  await p.waitForTimeout(7000);
+  ck("a later capture really was applied",
+     (await p.evaluate(() => localStorage.getItem("reccheck_moves_v2") || "")).indexOf('"201"') >= 0);
+  ck("and his pairing decision survived it",
+     await p.evaluate(() => !!(window.__tx.getPair() && window.__tx.getPair().mine)));
+  await p.evaluate(() => window.__t.showScreen("tax"));
+  await p.click("#liveRead");
+  await p.waitForTimeout(600);
+  ck("but pressing the button still clears it",
+     await p.evaluate(() => window.__tx.getPair() === null));
+  await p.close();
+
+  /* 11. THE ARRIVAL AND DEPARTURE REPORTS, captured the same way.
+         The one that matters: a report names thirty rooms out of two hundred, and the rest
+         of the ledger reads a missing room as a guest who has left. */
+  const RPT = (tag, title, rows) => [
+    "TITLE\t" + title,
+    ...rows.map(r => tag + "\t" + r.join("\t")),
+    "DONE\t" + rows.length + "\t" + rows.length + "\t83\t47\tunicode\tcomplete"].join("\n");
+  p = await b.newPage();
+  await p.addInitScript(bridgeFor(IH("Guests inhouse: 04/09/26", ROWS), false));
+  await p.setViewportSize({width: 1280, height: 620});
+  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
+  await p.waitForTimeout(1200);
+  ck("the in-house capture landed first",
+     (await p.evaluate(() => localStorage.getItem("reccheck_moves_v2") || "")).indexOf('"426"') >= 0);
+  await p.evaluate((o) => { window.__files.AR = o.a; window.__at.AR = 2;
+                            window.__files.DP = o.d; window.__at.DP = 2; }, {
+    a: RPT("AR", "Arrival Report for the 04/09/26", [
+      ["AMANN ANJA/BERND ", "337", "2/0/0/0/0", "14/09/26", "CI"]]),
+    d: RPT("DP", "Departure Report for 04/09/26", [
+      ["BURWIECK/GRUBE TAREK/KATHARINA ", "125", "2/0/0/0/0", "28/08/26", "CO"],
+      ["BRUEMMER FRED/GUDRUN ", "9000", "0/0/0/0/0", "04/09/26", "CO"]])});
+  await p.waitForTimeout(8000);
+  const led = await p.evaluate(() => JSON.parse(localStorage.getItem("reccheck_moves_v2") || "{}"));
+  ck("the arrival report reached the ledger",   !!(led["337"] && led["337"][20260904]));
+  ck("its own date is the ARRIVAL, the row's the departure",
+     !!(led["337"] && led["337"][20260904] && led["337"][20260904].d === 20260914));
+  ck("the departure report reached it too",     !!(led["125"] && led["125"][20260828]));
+  ck("with its own date as the DEPARTURE",
+     !!(led["125"] && led["125"][20260828] && led["125"][20260828].d === 20260904));
+  ck("the holding room 9000 was ignored",       !led["9000"]);
+  ck("the in-house rooms survived both reports", !!led["426"] && !!led["414"]);
+  ck("none of them was marked as having left",
+     !led["426"][Object.keys(led["426"])[0]].mv && !led["414"][Object.keys(led["414"])[0]].mv);
+  ck("nor had its departure rewritten",
+     led["426"][20260829] && led["426"][20260829].d === 20260905);
+
+  /* 12. AND A MOVE THAT HAS ALREADY HAPPENED, recorded onto the stays the census made. */
+  await p.evaluate((mv) => { window.__files.MV = mv; window.__at.MV = 2; },
+    ["TITLE\tPerform Move for Date 04/09/26",
+     "MV\t426\tSSV\t333\tSSV\tABBUSHI MIRIAM/OLIVER/NAHLA/HELENA\tX\t29/08/26\t05/09/26",
+     "DONE\t1\t1\t43\t32\tunicode\tcomplete"].join("\n"));
+  await p.waitForTimeout(8000);
+  const led2 = await p.evaluate(() => JSON.parse(localStorage.getItem("reccheck_moves_v2") || "{}"));
+  ck("the room they left is marked vacated",    led2["426"][20260829].mv === 20260904);
+  ck("and it is NOT given a departure protel never called one",
+     led2["426"][20260829].d === 20260905);
+  await p.close();
 
   await b.close();
   console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");

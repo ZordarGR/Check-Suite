@@ -122,7 +122,7 @@ body.onMenu #clList.moreBelow{
    follows it rather than drifting off the row it belongs to */
 body.onMenu #userBtn{top:clamp(10px,1.6vh,16px)}
 /* the one button that starts the night never gives up its place */
-body.onMenu #auditBtn{flex:0 0 auto}
+body.onMenu #auditBtn,body.onMenu #alertsBtn{flex:0 0 auto}
 
 /* ---------- and it uses the width it has ----------
    Fitting the window is not the same as showing everything at once: a 640px strip down
@@ -135,7 +135,7 @@ body.onMenu #auditBtn{flex:0 0 auto}
    the CSS only says what to do with them. */
 body.onMenu{--homeW:640px}
 body.onMenu #landing{max-width:min(1560px,96vw)}
-body.onMenu #homeBar,body.onMenu #checklist,body.onMenu #auditBtn{max-width:var(--homeW)}
+body.onMenu #homeBar,body.onMenu #checklist,body.onMenu #auditBtn,body.onMenu #alertsBtn{max-width:var(--homeW)}
 body.onMenu #clList{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
   grid-template-rows:repeat(var(--clRows,999),auto);column-gap:22px;align-content:start}
 .mcat{position:relative}
@@ -217,7 +217,8 @@ body.onMenu #clList{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
 .clRow .clBtns button.clMove{padding:2px 7px;font-size:10px;line-height:1.5}
 .clRow .clBtns button.clMove:disabled{opacity:.28;cursor:default;border-color:var(--line);color:var(--dim)}
 .clEmpty{color:var(--faint);font-size:13px;font-family:var(--mono);padding:14px 4px}
-#auditBtn{max-width:640px;margin:0 auto;width:100%}
+#auditBtn,#alertsBtn{max-width:640px;margin:0 auto;width:100%}
+#alertsBtn{margin-top:8px}
 #auditScreen{margin-top:60px}
 .mNav{display:flex;flex-direction:column;gap:10px;max-width:430px;margin:0 auto}
 .mItem{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;background:var(--panel);
@@ -253,6 +254,22 @@ body.onMenu #clList{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
 #fbEmpty{color:var(--faint);font-family:var(--mono);font-size:12.5px;padding:30px;text-align:center;border:1.5px dashed var(--line);border-radius:12px}
 #staleChip{display:none;background:#4a3a12;border:1px solid var(--amber-dim);color:var(--amber);border-radius:999px;
   padding:3px 10px;font-size:11.5px;font-family:var(--mono);cursor:pointer;white-space:nowrap}
+/* An alert nobody has looked at yet pulses. Red, and on the button itself, because the
+   home screen is the one place he passes through every time. It stops the moment the
+   list is opened — read is not the same as resolved, and only resolving removes it. */
+@keyframes alPulse{
+  0%,100%{ border-color:#7a2230; box-shadow:0 0 0 0 rgba(220,60,70,.0); }
+  50%    { border-color:#e04452; box-shadow:0 0 14px 2px rgba(220,60,70,.30); }
+}
+#alertsBtn.unread{ animation: alPulse 1.5s ease-in-out infinite; }
+#alertsBtn.unread .mLabel{ color:#ff8a94; }
+#alList{ display:flex; flex-direction:column; gap:10px; width:100%; }
+.alDay{ font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:#8892a6; margin:6px 0 2px; }
+.alRow{ display:flex; align-items:flex-start; gap:10px; padding:9px 11px; border:1px solid #2a3142;
+        border-radius:9px; background:#151a24; }
+.alRow .alTxt{ flex:1; min-width:0; font-size:13px; line-height:1.45; word-break:break-word; }
+.alRow .alWhen{ color:#8892a6; font-size:11px; margin-top:2px; }
+.alNone{ color:#8892a6; font-size:13px; padding:10px 2px; }
 /* ---------- landing (legacy bits) ---------- */
 #unused-landing-old{max-width:640px;margin:9vh auto;padding:0 20px;text-align:center}
 #landing .logo{font-family:var(--mono);font-size:34px;letter-spacing:.22em;color:var(--amber);margin-bottom:6px}
@@ -845,6 +862,14 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
       <div id="clList"></div>
     </div>
     <button class="mItem primary" id="auditBtn"><span class="mLabel"></span><span class="mSub"></span></button>
+    <button class="mItem primary" id="alertsBtn"><span class="mLabel"></span><span class="mSub"></span></button>
+  </div>
+
+  <div id="alertsScreen" style="display:none">
+    <div class="mNav">
+      <div id="alList"></div>
+      <button class="btn small" id="alBack" style="margin-top:6px"></button>
+    </div>
   </div>
 
   <div id="auditScreen" style="display:none">
@@ -1364,7 +1389,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.30";
+const APP_VERSION = "1.17.35";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1497,6 +1522,10 @@ en: {
   "menu.dirDept": "DIRECTORY — DEPARTMENT CHECK", "menu.dirTax": "DIRECTORY — TAX CHECK",
   "menu.dirNone": "no reports folder chosen yet",
   "menu.ledger": "ROOM MOVEMENTS MEMORY \u2014 START IT AGAIN",
+  "al.title": "ALERTS", "al.none": "nothing to look at",
+  "al.count": "{n} waiting", "al.empty": "Nothing here. Alerts appear when protel shows something that needs your eye.",
+  "al.resolve": "Resolve", "al.nodate": "no date", "al.back": "\u2190 HOME",
+  "al.moveNoX": "Room move {from}\u2192{to} ({name}) has no X in protel \u2014 protel will not show it.",
   "menu.legacy": "LEGACY MODE \u2014 XPS FILES",
   "menu.legacyOn": "on \u2014 fed from xps files; the Rate Check slot is shown",
   "menu.legacyOff": "off \u2014 fed from protel; the Rate Check slot is hidden",
@@ -1721,6 +1750,10 @@ gr: {
   "menu.dirDept": "ΦΑΚΕΛΟΣ — ΕΛΕΓΧΟΣ ΤΜΗΜΑΤΩΝ", "menu.dirTax": "ΦΑΚΕΛΟΣ — ΕΛΕΓΧΟΣ ΤΑ",
   "menu.dirNone": "δεν έχει οριστεί φάκελος αναφορών",
   "menu.ledger": "ΜΝΗΜΗ ΚΙΝΗΣΕΩΝ — ΞΕΚΙΝΑ ΑΠΟ ΤΗΝ ΑΡΧΗ",
+  "al.title": "ΕΙΔΟΠΟΙΗΣΕΙΣ", "al.none": "τίποτα για έλεγχο",
+  "al.count": "{n} σε αναμονή", "al.empty": "Τίποτα εδώ. Οι ειδοποιήσεις εμφανίζονται όταν το protel δείχνει κάτι που θέλει το μάτι σου.",
+  "al.resolve": "Επίλυση", "al.nodate": "χωρίς ημερομηνία", "al.back": "\u2190 ΑΡΧΙΚΗ",
+  "al.moveNoX": "Η αλλαγή δωματίου {from}\u2192{to} ({name}) δεν έχει X στο protel — το protel δεν θα τη δείξει.",
   "menu.legacy": "ΠΑΛΑΙΑ ΛΕΙΤΟΥΡΓΙΑ — ΑΡΧΕΙΑ XPS",
   "menu.legacyOn": "ενεργή — τροφοδοσία από αρχεία xps· η υποδοχή Rate Check φαίνεται",
   "menu.legacyOff": "ανενεργή — τροφοδοσία από το protel· η υποδοχή Rate Check κρύβεται",
@@ -1845,6 +1878,7 @@ function applyLang(){
   mi("#mDirTax", "menu.dirTax", null);
   paintLegacy();
   paintLedger();
+  paintAlertsStatic();
   paintHelp();
   mi("#mHelp", "menu.help", "menu.helpSub");
   paintDirSub();
@@ -1931,6 +1965,33 @@ function loadRooms(){
 }
 function saveRooms(){
   try{ localStorage.setItem(ROOMS_KEY, JSON.stringify(ROOMS)); }catch(e){}
+  /* And a mirror in the app's own folder, obfuscated — his call, 04/09. localStorage
+     stays the working store because the renderer boots off it synchronously; this is a
+     copy beside it, so a browser that cleared its site data has not taken the room
+     database with it. It cannot cost anything: it is fire-and-forget and nothing waits
+     on the answer. */
+  try{ if(window.reccheckRooms) window.reccheckRooms.write(ROOMS); }catch(e){}
+}
+/* Read the disk mirror back and fill in ONLY what localStorage does not have. Never the
+   other way round: the store the app has been running on wins every conflict, because a
+   stale file quietly replacing tonight's work is the failure that would matter. */
+async function mergeRoomsFromDisk(){
+  try{
+    if(!window.reccheckRooms) return 0;
+    const disk = await window.reccheckRooms.read();
+    if(!disk || typeof disk !== "object") return 0;
+    let added = 0;
+    for(const room of Object.keys(disk)){
+      if(ROOMS[room]) continue;
+      const e = disk[room];
+      if(e && typeof e === "object"){ ROOMS[room] = e; added++; }
+    }
+    if(added){
+      try{ localStorage.setItem(ROOMS_KEY, JSON.stringify(ROOMS)); }catch(e){}
+      if(MODEL) NAMES_STALE = true;
+    }
+    return added;
+  }catch(e){ return 0; }
 }
 /* THE PROTEL NAMES, straight into the room database. His call, 04/09.
 
@@ -2036,10 +2097,14 @@ function syncRooms(){
        Two independent ways of recognising it, either sufficient: the stored name was read
        for THIS night, or the receipt's name is that name's opening (which is what a cut
        name is). The better name stays and nothing is inferred from the difference. */
-    const fromProtel = !!e.liveKey &&
-      ((rd && e.liveKey === rd) || (!!e.guest && !!g && e.guest.indexOf(g) === 0));
+    /* isCutOf, not a raw indexOf: it normalises case and spacing, so a receipt name that
+       differs only in whitespace still reads as the truncation it is instead of slipping
+       past this guard into the block that deletes his nicknames. */
+    const fromProtel = !!e.liveKey && ((rd && e.liveKey === rd) || isCutOf(g, e.guest));
     if(fromProtel){ e.seen = MODEL.reportDate; continue; }
-    const changed = !!(e.guest && e.guest !== g);
+    /* sameName, not !==: two names that differ only in case or spacing are one guest, and
+       reading them as a turnover marks the room and deletes its nickname. */
+    const changed = !!(e.guest && !sameName(e.guest, g));
     /* Stamped so the room can be marked as having turned over on a night whose rate
        list was never opened. It is weaker evidence than an arrival or departure date —
        it says the name under this room is not the name that was here before, which
@@ -2152,34 +2217,172 @@ function openWatchChangePrompt(changes){
   };
 }
 function nickFor(room){ const e = ROOMS[String(room)]; return (e && e.nick) ? e.nick : null; }
+/* Is `short` what the .oxps made of `full`? A cut name is the opening of the whole one,
+   so this asks that directly instead of reasoning about dates. Four characters minimum,
+   so an initial does not match half the hotel. */
+function isCutOf(short, full){
+  const n = x => String(x || "").trim().replace(/\s+/g, " ").toUpperCase();
+  const a = n(short), b = n(full);
+  return a.length >= 4 && b.length > a.length && b.indexOf(a) === 0;
+}
 function guestFor(room){
   /* A name read live from protel BEATS the one on the receipt. It is the same guest —
      the .oxps simply truncates it, and that truncation is the entire reason this exists.
 
-     Only for the night it was read for, though. `liveKey` is the business night of the
-     in-house list it came from; once the room turns over, last night's protel name is
-     not who is charging tonight, and preferring it then would put the wrong name on a
-     charge. With no report loaded there is nothing to disagree with, so it stands. */
+     THE FIRST VERSION OF THIS ASKED THE WRONG QUESTION. It preferred the live name only
+     when the in-house list's date equalled the report's night, and he found what that
+     costs: he audits the night that has just ended, while protel's in-house list always
+     says TODAY. At one in the morning those are different days and every name fell back
+     to the cut one — the fix looked like it had done nothing.
+
+     So it asks about the NAMES instead. If the receipt's name is the opening of the
+     stored one, it is the same guest truncated and the whole name wins. If the room has
+     turned over, the new guest's name is not the opening of the old one and the receipt
+     wins, which is the case the date was there to protect. The date is still accepted
+     when it does match, for a name protel words differently rather than merely cuts. */
   const live = ROOMS[String(room)];
-  if(live && live.guest && live.liveKey){
-    /* With no report loaded there is nothing to disagree with. With one loaded, the live
-       name is preferred ONLY when it was read for that same night — an undated report
-       (dateNum 0) is not a match, because "we cannot tell which night this is" is not a
-       reason to put tonight's guest on it. */
-    if(!MODEL) return live.guest;
-    if(dateNum(MODEL.reportDate) === live.liveKey) return live.guest;
-  }
-  if(MODEL){
+  const onReceipt = (() => {
+    if(!MODEL) return null;
     if(!MODEL._gm){
       const m = {};
       for(const r of MODEL.receipts) if(r.roomMain && r.guest && m[r.roomMain] === undefined) m[r.roomMain] = r.guest;
       MODEL._gm = m;
     }
-    if(MODEL._gm[String(room)]) return MODEL._gm[String(room)];
+    return MODEL._gm[String(room)] || null;
+  })();
+  if(live && live.guest && live.liveKey){
+    if(!onReceipt) return live.guest;                          // nothing to disagree with
+    if(isCutOf(onReceipt, live.guest)) return live.guest;      // the same guest, in full
+    if(dateNum(MODEL.reportDate) === live.liveKey) return live.guest;
   }
+  if(onReceipt) return onReceipt;
   const e = ROOMS[String(room)];
   return (e && e.guest) || null;
 }
+
+/* ---------- alerts ----------
+   His, 04/09: "if the tool happens to pick up on a missing x put an alert on the tool for
+   that (create a separate alerts menu that will categorize the alerts by date, once marked
+   as resolved -a button next to each alert- remove them entirely)", then "it belongs in
+   the home screen below audit", then "if it has an alert that has not been read make it
+   pulse red".
+
+   READ AND RESOLVED ARE DIFFERENT THINGS. Opening the list stops the pulse; only the
+   button beside an alert removes it, and removing is removal — not a flag, not an
+   archive. Grouped by the business night that raised them, newest night first.
+
+   `key` is what makes an alert the SAME alert: the same missing X on the same move, seen
+   again on the next read three seconds later, must not pile up a second copy. Everything
+   that identifies the thing goes in it, nothing that merely describes it. */
+const ALERTS_KEY = "reccheck_alerts";
+const ALERTS_DONE_KEY = "reccheck_alerts_done";
+const ALERTS_MAX = 400;              // a bound, like every other store in this file
+const ALERTS_KEEP_NIGHTS = 14;
+let ALERTS = [];
+let ALERTS_DONE = {};                // key -> the night it was resolved on
+function loadAlerts(){
+  try{
+    const a = JSON.parse(localStorage.getItem(ALERTS_KEY) || "[]");
+    ALERTS = Array.isArray(a) ? a.filter(x => x && typeof x === "object" && x.key) : [];
+  }catch(e){ ALERTS = []; }
+  try{
+    const d = JSON.parse(localStorage.getItem(ALERTS_DONE_KEY) || "{}");
+    ALERTS_DONE = (d && typeof d === "object" && !Array.isArray(d)) ? d : {};
+  }catch(e){ ALERTS_DONE = {}; }
+  pruneAlerts();
+}
+function saveAlerts(){
+  try{ localStorage.setItem(ALERTS_KEY, JSON.stringify(ALERTS)); }catch(e){}
+  try{ localStorage.setItem(ALERTS_DONE_KEY, JSON.stringify(ALERTS_DONE)); }catch(e){}
+}
+/* NOTHING IN THIS FILE IS ALLOWED TO GROW FOREVER — the ledger has a date floor, the tax
+   memory keeps seven days, the verify list seven nights. Alerts leave only when he presses
+   Resolve, so without this a night with an unmarked move would add entries that never go,
+   and a full localStorage does not fail loudly: it throws on the NEXT setItem, which is
+   whatever was trying to save the ledger. Fourteen nights, and a hard ceiling under it. */
+function pruneAlerts(){
+  const floor = bnKey() - 10000;                       // ~a year in YYYYMMDD arithmetic
+  const old = k => { const n = ALERTS_DONE[k]; return n && n < floor; };
+  for(const k of Object.keys(ALERTS_DONE)) if(old(k)) delete ALERTS_DONE[k];
+  const nights = [...new Set(ALERTS.map(a => a.night || 0))].sort((x, y) => y - x);
+  const keep = new Set(nights.slice(0, ALERTS_KEEP_NIGHTS));
+  ALERTS = ALERTS.filter(a => keep.has(a.night || 0));
+  if(ALERTS.length > ALERTS_MAX) ALERTS = ALERTS.slice(-ALERTS_MAX);
+}
+/* Returns true when this is one we had not already recorded. */
+function addAlert(a){
+  if(!a || !a.key) return false;
+  /* RESOLVED MEANS RESOLVED. The moves window is read every five seconds, so the row he
+     just dismissed is back before he has let go of the mouse. Without a record of what he
+     resolved, "remove them entirely" lasted five seconds and the button pulsed again. */
+  if(ALERTS_DONE[a.key]) return false;
+  if(ALERTS.some(x => x.key === a.key)) return false;
+  ALERTS.push({key: a.key, kind: a.kind || "", text: a.text || "",
+               night: a.night || bnKey(), at: a.at || "", read: false});
+  pruneAlerts();
+  saveAlerts();
+  paintAlertsBtn();
+  /* If he is standing on the list when one arrives, he should see it arrive. */
+  if(typeof SCREEN !== "undefined" && SCREEN === "alerts") renderAlerts();
+  return true;
+}
+function resolveAlert(key){
+  const before = ALERTS.length;
+  ALERTS = ALERTS.filter(x => x.key !== key);
+  if(ALERTS.length === before) return;
+  ALERTS_DONE[key] = bnKey();
+  saveAlerts(); paintAlertsBtn(); renderAlerts();
+}
+function unreadAlerts(){ return ALERTS.filter(x => !x.read).length; }
+function markAlertsRead(){
+  if(!unreadAlerts()) return;
+  for(const a of ALERTS) a.read = true;
+  saveAlerts();
+  paintAlertsBtn();
+}
+function paintAlertsBtn(){
+  const b = $("#alertsBtn");
+  if(!b) return;
+  const n = ALERTS.length, u = unreadAlerts();
+  b.querySelector(".mLabel").textContent = t("al.title");
+  b.querySelector(".mSub").textContent = n ? t("al.count", {n: n}) : t("al.none");
+  b.classList.toggle("unread", u > 0);
+}
+function renderAlerts(){
+  const box = $("#alList");
+  if(!box) return;
+  box.innerHTML = "";
+  if(!ALERTS.length){
+    const d = el("div", "alNone", t("al.empty"));
+    box.append(d);
+    return;
+  }
+  /* newest night first; within a night, newest alert first */
+  const nights = [...new Set(ALERTS.map(a => a.night || 0))].sort((x, y) => y - x);
+  for(const night of nights){
+    const head = el("div", "alDay", night ? dfmtKey(night) : t("al.nodate"));
+    box.append(head);
+    const rows = ALERTS.filter(a => (a.night || 0) === night).slice().reverse();
+    for(const a of rows){
+      const row = el("div", "alRow");
+      const txt = el("div", "alTxt", a.text || "");
+      if(a.at){ const w = el("div", "alWhen", a.at); txt.append(w); }
+      const btn = el("button", "btn small", t("al.resolve"));
+      btn.onclick = () => resolveAlert(a.key);
+      row.append(txt, btn);
+      box.append(row);
+    }
+  }
+}
+/* YYYYMMDD -> the d/m/yyyy he reads everywhere else */
+function dfmtKey(k){
+  const s = String(k);
+  if(s.length !== 8) return s;
+  return (+s.slice(6, 8)) + "/" + (+s.slice(4, 6)) + "/" + s.slice(0, 4);
+}
+/* The tax half is a separate <script> and is where the lists are read. This is the door,
+   the same shape as the others. */
+window.__rcAlert = function(a){ try{ return addAlert(a); }catch(e){ return false; } };
 
 /* ---------- state ---------- */
 function blankState(date){
@@ -2735,6 +2938,11 @@ function ledgerClick(){
   LEDARMED = false;
   try{ localStorage.removeItem(MOVES_KEY); }catch(e){}
   try{ localStorage.removeItem("reccheck_moves_last"); }catch(e){}
+  /* The live loop remembers each list it has already written, so that an unchanged one
+     costs nothing. Emptying the ledger without clearing that memory means every list still
+     looks unchanged and nothing is ever written back — he would clear it and watch it stay
+     cleared while protel sat there full. */
+  try{ if(window.__taForget) window.__taForget(); }catch(e){}
   paintLedger();
   const b = $("#mLedger");
   if(b) b.querySelector(".mSub").textContent = t("sc.ledgerDone");
@@ -3441,6 +3649,11 @@ function showScreen(which){
   const mainEl = document.querySelector("main");
   const tax = document.getElementById("taxScreen");
   if(tax) tax.style.display = which === "tax" ? "" : "none";
+  /* Arriving at the Tax Check starts the automatic protel read, and leaving it stops the
+     retry. The read itself lives in the other <script> scope, so this is a door, the same
+     shape as __taLegacy. Never awaited — the screen must appear at once and the line
+     fills in when protel answers. */
+  try{ if(window.__taScreen) window.__taScreen(which); }catch(e){}
   $("#rail").style.display = (which === "app" && MODEL) ? "flex" : "none";
   if(which !== "app" && typeof closeDrawer === "function") closeDrawer();
   if(which === "app"){
@@ -3458,7 +3671,10 @@ function showScreen(which){
   $("#menuScreen").style.display = which === "menu" ? "" : "none";
   $("#auditScreen").style.display = which === "audit" ? "" : "none";
   $("#filesScreen").style.display = which === "files" ? "" : "none";
+  $("#alertsScreen").style.display = which === "alerts" ? "" : "none";
   if(which === "menu") renderChecklist();
+  /* Opening the list is what "read" means — the pulse stops here and nowhere else. */
+  if(which === "alerts"){ renderAlerts(); markAlertsRead(); }
   if(which === "files") fbRefresh();
   window.scrollTo(0, 0);
 }
@@ -3640,6 +3856,10 @@ async function loadReport(buf, fname){
     STATE = loadState(MODEL.reportDate);
     loadWatch();
     loadRooms();
+    /* Before syncRooms, so a room the mirror knows about is already in hand when the
+       report's names meet it — otherwise the ingest would create it fresh from the CUT
+       name and the protel one would be lost. */
+    await mergeRoomsFromDisk();
     syncRooms();
     renderAll(fname);
     if(!MODEL.receipts.length){
@@ -4925,7 +5145,7 @@ function importData(file){
         localStorage.setItem(k, v); n++;
       }
       if(!n) throw new Error(t("imp.nodata"));
-      loadWatch(); loadRooms();
+      loadWatch(); loadRooms(); loadAlerts(); paintAlertsBtn();
       if(MODEL){
         STATE = loadState(MODEL.reportDate);
         syncRooms();
@@ -5068,6 +5288,16 @@ $("#hdrLogo").onclick = () => showScreen("menu");
 $("#reportMeta").onclick = () => { if(MODEL && SCREEN !== "app") showScreen("app"); };
 $("#auditBtn").onclick = () => showScreen("audit");
 $("#aBack").onclick = () => showScreen("menu");
+$("#alertsBtn").onclick = () => showScreen("alerts");
+$("#alBack").onclick = () => showScreen("menu");
+/* the two strings the alerts screen owns, repainted with the rest on a language change */
+function paintAlertsStatic(){
+  try{
+    $("#alBack").textContent = t("al.back");
+    paintAlertsBtn();
+    if(SCREEN === "alerts") renderAlerts();
+  }catch(e){}
+}
 $("#aDept").onclick = async () => {
   if(!window.reccheckFiles){ showScreen("files"); return; }
   FB.tool = "dept";
@@ -5262,6 +5492,14 @@ $("#resetDay").onclick = () => {
         if(task){ task.done = !task.done; saveCL(); renderChecklist(); }
       });
   }
+  /* The room database the app's own folder is holding, pulled in at start so the nickname
+     panel and the names are complete before any report is opened. NOT awaited: nothing on
+     this screen needs it yet, and a boot that waits on an IPC round-trip is a boot that
+     can hang on one. Opening a report does await it, which is where it has to be right. */
+  loadRooms();
+  mergeRoomsFromDisk();
+  loadAlerts();
+  paintAlertsBtn();
   paintSevSel();
   clNightCheck();
   applyLang();
@@ -5330,6 +5568,11 @@ const I18N={
   live_err:"protel said: ", live_got:"{0} of {1} rows \u2014 {2} rooms, {3} stays recorded for {4}. {5} messages, {6} ms.",
   live_cut:" Stopped early \u2014 protel was answering slowly.", live_cancel:" {0} cancelled row(s) ignored.",
   live_named:" {0} room(s) took their name from protel, uncut.",
+  live_idle:"protel\u2019s in-house list is not open \u2014 press to read it once it is.",
+  al_moveNoX:"Room move {0}\u2192{1} ({2}) has no X in protel \u2014 protel will not show it.",
+  live_arr:"Arrival report {2}: {0} rows, {1} stays recorded.",
+  live_dep:"Departure report {2}: {0} rows, {1} stays recorded.",
+  live_held:" {0} holding-room row(s) ignored.",
   live_wrong:"That is not the in-house list \u2014 the window it found says \u201c{0}\u201d. Nothing was recorded.",
   live_nodate:"No date in \u201c{0}\u201d, so there is no night to file these under. Nothing was recorded.",
   slot_rate:"Rate Check", slot_rate_sub:"in-house list · pre-EOD", slot_tax:"Tax Check", slot_tax_sub:"charges history · post-EOD",
@@ -5392,6 +5635,11 @@ const I18N={
   live_err:"το protel είπε: ", live_got:"{0} από {1} γραμμές — {2} δωμάτια, {3} διαμονές για {4}. {5} μηνύματα, {6} ms.",
   live_cut:" Σταμάτησε νωρίς — το protel απαντούσε αργά.", live_cancel:" {0} ακυρωμένες γραμμές αγνοήθηκαν.",
   live_named:" {0} δωμάτια πήραν το όνομά τους από το protel, ακέραιο.",
+  live_idle:"Η λίστα παραμονών του protel δεν είναι ανοιχτή — πάτησε για ανάγνωση μόλις ανοίξει.",
+  al_moveNoX:"Η αλλαγή δωματίου {0}→{1} ({2}) δεν έχει X στο protel — το protel δεν θα τη δείξει.",
+  live_arr:"Αφίξεις {2}: {0} γραμμές, {1} διαμονές καταγράφηκαν.",
+  live_dep:"Αναχωρήσεις {2}: {0} γραμμές, {1} διαμονές καταγράφηκαν.",
+  live_held:" {0} γραμμές δωματίου αναμονής αγνοήθηκαν.",
   live_wrong:"Αυτή δεν είναι η λίστα παραμονών — το παράθυρο που βρέθηκε λέει «{0}». Δεν καταγράφηκε τίποτα.",
   live_nodate:"Δεν υπάρχει ημερομηνία στο «{0}», οπότε δεν υπάρχει νύχτα για να καταχωρηθούν. Δεν καταγράφηκε τίποτα.",
   slot_rate:"Rate Check", slot_rate_sub:"λίστα παραμονών · πριν το EOD", slot_tax:"Tax Check", slot_tax_sub:"ιστορικό χρεώσεων · μετά το EOD",
@@ -6004,28 +6252,426 @@ function inhouseDate(title){
   const m = String(title || "").match(/(\d{1,2}\/\d{1,2}\/\d{2,4})/g);
   return m && m.length ? m[m.length - 1] : "";
 }
-async function readInhouseLive(){
+/* HIS CAVEAT, 04/09: "for the tool to truly read automatically the data make it attempt
+   to read every 3 seconds" — and, when this stopped after the first success: "we dont
+   want it to stop, as long as the process is open and running it keeps running".
+
+   So it runs for the life of the app, on every screen, whether or not it has already got
+   tonight's list. That was put to him with the cost: a FAILED attempt costs protel
+   nothing at all — the hunt is window-manager reads, and not one message is sent until
+   the list is found — but a SUCCESSFUL one is about 1500 messages, so every three seconds
+   is roughly 30,000 a minute, all shift, against software that is not his. He was told
+   that plainly and chose this. It is his machine and his call; it is recorded here so it
+   is a decision and not a drift.
+
+   WHAT IS NOT REPEATED is the work behind the read. A list that has not changed since the
+   last tick writes nothing and redraws nothing: re-saving the ledger and re-rendering
+   twenty times a minute would move the page under his hands mid-audit, and that is a
+   fault rather than a faithfulness. The read still happens at his cadence. */
+let LIVE_TIMER = null;
+let LIVE_SIG = "";                       // the last list seen, so an unchanged one is cheap
+/* He asked for three seconds and then offered five "if you think its going to cause
+   issues". Five, and the reason is the successful read rather than the failed one: at
+   three it is about 30,000 messages a minute into protel all shift, at five about 18,000.
+   Two seconds is nothing to him — the list lands while he is still looking at protel —
+   and it is a third off the load on software that is not his. */
+const LIVE_RETRY_MS = 5000;
+/* Clearing the ledger from OPTIONS must also clear what the loop remembers, or every list
+   looks unchanged and nothing is ever written back — he would empty it and watch it stay
+   empty. The reset lives in the other scope, so this is its door. */
+window.__taForget = function(){
+  try{ LIVE_SIG = ""; RPT_SIG = {}; LIVE_AT = {}; }catch(e){}
+  try{ localStorage.removeItem(MOVES_DONE_KEY); }catch(e){}
+};
+function liveStop(){
+  if(LIVE_TIMER){ clearInterval(LIVE_TIMER); LIVE_TIMER = null; }
+}
+/* Started at boot and whenever legacy changes. Legacy is the manual mode, so it is the
+   one thing that switches this off. */
+function liveEnsure(){
+  if(legacyOn() || !LIVE_OK){ liveStop(); return; }
+  if(LIVE_TIMER) return;
+  autoReadInhouse();
+  LIVE_TIMER = setInterval(autoReadInhouse, LIVE_RETRY_MS);
+}
+/* THE IN-HOUSE LIST EVERY TICK, THE OTHER THREE IN TURN.
+
+   Four lists on every tick would be four rc-tbind.exe launches every five seconds -- some
+   thirty thousand process starts across a night shift, on his machine, for lists that do
+   not change that fast. The in-house list is the one everything else is built on, so it
+   keeps the cadence he asked for; the moves window and the two reports take one tick each
+   in rotation, which is a read of each about every fifteen seconds.
+
+   A failed hunt still costs protel nothing at all -- it is window-manager reads and no
+   message is sent until the list is found -- so the rotation is about the machine, not
+   about protel. */
+/* ---- collecting what the helper captured ----
+
+   His, 04/09: "when a user opens protel the tool knows and scans the list opened".
+
+   THE PAGE NO LONGER DRIVES PROTEL ON A TIMER. The resident helper holds a WinEvent hook
+   and reads a list the moment it appears, leaving the rows in a file. This collects those
+   files, which is a file read through IPC: no process is launched and protel is not
+   touched at all, however often it runs. That is what makes the two-second case work — the
+   rows were taken when the window opened, so they are still there to collect after it has
+   gone, and it also settles the departures cadence he raised: a departure report is read
+   when he opens one, which is when it changes, and never in between.
+
+   The manual button still spawns a read, because pressing it is a question about right
+   now. Legacy mode still switches all of it off. */
+const LIVE_TAGS = ["IH", "MV", "AR", "DP"];
+let LIVE_AT = {};                              // tag -> the capture already taken
+async function autoReadInhouse(){
+  if(legacyOn() || !LIVE_OK){ liveStop(); return; }
+  if(!window.reccheckShortcuts || !window.reccheckShortcuts.listFile) return;
+  for(const tag of LIVE_TAGS){
+    try{
+      const f = await window.reccheckShortcuts.listFile(tag).catch(() => null);
+      if(!f || !f.text || f.at === LIVE_AT[tag]) continue;
+      LIVE_AT[tag] = f.at;
+      await ingestCaptured(tag, f.text);
+    }catch(e){}
+  }
+}
+async function ingestCaptured(tag, txt){
+  if(tag === "IH") return applyInhouse(parseInhouse(txt), true);
+  if(tag === "MV") return applyMoves(parseTagged(txt, "MV"));
+  return applyReport(parseTagged(txt, tag), tag === "AR");
+}
+/* THE MOVES WINDOW, and only for the missing X.
+
+   His words: X is "the mark that the move is okay for protel to visualize it", and a row
+   without one gets an alert. NOTHING HERE RECORDS A MOVE. Which of columns 0 and 2 is the
+   room being left and which is the room being taken is still UNCONFIRMED, and writing a
+   move backwards puts two wrong rooms in the ledger — the failure that has cost him twice
+   already. So the rooms appear in the alert TEXT, where he can read them and see for
+   himself, and nowhere near saveMoves.
+
+   The alert's key is the move itself plus the night, so the same missing X seen again
+   five seconds later is the same alert and not a second copy. */
+const MV = {FROM: 0, TO: 2, NAME: 4, X: 5, ARR: 6, DEP: 7};
+function parseTagged(txt, tag){
+  const rows = []; let title = "", done = null, err = "";
+  for(const line of String(txt || "").split(/\r?\n/)){
+    if(!line) continue;
+    const c = line.split("\t");
+    if(c[0] === tag) rows.push(c.slice(1));
+    else if(c[0] === "TITLE") title = c[1] || "";
+    else if(c[0] === "ERR") err = c[1] || "unknown";
+    else if(c[0] === "DONE") done = {got:+c[1]||0, rows:+c[2]||0, msgs:+c[3]||0, ms:+c[4]||0,
+                                     enc:c[5]||"", cut:c[6] === "cut-short"};
+  }
+  return {rows, title, done, err};
+}
+/* ---- the arrival and departure reports ----
+
+   ARRIVALS AND DEPARTURES ARE NOT A CENSUS, and that is the whole design constraint.
+   `saveMoves` and `detectMoves` are written for the IN-HOUSE list, which names every
+   occupied room, and both reason from ABSENCE: a room the list does not mention is a room
+   the guest has left. An arrival report names thirty rooms out of two hundred. Putting one
+   through saveMoves would read as a hundred and seventy people leaving at once and mark
+   half the hotel as having moved rooms -- the 30/08 failure, reproduced deliberately.
+
+   So these two get their own writer. It states only what its rows state -- this room, this
+   arrival, this departure, this name -- and it adds and corrects. It never deletes, never
+   prunes, and never concludes anything from a room being absent.
+
+   Each report carries only ONE of the two dates, because the other is the report's own: an
+   arrival report for the 4th lists guests arriving on the 4th, with their departures; a
+   departure report for the 4th lists guests leaving on the 4th, with their arrivals.
+   Corroborated twice: his 23:17 reads, and protel's own home screen, where the Arrivals
+   panel's date column reads Dep. and the Departures panel's reads Arr. */
+const AR = {NAME: 0, ROOM: 1, OCC: 2, DEP: 3, STATUS: 4};
+const DP = {NAME: 0, ROOM: 1, OCC: 2, ARR: 3, STATUS: 4};
+/* Room 9000, type ACC, is a holding room -- his word, 04/09: "9000 is a holding room,
+   ignore it". Anything that is not a real two or three digit room is dropped and counted,
+   never guessed at. */
+function stayFromRow(r, map, night, arrIsNight){
+  const status = String(r[map.STATUS] || "").trim();
+  if(/reversal|void/i.test(status)) return {cancelled: true};
+  const cell = String(r[map.ROOM] || "").trim();
+  const room = (cell.split("-")[0] || "").trim();
+  if(!/^\d{2,3}$/.test(room)) return {dropped: true};
+  const other = String(r[arrIsNight ? map.DEP : map.ARR] || "").trim();
+  const arr = arrIsNight ? night : other;
+  const dep = arrIsNight ? other : night;
+  if(!dkey(arr)) return {dropped: true};
+  /* ReadCell returns "" for every failure it has, so a half-read row looks like a row with
+     empty cells. An empty STATUS is not "not cancelled" and an empty NAME is not a guest —
+     a row is only a stay when the whole of it arrived. */
+  const name = String(r[map.NAME] || "").trim();
+  if(!name || !status) return {dropped: true};
+  return {rec: {room: room, arr: arr, dep: dep, name: name, status: status}};
+}
+function reportToStays(rows, night, arrIsNight){
+  const map = arrIsNight ? AR : DP;
+  const recs = []; let dropped = 0, cancelled = 0;
+  for(const r of (rows || [])){
+    if(!r) continue;
+    const o = stayFromRow(r, map, night, arrIsNight);
+    if(o.cancelled){ cancelled++; continue; }
+    if(o.dropped){ dropped++; continue; }
+    recs.push(o.rec);
+  }
+  return {recs: recs, dropped: dropped, cancelled: cancelled};
+}
+/* Purely additive. A newer report wins; an older one may fill a blank but never overwrite,
+   and a move already recorded against a stay is not ours to drop.
+
+   `night` here is the business night THIS READ HAPPENED ON, not the date printed on the
+   report. That distinction is the whole of a bug the audit found: stamping `seen` with the
+   caption's date meant a report he had opened for a FUTURE day wrote entries stamped in
+   the future, which the `seen` guard below then refused to let any later read correct.
+   The stay would have been frozen with whatever that window said. The report's own date
+   goes into the arrival or the departure, where it belongs; `seen` records when we learned
+   it, which is now. */
+function feedStays(recs, night){
+  if(!recs || !recs.length || !night) return 0;
+  let wrote = 0;
+  try{
+    const led = loadLedger();
+    for(const r of recs){
+      const a = dkey(r.arr);
+      if(!r.room || !a) continue;
+      const d = dkey(r.dep) || 0;
+      const m = led[r.room] || (led[r.room] = {});
+      const cur = m[a];
+      if(!cur){ m[a] = {d: d, n: r.name || "", seen: night}; wrote++; continue; }
+      if(night < (cur.seen || 0)) continue;
+      /* ON A TIE THE CENSUS WINS, AND THE COMMENT ABOVE ONLY SAID SO UNTIL NOW.
+
+         `seen` is a business night on both sides: saveMoves stamps it with the in-house
+         list's date, this stamps it with tonight. Through a whole shift the two are the
+         SAME NUMBER, so the guard above is a tie and never fires — and the line that
+         followed took the report's departure unconditionally.
+
+         That matters because the two sources are not equally fresh. protel's in-house
+         list is a census this reads again every five seconds; a report window is a
+         snapshot from whenever he printed it. So a departure report printed at six in
+         the evening could overwrite an extension the census had already picked up at one
+         in the morning, and roomMoves puts a pill on a departure whose date equals
+         tonight — a phantom departure on his panel, which is the failure that has cost
+         him twice.
+
+         So within one night a report may CREATE a stay and may FILL a blank, but it may
+         not overwrite what the census holds. On a strictly later night it is the newer
+         word and wins. */
+      const tie = night === (cur.seen || 0);
+      const next = {d: tie ? (cur.d || d || 0) : (d || cur.d || 0),
+                    n: tie ? (cur.n || r.name || "") : (r.name || cur.n || ""),
+                    seen: night};
+      if(cur.from) next.from = cur.from;
+      if(cur.mv) next.mv = cur.mv;
+      if(next.d !== (cur.d || 0) || next.n !== (cur.n || "")) wrote++;
+      m[a] = next;
+    }
+    localStorage.setItem(MOVES_KEY, JSON.stringify(led));
+  }catch(e){ return 0; }
+  return wrote;
+}
+let RPT_BUSY = {}, RPT_SIG = {};
+async function readReportLive(fn){
+  if(RPT_BUSY[fn] || !window.reccheckShortcuts || !window.reccheckShortcuts[fn]) return;
+  RPT_BUSY[fn] = true;
+  try{
+    const txt = await window.reccheckShortcuts[fn](600).catch(() => null);
+    if(!txt) return;
+    applyReport(parseTagged(txt, fn === "arrivals" ? "AR" : "DP"), fn === "arrivals");
+  }catch(e){}
+  finally{ RPT_BUSY[fn] = false; }
+}
+function applyReport(p, arrIsNight){
+  const fn = arrIsNight ? "arrivals" : "departures";
+  try{
+    if(!p || p.err || !p.rows.length) return;
+    if(!(arrIsNight ? /arrival\s*report/i : /departure\s*report/i).test(p.title)) return;
+    /* the same two refusals the in-house read has, and for the same reasons */
+    if(p.done && p.done.cut) return;
+    const night = inhouseDate(p.title);
+    const key = dkey(night);
+    if(!key) return;
+    const sig = p.title + "|" + p.rows.map(r => r.join("~")).join(";");
+    if(sig === RPT_SIG[fn]) return;
+    const out = reportToStays(p.rows, night, arrIsNight);
+    if(!out.recs.length) return;
+    const wrote = feedStays(out.recs, bnk());
+    /* THE REPORT NAMES DO NOT GO INTO THE ROOM DATABASE, and the first cut of this had
+       them doing exactly that. __rcLiveNames is the CENSUS door: it says "this is who is
+       in this room now", and syncRooms then treats a stored name that does not match the
+       receipt as a room that has turned over — stamping movedOn and DELETING the nickname.
+       A departure report names the guest who has LEFT. On a changeover the arrival and
+       departure reports name different people for the same room and would fight over it
+       every fifteen seconds. The in-house list is the census and already supplies the
+       names; these two are not, and have no business writing them. */
+    /* remembered only once the write has actually happened — set before it, a failed
+       feedStays would mean this report was never tried again */
+    RPT_SIG[fn] = sig;
+    const say = el('liveSay');
+    if(say) say.textContent = t(arrIsNight ? 'live_arr' : 'live_dep',
+                                out.recs.length, wrote, night)
+                            + (out.dropped ? t('live_held', out.dropped) : '');
+  }catch(e){}
+}
+let MOVES_BUSY = false, MOVES_ROWS = null, MOVES_NIGHT = 0;
+async function readMovesLive(){
+  if(MOVES_BUSY || !window.reccheckShortcuts || !window.reccheckShortcuts.moves) return;
+  MOVES_BUSY = true;
+  try{
+    const txt = await window.reccheckShortcuts.moves(400).catch(() => null);
+    if(!txt) return;
+    applyMoves(parseTagged(txt, "MV"));
+  }catch(e){}
+  finally{ MOVES_BUSY = false; }
+}
+function applyMoves(p){
+  try{
+    if(!p || p.err || !p.rows.length) return;
+    if(!/perform\s*move/i.test(p.title)) return;      // the caption has to name it
+    /* A read the helper called incomplete says nothing about which rows lack an X — the
+       missing ones may simply be the rows it never got to. */
+    if(p.done && p.done.cut) return;
+    const night = inhouseDate(p.title);
+    const key = dkey(night) || 0;
+    /* Kept, because a move can only be recorded once the stay it names exists, and that
+       may not be until the in-house list is read. Nothing here is expensive: the rows are
+       already in hand, the alert dedups on its key and the applied set dedups the write. */
+    MOVES_ROWS = p.rows; MOVES_NIGHT = key;
+    for(const r of p.rows){
+      const x = String(r[MV.X] || "").trim();
+      if(x) continue;                                  // marked, protel will show it
+      const from = String(r[MV.FROM] || "").trim();
+      const to   = String(r[MV.TO] || "").trim();
+      const name = String(r[MV.NAME] || "").trim();
+      /* AN EMPTY CELL IS NOT THE SAME AS A MISSING X. ReadCell returns "" for every
+         failure it has — a send that timed out on a busy protel, a write or read of the
+         scratch page that did not take — so a row that came back half-empty would mint a
+         "no X" alert for a move that has one. A row is only trusted to be missing its X
+         when the rest of it arrived: both rooms, the name, and a date. */
+      if(!from || !to || !name) continue;
+      if(!String(r[MV.ARR] || "").trim() && !String(r[MV.DEP] || "").trim()) continue;
+      if(window.__rcAlert) window.__rcAlert({
+        key: "movex|" + key + "|" + from + "|" + to + "|" + name,
+        kind: "moveNoX",
+        night: key,
+        text: t('al_moveNoX', from || '?', to || '?', name || '?')
+      });
+    }
+    recordMoves(p.rows, key);
+  }catch(e){}
+}
+/* ---- a move that has already happened ----
+
+   Asked whether "Perform Move for Date" was a list of moves still to do or moves already
+   made, he said: "it is a record of rooms that have moved already indeed". So it can be
+   recorded — and until he said it, nothing was, because writing a move that has not
+   happened puts a guest in a room they are not in.
+
+   ONLY ROWS WITH THE X. His words on that column: it is "the mark that the move is okay
+   for protel to visualize it". A row without one is a move protel itself will not show,
+   and it gets the alert instead. Recording one would be taking a step protel has not.
+
+   It writes the SAME TWO FIELDS detectMoves has always written, and nothing else: the
+   stay in the new room learns where it came from, and the stay in the old room is marked
+   vacated. It does NOT invent either stay. If the in-house list has not been read yet the
+   entries are not there, and the move stays on the pending list to be applied on a later
+   pass — which is why the applied set is what is remembered, and not merely that the
+   window was seen. `mv` deliberately does not set a departure: the guest left that room
+   but protel never called it a departure, and inventing one would put a pill on his panel
+   that protel's own list does not have. That was the 30/08 lesson. */
+const MOVES_DONE_KEY = "reccheck_moves_applied";
+function movesApplied(){
+  try{
+    const o = JSON.parse(localStorage.getItem(MOVES_DONE_KEY) || "{}");
+    return (o && typeof o === "object" && !Array.isArray(o)) ? o : {};
+  }catch(e){ return {}; }
+}
+function recordMoves(rows, night){
+  if(!rows || !rows.length || !night) return 0;
+  const done = movesApplied();
+  let led = null, wrote = 0, changed = false;
+  try{ led = loadLedger(); }catch(e){ return 0; }
+  for(const r of (rows || [])){
+    if(!String(r[MV.X] || "").trim()) continue;         // protel has not marked it
+    const from = String(r[MV.FROM] || "").trim();
+    const to   = String(r[MV.TO] || "").trim();
+    const arr  = dkey(String(r[MV.ARR] || "").trim());
+    if(!/^\d{2,3}$/.test(from) || !/^\d{2,3}$/.test(to) || !arr || from === to) continue;
+    const key = "mv|" + night + "|" + from + "|" + to + "|" + arr;
+    if(done[key]) continue;
+    const dst = led[to] && led[to][arr];
+    const src = led[from] && led[from][arr];
+    if(!dst && !src) continue;                          // neither stay known yet — try again later
+    if(dst && dst.from !== from){ dst.from = from; wrote++; }
+    if(src && src.mv !== night){ src.mv = night; wrote++; }
+    done[key] = night;
+    changed = true;
+  }
+  if(!changed) return 0;
+  try{ localStorage.setItem(MOVES_KEY, JSON.stringify(led)); }catch(e){}
+  try{ localStorage.setItem(MOVES_DONE_KEY, JSON.stringify(done)); }catch(e){}
+  try{ if(wrote) render(); }catch(e){}
+  return wrote;
+}
+async function readInhouseLive(auto){
   const btn = el('liveRead'), say = el('liveSay');
   if(!window.reccheckShortcuts || !window.reccheckShortcuts.inhouse || btn.disabled) return;
-  btn.disabled = true; say.textContent = t('live_reading');
+  btn.disabled = true;
+  /* Only a read he PRESSED says "reading protel…". An automatic one that finds the list
+     unchanged returns before any result text is written, which left this word on screen
+     for the rest of the shift. */
+  if(!auto) say.textContent = t('live_reading');
   const txt = await window.reccheckShortcuts.inhouse(400).catch(() => null);
   btn.disabled = false;
-  if(!txt){ say.textContent = t('live_none'); return; }
-  const p = parseInhouse(txt);
-  if(p.err){ say.textContent = t('live_err') + p.err; return; }
-  if(!p.rows.length){ say.textContent = t('live_none'); return; }
-  if(!isInhouseTitle(p.title)){ say.textContent = t('live_wrong', p.title || '?'); return; }
+  return applyInhouse(txt ? parseInhouse(txt) : null, auto);
+}
+/* The half that turns a parsed list into what the tool holds, kept separate from the half
+   that fetched it: the rows now arrive two ways — spawned on demand when he presses the
+   button, and captured by the resident helper the moment protel opened the window. Both
+   must land in exactly the same place, so there is one of these and not two. */
+function applyInhouse(p, auto){
+  const say = el('liveSay');
+  /* An automatic read that found nothing gets a quiet line, not the full explanation:
+     the in-house list not being open is the NORMAL state when the screen asked on its
+     own. A read he pressed for still says exactly what happened. */
+  const quiet = (m) => { say.textContent = auto ? t('live_idle') : m; LIVE_SIG = ""; };
+  if(!p){ quiet(t('live_none')); return; }
+  if(p.err){ quiet(t('live_err') + p.err); return; }
+  if(!p.rows.length){ quiet(t('live_none')); return; }
+  if(!isInhouseTitle(p.title)){ quiet(t('live_wrong', p.title || '?')); return; }
   const biz = inhouseDate(p.title);
   /* The caption is the only place the live path can learn the night from. Filing 250
      stays under a guessed date is exactly the kind of helpful deduction that put 83
      departures on his panel, so it does not happen: it refuses and says why. */
-  if(!biz){ say.textContent = t('live_nodate', p.title || '?'); return; }
+  if(!biz){ quiet(t('live_nodate', p.title || '?')); return; }
   const rate = inhouseToRate(p.rows, biz);
-  if(!rate.count){ say.textContent = t('live_none'); return; }
+  if(!rate.count){ quiet(t('live_none')); return; }
+  /* Nothing has moved in protel since the last tick. Writing the same ledger again and
+     redrawing the page under him twenty times a minute is not faithfulness, it is a
+     fault. A read he PRESSED still goes through, because pressing it is a question. */
+  /* A READ THE HELPER ITSELF CALLS INCOMPLETE MUST NOT BE WRITTEN.
+     ReadTagged abandons the list at READ_BUDGET_MS and says `cut-short`. saveMoves and
+     detectMoves both reason from ABSENCE — a room not in tonight's list is a room the
+     guest has left — so a list missing its tail reads as a hundred people checking out at
+     once. That is the phantom-departure failure, arriving unattended every five seconds.
+     He can still force one by pressing the button, where the "stopped early" line tells
+     him what he is looking at. */
+  if(auto && p.done && p.done.cut){ say.textContent = t('live_idle'); LIVE_SIG = ""; return; }
+  const sig = p.title + "\u0000" + p.rows.length + "\u0000" + p.rows.map(r => r.join("\u0001")).join("\u0002");
+  if(auto && sig === LIVE_SIG) return;
+  LIVE_SIG = sig;
   RATE = rate;
   const saved = saveMoves(rate);
+  /* A move can only be written onto a stay that exists, and the in-house list is what
+     creates them. So the last moves capture is offered again here — the applied set makes
+     a second attempt on one already written free, and a move whose stay is still unknown
+     simply waits for the next census. */
+  try{ if(MOVES_ROWS) recordMoves(MOVES_ROWS, MOVES_NIGHT); }catch(e){}
   const named = window.__rcLiveNames ? window.__rcLiveNames(rate) : 0;
-  PAIR_OVERRIDE = null; ADJ_OPEN_OVERRIDE = null;
+  /* Only a read HE asked for clears these. They hold decisions he made by clicking —
+     which adjoining pair to treat as one, which prompt he dismissed — and wiping them
+     from a five-second timer would undo his answer and put the prompt back on top of the
+     audit he is in the middle of. */
+  if(!auto){ PAIR_OVERRIDE = null; ADJ_OPEN_OVERRIDE = null; }
   el('fn-rate').textContent = p.title || biz;
   showMoveSave(saved);
   const d = p.done || {};
@@ -6045,7 +6691,7 @@ try{
   if(window.reccheckShortcuts && window.reccheckShortcuts.inhouse){
     LIVE_OK = true;
     el('liveRead').textContent = t('live_read');
-    el('liveRead').addEventListener('click', readInhouseLive);
+    el('liveRead').addEventListener('click', () => readInhouseLive(false));
   }
 }catch(e){}
 el('file-rate').addEventListener('change',e=>loadRate(e.target.files[0]));
@@ -6078,7 +6724,15 @@ function applyLegacy(on){
 function legacyOn(){
   try{ return localStorage.getItem('reccheck_legacy') !== '0'; }catch(e){ return true; }
 }
-window.__taLegacy = function(on){ applyLegacy(!!on); };
+window.__taLegacy = function(on){
+  applyLegacy(!!on);
+  /* Switching legacy off while standing on the Tax Check should start reading, not wait
+     for him to leave and come back. */
+  try{ if(on) liveStop(); else liveEnsure(); }catch(e){}
+};
+/* It runs for the life of the app now, not while a screen is open, so this only makes
+   sure it is running — arriving at the Tax Check is no longer what starts it. */
+window.__taScreen = function(){ try{ liveEnsure(); }catch(e){} };
 
 /* time safeguard: warn when a loaded report is for a past working night. Separate scope
    from the audit half, so the 03:30 boundary is repeated here rather than shared. */
@@ -6095,7 +6749,7 @@ window.__taSimulate=function(rk,tk){RATE=rk?{kind:'rate',dateKey:rk,bizDate:dfmt
 
 /* ============ boot ============ */
 function pruneZeroMem(){const mem=loadMem();let ch=false;for(const room of Object.keys(mem)){const rec=mem[room];for(const d of Object.keys(rec)){const e=rec[d];if(((e.arr||0)+(e.auto||0)+(e.man||0))===0){delete rec[d];ch=true;}}if(!Object.keys(rec).length){delete mem[room];ch=true;}}if(ch)saveMem(mem);}
-(function boot(){el('taxBack').textContent='← '+(LANG==='el'?'ΕΛΕΓΧΟΣ':'AUDIT');applyLegacy(legacyOn());pruneZeroMem();const mem=loadMem();const ds=recentDates(mem,7);if(ds.length)EXPANDED.add(ds[0]);applyStatic();renderMemory();el('memsec').style.display=ds.length?'block':'none';})();
+(function boot(){liveEnsure();el('taxBack').textContent='← '+(LANG==='el'?'ΕΛΕΓΧΟΣ':'AUDIT');applyLegacy(legacyOn());pruneZeroMem();const mem=loadMem();const ds=recentDates(mem,7);if(ds.length)EXPANDED.add(ds[0]);applyStatic();renderMemory();el('memsec').style.display=ds.length?'block':'none';})();
 })();
 </script>
 </body>

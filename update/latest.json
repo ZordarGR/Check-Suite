@@ -1,11 +1,11 @@
 {
-  "version": "1.17.30",
-  "type": "html",
-  "engine": "1.17.29",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.29/RecCheck-Setup.exe",
-  "setupSha256": "29e30681ea9e24949b2bb6f56594ff492f8c89c6511693a7ba3aab911465589f",
+  "version": "1.17.35",
+  "type": "full",
+  "engine": "1.17.35",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.35/RecCheck-Setup.exe",
+  "setupSha256": "8a6e96654675810814e3cb3be2ae2140d9860426314f52a0a1fae5e35456ec13",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "2fcc2424106e16642abe0d4eca822d0f7a7ffd0622200ac883c1741258bde24a",
-  "notes": "Guest names now come from protel uncut. They went into the ledger before and stopped there — the cards still showed the truncated name off the xps file. They reach the room database now, and the card, whole.\n\nAnd legacy mode is what the tool starts in: both checks fed from xps files. The live read of protel is what you switch ON in OPTIONS, not off."
+  "sha256": "cc22cfc5608b7cba06ef32731f8ee4eb7d739771cb06ca336b15e770b019da87",
+  "notes": "The tool is told now instead of asking. RecCheck's helper is already running and already watches protel's windows, so the moment you open the in-house list, the move window, the arrival report or the departure report it reads it there and then. Nothing polls protel any more.\n\nThat means a list you open for two seconds still lands — the rows are taken when the window opens, so they survive it closing. And the departure report is read when you open one, which is when it changes, rather than on any schedule.\n\nRoom moves are recorded too, but only the ones protel has put its X against. A move without one raises an alert instead, because protel will not show it either."
 }
