@@ -220,6 +220,55 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
   ck("it keeps reading away from the Tax Check (" + before + " -> " + off + ")", off > before);
   await p.close();
 
+  /* 11. A READ THE HELPER CALLED INCOMPLETE MUST NOT REACH THE LEDGER.
+         saveMoves and detectMoves both reason from ABSENCE — a room missing from tonight's
+         list is a room the guest has left. A list cut off at the time budget is a list
+         missing its tail, so writing it unattended reads as a hundred people checking out
+         at once. That is the phantom-departure failure, arriving every five seconds. */
+  const CUT = ["TITLE\tGuests inhouse: 04/09/26",
+    ...ROWS.map(r => "IH\t" + r.join("\t")),
+    "DONE\t2\t250\t83\t5000\tunicode\tcut-short"].join("\n");
+  p = await open(CUT, 1280, false);
+  await p.waitForTimeout(900);
+  ck("a cut-short automatic read writes NOTHING",
+     await p.evaluate(() => !localStorage.getItem("reccheck_moves_v2")));
+  ck("and says so quietly rather than accusing protel",
+     /not open|δεν είναι ανοιχτή/i.test(await p.evaluate(() => document.getElementById("liveSay").textContent)));
+  /* but he can still force one by hand, where the line tells him what he is looking at */
+  await p.evaluate(() => window.__t.showScreen("tax"));
+  await p.click("#liveRead");
+  await p.waitForTimeout(500);
+  ck("a read he PRESSED still goes through",
+     (await p.evaluate(() => localStorage.getItem("reccheck_moves_v2") || "")).indexOf('"426"') >= 0);
+  ck("and warns him it stopped early",
+     /stopped early|σταμάτησε νωρίς/i.test(await p.evaluate(() => document.getElementById("liveSay").textContent)));
+  await p.close();
+
+  /* 12. THE AUTOMATIC READ MUST NOT THROW AWAY A DECISION HE MADE BY CLICKING.
+         PAIR_OVERRIDE holds his answer about which adjoining rooms are one stay. Clearing
+         it was written for a button press; on a five-second timer it would undo his answer
+         and put the prompt back on top of the audit he is in the middle of. */
+  p = await open(IH("Guests inhouse: 04/09/26", ROWS), 1280, false);
+  await p.waitForTimeout(900);
+  await p.evaluate(() => { window.__tx.setPair({mine: true}); });
+  /* force a NEW signature so the read does real work rather than returning early */
+  await p.evaluate(() => { window.reccheckShortcuts.inhouse = () => Promise.resolve(
+    ["TITLE\tGuests inhouse: 04/09/26",
+     "IH\tSOMEONE ELSE\t201\t2/0/0/0/0\t01/09/26\t09/09/26\tCI",
+     "DONE\t1\t1\t83\t47\tunicode\tcomplete"].join("\n")); });
+  await p.waitForTimeout(7000);
+  ck("an automatic read really did run",
+     (await p.evaluate(() => localStorage.getItem("reccheck_moves_v2") || "")).indexOf('"201"') >= 0);
+  ck("and his pairing decision survived it",
+     await p.evaluate(() => !!(window.__tx.getPair() && window.__tx.getPair().mine)));
+  /* a read he PRESSES is a question, and still clears it */
+  await p.evaluate(() => window.__t.showScreen("tax"));
+  await p.click("#liveRead");
+  await p.waitForTimeout(600);
+  ck("but pressing the button still clears it",
+     await p.evaluate(() => window.__tx.getPair() === null));
+  await p.close();
+
   await b.close();
   console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");
   process.exit(bad ? 1 : 0);

@@ -179,7 +179,7 @@ static class TBind {
      top-level, so reading that caption costs protel nothing — which makes a name change on
      it the free way to know which report he just opened, and on which date. */
 
-  /* ---- reading a list's rows (v17) ----
+  /* ---- reading a list's rows (v19) ----
      LVM_GETITEMTEXT fills a caller-supplied buffer, and for a control in ANOTHER process
      that buffer has to live in that process — hence OpenProcess/VirtualAllocEx/Write/Read.
      This is the part that is NOT free, and it is why the probe reports its own cost.
@@ -1907,6 +1907,52 @@ static class TBind {
     c[0] = IH_NAME; c[1] = IH_ROOM; c[2] = IH_OCC; c[3] = IH_ARR; c[4] = IH_DEP; c[5] = IH_STATUS;
     return c;
   }
+  /* THE OTHER THREE LISTS. Their shapes all differ and none of them is the in-house one —
+     confirmed against his 04/09 23:17 reads, and against the panels on protel's own home
+     screen, where the Arrivals column reads Dep. and the Departures column reads Arr.
+
+     ARRIVALS  "Arrival Report for the 04/09/26", 16 columns, name at 1 and room at 3.
+               There is no arrival column: the arrival IS the report's date, in the caption.
+     DEPARTURES "Departure Report for 04/09/26", 16 columns, name at 0 and room at 2, and
+               the date it carries is the ARRIVAL. The departure is the report's date.
+     MOVES     "Perform Move for Date 04/09/26", a #32770 dialog, 8 columns, all of them
+               read because it is the narrowest list and the cheapest to take whole.
+               Column 5 is protel's X — his words: "the mark that the move is okay for
+               protel to visualize it". WHICH END OF THE MOVE IS WHICH IS UNCONFIRMED, so
+               nothing here records a move; only the missing X is acted on. */
+  static int[] ArrCols(){
+    int[] c = new int[5];
+    c[0] = 1; c[1] = 3; c[2] = 5; c[3] = 6; c[4] = 10;      // name, room, occ, departure, status
+    return c;
+  }
+  static int[] DepCols(){
+    int[] c = new int[5];
+    c[0] = 0; c[1] = 2; c[2] = 4; c[3] = 5; c[4] = 10;      // name, room, occ, arrival, status
+    return c;
+  }
+  static int[] MvCols(){
+    int[] c = new int[8];
+    for(int i = 0; i < 8; i++) c[i] = i;
+    return c;
+  }
+  static int[] ColsFor(string tag){
+    if(tag == "AR") return ArrCols();
+    if(tag == "DP") return DepCols();
+    if(tag == "MV") return MvCols();
+    return IhCols();
+  }
+  static string NeedleFor(string tag){
+    if(tag == "AR") return "ARRIVALREPORT";
+    if(tag == "DP") return "DEPARTUREREPORT";
+    if(tag == "MV") return "PERFORMMOVE";
+    return "INHOUSE";
+  }
+  static string MissingFor(string tag){
+    if(tag == "AR") return "the arrival report is not open in protel";
+    if(tag == "DP") return "the departure report is not open in protel";
+    if(tag == "MV") return "the move window is not open in protel";
+    return "the in-house list is not open in protel";
+  }
   const int IH_NAME = 0, IH_ROOM = 2, IH_OCC = 4, IH_ARR = 5, IH_DEP = 6, IH_STATUS = 11;
   /* FINDING the in-house list, without asking what is in front.
 
@@ -1928,34 +1974,54 @@ static class TBind {
   static IntPtr ihList = IntPtr.Zero;
   static string ihCaption = "";
   static uint[] ihPids = null;             // null = look everywhere, not only at protel
-  static bool CaptionSaysInhouse(string s){
-    if(s == null) return false;
+  /* The caption a hunt is looking for, normalised the same way on both sides so spacing
+     and case cannot decide it: "Guests in-house:" and "Guests inhouse:" read alike. */
+  static string huntNeedle = "INHOUSE";
+  static string Squash(string s){
+    if(s == null) return "";
     string u = s.ToUpperInvariant();
     StringBuilder b = new StringBuilder(u.Length);
     for(int i = 0; i < u.Length; i++){
       char c = u[i];
-      if(c == ' ' || c == '-' || c == '_') continue;   // "Guests in-house:" reads the same
+      if(c == ' ' || c == '-' || c == '_') continue;
       b.Append(c);
     }
-    return b.ToString().IndexOf("INHOUSE") >= 0;
+    return b.ToString();
   }
-  /* An MDI child of this frame whose caption says in-house AND which holds a list.
-     Both halves matter: a dialog merely NAMED after the in-house list is not it. */
-  static bool InhouseUnder(IntPtr frame){
+  static bool CaptionMatches(string s){
+    return Squash(s).IndexOf(huntNeedle) >= 0;
+  }
+  /* A window is the one we want only if its caption names it AND it holds a list. A
+     dialog merely NAMED after a report is not the report. */
+  static bool TakeIfMatch(IntPtr h){
+    StringBuilder t = new StringBuilder(320);
+    try{ GetWindowText(h, t, t.Capacity); }catch(Exception){}
+    string cap = t.ToString().Trim();
+    if(!CaptionMatches(cap)) return false;
+    IntPtr lv = BiggestListView(h);
+    if(lv == IntPtr.Zero) return false;
+    ihFound = h; ihList = lv; ihCaption = cap;
+    return true;
+  }
+  /* TWO ROUTES, and which one applies is decided by the window, not guessed.
+
+     protel's reports are MDI children of the FO frame, so under a frame that has an
+     MDIClient only its children are considered — testing the frame's own caption there
+     would bring back the pre-v16 bug, because a maximised report puts its name on the
+     frame while the biggest list under that frame may be something else entirely.
+
+     But "Perform Move for Date 04/09/26" is a #32770 DIALOG. It is top-level, it has no
+     MDIClient under it, and it names itself. So a window with no MDI client is tested on
+     its own caption. His moves list is only reachable this way. */
+  static bool ListUnder(IntPtr frame){
     mdiClient = IntPtr.Zero;
     try{ EnumChildWindows(frame, MdiPick, IntPtr.Zero); }catch(Exception){}
-    if(mdiClient == IntPtr.Zero) return false;
+    if(mdiClient == IntPtr.Zero) return TakeIfMatch(frame);
     IntPtr h = IntPtr.Zero;
     try{ h = GetWindow(mdiClient, GW_CHILD); }catch(Exception){ return false; }
     int guard = 0;
     while(h != IntPtr.Zero && guard++ < 128){
-      StringBuilder t = new StringBuilder(320);
-      try{ GetWindowText(h, t, t.Capacity); }catch(Exception){}
-      string cap = t.ToString().Trim();
-      if(CaptionSaysInhouse(cap)){
-        IntPtr lv = BiggestListView(h);
-        if(lv != IntPtr.Zero){ ihFound = h; ihList = lv; ihCaption = cap; return true; }
-      }
+      if(TakeIfMatch(h)) return true;
       try{ h = GetWindow(h, GW_HWNDNEXT); }catch(Exception){ return false; }
     }
     return false;
@@ -1969,14 +2035,15 @@ static class TBind {
         GetWindowThreadProcessId(h, out pid);
         if(!InArray(ihPids, pid)) return true;
       }
-      if(InhouseUnder(h)) return false;
+      if(ListUnder(h)) return false;
     }catch(Exception){}
     return true;
   }
   /* protel's windows first when there is a focus target to name them by, then everywhere.
      The second pass is what keeps this working for someone who never set one -- "not
      every user is me", and a helper that only works on his machine is not a helper. */
-  static IntPtr FindInhouseList(out string caption){
+  static IntPtr FindTaggedList(string needle, out string caption){
+    huntNeedle = needle;
     caption = "";
     ihFound = IntPtr.Zero; ihList = IntPtr.Zero; ihCaption = "";
     uint[] pids = ProtelPids();
@@ -1991,12 +2058,13 @@ static class TBind {
     caption = ihCaption;
     return ihList;
   }
-  static void ReadInhouse(int maxRows){
+  static void ReadInhouse(int maxRows){ ReadTagged("IH", maxRows); }
+  static void ReadTagged(string tag, int maxRows){
     int t0 = Environment.TickCount;
     readMsgs = 0;
     string cap;
-    IntPtr lv = FindInhouseList(out cap);
-    if(lv == IntPtr.Zero){ READ.Append("ERR\tthe in-house list is not open in protel\n"); return; }
+    IntPtr lv = FindTaggedList(NeedleFor(tag), out cap);
+    if(lv == IntPtr.Zero){ READ.Append("ERR\t" + MissingFor(tag) + "\n"); return; }
     READ.Append("TITLE\t" + cap + "\n");
     IntPtr res;
     readMsgs++;
@@ -2030,15 +2098,19 @@ static class TBind {
     bool wide = true, ranOut = false;
     try{
       /* the encoding question, settled on the first row and then left alone */
-      string probe0 = ReadCell(proc, lv, target64, 0, IH_NAME, text, item, CCH, true);
+      int[] cols = ColsFor(tag);
+      /* Probe on the TAG'S OWN first column, not column 0. The arrivals list has an EMPTY
+         column 0 — probing there reads nothing, and "nothing came back as Unicode" is
+         exactly how this decides the control is ANSI. It would have flipped the whole
+         read to the wrong encoding on the one list whose name is not first. */
+      string probe0 = ReadCell(proc, lv, target64, 0, cols[0], text, item, CCH, true);
       if(probe0.Length == 0){
-        string alt = ReadCell(proc, lv, target64, 0, IH_NAME, text, item, CCH, false);
+        string alt = ReadCell(proc, lv, target64, 0, cols[0], text, item, CCH, false);
         if(alt.Length > 0) wide = false;
       }
-      int[] cols = IhCols();
       for(int r = 0; r < show; r++){
         if(Environment.TickCount - t0 > READ_BUDGET_MS){ ranOut = true; break; }
-        StringBuilder line = new StringBuilder("IH");
+        StringBuilder line = new StringBuilder(tag);
         for(int c = 0; c < cols.Length; c++)
           line.Append("\t" + ReadCell(proc, lv, target64, r, cols[c], text, item, CCH, wide));
         READ.Append(line.ToString() + "\n");
@@ -2324,7 +2396,7 @@ static class TBind {
     }catch(Exception){}
   }
 
-  const string VER = "v18";
+  const string VER = "v19";
 
   static int Main(string[] args){
     int parentPid;
@@ -2410,6 +2482,26 @@ static class TBind {
       int secs = 240;
       if(args.Length >= 2) int.TryParse(args[1], out secs);
       return RunSplash(secs);
+    }
+    /* The other three lists, same machinery and the same TSV. Their tags are what the
+       page keys on, and each hunts its own caption. */
+    if(args.Length >= 2 && (args[0] == "moves" || args[0] == "arrivals" || args[0] == "departures")){
+      int tpid;
+      if(!int.TryParse(args[1], out tpid)) return 2;
+      int twait = 0, tmax = 400;
+      if(args.Length >= 3) int.TryParse(args[2], out twait);
+      if(args.Length >= 4) int.TryParse(args[3], out tmax);
+      if(twait < 0) twait = 0;
+      if(twait > 60000) twait = 60000;
+      if(tmax < 1) tmax = 1;
+      if(tmax > 2000) tmax = 2000;
+      LoadBinds();
+      if(twait > 0) Thread.Sleep(twait);
+      READ = new StringBuilder();
+      string tg = args[0] == "moves" ? "MV" : (args[0] == "arrivals" ? "AR" : "DP");
+      try{ ReadTagged(tg, tmax); }catch(Exception e){ READ.Append("ERR\t" + e.Message + "\n"); }
+      Say(READ.ToString());
+      return 0;
     }
     /* The in-house list, straight into RecCheck. Same cost as readlist, fewer columns. */
     if(args.Length >= 2 && args[0] == "inhouse"){

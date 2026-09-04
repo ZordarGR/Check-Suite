@@ -84,6 +84,7 @@ AppendTauLog
 AppendWatch
 Arc
 args
+ArrCols
 ARRIVE_MS
 AsyncCallback
 at
@@ -130,7 +131,7 @@ CapsPaint
 capsWnd
 CapsWndProc
 caption
-CaptionSaysInhouse
+CaptionMatches
 CB_GETCOUNT
 cbClsExtra
 cbSize
@@ -148,6 +149,7 @@ code
 col
 color
 cols
+ColsFor
 Combine
 CompilerGeneratedAttribute
 Component
@@ -173,6 +175,7 @@ DefWindowProc
 Delete
 DeleteObject
 DeleteValue
+DepCols
 Depth
 Describe
 DIAG
@@ -223,7 +226,7 @@ fgWnd
 File
 FillRect
 fIncUpdate
-FindInhouseList
+FindTaggedList
 FindWindow
 flags
 Flush
@@ -325,6 +328,7 @@ HopTo
 HopViaWinSpace
 HostRunning
 hostUp
+huntNeedle
 hWnd
 hwnd
 hwndActive
@@ -357,7 +361,6 @@ ihPids
 InArray
 IndexOf
 inherit
-InhouseUnder
 INPUT
 inputs
 InputUnion
@@ -414,6 +417,7 @@ List`1
 listBest
 listBestArea
 ListPick
+ListUnder
 LLKHF_INJECTED
 LLMHF_INJECTED
 LoadBinds
@@ -455,6 +459,7 @@ mi
 Microsoft.Win32
 min
 MinValue
+MissingFor
 mod
 mode
 Monitor
@@ -469,9 +474,12 @@ MSG
 msg
 MSLLHOOKSTRUCT
 MulticastDelegate
+MvCols
 n
 name
 nCode
+needle
+NeedleFor
 NULL_BRUSH_
 NULL_PEN
 obj
@@ -554,6 +562,7 @@ readMsgs
 ReadProcessMemory
 ReadRow
 ReadScope
+ReadTagged
 RecCheckRunning
 RECT
 RegisterClassEx
@@ -653,6 +662,7 @@ splashTotalMs
 splashWnd
 SplashWndProc
 Split
+Squash
 Start
 StartsWith
 stdoutRaw
@@ -682,6 +692,8 @@ System.Threading
 t
 T_FADE
 T_HOLD
+tag
+TakeIfMatch
 target64
 TargetFocused
 TargetIs64

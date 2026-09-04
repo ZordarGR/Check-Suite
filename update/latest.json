@@ -1,11 +1,11 @@
 {
-  "version": "1.17.32",
+  "version": "1.17.33",
   "type": "full",
-  "engine": "1.17.32",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.32/RecCheck-Setup.exe",
-  "setupSha256": "9591e6b41cf7928061cbf53e382e8c3858057e66461128ac532672ab0b0141f4",
+  "engine": "1.17.33",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.33/RecCheck-Setup.exe",
+  "setupSha256": "f63ae194522e1856e8a8d269c7acced84303e097a6678cfbc6161272049cca2d",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "04f3d276bc8467213d7222596a840961791f0c70ca22bf7508da2e36974e17fd",
-  "notes": "The names were still cut and this is why: the tool only preferred protel's name when the in-house list's date matched the report's night — and you audit the night that has just ended while the in-house list always says today. After midnight they never matched. It compares the NAMES now: if the printed one is the opening of protel's, the whole name wins.\n\nAlso: the room database is kept in RecCheck's own folder as well, scrambled so it cannot be read by opening it, and with legacy mode OFF the tool reads protel's in-house list by itself every five seconds, on any screen, for as long as it is running. Legacy mode stays the default and stays manual."
+  "sha256": "dcca5fb9a35defcd5b6da27e4a685c82be5a228316017912778ee28c5ee8d46d",
+  "notes": "ALERTS, on the home screen below AUDIT. It pulses red while something is unread, groups by date, and each one has a Resolve button that removes it for good.\n\nThe first thing it watches: a room move protel has no X against. With legacy mode off the tool now reads the move window too, and tells you about a move protel is not going to show you. It does not record the move itself — which room is the one being left is still not confirmed, and guessing that would put two wrong rooms in the ledger.\n\nAlso fixed: guest names now really do arrive uncut, and an unattended read that protel cut short is no longer written to the ledger."
 }

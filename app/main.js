@@ -830,6 +830,24 @@ ipcMain.handle("sc-diag", (_e, delayMs) => new Promise(res => {
    cost — fewer columns, so fewer messages: six of sixteen over 250 rows is 1500 rather
    than 4000. Returns the helper's raw tab-separated answer; the page parses it, because
    the page is where the shape it has to become already lives. */
+/* The other three lists. Same shape as sc-inhouse — one verb per list, the helper picks
+   its own window by caption, and the answer is the same TSV with a different tag. */
+["moves", "arrivals", "departures"].forEach(verb => {
+  ipcMain.handle("sc-" + verb, (_e, maxRows) => new Promise(res => {
+    if(process.platform !== "win32" || !tauPath()){ res(null); return; }
+    const n = Math.max(1, Math.min(2000, +maxRows || 400));
+    const chunks = []; let done = false;
+    const finish = () => { if(done) return; done = true;
+      res(Buffer.concat(chunks).toString("utf8") || null); };
+    try{
+      const child = spawn(tauPath(), [verb, String(process.pid), "0", String(n)], {windowsHide: true});
+      child.stdout.on("data", d => { chunks.push(d); });
+      child.on("exit", finish);
+      child.on("error", finish);
+      setTimeout(() => { try{ child.kill(); }catch(e){} finish(); }, 30000);
+    }catch(e){ finish(); }
+  }));
+});
 ipcMain.handle("sc-inhouse", (_e, maxRows) => new Promise(res => {
   if(process.platform !== "win32" || !tauPath()){ res(null); return; }
   const n = Math.max(1, Math.min(2000, +maxRows || 400));
