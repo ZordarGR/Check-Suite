@@ -54,6 +54,63 @@ for (const fn of ["renderMoves","roomMoves","movesReport"]) {
   console.log(fn.padEnd(12), missing.size ? "UNDEFINED -> " + [...missing].join(", ") : "all calls resolve");
 }
 
+/* ---- I18N.en vs I18N.el ----
+   The check below this one only ever matched QUOTED, DOTTED keys ("menu.audit":), which
+   is the shape T uses. I18N's keys are bare identifiers (live_read:), so every one of
+   them — the whole second language table — was invisible to the very guard that exists
+   because keys had drifted into one language before. Found while adding two.
+
+   This walks the literal instead of matching lines: strings are skipped whole, so a
+   value like "protel said: " cannot be mistaken for a key, and only depth-0 names
+   inside each table count. */
+function litKeys(body){
+  const out = new Set();
+  let i = 0, depth = 0;
+  while(i < body.length){
+    const c = body[i];
+    if(c === '"' || c === "'" || c === '`'){
+      const q = c; let j = i + 1, buf = "";
+      while(j < body.length && body[j] !== q){ if(body[j] === "\\") j++; buf += body[j]; j++; }
+      let k = j + 1; while(k < body.length && /\s/.test(body[k])) k++;
+      if(depth === 0 && body[k] === ":") out.add(buf);
+      i = j + 1; continue;
+    }
+    if(c === "{" || c === "[" || c === "("){ depth++; i++; continue; }
+    if(c === "}" || c === "]" || c === ")"){ depth--; i++; continue; }
+    if(depth === 0 && /[A-Za-z_$]/.test(c)){
+      let j = i; while(j < body.length && /[A-Za-z0-9_$]/.test(body[j])) j++;
+      let k = j; while(k < body.length && /\s/.test(body[k])) k++;
+      if(body[k] === ":") out.add(body.slice(i, j));
+      i = j; continue;
+    }
+    i++;
+  }
+  return out;
+}
+function tableBody(text, header){        // the text between that table's own braces
+  const at = text.indexOf(header);
+  if(at < 0) return null;
+  const open = text.indexOf("{", at);
+  let d = 0;
+  for(let j = open; j < text.length; j++){
+    if(text[j] === "{") d++;
+    else if(text[j] === "}"){ d--; if(!d) return text.slice(open + 1, j); }
+  }
+  return null;
+}
+{
+  const bEn = tableBody(src, "\n en:{"), bEl = tableBody(src, "\n el:{");
+  if(!bEn || !bEl){ console.log("i18n(I18N) could not find en/el — fix test/scopecheck.js"); process.exitCode = 1; }
+  else {
+    const en = litKeys(bEn), el = litKeys(bEl);
+    const onlyEl = [...el].filter(k => !en.has(k)), onlyEn = [...en].filter(k => !el.has(k));
+    console.log("i18n(I18N) " + (onlyEl.length + onlyEn.length === 0
+      ? "both tables hold the same " + en.size + " keys"
+      : "MISMATCH — only in greek: [" + onlyEl + "]  only in english: [" + onlyEn + "]"));
+    if(onlyEl.length + onlyEn.length) process.exitCode = 1;
+  }
+}
+
 /* ---- the two language tables must hold the same keys ----
    A key present in one and not the other renders as the key itself for anyone using the
    other language, and nothing in the page complains. Four had drifted into Greek-only

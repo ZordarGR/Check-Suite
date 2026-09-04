@@ -169,6 +169,8 @@ static class TBind {
   const uint WINEVENT_SKIPOWNPROCESS= 0x0002;
   const int  OBJID_WINDOW           = 0;
   const uint GA_ROOT                = 2;
+  const uint GW_HWNDNEXT            = 2;
+  const uint GW_CHILD               = 5;
   const uint PM_REMOVE              = 1;
   const int  WATCH_MAX              = 4000;   // one shift of windows, with room to spare
   const uint EVENT_OBJECT_NAMECHANGE= 0x800C;   // a window's caption changed
@@ -177,7 +179,7 @@ static class TBind {
      top-level, so reading that caption costs protel nothing — which makes a name change on
      it the free way to know which report he just opened, and on which date. */
 
-  /* ---- reading a list's rows (v15) ----
+  /* ---- reading a list's rows (v16) ----
      LVM_GETITEMTEXT fills a caller-supplied buffer, and for a control in ANOTHER process
      that buffer has to live in that process — hence OpenProcess/VirtualAllocEx/Write/Read.
      This is the part that is NOT free, and it is why the probe reports its own cost.
@@ -283,6 +285,7 @@ static class TBind {
   [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr hWnd, EnumProc fn, IntPtr lParam);
   [DllImport("user32.dll")] static extern int GetDlgCtrlID(IntPtr hWnd);
   [DllImport("user32.dll")] static extern IntPtr GetParent(IntPtr hWnd);
+  [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr hWnd, uint cmd);
   [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hWnd, out RECT r);
   [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hWnd);
   [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SendMessageTimeoutW")]
@@ -1431,6 +1434,64 @@ static class TBind {
     if(!osIs64) return false;      // 32-bit Windows: nothing on it is 64-bit
     return !targetWow;             // 64-bit Windows: WOW64 means the target is 32-bit
   }
+  /* WHICH list the read is pointed at.
+
+     protel is MDI. The frame's caption names a report only while that report is
+     MAXIMISED; restore it and the frame says nothing about it, while the biggest
+     list under the frame stays whatever is sitting behind. He hit exactly that on
+     04/09: the arrival list was open but not maximised, and the read came back with
+     the in-house list's 250 rows under a caption that named neither list. Reading the
+     wrong list is not a display fault -- those rows go straight into the ledger.
+
+     So a read is scoped to the ACTIVE MDI child and reports THAT window's caption.
+     GetWindow(client, GW_CHILD) is the topmost child in Z-order, which for an MDI
+     client is the active one; invisible ones are stepped over. Nothing here sends
+     protel a message: class names, captions and Z-order all come from the window
+     manager, not from protel's message queue.
+
+     With no MDI client under the front window -- a dialog, or a popup, which is
+     top-level and is itself the foreground window -- the scope stays the front window
+     and this changes nothing. */
+  static IntPtr mdiClient = IntPtr.Zero;
+  static bool MdiPick(IntPtr h, IntPtr p){
+    if(mdiClient != IntPtr.Zero) return false;
+    try{
+      StringBuilder c = new StringBuilder(80);
+      GetClassName(h, c, c.Capacity);
+      /* Contains, not equals: protel is Borland OWL, and an OWL frame's client has been
+         seen registered under its own name. A miss here is safe -- the scope falls back
+         to the front window and the page then refuses a caption that names no list --
+         but a miss also means the fix never engages, so the match is the tolerant one. */
+      if(c.ToString().ToUpperInvariant().IndexOf("MDICLIENT") >= 0 && IsWindowVisible(h)){ mdiClient = h; return false; }
+    }catch(Exception){}
+    return true;
+  }
+  static IntPtr ActiveMdiChild(IntPtr frame){
+    mdiClient = IntPtr.Zero;
+    try{ EnumChildWindows(frame, MdiPick, IntPtr.Zero); }catch(Exception){}
+    if(mdiClient == IntPtr.Zero) return IntPtr.Zero;
+    IntPtr h = IntPtr.Zero;
+    try{ h = GetWindow(mdiClient, GW_CHILD); }catch(Exception){ return IntPtr.Zero; }
+    int guard = 0;
+    while(h != IntPtr.Zero && guard++ < 64){
+      bool vis = false;
+      try{ vis = IsWindowVisible(h); }catch(Exception){}
+      if(vis) return h;
+      try{ h = GetWindow(h, GW_HWNDNEXT); }catch(Exception){ return IntPtr.Zero; }
+    }
+    return IntPtr.Zero;
+  }
+  /* The window a read covers, and the caption that HONESTLY names it. */
+  static IntPtr ReadScope(IntPtr fg, string frameText, out string caption){
+    caption = frameText == null ? "" : frameText.Trim();
+    IntPtr child = ActiveMdiChild(fg);
+    if(child == IntPtr.Zero) return fg;
+    StringBuilder t = new StringBuilder(320);
+    try{ GetWindowText(child, t, t.Capacity); }catch(Exception){}
+    string own = t.ToString().Trim();
+    if(own.Length > 0) caption = own;
+    return child;
+  }
   static IntPtr BiggestListView(IntPtr root){
     listBest = IntPtr.Zero; listBestArea = 0;
     try{ EnumChildWindows(root, ListPick, IntPtr.Zero); }catch(Exception){}
@@ -1458,13 +1519,20 @@ static class TBind {
     if(fg == IntPtr.Zero){ READ.Append("nothing is in front.\n"); return; }
     string exe, cls, txt;
     ForegroundOf(fg, out exe, out cls, out txt);
-    READ.Append("front: " + exe + " | " + cls + " | " + txt + "\n\n");
+    READ.Append("front: " + exe + " | " + cls + " | " + txt + "\n");
     if(!MatchesNeedle(exe, cls, txt)){
       READ.Append("That is not the window this is pointed at (focus=" + (focusNeedle == null ? "(none)" : focusNeedle)
                   + "). Nothing was read.\n");
       return;
     }
-    IntPtr lv = BiggestListView(fg);
+    string cap;
+    IntPtr scope = ReadScope(fg, txt, out cap);
+    /* Says which of the two it got, so a probe run answers whether the MDI scoping
+       engaged at all rather than leaving it to be assumed. */
+    READ.Append("list window: " + cap
+                + (scope == fg ? "   (no MDI child under it — the front window itself)" : "   (the active MDI child)")
+                + "\n\n");
+    IntPtr lv = BiggestListView(scope);
     if(lv == IntPtr.Zero){ READ.Append("No SysListView32 anywhere in that window. Nothing was read.\n"); return; }
 
     IntPtr res;
@@ -1578,6 +1646,94 @@ static class TBind {
                 + "arrive — that is the answer this probe exists to get, and it means this route\n"
                 + "is the wrong one rather than that something is broken.\n");
   }
+  /* The in-house list, machine-readable, and ONLY the columns RecCheck uses.
+     0 name, 2 room, 4 occupancy, 5 arrival, 6 departure, 11 status — confirmed by him on
+     04/09 against a real read. The group and the travel agent (12-14) are not read at
+     all: he does not want them, and not reading them is also four fewer messages a row.
+     Sixteen columns over 250 rows is 4000 messages; six is 1500.
+
+     Tab-separated because ReadCell already turns any tab in a cell into a space, so a tab
+     here can only be a separator. */
+  /* Built element by element on purpose. A static array INITIALISER makes the compiler
+     emit a <PrivateImplementationDetails> blob whose field name is a HASH OF THE CONTENTS,
+     so the build guard's allow-list would need a new entry every time a column moved — and
+     an allow-list that has to be regenerated is one that stops being read. */
+  static int[] IhCols(){
+    int[] c = new int[6];
+    c[0] = IH_NAME; c[1] = IH_ROOM; c[2] = IH_OCC; c[3] = IH_ARR; c[4] = IH_DEP; c[5] = IH_STATUS;
+    return c;
+  }
+  const int IH_NAME = 0, IH_ROOM = 2, IH_OCC = 4, IH_ARR = 5, IH_DEP = 6, IH_STATUS = 11;
+  static void ReadInhouse(int maxRows){
+    int t0 = Environment.TickCount;
+    readMsgs = 0;
+    IntPtr fg = GetForegroundWindow();
+    if(fg == IntPtr.Zero){ READ.Append("ERR\tnothing is in front\n"); return; }
+    string exe, cls, txt;
+    ForegroundOf(fg, out exe, out cls, out txt);
+    if(!MatchesNeedle(exe, cls, txt)){ READ.Append("ERR\tthat is not protel\n"); return; }
+    string cap;
+    IntPtr scope = ReadScope(fg, txt, out cap);
+    READ.Append("TITLE\t" + cap + "\n");
+    IntPtr lv = BiggestListView(scope);
+    if(lv == IntPtr.Zero){ READ.Append("ERR\tno list in that window\n"); return; }
+    IntPtr res;
+    readMsgs++;
+    int rows = 0;
+    if(SendMessageTimeout(lv, LVM_GETITEMCOUNT, IntPtr.Zero, IntPtr.Zero, SMTO_ABORTIFHUNG, 250, out res) != IntPtr.Zero)
+      rows = res.ToInt32();
+    if(rows <= 0){ READ.Append("ERR\tthe list is empty\n"); return; }
+    uint pid;
+    GetWindowThreadProcessId(lv, out pid);
+    IntPtr proc = OpenProcess(PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE
+                              | PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+    if(proc == IntPtr.Zero){ READ.Append("ERR\tprotel would not let this process read it\n"); return; }
+    bool selfWow = false, targetWow = false, okSelf = false, okTarget = false;
+    try{ okSelf = IsWow64Process(GetCurrentProcess(), out selfWow); }catch(Exception){}
+    try{ okTarget = IsWow64Process(proc, out targetWow); }catch(Exception){}
+    if(!okSelf || !okTarget){
+      READ.Append("ERR\tcould not establish whether protel is 32-bit or 64-bit\n");
+      CloseHandle(proc); return;
+    }
+    bool target64 = TargetIs64((IntPtr.Size == 8) || selfWow, targetWow);
+    const int CCH = 512;
+    IntPtr text = VirtualAllocEx(proc, IntPtr.Zero, (UIntPtr)(CCH * 2), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    IntPtr item = VirtualAllocEx(proc, IntPtr.Zero, (UIntPtr)64, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if(text == IntPtr.Zero || item == IntPtr.Zero){
+      READ.Append("ERR\tno scratch page in protel\n");
+      if(text != IntPtr.Zero) VirtualFreeEx(proc, text, UIntPtr.Zero, MEM_RELEASE);
+      if(item != IntPtr.Zero) VirtualFreeEx(proc, item, UIntPtr.Zero, MEM_RELEASE);
+      CloseHandle(proc); return;
+    }
+    int show = rows < maxRows ? rows : maxRows, got = 0;
+    bool wide = true, ranOut = false;
+    try{
+      /* the encoding question, settled on the first row and then left alone */
+      string probe0 = ReadCell(proc, lv, target64, 0, IH_NAME, text, item, CCH, true);
+      if(probe0.Length == 0){
+        string alt = ReadCell(proc, lv, target64, 0, IH_NAME, text, item, CCH, false);
+        if(alt.Length > 0) wide = false;
+      }
+      int[] cols = IhCols();
+      for(int r = 0; r < show; r++){
+        if(Environment.TickCount - t0 > READ_BUDGET_MS){ ranOut = true; break; }
+        StringBuilder line = new StringBuilder("IH");
+        for(int c = 0; c < cols.Length; c++)
+          line.Append("\t" + ReadCell(proc, lv, target64, r, cols[c], text, item, CCH, wide));
+        READ.Append(line.ToString() + "\n");
+        got++;
+      }
+    }catch(Exception e){ READ.Append("ERR\t" + e.Message + "\n"); }
+    finally{
+      VirtualFreeEx(proc, text, UIntPtr.Zero, MEM_RELEASE);
+      VirtualFreeEx(proc, item, UIntPtr.Zero, MEM_RELEASE);
+      CloseHandle(proc);
+    }
+    READ.Append("DONE\t" + got + "\t" + rows + "\t" + readMsgs + "\t"
+                + (Environment.TickCount - t0) + "\t" + (wide ? "unicode" : "ansi")
+                + "\t" + (ranOut ? "cut-short" : "complete") + "\n");
+  }
+
   static string[] ReadRow(IntPtr proc, IntPtr lv, bool target64, int row, int cols,
                          IntPtr text, IntPtr item, int cch, bool wide){
     string[] out2 = new string[cols];
@@ -1847,7 +2003,7 @@ static class TBind {
     }catch(Exception){}
   }
 
-  const string VER = "v15";
+  const string VER = "v16";
 
   static int Main(string[] args){
     int parentPid;
@@ -1923,6 +2079,24 @@ static class TBind {
       READ = new StringBuilder();
       READ.Append("rc-tbind " + VER + " list read  " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "\n");
       try{ ReadForeground(rmax); }catch(Exception e){ READ.Append("EXCEPTION: " + e.Message + "\n"); }
+      Say(READ.ToString());
+      return 0;
+    }
+    /* The in-house list, straight into RecCheck. Same cost as readlist, fewer columns. */
+    if(args.Length >= 2 && args[0] == "inhouse"){
+      int ipid;
+      if(!int.TryParse(args[1], out ipid)) return 2;
+      int iwait = 0, imax = 400;
+      if(args.Length >= 3) int.TryParse(args[2], out iwait);
+      if(args.Length >= 4) int.TryParse(args[3], out imax);
+      if(iwait < 0) iwait = 0;
+      if(iwait > 60000) iwait = 60000;
+      if(imax < 1) imax = 1;
+      if(imax > 2000) imax = 2000;
+      LoadBinds();
+      if(iwait > 0) Thread.Sleep(iwait);
+      READ = new StringBuilder();
+      try{ ReadInhouse(imax); }catch(Exception e){ READ.Append("ERR\t" + e.Message + "\n"); }
       Say(READ.ToString());
       return 0;
     }

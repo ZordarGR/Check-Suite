@@ -1,11 +1,11 @@
 {
-  "version": "1.17.26",
+  "version": "1.17.27",
   "type": "full",
-  "engine": "1.17.26",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.26/RecCheck-Setup.exe",
-  "setupSha256": "177621065f2a6d8667fa8f8ee7db80d75b5810f4cde1b38582a920a49c6b4b69",
+  "engine": "1.17.27",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.27/RecCheck-Setup.exe",
+  "setupSha256": "33e40516b9868ef16255efeb08aa24a0b794a09a6d8596de235996669d1072b6",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "74eb85ec946af24ef69d91e312681c71025ce2a02917cc42e20d9571d095e854",
-  "notes": "The watcher now also records when protel's own title bar changes, which is how it learns which report you opened and for which date \u2014 still with nothing sent to protel. And DEBUG can read the rows of the list in the window in front. That one is not free and says so, and it feeds nothing yet: it is there so we can see whether the rows come back at all before anything is built on them."
+  "sha256": "abca089b173a5b2656b766e61fc383f4f50fa937ac89be0a8dcbe75858bb99aa",
+  "notes": "The in-house list now feeds the tool straight from protel — press “Read the in-house list” on the Tax Check screen and the rooms, the whole guest names and the arrival and departure dates go in without a Rate Check file. Names come through uncut, which the .oxps never did. It only ever reads: nothing is written to protel and nothing is sent to it beyond the getters the read needs.\n\nIt also reads the window you are actually looking at. Before, with a report open but not maximised, it could read the list sitting behind it — so it now takes the active protel window and refuses outright when that window's title does not say in-house, or carries no date. The refusal shows you the title it saw."
 }

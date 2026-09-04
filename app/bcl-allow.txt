@@ -42,6 +42,7 @@
 <>f__mg$cache4
 <>f__mg$cache5
 <>f__mg$cache6
+<>f__mg$cache7
 <>m__0
 <Main>m__0
 <Main>m__1
@@ -59,6 +60,7 @@ ACT_SEQ
 ACT_TAU
 action
 ActivateKeyboardLayout
+ActiveMdiChild
 Add
 add_UnhandledException
 AddHours
@@ -121,6 +123,7 @@ capsOn
 CapsPaint
 capsWnd
 CapsWndProc
+caption
 CB_GETCOUNT
 cbClsExtra
 cbSize
@@ -216,6 +219,8 @@ fn
 FocusedOf
 focusNeedle
 ForegroundOf
+frame
+frameText
 fRestore
 GA_ROOT
 gap
@@ -271,16 +276,20 @@ GetString
 GetSystemMetrics
 GetTypeFromHandle
 GetValue
+GetWindow
 GetWindowRect
 GetWindowText
 GetWindowThreadProcessId
 GLYPH
 GLYPH_N
+got
 GREEK
 GreekHKL
 grkCached
 gui
 GUITHREADINFO
+GW_CHILD
+GW_HWNDNEXT
 h
 HashSet`1
 hbrBackground
@@ -321,6 +330,13 @@ IDisposable
 idObject
 idThread
 idx
+IH_ARR
+IH_DEP
+IH_NAME
+IH_OCC
+IH_ROOM
+IH_STATUS
+IhCols
 InArray
 IndexOf
 inherit
@@ -406,6 +422,8 @@ Marshal
 MatchesNeedle
 max
 maxRows
+mdiClient
+MdiPick
 MEM_COMMIT
 MEM_RELEASE
 MEM_RESERVE
@@ -469,6 +487,7 @@ PostUi
 PressKeys
 PressTau
 PressWinSpace
+probe0
 proc
 Process
 PROCESS_QUERY_LIMITED_INFORMATION
@@ -505,10 +524,12 @@ ReadAllLines
 ReadAllText
 ReadCell
 ReadForeground
+ReadInhouse
 ReadLine
 readMsgs
 ReadProcessMemory
 ReadRow
+ReadScope
 RECT
 RegisterClassEx
 Registry
