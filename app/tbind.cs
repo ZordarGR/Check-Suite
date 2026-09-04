@@ -179,7 +179,7 @@ static class TBind {
      top-level, so reading that caption costs protel nothing — which makes a name change on
      it the free way to know which report he just opened, and on which date. */
 
-  /* ---- reading a list's rows (v16) ----
+  /* ---- reading a list's rows (v17) ----
      LVM_GETITEMTEXT fills a caller-supplied buffer, and for a control in ANOTHER process
      that buffer has to live in that process — hence OpenProcess/VirtualAllocEx/Write/Read.
      This is the part that is NOT free, and it is why the probe reports its own cost.
@@ -282,6 +282,7 @@ static class TBind {
   [DllImport("user32.dll")] static extern uint MapVirtualKey(uint code, uint mapType);
   [DllImport("user32.dll")] static extern short GetAsyncKeyState(int vk);
   [DllImport("user32.dll")] static extern short GetKeyState(int vk);
+  [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc fn, IntPtr lParam);
   [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr hWnd, EnumProc fn, IntPtr lParam);
   [DllImport("user32.dll")] static extern int GetDlgCtrlID(IntPtr hWnd);
   [DllImport("user32.dll")] static extern IntPtr GetParent(IntPtr hWnd);
@@ -1664,19 +1665,96 @@ static class TBind {
     return c;
   }
   const int IH_NAME = 0, IH_ROOM = 2, IH_OCC = 4, IH_ARR = 5, IH_DEP = 6, IH_STATUS = 11;
+  /* FINDING the in-house list, without asking what is in front.
+
+     This is the bug he found by asking the obvious question: "does it take the list from
+     whatever window is in front?" It did -- and CLICKING THE BUTTON PUTS RECCHECK IN
+     FRONT. So the read looked at RecCheck, saw no protel, and gave up. DEBUG's readlist
+     gets away with the foreground because it counts down first and he switches over; a
+     button cannot.
+
+     So the button does not use the foreground at all. It hunts for the window BY ITS
+     CAPTION -- an MDI child, under any top-level window, whose title says in-house and
+     which actually has a list under it. That also makes the guard structural rather than
+     a check bolted on afterwards: the wrong list cannot be read, because the right one is
+     what was searched for.
+
+     Still nothing sent to protel. Top-level enumeration, class names, captions and
+     Z-order are all window-manager reads. Only the list found at the end is messaged. */
+  static IntPtr ihFound = IntPtr.Zero;
+  static IntPtr ihList = IntPtr.Zero;
+  static string ihCaption = "";
+  static uint[] ihPids = null;             // null = look everywhere, not only at protel
+  static bool CaptionSaysInhouse(string s){
+    if(s == null) return false;
+    string u = s.ToUpperInvariant();
+    StringBuilder b = new StringBuilder(u.Length);
+    for(int i = 0; i < u.Length; i++){
+      char c = u[i];
+      if(c == ' ' || c == '-' || c == '_') continue;   // "Guests in-house:" reads the same
+      b.Append(c);
+    }
+    return b.ToString().IndexOf("INHOUSE") >= 0;
+  }
+  /* An MDI child of this frame whose caption says in-house AND which holds a list.
+     Both halves matter: a dialog merely NAMED after the in-house list is not it. */
+  static bool InhouseUnder(IntPtr frame){
+    mdiClient = IntPtr.Zero;
+    try{ EnumChildWindows(frame, MdiPick, IntPtr.Zero); }catch(Exception){}
+    if(mdiClient == IntPtr.Zero) return false;
+    IntPtr h = IntPtr.Zero;
+    try{ h = GetWindow(mdiClient, GW_CHILD); }catch(Exception){ return false; }
+    int guard = 0;
+    while(h != IntPtr.Zero && guard++ < 128){
+      StringBuilder t = new StringBuilder(320);
+      try{ GetWindowText(h, t, t.Capacity); }catch(Exception){}
+      string cap = t.ToString().Trim();
+      if(CaptionSaysInhouse(cap)){
+        IntPtr lv = BiggestListView(h);
+        if(lv != IntPtr.Zero){ ihFound = h; ihList = lv; ihCaption = cap; return true; }
+      }
+      try{ h = GetWindow(h, GW_HWNDNEXT); }catch(Exception){ return false; }
+    }
+    return false;
+  }
+  static bool TopHunt(IntPtr h, IntPtr p){
+    if(ihFound != IntPtr.Zero) return false;
+    try{
+      if(!IsWindowVisible(h)) return true;
+      if(ihPids != null){
+        uint pid = 0;
+        GetWindowThreadProcessId(h, out pid);
+        if(!InArray(ihPids, pid)) return true;
+      }
+      if(InhouseUnder(h)) return false;
+    }catch(Exception){}
+    return true;
+  }
+  /* protel's windows first when there is a focus target to name them by, then everywhere.
+     The second pass is what keeps this working for someone who never set one -- "not
+     every user is me", and a helper that only works on his machine is not a helper. */
+  static IntPtr FindInhouseList(out string caption){
+    caption = "";
+    ihFound = IntPtr.Zero; ihList = IntPtr.Zero; ihCaption = "";
+    uint[] pids = ProtelPids();
+    if(pids.Length > 0){
+      ihPids = pids;
+      try{ EnumWindows(TopHunt, IntPtr.Zero); }catch(Exception){}
+    }
+    if(ihFound == IntPtr.Zero){
+      ihPids = null;
+      try{ EnumWindows(TopHunt, IntPtr.Zero); }catch(Exception){}
+    }
+    caption = ihCaption;
+    return ihList;
+  }
   static void ReadInhouse(int maxRows){
     int t0 = Environment.TickCount;
     readMsgs = 0;
-    IntPtr fg = GetForegroundWindow();
-    if(fg == IntPtr.Zero){ READ.Append("ERR\tnothing is in front\n"); return; }
-    string exe, cls, txt;
-    ForegroundOf(fg, out exe, out cls, out txt);
-    if(!MatchesNeedle(exe, cls, txt)){ READ.Append("ERR\tthat is not protel\n"); return; }
     string cap;
-    IntPtr scope = ReadScope(fg, txt, out cap);
+    IntPtr lv = FindInhouseList(out cap);
+    if(lv == IntPtr.Zero){ READ.Append("ERR\tthe in-house list is not open in protel\n"); return; }
     READ.Append("TITLE\t" + cap + "\n");
-    IntPtr lv = BiggestListView(scope);
-    if(lv == IntPtr.Zero){ READ.Append("ERR\tno list in that window\n"); return; }
     IntPtr res;
     readMsgs++;
     int rows = 0;
@@ -2003,7 +2081,7 @@ static class TBind {
     }catch(Exception){}
   }
 
-  const string VER = "v16";
+  const string VER = "v17";
 
   static int Main(string[] args){
     int parentPid;

@@ -1364,7 +1364,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.27";
+const APP_VERSION = "1.17.28";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -5248,10 +5248,10 @@ const I18N={
   app_brand:"TA Check", app_rest:"— protel occupancy vs postings",
   app_sub:"Load the Rate Check (pre-EOD, who's in-house) and the Tax Check (post-EOD, what posted). The tool cross-references the night and flags what didn't post.",
   live_read:"Read the in-house list from protel", live_reading:"reading protel\u2026",
-  live_none:"Nothing came back. Bring protel\u2019s in-house list to the front and try again.",
+  live_none:"Nothing came back. Open protel\u2019s in-house list \u2014 it does not have to be in front \u2014 and try again.",
   live_err:"protel said: ", live_got:"{0} of {1} rows \u2014 {2} rooms, {3} stays recorded for {4}. {5} messages, {6} ms.",
   live_cut:" Stopped early \u2014 protel was answering slowly.", live_cancel:" {0} cancelled row(s) ignored.",
-  live_wrong:"That is not the in-house list \u2014 the window in front says \u201c{0}\u201d. Nothing was recorded.",
+  live_wrong:"That is not the in-house list \u2014 the window it found says \u201c{0}\u201d. Nothing was recorded.",
   live_nodate:"No date in \u201c{0}\u201d, so there is no night to file these under. Nothing was recorded.",
   slot_rate:"Rate Check", slot_rate_sub:"in-house list · pre-EOD", slot_tax:"Tax Check", slot_tax_sub:"charges history · post-EOD",
   sec_memory:"Room memory by date", btn_clearmem:"clear all memory", menu_reset:"Reset memory (start fresh)",
@@ -5309,10 +5309,10 @@ const I18N={
   app_brand:"Έλεγχος ΤΑ", app_rest:"— πληρότητα protel vs καταχωρήσεις",
   app_sub:"Φόρτωσε το Rate Check (πριν το EOD, ποιοι είναι μέσα) και το Tax Check (μετά το EOD, τι καταχωρήθηκε). Το εργαλείο διασταυρώνει τη νύχτα και επισημαίνει ό,τι δεν μπήκε.",
   live_read:"Διάβασε τη λίστα παραμονών από το protel", live_reading:"διαβάζει το protel…",
-  live_none:"Δεν ήρθε τίποτα. Φέρε μπροστά τη λίστα παραμονών του protel και ξαναδοκίμασε.",
+  live_none:"Δεν ήρθε τίποτα. Άνοιξε τη λίστα παραμονών του protel — δεν χρειάζεται να είναι μπροστά — και ξαναδοκίμασε.",
   live_err:"το protel είπε: ", live_got:"{0} από {1} γραμμές — {2} δωμάτια, {3} διαμονές για {4}. {5} μηνύματα, {6} ms.",
   live_cut:" Σταμάτησε νωρίς — το protel απαντούσε αργά.", live_cancel:" {0} ακυρωμένες γραμμές αγνοήθηκαν.",
-  live_wrong:"Αυτή δεν είναι η λίστα παραμονών — το παράθυρο μπροστά λέει «{0}». Δεν καταγράφηκε τίποτα.",
+  live_wrong:"Αυτή δεν είναι η λίστα παραμονών — το παράθυρο που βρέθηκε λέει «{0}». Δεν καταγράφηκε τίποτα.",
   live_nodate:"Δεν υπάρχει ημερομηνία στο «{0}», οπότε δεν υπάρχει νύχτα για να καταχωρηθούν. Δεν καταγράφηκε τίποτα.",
   slot_rate:"Rate Check", slot_rate_sub:"λίστα παραμονών · πριν το EOD", slot_tax:"Tax Check", slot_tax_sub:"ιστορικό χρεώσεων · μετά το EOD",
   sec_memory:"Μνήμη δωματίων ανά ημερομηνία", btn_clearmem:"διαγραφή μνήμης", menu_reset:"Επαναφορά μνήμης (καθαρή αρχή)",

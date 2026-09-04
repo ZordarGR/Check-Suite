@@ -1,11 +1,11 @@
 {
-  "version": "1.17.27",
+  "version": "1.17.28",
   "type": "full",
-  "engine": "1.17.27",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.27/RecCheck-Setup.exe",
-  "setupSha256": "33e40516b9868ef16255efeb08aa24a0b794a09a6d8596de235996669d1072b6",
+  "engine": "1.17.28",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.28/RecCheck-Setup.exe",
+  "setupSha256": "32659fb804d7c9329805f2d7a0860334fe9967267ffd8a115b80487a4fcec037",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "abca089b173a5b2656b766e61fc383f4f50fa937ac89be0a8dcbe75858bb99aa",
-  "notes": "The in-house list now feeds the tool straight from protel — press “Read the in-house list” on the Tax Check screen and the rooms, the whole guest names and the arrival and departure dates go in without a Rate Check file. Names come through uncut, which the .oxps never did. It only ever reads: nothing is written to protel and nothing is sent to it beyond the getters the read needs.\n\nIt also reads the window you are actually looking at. Before, with a report open but not maximised, it could read the list sitting behind it — so it now takes the active protel window and refuses outright when that window's title does not say in-house, or carries no date. The refusal shows you the title it saw."
+  "sha256": "b8cf57000c6a41fb0f532eef6a2ec7c022615760578e6c3dfdb1757b5c234eb1",
+  "notes": "Fixes the button added in 1.17.27, which could not work: it read whichever window was in front, and clicking a button in RecCheck puts RecCheck in front. It now looks for protel's in-house window itself. The list only has to be OPEN — it does not have to be in front, on top, or even visible. Still read-only, and still nothing sent to protel beyond the getters the read needs."
 }
