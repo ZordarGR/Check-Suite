@@ -89,11 +89,14 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok?"ok  ":"FAIL") + "
   ck("and lines up with it",                    box.al === box.xl);
   ck("and sits BELOW it (" + box.top + "px gap)", box.top >= 0 && box.top < 40);
 
-  /* the read never stops — twenty more passes must not pile up */
-  await p.waitForTimeout(11000);
+  /* The read never stops, but the moves window takes one tick in three: four lists on
+     every tick would be four process launches every five seconds, some thirty thousand
+     across a shift. So it is read about every fifteen seconds, and the same missing X
+     must still never pile up. */
+  await p.waitForTimeout(26000);
   const tries = await p.evaluate(() => window.__mv);
   alerts = await p.evaluate(() => JSON.parse(localStorage.getItem("reccheck_alerts") || "[]"));
-  ck("it keeps reading the moves window (" + tries + " reads)", tries >= 3);
+  ck("it keeps reading the moves window (" + tries + " reads)", tries >= 2);
   ck("and the same missing X does not pile up",  alerts.length === 2);
 
   /* opening the list stops the pulse but removes nothing */

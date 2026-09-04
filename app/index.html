@@ -1389,7 +1389,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.33";
+const APP_VERSION = "1.17.34";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -2938,6 +2938,11 @@ function ledgerClick(){
   LEDARMED = false;
   try{ localStorage.removeItem(MOVES_KEY); }catch(e){}
   try{ localStorage.removeItem("reccheck_moves_last"); }catch(e){}
+  /* The live loop remembers each list it has already written, so that an unchanged one
+     costs nothing. Emptying the ledger without clearing that memory means every list still
+     looks unchanged and nothing is ever written back — he would clear it and watch it stay
+     cleared while protel sat there full. */
+  try{ if(window.__taForget) window.__taForget(); }catch(e){}
   paintLedger();
   const b = $("#mLedger");
   if(b) b.querySelector(".mSub").textContent = t("sc.ledgerDone");
@@ -5565,6 +5570,9 @@ const I18N={
   live_named:" {0} room(s) took their name from protel, uncut.",
   live_idle:"protel\u2019s in-house list is not open \u2014 press to read it once it is.",
   al_moveNoX:"Room move {0}\u2192{1} ({2}) has no X in protel \u2014 protel will not show it.",
+  live_arr:"Arrival report {2}: {0} rows, {1} stays recorded.",
+  live_dep:"Departure report {2}: {0} rows, {1} stays recorded.",
+  live_held:" {0} holding-room row(s) ignored.",
   live_wrong:"That is not the in-house list \u2014 the window it found says \u201c{0}\u201d. Nothing was recorded.",
   live_nodate:"No date in \u201c{0}\u201d, so there is no night to file these under. Nothing was recorded.",
   slot_rate:"Rate Check", slot_rate_sub:"in-house list · pre-EOD", slot_tax:"Tax Check", slot_tax_sub:"charges history · post-EOD",
@@ -5629,6 +5637,9 @@ const I18N={
   live_named:" {0} δωμάτια πήραν το όνομά τους από το protel, ακέραιο.",
   live_idle:"Η λίστα παραμονών του protel δεν είναι ανοιχτή — πάτησε για ανάγνωση μόλις ανοίξει.",
   al_moveNoX:"Η αλλαγή δωματίου {0}→{1} ({2}) δεν έχει X στο protel — το protel δεν θα τη δείξει.",
+  live_arr:"Αφίξεις {2}: {0} γραμμές, {1} διαμονές καταγράφηκαν.",
+  live_dep:"Αναχωρήσεις {2}: {0} γραμμές, {1} διαμονές καταγράφηκαν.",
+  live_held:" {0} γραμμές δωματίου αναμονής αγνοήθηκαν.",
   live_wrong:"Αυτή δεν είναι η λίστα παραμονών — το παράθυρο που βρέθηκε λέει «{0}». Δεν καταγράφηκε τίποτα.",
   live_nodate:"Δεν υπάρχει ημερομηνία στο «{0}», οπότε δεν υπάρχει νύχτα για να καταχωρηθούν. Δεν καταγράφηκε τίποτα.",
   slot_rate:"Rate Check", slot_rate_sub:"λίστα παραμονών · πριν το EOD", slot_tax:"Tax Check", slot_tax_sub:"ιστορικό χρεώσεων · μετά το EOD",
@@ -6265,6 +6276,12 @@ let LIVE_SIG = "";                       // the last list seen, so an unchanged 
    Two seconds is nothing to him — the list lands while he is still looking at protel —
    and it is a third off the load on software that is not his. */
 const LIVE_RETRY_MS = 5000;
+/* Clearing the ledger from OPTIONS must also clear what the loop remembers, or every list
+   looks unchanged and nothing is ever written back — he would empty it and watch it stay
+   empty. The reset lives in the other scope, so this is its door. */
+window.__taForget = function(){
+  try{ LIVE_SIG = ""; MOVES_SIG = ""; RPT_SIG = {}; }catch(e){}
+};
 function liveStop(){
   if(LIVE_TIMER){ clearInterval(LIVE_TIMER); LIVE_TIMER = null; }
 }
@@ -6276,10 +6293,30 @@ function liveEnsure(){
   autoReadInhouse();
   LIVE_TIMER = setInterval(autoReadInhouse, LIVE_RETRY_MS);
 }
+/* THE IN-HOUSE LIST EVERY TICK, THE OTHER THREE IN TURN.
+
+   Four lists on every tick would be four rc-tbind.exe launches every five seconds -- some
+   thirty thousand process starts across a night shift, on his machine, for lists that do
+   not change that fast. The in-house list is the one everything else is built on, so it
+   keeps the cadence he asked for; the moves window and the two reports take one tick each
+   in rotation, which is a read of each about every fifteen seconds.
+
+   A failed hunt still costs protel nothing at all -- it is window-manager reads and no
+   message is sent until the list is found -- so the rotation is about the machine, not
+   about protel. */
+let LIVE_TURN = 0;
 async function autoReadInhouse(){
   if(legacyOn() || !LIVE_OK){ liveStop(); return; }
-  await readInhouseLive(true);
-  await readMovesLive();
+  /* Each read is caught on its own. Awaited bare, one throw in the in-house read would
+     stop the moves window and both reports being read for the rest of the night, and
+     nothing on screen would say so. */
+  try{ await readInhouseLive(true); }catch(e){}
+  const turn = LIVE_TURN++ % 3;
+  try{
+    if(turn === 0) await readMovesLive();
+    else if(turn === 1) await readReportLive("arrivals");
+    else await readReportLive("departures");
+  }catch(e){}
 }
 /* THE MOVES WINDOW, and only for the missing X.
 
@@ -6305,6 +6342,130 @@ function parseTagged(txt, tag){
                                      enc:c[5]||"", cut:c[6] === "cut-short"};
   }
   return {rows, title, done, err};
+}
+/* ---- the arrival and departure reports ----
+
+   ARRIVALS AND DEPARTURES ARE NOT A CENSUS, and that is the whole design constraint.
+   `saveMoves` and `detectMoves` are written for the IN-HOUSE list, which names every
+   occupied room, and both reason from ABSENCE: a room the list does not mention is a room
+   the guest has left. An arrival report names thirty rooms out of two hundred. Putting one
+   through saveMoves would read as a hundred and seventy people leaving at once and mark
+   half the hotel as having moved rooms -- the 30/08 failure, reproduced deliberately.
+
+   So these two get their own writer. It states only what its rows state -- this room, this
+   arrival, this departure, this name -- and it adds and corrects. It never deletes, never
+   prunes, and never concludes anything from a room being absent.
+
+   Each report carries only ONE of the two dates, because the other is the report's own: an
+   arrival report for the 4th lists guests arriving on the 4th, with their departures; a
+   departure report for the 4th lists guests leaving on the 4th, with their arrivals.
+   Corroborated twice: his 23:17 reads, and protel's own home screen, where the Arrivals
+   panel's date column reads Dep. and the Departures panel's reads Arr. */
+const AR = {NAME: 0, ROOM: 1, OCC: 2, DEP: 3, STATUS: 4};
+const DP = {NAME: 0, ROOM: 1, OCC: 2, ARR: 3, STATUS: 4};
+/* Room 9000, type ACC, is a holding room -- his word, 04/09: "9000 is a holding room,
+   ignore it". Anything that is not a real two or three digit room is dropped and counted,
+   never guessed at. */
+function stayFromRow(r, map, night, arrIsNight){
+  const status = String(r[map.STATUS] || "").trim();
+  if(/reversal|void/i.test(status)) return {cancelled: true};
+  const cell = String(r[map.ROOM] || "").trim();
+  const room = (cell.split("-")[0] || "").trim();
+  if(!/^\d{2,3}$/.test(room)) return {dropped: true};
+  const other = String(r[arrIsNight ? map.DEP : map.ARR] || "").trim();
+  const arr = arrIsNight ? night : other;
+  const dep = arrIsNight ? other : night;
+  if(!dkey(arr)) return {dropped: true};
+  /* ReadCell returns "" for every failure it has, so a half-read row looks like a row with
+     empty cells. An empty STATUS is not "not cancelled" and an empty NAME is not a guest —
+     a row is only a stay when the whole of it arrived. */
+  const name = String(r[map.NAME] || "").trim();
+  if(!name || !status) return {dropped: true};
+  return {rec: {room: room, arr: arr, dep: dep, name: name, status: status}};
+}
+function reportToStays(rows, night, arrIsNight){
+  const map = arrIsNight ? AR : DP;
+  const recs = []; let dropped = 0, cancelled = 0;
+  for(const r of (rows || [])){
+    if(!r) continue;
+    const o = stayFromRow(r, map, night, arrIsNight);
+    if(o.cancelled){ cancelled++; continue; }
+    if(o.dropped){ dropped++; continue; }
+    recs.push(o.rec);
+  }
+  return {recs: recs, dropped: dropped, cancelled: cancelled};
+}
+/* Purely additive. A newer report wins; an older one may fill a blank but never overwrite,
+   and a move already recorded against a stay is not ours to drop.
+
+   `night` here is the business night THIS READ HAPPENED ON, not the date printed on the
+   report. That distinction is the whole of a bug the audit found: stamping `seen` with the
+   caption's date meant a report he had opened for a FUTURE day wrote entries stamped in
+   the future, which the `seen` guard below then refused to let any later read correct.
+   The stay would have been frozen with whatever that window said. The report's own date
+   goes into the arrival or the departure, where it belongs; `seen` records when we learned
+   it, which is now. */
+function feedStays(recs, night){
+  if(!recs || !recs.length || !night) return 0;
+  let wrote = 0;
+  try{
+    const led = loadLedger();
+    for(const r of recs){
+      const a = dkey(r.arr);
+      if(!r.room || !a) continue;
+      const d = dkey(r.dep) || 0;
+      const m = led[r.room] || (led[r.room] = {});
+      const cur = m[a];
+      if(!cur){ m[a] = {d: d, n: r.name || "", seen: night}; wrote++; continue; }
+      if(night < (cur.seen || 0)) continue;
+      const next = {d: d || cur.d || 0, n: r.name || cur.n || "", seen: night};
+      if(cur.from) next.from = cur.from;
+      if(cur.mv) next.mv = cur.mv;
+      if(next.d !== (cur.d || 0) || next.n !== (cur.n || "")) wrote++;
+      m[a] = next;
+    }
+    localStorage.setItem(MOVES_KEY, JSON.stringify(led));
+  }catch(e){ return 0; }
+  return wrote;
+}
+let RPT_BUSY = {}, RPT_SIG = {};
+async function readReportLive(fn){
+  if(RPT_BUSY[fn] || !window.reccheckShortcuts || !window.reccheckShortcuts[fn]) return;
+  RPT_BUSY[fn] = true;
+  try{
+    const txt = await window.reccheckShortcuts[fn](600).catch(() => null);
+    if(!txt) return;
+    const arrIsNight = fn === "arrivals";
+    const p = parseTagged(txt, arrIsNight ? "AR" : "DP");
+    if(p.err || !p.rows.length) return;
+    if(!(arrIsNight ? /arrival\s*report/i : /departure\s*report/i).test(p.title)) return;
+    /* the same two refusals the in-house read has, and for the same reasons */
+    if(p.done && p.done.cut) return;
+    const night = inhouseDate(p.title);
+    const key = dkey(night);
+    if(!key) return;
+    const sig = p.title + "|" + p.rows.map(r => r.join("~")).join(";");
+    if(sig === RPT_SIG[fn]) return;
+    const out = reportToStays(p.rows, night, arrIsNight);
+    if(!out.recs.length) return;
+    const wrote = feedStays(out.recs, bnk());
+    /* THE REPORT NAMES DO NOT GO INTO THE ROOM DATABASE, and the first cut of this had
+       them doing exactly that. __rcLiveNames is the CENSUS door: it says "this is who is
+       in this room now", and syncRooms then treats a stored name that does not match the
+       receipt as a room that has turned over — stamping movedOn and DELETING the nickname.
+       A departure report names the guest who has LEFT. On a changeover the arrival and
+       departure reports name different people for the same room and would fight over it
+       every fifteen seconds. The in-house list is the census and already supplies the
+       names; these two are not, and have no business writing them. */
+    /* remembered only once the write has actually happened — set before it, a failed
+       feedStays would mean this report was never tried again */
+    RPT_SIG[fn] = sig;
+    const say = el('liveSay');
+    if(say) say.textContent = t(arrIsNight ? 'live_arr' : 'live_dep',
+                                out.recs.length, wrote, night)
+                            + (out.dropped ? t('live_held', out.dropped) : '');
+  }catch(e){}
+  finally{ RPT_BUSY[fn] = false; }
 }
 let MOVES_BUSY = false, MOVES_SIG = "";
 async function readMovesLive(){

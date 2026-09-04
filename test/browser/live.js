@@ -269,6 +269,56 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
      await p.evaluate(() => window.__tx.getPair() === null));
   await p.close();
 
+  /* 13. THE ARRIVAL AND DEPARTURE REPORTS, end to end and unattended.
+         The one that matters: a report names thirty rooms out of two hundred, and both
+         saveMoves and detectMoves reason from ABSENCE. If a report went down that path it
+         would read as a hundred and seventy people leaving at once. So a ledger full of
+         in-house stays must come through a report untouched except for what the report
+         actually names. */
+  const RPT = (tag, title, rows) => [
+    "TITLE\t" + title,
+    ...rows.map(r => tag + "\t" + r.join("\t")),
+    "DONE\t" + rows.length + "\t" + rows.length + "\t83\t47\tunicode\tcomplete"].join("\n");
+  const ARR = RPT("AR", "Arrival Report for the 04/09/26", [
+    ["AMANN ANJA/BERND ", "337", "2/0/0/0/0", "14/09/26", "CI"]]);
+  const DEP = RPT("DP", "Departure Report for 04/09/26", [
+    ["BURWIECK/GRUBE TAREK/KATHARINA ", "125", "2/0/0/0/0", "28/08/26", "CO"],
+    ["BRUEMMER FRED/GUDRUN ", "9000", "0/0/0/0/0", "04/09/26", "CO"]]);
+
+  p = await b.newPage();
+  await p.addInitScript(`window.reccheckShortcuts={
+    get:()=>Promise.resolve({profiles:[],active:null,available:true}),
+    helper:()=>Promise.resolve({state:"started"}),
+    inhouse:()=>Promise.resolve(${JSON.stringify(IH("Guests inhouse: 04/09/26", ROWS))}),
+    moves:()=>Promise.resolve(null),
+    arrivals:()=>Promise.resolve(${JSON.stringify(ARR)}),
+    departures:()=>Promise.resolve(${JSON.stringify(DEP)})};
+    try{ localStorage.setItem("reccheck_legacy","0"); }catch(e){}`);
+  await p.setViewportSize({width: 1280, height: 620});
+  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
+  await p.waitForTimeout(1200);
+  const led0 = await p.evaluate(() => JSON.parse(localStorage.getItem("reccheck_moves_v2") || "{}"));
+  ck("the in-house list landed first", !!led0["426"] && !!led0["414"]);
+
+  /* the reports take one tick each in rotation, so give the loop time to reach both */
+  await p.waitForTimeout(22000);
+  const led = await p.evaluate(() => JSON.parse(localStorage.getItem("reccheck_moves_v2") || "{}"));
+  ck("the arrival report reached the ledger",   !!(led["337"] && led["337"][20260904]));
+  ck("with its own date as the ARRIVAL and the row's as the departure",
+     !!(led["337"] && led["337"][20260904] && led["337"][20260904].d === 20260914));
+  ck("the departure report reached it too",     !!(led["125"] && led["125"][20260828]));
+  ck("with its own date as the DEPARTURE",
+     !!(led["125"] && led["125"][20260828] && led["125"][20260828].d === 20260904));
+  ck("the holding room 9000 was ignored",       !led["9000"]);
+
+  /* AND THE ROOMS THE REPORTS NEVER MENTION ARE UNTOUCHED */
+  ck("the in-house rooms survived both reports", !!led["426"] && !!led["414"]);
+  ck("none of them was marked as having left",
+     !led["426"][Object.keys(led["426"])[0]].mv && !led["414"][Object.keys(led["414"])[0]].mv);
+  ck("nor had its departure rewritten",
+     led["426"][20260829] && led["426"][20260829].d === 20260905);
+  await p.close();
+
   await b.close();
   console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");
   process.exit(bad ? 1 : 0);

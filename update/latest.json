@@ -1,11 +1,11 @@
 {
-  "version": "1.17.33",
+  "version": "1.17.34",
   "type": "full",
-  "engine": "1.17.33",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.33/RecCheck-Setup.exe",
-  "setupSha256": "f63ae194522e1856e8a8d269c7acced84303e097a6678cfbc6161272049cca2d",
+  "engine": "1.17.34",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.34/RecCheck-Setup.exe",
+  "setupSha256": "b4ed92d250e347c3638805c8409fd36bfc8e6a469308e0582bc5d4b7ed235ac9",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "dcca5fb9a35defcd5b6da27e4a685c82be5a228316017912778ee28c5ee8d46d",
-  "notes": "ALERTS, on the home screen below AUDIT. It pulses red while something is unread, groups by date, and each one has a Resolve button that removes it for good.\n\nThe first thing it watches: a room move protel has no X against. With legacy mode off the tool now reads the move window too, and tells you about a move protel is not going to show you. It does not record the move itself — which room is the one being left is still not confirmed, and guessing that would put two wrong rooms in the ledger.\n\nAlso fixed: guest names now really do arrive uncut, and an unattended read that protel cut short is no longer written to the ledger."
+  "sha256": "1e8a32af43e1c6e341b75a56a8a6ee6334fbf2fa8f9176caa25786e0e8a0bb71",
+  "notes": "All four lists now. With legacy mode off the tool reads protel's in-house list every five seconds and takes the move window, the arrival report and the departure report in turn — open any of them in the course of your own work and it is taken as it goes past.\n\nThe arrival and departure reports go in through their own writer, which can only state what its own rows say. A report names thirty rooms out of two hundred, and the rest of the ledger reads a missing room as a guest who has left, so it never goes near that. Room 9000 is ignored.\n\nALERTS is on the home screen below AUDIT: it pulses red while something is unread, groups by date, and Resolve removes for good."
 }
