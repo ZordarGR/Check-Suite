@@ -741,6 +741,25 @@ ipcMain.handle("sc-diag", (_e, delayMs) => new Promise(res => {
    control in another process that buffer must live in that process. The report says so
    itself and prints how many messages it asked and how long it took, the same terms the
    window scan shipped on. Nothing here feeds the ledger yet. */
+/* protel's in-house list, straight into the ledger. Same read as sc-readlist and the same
+   cost — fewer columns, so fewer messages: six of sixteen over 250 rows is 1500 rather
+   than 4000. Returns the helper's raw tab-separated answer; the page parses it, because
+   the page is where the shape it has to become already lives. */
+ipcMain.handle("sc-inhouse", (_e, maxRows) => new Promise(res => {
+  if(process.platform !== "win32" || !tauPath()){ res(null); return; }
+  const n = Math.max(1, Math.min(2000, +maxRows || 400));
+  const chunks = []; let done = false;
+  const finish = () => { if(done) return; done = true;
+    const out = Buffer.concat(chunks).toString("utf8");
+    res(out || null); };
+  try{
+    const child = spawn(tauPath(), ["inhouse", String(process.pid), "0", String(n)], {windowsHide: true});
+    child.stdout.on("data", d => { chunks.push(d); });
+    child.on("exit", finish);
+    child.on("error", finish);
+    setTimeout(() => { try{ child.kill(); }catch(e){} finish(); }, 30000);
+  }catch(e){ finish(); }
+}));
 ipcMain.handle("sc-readlist", (_e, delayMs, rows) => new Promise(res => {
   if(process.platform !== "win32" || !tauPath()){ res(null); return; }
   const wait = Math.max(1000, Math.min(30000, +delayMs || 6000));

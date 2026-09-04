@@ -686,6 +686,7 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
 #taxScreen .menu-item{display:block;width:100%;text-align:left;font:inherit;font-size:13px;background:none;border:none;color:var(--txt);padding:8px 10px;border-radius:7px;cursor:pointer;}
 #taxScreen .menu-item:hover{background:var(--panel2);}
 #taxScreen .menu-item.danger{color:#ff9a94;}#taxScreen .menu-item.danger:hover{background:var(--redbg);color:#ffb4b0;}
+#taxScreen #liveRow{display:flex;align-items:center;gap:10px;margin:18px 0 0;flex-wrap:wrap;}
 #taxScreen .slots{display:flex;gap:10px;margin:20px 0 6px;flex-wrap:wrap;}
 #taxScreen .slot{flex:1;min-width:240px;border:1.5px dashed var(--line);border-radius:10px;padding:16px;text-align:center;cursor:pointer;transition:.15s;background:var(--panel2);display:block;}
 #taxScreen .slot:hover, #taxScreen .slot.over{border-color:var(--accent);background:#101a26;}
@@ -955,6 +956,10 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
     <div class="menu"><button id="menu-btn" class="menu-btn" title="Menu" aria-label="Menu">⋮</button><div class="menu-drop" id="menu-drop"><button id="reset-mem" class="menu-item danger" data-i18n="menu_reset"></button></div></div>
   </div>
 
+  <div id="liveRow" style="display:none">
+    <button class="mini" id="liveRead"></button>
+    <span class="legend" id="liveSay"></span>
+  </div>
   <div class="slots">
     <label class="slot" id="slot-rate" for="file-rate">
       <span class="num">①</span><b data-i18n="slot_rate"></b><small data-i18n="slot_rate_sub"></small>
@@ -1359,7 +1364,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.26";
+const APP_VERSION = "1.17.27";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -5242,6 +5247,12 @@ const I18N={
  en:{
   app_brand:"TA Check", app_rest:"— protel occupancy vs postings",
   app_sub:"Load the Rate Check (pre-EOD, who's in-house) and the Tax Check (post-EOD, what posted). The tool cross-references the night and flags what didn't post.",
+  live_read:"Read the in-house list from protel", live_reading:"reading protel\u2026",
+  live_none:"Nothing came back. Bring protel\u2019s in-house list to the front and try again.",
+  live_err:"protel said: ", live_got:"{0} of {1} rows \u2014 {2} rooms, {3} stays recorded for {4}. {5} messages, {6} ms.",
+  live_cut:" Stopped early \u2014 protel was answering slowly.", live_cancel:" {0} cancelled row(s) ignored.",
+  live_wrong:"That is not the in-house list \u2014 the window in front says \u201c{0}\u201d. Nothing was recorded.",
+  live_nodate:"No date in \u201c{0}\u201d, so there is no night to file these under. Nothing was recorded.",
   slot_rate:"Rate Check", slot_rate_sub:"in-house list · pre-EOD", slot_tax:"Tax Check", slot_tax_sub:"charges history · post-EOD",
   sec_memory:"Room memory by date", btn_clearmem:"clear all memory", menu_reset:"Reset memory (start fresh)",
   stat_night:"Night audited", stat_inhouse:"In-house rooms", stat_posted:"Rooms posted", stat_flags:"To act on",
@@ -5297,6 +5308,12 @@ const I18N={
  el:{
   app_brand:"Έλεγχος ΤΑ", app_rest:"— πληρότητα protel vs καταχωρήσεις",
   app_sub:"Φόρτωσε το Rate Check (πριν το EOD, ποιοι είναι μέσα) και το Tax Check (μετά το EOD, τι καταχωρήθηκε). Το εργαλείο διασταυρώνει τη νύχτα και επισημαίνει ό,τι δεν μπήκε.",
+  live_read:"Διάβασε τη λίστα παραμονών από το protel", live_reading:"διαβάζει το protel…",
+  live_none:"Δεν ήρθε τίποτα. Φέρε μπροστά τη λίστα παραμονών του protel και ξαναδοκίμασε.",
+  live_err:"το protel είπε: ", live_got:"{0} από {1} γραμμές — {2} δωμάτια, {3} διαμονές για {4}. {5} μηνύματα, {6} ms.",
+  live_cut:" Σταμάτησε νωρίς — το protel απαντούσε αργά.", live_cancel:" {0} ακυρωμένες γραμμές αγνοήθηκαν.",
+  live_wrong:"Αυτή δεν είναι η λίστα παραμονών — το παράθυρο μπροστά λέει «{0}». Δεν καταγράφηκε τίποτα.",
+  live_nodate:"Δεν υπάρχει ημερομηνία στο «{0}», οπότε δεν υπάρχει νύχτα για να καταχωρηθούν. Δεν καταγράφηκε τίποτα.",
   slot_rate:"Rate Check", slot_rate_sub:"λίστα παραμονών · πριν το EOD", slot_tax:"Tax Check", slot_tax_sub:"ιστορικό χρεώσεων · μετά το EOD",
   sec_memory:"Μνήμη δωματίων ανά ημερομηνία", btn_clearmem:"διαγραφή μνήμης", menu_reset:"Επαναφορά μνήμης (καθαρή αρχή)",
   stat_night:"Νύχτα ελέγχου", stat_inhouse:"Κατειλημμένα δωμάτια", stat_posted:"Δωμάτια με καταχώρηση", stat_flags:"Προς ενέργεια",
@@ -5388,6 +5405,52 @@ if(!bizDate){let best=-1;for(const d of Object.keys(dcount))if(dcount[d]>best){b
 const rooms={};for(const g of pages){let cur=null;for(const row of toRows(g)){row.sort((a,b)=>a.x-b.x);const dates=row.filter(c=>/^\d{2}\/\d{2}\/\d{2}$/.test((c.t||'').trim())).map(c=>c.t.trim());const isData=dates.length>=2 && row[0] && /^\d/.test((row[0].t||'').trim());if(!isData){if(cur){const nm=row.filter(c=>c.x>=100&&c.x<235&&/[A-Za-zΑ-Ω]/.test(c.t)&&!/Print Date|PROTEL|Arrival Date|Departure|^Name$|^Room$|Kernos|Page/i.test(c.t)).map(c=>c.t.trim());if(nm.length)cur.name=(cur.name+' '+nm.join(' ')).trim();}continue;}let cell=(row[0].t||'').trim();const hasSepOcc=row.some(c=>c.x>=375&&c.x<478&&/^\d{4}$/.test((c.t||'').trim()));let core=hasSepOcc?cell:cell.slice(0,-4);const room=(core.split('-')[0]||'').trim();if(!/^\d{2,3}$/.test(room))continue;const partner=core.includes('-')?core.split('-')[1]:'';const name=row.filter(c=>c.x>=100&&c.x<235&&/[A-Za-zΑ-Ω]/.test(c.t)).map(c=>c.t.trim()).join(' ');const term=row.filter(c=>c.x>=535&&c.x<572&&/[A-Za-z]/.test(c.t)).map(c=>c.t.trim()).join('');const agent=row.filter(c=>c.x>=572&&/[A-Za-zΑ-Ω0-9]/.test(c.t)).map(c=>c.t.trim()).join(' ');cur={room,arr:dates[0],dep:dates[1],name,term,agent,adjoining:!!partner,partner};rooms[room]=cur;(all[room]=all[room]||[]).push(cur);}}let dateKey=dkey(bizDate),dateSure=!!dateKey;
 if(!dateKey)for(const room of Object.keys(all))for(const r of all[room]){const a=dkey(r.arr);if(a>dateKey)dateKey=a;}
 return{kind:'rate',bizDate,dateKey,dateSure,count:Object.keys(rooms).length,rooms,all};}
+/* ---- protel's in-house list, read live, in the shape parseRate already produces ----
+   Deliberately returns the SAME object as parseRate so the whole tested path downstream —
+   detectMoves, the seen>= guard, the prune, the ledger write — is reused rather than
+   written a second time against the same ledger.
+
+   Columns, confirmed by him on 04/09 against a real read of "Guests inhouse: 04/09/26":
+     0 name (whole, not cut — the reason for all of this)   2 room   3 type
+     4 occupancy   5 ARRIVAL   6 DEPARTURE   11 status
+
+   Status is Confirmed, CI, CO, or Reversal/Void when it is cancelled. A CANCELLED ROW IS
+   NOT A STAY and is not recorded; everything else is what protel holds, so it is. That is
+   the only row this drops, and it drops it rather than deducing anything from it.
+
+   Columns 12-14 are the group and the travel agent. His words: "we dont need the travel
+   agencies" — they are not read and not stored. Occupancy IS kept, unused, at his
+   request: "keep it just in case we need something later on".
+
+   The room cell carries the adjoining pair as "414-15", which is why the key is the part
+   before the dash — the same split parseRate does. */
+const IH = {NAME: 0, ROOM: 2, TYPE: 3, OCC: 4, ARR: 5, DEP: 6, STATUS: 11};
+function inhouseToRate(rows, bizDate){
+  const all = {}, rooms = {};
+  let cancelled = 0, unusable = 0;
+  for(const r of (rows || [])){
+    if(!r) continue;
+    const status = String(r[IH.STATUS] || "").trim();
+    if(/reversal|void/i.test(status)){ cancelled++; continue; }
+    const cell = String(r[IH.ROOM] || "").trim();
+    const room = (cell.split("-")[0] || "").trim();
+    if(!/^\d{2,3}$/.test(room)){ unusable++; continue; }
+    const arr = String(r[IH.ARR] || "").trim(), dep = String(r[IH.DEP] || "").trim();
+    if(!dkey(arr)){ unusable++; continue; }        // no arrival date, no stay
+    const partner = cell.indexOf("-") >= 0 ? (cell.split("-")[1] || "").trim() : "";
+    const cur = {room: room, arr: arr, dep: dep,
+                 name: String(r[IH.NAME] || "").trim(),
+                 term: "", agent: "",
+                 adjoining: !!partner, partner: partner,
+                 status: status, occ: String(r[IH.OCC] || "").trim()};
+    rooms[room] = cur;
+    (all[room] = all[room] || []).push(cur);
+  }
+  const dateKey = dkey(bizDate);
+  return {kind: "rate", live: true, bizDate: bizDate, dateKey: dateKey, dateSure: !!dateKey,
+          count: Object.keys(rooms).length, rooms: rooms, all: all,
+          cancelled: cancelled, unusable: unusable};
+}
 function crossReference(rate,tax,nightKey){const N=nightKey||tax.dateKey;const totalFail=[],autoMiss=[],adjoining=[],ok=[];let notOwed=0;for(const room of Object.keys(rate.rooms)){const rr=rate.rooms[room];const aK=dkey(rr.arr),dK=dkey(rr.dep);const occ=aK&&dK&&aK<=N&&N<dK;if(!occ){notOwed++;continue;}if(rr.adjoining){adjoining.push({room,name:rr.name,partner:rr.partner});continue;}const tr=tax.rooms[room];if(!tr||tr.arr===0){totalFail.push({room,name:rr.name,covered:tr?(tr.man>0):false});}else if(tr.auto===0){autoMiss.push({room,name:rr.name,covered:tr.man>0});}else{ok.push(room);}}const over=[];for(const room of Object.keys(tax.rooms)){const b=tax.rooms[room];if((b.auto+b.man)>=2&&b.arr>0)over.push({room,extra:(b.auto+b.man)-1});}const sk=a=>a.sort((x,y)=>(parseInt(x.room||x)||0)-(parseInt(y.room||y)||0));return{nightKey:N,totalFail:sk(totalFail),autoMiss:sk(autoMiss),adjoining:sk(adjoining),overcharge:sk(over),okCount:ok.length,notOwed};}
 
 /* ============ state + memory ============ */
@@ -5811,7 +5874,7 @@ document.addEventListener('keydown',e=>{
 });
 
 /* ============ language ============ */
-function applyStatic(){el('apptitle').innerHTML='<span>'+t('app_brand')+'</span> '+t('app_rest');document.querySelectorAll('[data-i18n]').forEach(e=>{e.textContent=t(e.getAttribute('data-i18n'));});el('memhint').textContent=t('mem_hint');el('foot').textContent=t('foot');}
+function applyStatic(){el('apptitle').innerHTML='<span>'+t('app_brand')+'</span> '+t('app_rest');document.querySelectorAll('[data-i18n]').forEach(e=>{e.textContent=t(e.getAttribute('data-i18n'));});el('memhint').textContent=t('mem_hint');el('foot').textContent=t('foot');try{ if(el('liveRead')) el('liveRead').textContent=t('live_read'); }catch(e){}}
 function setLang(l){LANG=l;try{localStorage.setItem('ta_lang',l);}catch(e){}applyStatic();render();}
 
 /* ============ file loading ============ */
@@ -5826,8 +5889,82 @@ function showMoveSave(r){
   box.style.color='';
   box.textContent=t('mv_saved',r.rooms,r.res,dfmt(r.night)||'?')+(r.sure?'':' '+t('mv_guessdate'));
 }
+/* ---- the in-house list, read live, instead of printed to XPS ----
+   The helper answers in tab-separated lines: TITLE, then one IH row per guest, then DONE
+   with the counts and the cost. Everything after the parse is the SAME path a loaded
+   .oxps takes — inhouseToRate produces exactly what parseRate produces, and saveMoves
+   does the rest. Nothing here writes the ledger by itself. */
+function parseInhouse(txt){
+  const rows = []; let title = "", done = null, err = "";
+  for(const line of String(txt || "").split(/\r?\n/)){
+    if(!line) continue;
+    const c = line.split("\t");
+    if(c[0] === "IH"){ rows.push([c[1], "", c[2], "", c[3], c[4], c[5], "", "", "", "", c[6]]); }
+    else if(c[0] === "TITLE") title = c[1] || "";
+    else if(c[0] === "ERR") err = c[1] || "unknown";
+    else if(c[0] === "DONE") done = {got:+c[1]||0, rows:+c[2]||0, msgs:+c[3]||0, ms:+c[4]||0,
+                                     enc:c[5]||"", cut:c[6] === "cut-short"};
+  }
+  return {rows, title, done, err};
+}
+/* A read only becomes data when the window holding the list SAYS it is the in-house
+   list. On 04/09 he had the arrival list open but restored, not maximised: the frame's
+   caption named no report at all and the read came back with the in-house list's 250
+   rows sitting behind it. The helper now scopes a read to the active MDI child and
+   reports that child's own caption, and this refuses anything that caption does not
+   identify. Without both, whichever list happened to be in front would have gone into
+   the ledger as tonight's stays.
+
+   The refusal SHOWS the caption it saw. If protel words it differently on his machine
+   the wording is on screen to be read, rather than a pattern guessed at from here. */
+function isInhouseTitle(title){ return /in\s*-?\s*house/i.test(String(title || "")); }
+/* "Guests inhouse: 04/09/26" — the date is in the window's own caption, which is the one
+   thing about this that costs protel nothing at all. */
+function inhouseDate(title){
+  const m = String(title || "").match(/(\d{1,2}\/\d{1,2}\/\d{2,4})/g);
+  return m && m.length ? m[m.length - 1] : "";
+}
+async function readInhouseLive(){
+  const btn = el('liveRead'), say = el('liveSay');
+  if(!window.reccheckShortcuts || !window.reccheckShortcuts.inhouse || btn.disabled) return;
+  btn.disabled = true; say.textContent = t('live_reading');
+  const txt = await window.reccheckShortcuts.inhouse(400).catch(() => null);
+  btn.disabled = false;
+  if(!txt){ say.textContent = t('live_none'); return; }
+  const p = parseInhouse(txt);
+  if(p.err){ say.textContent = t('live_err') + p.err; return; }
+  if(!p.rows.length){ say.textContent = t('live_none'); return; }
+  if(!isInhouseTitle(p.title)){ say.textContent = t('live_wrong', p.title || '?'); return; }
+  const biz = inhouseDate(p.title);
+  /* The caption is the only place the live path can learn the night from. Filing 250
+     stays under a guessed date is exactly the kind of helpful deduction that put 83
+     departures on his panel, so it does not happen: it refuses and says why. */
+  if(!biz){ say.textContent = t('live_nodate', p.title || '?'); return; }
+  const rate = inhouseToRate(p.rows, biz);
+  if(!rate.count){ say.textContent = t('live_none'); return; }
+  RATE = rate;
+  const saved = saveMoves(rate);
+  PAIR_OVERRIDE = null; ADJ_OPEN_OVERRIDE = null;
+  el('fn-rate').textContent = p.title || biz;
+  showMoveSave(saved);
+  const d = p.done || {};
+  say.textContent = t('live_got', d.got || p.rows.length, d.rows || p.rows.length,
+                      rate.count, (saved && saved.res) || 0, biz || '?', d.msgs || 0, d.ms || 0)
+                  + (d.cut ? t('live_cut') : '')
+                  + (rate.cancelled ? t('live_cancel', rate.cancelled) : '');
+  render();
+}
 async function loadRate(file){clearErr();el('fn-rate').textContent=file?file.name:'';el('mv-rate').textContent='';if(!file)return;try{const pages=await readOxps(file);const r=parseRate(pages);if(!r.count){showErr(t('err_norooms'));return;}RATE=r;showMoveSave(saveMoves(r));PAIR_OVERRIDE=null;ADJ_OPEN_OVERRIDE=null;el('slot-rate').classList.add('loaded');render();}catch(e){showErr(e.message==='notxps'?t('err_notxps'):t('err_read')+e.message);}}
 async function loadTax(file){clearErr();el('fn-tax').textContent=file?file.name:'';if(!file)return;try{const pages=await readOxps(file);const tokens=pagesToTokens(pages);const r=parseTax(tokens);if(!r.totalRooms){showErr(t('err_norooms'));return;}TAX=r;PAIR_OVERRIDE=null;ADJ_OPEN_OVERRIDE=null;ingestTax(r);if(r.fileDate)EXPANDED.add(r.fileDate);el('slot-tax').classList.add('loaded');render();}catch(e){showErr(e.message==='notxps'?t('err_notxps'):t('err_read')+e.message);}}
+/* Only where there is a helper to ask. In a browser, or on a machine without it, the row
+   is not there at all rather than there and dead. */
+try{
+  if(window.reccheckShortcuts && window.reccheckShortcuts.inhouse){
+    el('liveRow').style.display = 'flex';
+    el('liveRead').textContent = t('live_read');
+    el('liveRead').addEventListener('click', readInhouseLive);
+  }
+}catch(e){}
 el('file-rate').addEventListener('change',e=>loadRate(e.target.files[0]));
 el('file-tax').addEventListener('change',e=>loadTax(e.target.files[0]));
 [['slot-rate','file-rate',loadRate],['slot-tax','file-tax',loadTax]].forEach(([sid,fid,fn])=>{const s=el(sid);['dragenter','dragover'].forEach(ev=>s.addEventListener(ev,e=>{e.preventDefault();s.classList.add('over');}));['dragleave','drop'].forEach(ev=>s.addEventListener(ev,e=>{e.preventDefault();s.classList.remove('over');}));s.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f){el(fid).files=e.dataTransfer.files;fn(f);}});});

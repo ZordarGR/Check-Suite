@@ -21,6 +21,7 @@ Run the ones that need nothing but node:
 | `lvitem.cs` | the LVITEM the list control reads, laid out for the **target's** bitness. Get an offset wrong and the read silently returns nothing, which looks exactly like "protel will not allow it" |
 | `stdout.js` | the helper's output reaches RecCheck as bytes. Greek guest names are the first non-ASCII thing to cross that pipe — this splits one mid-character across two chunks and checks it survives |
 | `quiet.js` | the real `main.js` with electron stubbed: the 07:00 reset must not summon the overlay |
+| `inhouse.js` | the live in-house read, his five real rows verbatim, through the shipped `inhouseToRate` and then the shipped `saveMoves`. Also which captions may become data at all: the bare frame caption he actually got on 04/09 must not |
 
 ## Browser harnesses
 
@@ -29,7 +30,11 @@ Run the ones that need nothing but node:
     node test/harness.js        # regenerate browser/h-sweep.html from the current page
 
 Then `sweep.js` (every dialog at six window widths), `taxsweep.js` (every screen),
-`legacy.js`, `ledger.js`, `dbgshot.js`, `optshot.js`.
+`legacy.js`, `ledger.js`, `live.js`, `dbgshot.js`, `optshot.js`.
+
+`live.js` is the one to keep honest: it presses the shipped *Read the in-house list*
+button with a stubbed bridge and requires that a list whose caption does not name it
+writes **nothing** to the ledger.
 
 **Regenerate `h-sweep.html` after every change to `index.html`** — it is a copy, and a
 stale one tests the wrong page.
