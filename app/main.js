@@ -490,11 +490,41 @@ app.whenReady().then(() => {
   setInterval(() => runCheck(false), 6 * 3600e3);
 });
 
+/* The overlay he asked for on 04/09: the icon centred with a donut ring around it in the
+   update button's blue, instead of the nothing he watches now.
+
+   IT CANNOT BE THE HELPER, and that was the plan until the .nsi was read properly. The
+   installer's first act is `taskkill /F /IM rc-tbind.exe`, because Windows will not
+   overwrite a running exe. So the helper is copied to TEMP under ANOTHER NAME and that
+   copy is what draws: `taskkill /IM` matches the image name, so it does not match this,
+   and nothing in TEMP is touched by the install.
+
+   Purely cosmetic and deliberately unable to break anything. If the copy fails, the spawn
+   fails, or the drawing fails, the install proceeds exactly as before — nothing waits on
+   it and nothing checks it. It closes itself when RecCheck comes back and on a hard
+   timeout regardless, so a failed install cannot leave it on screen. */
+function startInstallSplash(){
+  if(process.platform !== "win32") return;
+  try{
+    const fs = require("fs"), os = require("os");
+    const exe = tauPath();
+    if(!exe || !fs.existsSync(exe)) return;
+    const dst = path.join(os.tmpdir(), "rc-splash.exe");
+    let ready = false;
+    try{ fs.unlinkSync(dst); }catch(e){}
+    try{ fs.copyFileSync(exe, dst); ready = true; }
+    catch(e){ ready = fs.existsSync(dst); }      // locked by a previous run: that one draws too
+    if(!ready) return;
+    const child = spawn(dst, ["splash", "240"], {detached: true, stdio: "ignore", windowsHide: true});
+    child.unref();
+  }catch(e){}
+}
 ipcMain.handle("reccheck-apply-update", () => {
   if(!updater || !updater.pending) return false;
   if(updater.pending.full){
     if(updater.pending.downloaded && updater.pending.setupPath){
       // run the downloaded installer silently; it relaunches the app when done
+      startInstallSplash();
       try{
         const child = spawn(updater.pending.setupPath, ["/S"], {detached: true, stdio: "ignore"});
         child.unref();

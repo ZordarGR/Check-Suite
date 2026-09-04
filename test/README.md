@@ -19,6 +19,7 @@ Run the ones that need nothing but node:
 | `nighttest.js` | the working night turns at 03:30, the shift at 07:00, and the upgrade never wipes a tick mid-shift |
 | `dst.js` | both boundaries across Greece's real DST transitions — fails on absolute-time arithmetic |
 | `lvitem.cs` | the LVITEM the list control reads, laid out for the **target's** bitness. Get an offset wrong and the read silently returns nothing, which looks exactly like "protel will not allow it" |
+| `splash.cs` | the installation overlay's geometry: the icon centred in the ring, the ring inside the window, the palette the update button's. The drawing needs Windows; where it is placed does not, and both ways of getting it wrong are silent until it is on his screen mid-install |
 | `stdout.js` | the helper's output reaches RecCheck as bytes. Greek guest names are the first non-ASCII thing to cross that pipe — this splits one mid-character across two chunks and checks it survives |
 | `quiet.js` | the real `main.js` with electron stubbed: the 07:00 reset must not summon the overlay |
 | `inhouse.js` | the live in-house read, his five real rows verbatim, through the shipped `inhouseToRate` and then the shipped `saveMoves`. Also which captions may become data at all: the bare frame caption he actually got on 04/09 must not |

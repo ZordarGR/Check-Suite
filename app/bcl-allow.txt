@@ -46,6 +46,7 @@
 <>f__mg$cache8
 <>f__mg$cache9
 <>f__mg$cacheA
+<>f__mg$cacheB
 <>m__0
 <Main>m__0
 <Main>m__1
@@ -64,6 +65,7 @@ ACT_TAU
 action
 ActivateKeyboardLayout
 ActiveMdiChild
+AD_CLOCKWISE
 Add
 add_UnhandledException
 AddHours
@@ -80,6 +82,7 @@ AppendAllText
 AppendLine
 AppendTauLog
 AppendWatch
+Arc
 args
 ARRIVE_MS
 AsyncCallback
@@ -151,6 +154,7 @@ Component
 Concat
 Console
 ContainsKey
+Cos
 counts
 CPOINT
 CrashPath
@@ -173,6 +177,7 @@ Depth
 Describe
 DIAG
 Dictionary`2
+dir
 Directory
 DirectoryInfo
 DispatchMessage
@@ -183,6 +188,7 @@ dwFlags
 dx
 dy
 e
+Ellipse
 Empty
 Encoding
 EndInvoke
@@ -372,6 +378,7 @@ kbHook
 keepEv
 keepKeys
 keepMouse
+keepSplashProc
 keepWndProc
 kernel32.dll
 key
@@ -431,8 +438,10 @@ mapType
 MapVirtualKey
 Marshal
 MatchesNeedle
+Math
 max
 maxRows
+maxSeconds
 mdiClient
 MdiPick
 MEM_COMMIT
@@ -462,6 +471,7 @@ MulticastDelegate
 n
 name
 nCode
+NULL_BRUSH_
 NULL_PEN
 obj
 Object
@@ -512,6 +522,7 @@ protect
 ProtelPid
 ProtelPids
 ps
+PS_ENDCAP_ROUND_
 PS_GEOMETRIC
 PS_SOLID
 pt
@@ -541,6 +552,7 @@ readMsgs
 ReadProcessMemory
 ReadRow
 ReadScope
+RecCheckRunning
 RECT
 RegisterClassEx
 Registry
@@ -557,6 +569,7 @@ row
 RowCount
 Run
 RUNK
+RunSplash
 RunStandalone
 RuntimeCompatibilityAttribute
 RuntimeTypeHandle
@@ -588,6 +601,7 @@ set_CreateNoWindow
 set_IsBackground
 set_Item
 set_UseShellExecute
+SetArcDirection
 SetHost
 SetLayeredWindowAttributes
 SetPolyFillMode
@@ -598,6 +612,7 @@ SetWindowsHookEx
 SetWinEventHook
 ShiftKey
 ShowWindow
+Sin
 size
 SizeOf
 Sleep
@@ -607,6 +622,28 @@ SMTO_ABORTIFHUNG
 SpawnSelf
 spec
 SpecialFolder
+SPLASH_ARC
+SPLASH_BACK
+SPLASH_CLASS
+SPLASH_CX
+SPLASH_CY
+SPLASH_DX
+SPLASH_DY
+SPLASH_H
+SPLASH_PEN
+SPLASH_R
+SPLASH_STEP_MS
+SPLASH_SWEEP
+SPLASH_TRACK
+SPLASH_W
+splashAngle
+splashBackMs
+SplashGlyph
+splashLeftMs
+SplashPaint
+splashSawGone
+splashWnd
+SplashWndProc
 Split
 Start
 StartsWith
@@ -762,5 +799,9 @@ WS_POPUP
 wScan
 wVk
 x
+xe
+xs
 y
+ye
+ys
 Zero
