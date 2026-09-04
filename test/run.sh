@@ -11,6 +11,8 @@ done
 printf '\n=== lvitem (C#, needs mono) ===\n'
 if command -v mcs >/dev/null 2>&1; then
   mcs -out:/tmp/lvtest.exe test/lvitem.cs 2>/dev/null && mono /tmp/lvtest.exe app/rc-tbind.exe || fail=1
+  printf '\n=== splash geometry (C#) ===\n'
+  mcs -out:/tmp/sptest.exe test/splash.cs 2>/dev/null && mono /tmp/sptest.exe app/rc-tbind.exe || fail=1
 else
   echo "  skipped — no mcs on this machine"
 fi

@@ -60,6 +60,20 @@ to him — and stop there. Write it into the queue in `.reccheck-notes.md` and w
 explicit go. This is partly about tokens and partly about rule 4: an idea half-discussed
 is not a specification.
 
+**6. Check for bugs the changes themselves caused, before merging. Every time.**
+His instruction, 04/09: *"after building i want you to merge whatever branch it is that
+you've worked on to main but first i want you to always run a check to see if there are
+any bugs that have occurred due to the changes"*. So a build is not finished when the
+tests pass and the installer verifies. Re-read the new code adversarially first — leaks,
+loops, counters that only stop on an exact value, work done per frame that belongs per
+second — and say what was found, including when it was found in something written an hour
+earlier. The first pass of this found three in the installation overlay and a fourth in
+the test written to catch them.
+
+Said the same day, and it governs the tone of everything after it: *"from this moment
+onward we are working with delicate functions and if something were to go wrong it would
+cost us"*. Nothing merges on "it should be fine".
+
 ## The hard constraint
 
 **protel is not his.** It is vendor-managed software on the hotel's PC, which is also not

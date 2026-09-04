@@ -228,7 +228,24 @@ static class TBind {
   const int  SW_HIDE = 0, SM_CXSCREEN = 0, SM_CYSCREEN = 1;
   const uint PS_GEOMETRIC = 0x00010000, PS_SOLID = 0, BS_SOLID = 0;
   const int  ALTERNATE = 1, NULL_PEN = 8;
+  const int  NULL_BRUSH_ = 5;                    // GDI stock object, hollow fill
+  const uint PS_ENDCAP_ROUND_ = 0x00000000;      // the default cap; named for what it is
   const int  CAPS_W = 170, CAPS_H = 170;
+  /* The installation overlay. Its palette is the update button's own, so the two read as
+     one thing: #101d33 behind, #2f5f9e for the ring it travels on, and the glow #286edc
+     for the arc itself. COLORREF is 0x00BBGGRR, hence the reversed bytes. */
+  const string SPLASH_CLASS = "RcTbindSplashWnd";
+  const int  SPLASH_W = 260, SPLASH_H = 260;
+  const int  SPLASH_CX = 130, SPLASH_CY = 130;   // centre of that window
+  const int  SPLASH_R  = 96;                     // ring radius
+  const int  SPLASH_PEN = 12;                    // ring thickness
+  const int  SPLASH_DX = 45, SPLASH_DY = 49;     // moves the 170-wide glyph to the centre
+  const uint SPLASH_BACK  = 0x00331D10;          // #101d33
+  const uint SPLASH_TRACK = 0x009E5F2F;          // #2f5f9e
+  const uint SPLASH_ARC   = 0x00DC6E28;          // #286edc
+  const int  SPLASH_STEP_MS = 40;                // one frame
+  const int  SPLASH_SWEEP = 70;                  // degrees of arc that travel
+  const int  AD_CLOCKWISE = 2;
   const byte CAPS_ALPHA = 89;               // 35% of 255, the spec
   const uint CAPS_KEY   = 0x00FF00FF;       // colour-keyed away; never drawn by the glyph
   const uint CAPS_DARK  = 0x00161210;       // COLORREF is 0x00BBGGRR -> #101216
@@ -312,6 +329,9 @@ static class TBind {
   [DllImport("user32.dll")] static extern int FillRect(IntPtr hdc, ref RECT r, IntPtr brush);
   [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr h, out RECT r);
   [DllImport("gdi32.dll")] static extern IntPtr CreateSolidBrush(uint color);
+  [DllImport("gdi32.dll")] static extern bool Arc(IntPtr hdc, int l, int t, int r, int b, int xs, int ys, int xe, int ye);
+  [DllImport("gdi32.dll")] static extern bool Ellipse(IntPtr hdc, int l, int t, int r, int b);
+  [DllImport("gdi32.dll")] static extern int SetArcDirection(IntPtr hdc, int dir);
   [DllImport("gdi32.dll")] static extern IntPtr GetStockObject(int i);
   [DllImport("gdi32.dll")] static extern IntPtr ExtCreatePen(uint style, uint width, ref LOGBRUSH lb, uint n, IntPtr a);
   [DllImport("gdi32.dll")] static extern IntPtr SelectObject(IntPtr hdc, IntPtr obj);
@@ -1072,6 +1092,229 @@ static class TBind {
     }catch(Exception){}
   }
 
+  /* ---- the installation overlay (v18) ----
+
+     What he asked for, 04/09: "when installing, it would be nice to have an overlay
+     (during the installation process) that shows the installation progress instead of
+     nothingness, im thinking it would be cool to have the icon in the middle and the
+     progress bar being a donut around it, the progress bar's color should be blue to
+     match the update ui's theme."
+
+     WHY IT IS ITS OWN PROCESS, AND NOT rc-tbind.exe ITSELF. The installer's very first
+     act is `taskkill /F /IM rc-tbind.exe` (reccheck.nsi), because Windows will not
+     overwrite a running exe. The notes had the helper drawing this; the installer rules
+     that out by design. So RecCheck copies the helper to TEMP under ANOTHER NAME before
+     it exits, and runs that. `taskkill /IM` matches the image name, so the copy is not
+     what it is looking for, and nothing in TEMP is touched by the install.
+
+     WHAT THE RING CAN HONESTLY SHOW. Nothing. `spawn(setup, ["/S"])` is a silent NSIS
+     run: it reports no progress to anybody, and RecCheck is gone a fraction of a second
+     later anyway. A ring filling 0->100 here would be a number invented to look like a
+     measurement, which is the one thing his rules forbid outright. So the arc TRAVELS
+     rather than fills: it says work is happening, which is exactly the "instead of
+     nothingness" he asked for, and it claims nothing it does not know. The download,
+     which does have a real percentage, already shows it in the app before this starts.
+
+     It ends when RecCheck comes back -- the installer relaunches it as its last act --
+     and on a hard timeout regardless, so a failed install cannot leave this on screen.
+     Click-through and never activated, so it cannot take a keystroke or a click from
+     anything, protel included. If it fails to draw at all, the install is unaffected:
+     nothing depends on it. */
+  static IntPtr splashWnd = IntPtr.Zero;
+  static int splashAngle = 0;
+  static int splashLeftMs = 0;
+  static bool splashSawGone = false;
+  static bool splashBack = false, splashDone = false;
+  static int splashBackMs = 0, splashPollMs = 0, splashTotalMs = 0;
+  static WndProcD keepSplashProc;
+  static CPOINT[] SplashGlyph(){
+    CPOINT[] g = new CPOINT[GLYPH.Length];
+    for(int i = 0; i < GLYPH.Length; i++){
+      CPOINT p = new CPOINT();
+      p.x = GLYPH[i].x + SPLASH_DX;
+      p.y = GLYPH[i].y + SPLASH_DY;
+      g[i] = p;
+    }
+    return g;
+  }
+  static void SplashPaint(){
+    PAINTSTRUCT ps;
+    IntPtr hdc = BeginPaint(splashWnd, out ps);
+    IntPtr keyBrush = IntPtr.Zero, back = IntPtr.Zero, white = IntPtr.Zero;
+    IntPtr track = IntPtr.Zero, arc = IntPtr.Zero;
+    try{
+      RECT rc;
+      GetClientRect(splashWnd, out rc);
+      keyBrush = CreateSolidBrush(CAPS_KEY);
+      FillRect(hdc, ref rc, keyBrush);          // anything not drawn on is keyed away
+
+      /* the disc the glyph sits on */
+      back = CreateSolidBrush(SPLASH_BACK);
+      SelectObject(hdc, GetStockObject(NULL_PEN));
+      SelectObject(hdc, back);
+      Ellipse(hdc, SPLASH_CX - SPLASH_R + SPLASH_PEN, SPLASH_CY - SPLASH_R + SPLASH_PEN,
+                   SPLASH_CX + SPLASH_R - SPLASH_PEN, SPLASH_CY + SPLASH_R - SPLASH_PEN);
+
+      int l = SPLASH_CX - SPLASH_R, t = SPLASH_CY - SPLASH_R;
+      int r = SPLASH_CX + SPLASH_R, b = SPLASH_CY + SPLASH_R;
+      LOGBRUSH lb = new LOGBRUSH();
+      lb.lbStyle = BS_SOLID; lb.lbHatch = IntPtr.Zero;
+
+      /* the whole ring, dim: the track the arc travels on */
+      lb.lbColor = SPLASH_TRACK;
+      track = ExtCreatePen(PS_GEOMETRIC | PS_SOLID, (uint)SPLASH_PEN, ref lb, 0, IntPtr.Zero);
+      SelectObject(hdc, track);
+      SelectObject(hdc, GetStockObject(NULL_BRUSH_));
+      Ellipse(hdc, l, t, r, b);
+
+      /* and the bright arc on top of it */
+      SetArcDirection(hdc, AD_CLOCKWISE);
+      lb.lbColor = SPLASH_ARC;
+      arc = ExtCreatePen(PS_GEOMETRIC | PS_SOLID | PS_ENDCAP_ROUND_, (uint)SPLASH_PEN, ref lb, 0, IntPtr.Zero);
+      SelectObject(hdc, arc);
+      double a0 = splashAngle * Math.PI / 180.0;
+      double a1 = (splashAngle + SPLASH_SWEEP) * Math.PI / 180.0;
+      int xs = SPLASH_CX + (int)(SPLASH_R * Math.Cos(a0));
+      int ys = SPLASH_CY - (int)(SPLASH_R * Math.Sin(a0));
+      int xe = SPLASH_CX + (int)(SPLASH_R * Math.Cos(a1));
+      int ye = SPLASH_CY - (int)(SPLASH_R * Math.Sin(a1));
+      Arc(hdc, l, t, r, b, xs, ys, xe, ye);
+
+      /* the icon, the same two passes as the caps window and for the same reason: GDI
+         strokes on top of its fill, which would close the counter of the A. */
+      CPOINT[] g = SplashGlyph();
+      white = CreateSolidBrush(CAPS_WHITE);
+      lb.lbColor = CAPS_WHITE;
+      IntPtr pen = ExtCreatePen(PS_GEOMETRIC | PS_SOLID, 9, ref lb, 0, IntPtr.Zero);
+      SetPolyFillMode(hdc, ALTERNATE);
+      SelectObject(hdc, pen);
+      SelectObject(hdc, white);
+      PolyPolygon(hdc, g, GLYPH_N, 2);
+      SelectObject(hdc, GetStockObject(NULL_PEN));
+      SelectObject(hdc, back);
+      PolyPolygon(hdc, g, GLYPH_N, 2);
+      /* Everything must be OUT of the DC before the finally deletes it. GDI silently
+         refuses to delete an object that is still selected, and this paints 25 times a
+         second for as long as the install takes -- one leaked brush per frame walks into
+         the 10,000-object quota, after which CreateSolidBrush starts returning null and
+         the overlay quietly falls apart. */
+      SelectObject(hdc, GetStockObject(NULL_PEN));
+      SelectObject(hdc, GetStockObject(NULL_BRUSH_));
+      if(pen != IntPtr.Zero) DeleteObject(pen);
+    }catch(Exception){
+    }finally{
+      if(track    != IntPtr.Zero) DeleteObject(track);
+      if(arc      != IntPtr.Zero) DeleteObject(arc);
+      if(white    != IntPtr.Zero) DeleteObject(white);
+      if(back     != IntPtr.Zero) DeleteObject(back);
+      if(keyBrush != IntPtr.Zero) DeleteObject(keyBrush);
+      EndPaint(splashWnd, ref ps);
+    }
+  }
+  /* RecCheck has to GO before its return means anything -- it is still running when this
+     starts, for the fraction of a second it takes to exit. */
+  static bool RecCheckRunning(){
+    try{
+      Process[] all = Process.GetProcessesByName("RecCheck");
+      bool any = all.Length > 0;
+      for(int i = 0; i < all.Length; i++){ try{ all[i].Dispose(); }catch(Exception){} }
+      return any;
+    }catch(Exception){ return false; }
+  }
+  /* ONCE A SECOND, not once a frame. Walking the whole process table 25 times a second,
+     on the machine, while it is extracting 300 MB, is a cost paid for nothing: RecCheck
+     does not come and go inside 40 ms. */
+  static bool SplashPollDue(int step){
+    splashPollMs -= step;
+    if(splashPollMs <= 0){ splashPollMs = 1000; return true; }
+    return false;
+  }
+  /* WHEN THIS ENDS, kept out of the window procedure so it can be driven without Windows.
+     Every one of its three exits is a case that only ever happens on his machine, mid
+     install, with nobody watching the code:
+
+       - RecCheck went away and came back  -> the normal one, after a moment for its
+         window to paint.
+       - RecCheck never went away          -> the update did not start. Twenty seconds is
+         already generous; waiting the full timeout would leave a ring on his screen for
+         four minutes over nothing.
+       - neither                           -> the hard timeout, so a failed install can
+         never strand it.
+
+     `splashBack` is a FLAG and the test is `<= 0`, deliberately. The first version ended
+     on `splashBackMs == 0` exactly, which works only because 40 happens to divide 1200 --
+     change either number to something that does not and the overlay would have hung until
+     the timeout. */
+  static bool SplashStep(int step, bool polled, bool here){
+    splashLeftMs -= step;
+    if(polled){
+      if(!splashSawGone){
+        if(!here) splashSawGone = true;
+        else if((splashTotalMs - splashLeftMs) > 20000) splashDone = true;
+      }else if(here && !splashBack){ splashBack = true; splashBackMs = 1200; }
+    }
+    if(splashBack){
+      splashBackMs -= step;
+      if(splashBackMs <= 0) splashDone = true;
+    }
+    return splashLeftMs <= 0 || splashDone;
+  }
+  static IntPtr SplashWndProc(IntPtr h, uint msg, IntPtr w, IntPtr l){
+    try{
+      if(msg == WM_PAINT){ SplashPaint(); return IntPtr.Zero; }
+      if(msg == WM_TIMER){
+        splashAngle = (splashAngle + 6) % 360;
+        bool polled = SplashPollDue(SPLASH_STEP_MS);
+        bool here = polled && RecCheckRunning();
+        if(SplashStep(SPLASH_STEP_MS, polled, here)){
+          KillTimer(splashWnd, T_HOLD);
+          PostQuitMessage(0);
+          return IntPtr.Zero;
+        }
+        InvalidateRect(splashWnd, IntPtr.Zero, false);
+        return IntPtr.Zero;
+      }
+      if(msg == WM_DESTROY){ PostQuitMessage(0); return IntPtr.Zero; }
+    }catch(Exception){}
+    return DefWindowProc(h, msg, w, l);
+  }
+  static int RunSplash(int maxSeconds){
+    if(maxSeconds < 5) maxSeconds = 5;
+    if(maxSeconds > 600) maxSeconds = 600;
+    /* one at a time: a second overlay on top of the first helps nobody */
+    try{ if(FindWindow(SPLASH_CLASS, null) != IntPtr.Zero) return 0; }catch(Exception){}
+    try{
+      IntPtr inst = GetModuleHandle(null);
+      keepSplashProc = SplashWndProc;
+      WNDCLASSEX wc = new WNDCLASSEX();
+      wc.cbSize = (uint)Marshal.SizeOf(typeof(WNDCLASSEX));
+      wc.lpfnWndProc = Marshal.GetFunctionPointerForDelegate(keepSplashProc);
+      wc.hInstance = inst;
+      wc.lpszClassName = SPLASH_CLASS;
+      if(RegisterClassEx(ref wc) == 0) return 1;
+      splashWnd = CreateWindowEx(
+        WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+        SPLASH_CLASS, "RecCheck is updating", WS_POPUP,
+        (GetSystemMetrics(SM_CXSCREEN) - SPLASH_W) / 2,
+        (GetSystemMetrics(SM_CYSCREEN) - SPLASH_H) / 2, SPLASH_W, SPLASH_H,
+        IntPtr.Zero, IntPtr.Zero, inst, IntPtr.Zero);
+      if(splashWnd == IntPtr.Zero) return 1;
+      SetLayeredWindowAttributes(splashWnd, CAPS_KEY, 235, LWA_COLORKEY | LWA_ALPHA);
+      splashLeftMs = maxSeconds * 1000;
+      splashTotalMs = splashLeftMs;
+      SetWindowPos(splashWnd, (IntPtr)(-1),
+                   (GetSystemMetrics(SM_CXSCREEN) - SPLASH_W) / 2,
+                   (GetSystemMetrics(SM_CYSCREEN) - SPLASH_H) / 2,
+                   SPLASH_W, SPLASH_H, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+      SetTimer(splashWnd, T_HOLD, (uint)SPLASH_STEP_MS, IntPtr.Zero);
+      MSG m;
+      while(GetMessage(out m, IntPtr.Zero, 0, 0) > 0){
+        TranslateMessage(ref m);
+        DispatchMessage(ref m);
+      }
+    }catch(Exception e){ WriteCrash("splash", e); return 1; }
+    return 0;
+  }
   static bool CreateCapsWindow(){
     try{
       IntPtr inst = GetModuleHandle(null);
@@ -2081,7 +2324,7 @@ static class TBind {
     }catch(Exception){}
   }
 
-  const string VER = "v17";
+  const string VER = "v18";
 
   static int Main(string[] args){
     int parentPid;
@@ -2159,6 +2402,14 @@ static class TBind {
       try{ ReadForeground(rmax); }catch(Exception e){ READ.Append("EXCEPTION: " + e.Message + "\n"); }
       Say(READ.ToString());
       return 0;
+    }
+    /* The overlay RecCheck runs from a copy of this exe in TEMP, just before it exits so
+       the installer can replace it. Takes no parent pid: by design nothing is alive to
+       be a parent by the time it matters. */
+    if(args.Length >= 1 && args[0] == "splash"){
+      int secs = 240;
+      if(args.Length >= 2) int.TryParse(args[1], out secs);
+      return RunSplash(secs);
     }
     /* The in-house list, straight into RecCheck. Same cost as readlist, fewer columns. */
     if(args.Length >= 2 && args[0] == "inhouse"){
