@@ -3,6 +3,7 @@
    maximised handed back the in-house list's rows under a caption naming neither, and
    nothing would have stopped those rows entering the ledger. Here the wrong list is
    pressed against the real click handler and the ledger has to come back untouched. */
+require("./fresh.js")();          // refuse to run against a stale copy
 const {chromium} = require("playwright-core");
 const path = require("path");
 
@@ -20,9 +21,24 @@ const ROWS = [
 /* legacy: ON is the shipped default and means "fed from xps files", so the live read is
    not on offer in it. Every press case below has to switch it off first — which is the
    point of the two cases that do not. */
-const bridgeFor = (payload, legacy) => `window.reccheckShortcuts={
+/* Two ways rows reach the page now, and the bridge serves both:
+
+   inhouse()  -- a read spawned on demand, which is what the button does.
+   listFile() -- what the RESIDENT helper captured when protel opened the window, handed
+                 over as a file. No process, no contact with protel, and it survives the
+                 window being closed two seconds later. This is what the loop uses.
+
+   window.__files is the captured set and window.__at its timestamps, both writable from a
+   test so a capture can appear or change mid-run the way protel makes them. */
+const bridgeFor = (payload, legacy, capture) => `
+window.__files = {IH: ${capture === undefined ? (payload === null ? "null" : JSON.stringify(payload)) : (capture === null ? "null" : JSON.stringify(capture))}, MV: null, AR: null, DP: null};
+window.__at = {IH: 1, MV: 1, AR: 1, DP: 1};
+window.reccheckShortcuts={
   get:()=>Promise.resolve({profiles:[],active:null,available:true}),
-  helper:()=>Promise.resolve({state:"started"})
+  helper:()=>Promise.resolve({state:"started"}),
+  listFile:(tag)=>{ window.__lf=(window.__lf||0)+1;
+    const t = window.__files[tag];
+    return Promise.resolve(t ? {tag: tag, at: window.__at[tag], text: t} : null); }
   ${payload === null ? "" : ",inhouse:()=>Promise.resolve(" + JSON.stringify(payload) + ")"}};
 try{ localStorage.setItem("reccheck_legacy", ${legacy ? '"1"' : '"0"'}); }catch(e){}`;
 
@@ -116,33 +132,34 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
     await p.close();
   }
 
-  /* 6. AUTOMATIC when legacy is off. His words: legacy is the manual way, the new way is
-        the tool getting the data by itself — and then, on why it must not wait to be
-        asked: "we want to obtain data from real usage, not when we need them to be shown
-        on the tool because it becomes the same hassle if not more than feeding a xps
-        file". So it runs from the moment the app is up, on whatever screen. */
+  /* 6. THE PAGE NO LONGER DRIVES PROTEL. His words: "when a user opens protel the tool
+        knows and scans the list opened". The resident helper captures the rows on the
+        window event and leaves them in a file; the page collects the file. So a capture
+        that is already there is taken without the Tax Check ever being opened. */
   p = await b.newPage();
   await p.addInitScript(bridgeFor(IH("Guests inhouse: 04/09/26", ROWS), false));
   await p.setViewportSize({width: 1280, height: 620});
   await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
-  await p.waitForTimeout(900);
+  await p.waitForTimeout(1200);
   let after = await p.evaluate(() => ({
     led: localStorage.getItem("reccheck_moves_v2") || "",
     rooms: localStorage.getItem("reccheck_rooms") || ""
   }));
-  ck("it reads without the Tax Check ever being opened", after.led.indexOf('"426"') >= 0);
-  ck("and the names land with it",                       after.rooms.indexOf("NAHLA") >= 0);
-  /* the reading continues, but an UNCHANGED list must not rewrite and redraw twenty times
-     a minute under his hands */
+  ck("a capture is collected with no screen opened", after.led.indexOf('"426"') >= 0);
+  ck("and the names land with it",                   after.rooms.indexOf("NAHLA") >= 0);
+
+  /* the same capture must not be re-applied on every pass */
   await p.evaluate(() => { window.__writes = 0;
     const real = localStorage.setItem.bind(localStorage);
     localStorage.setItem = (k, v) => { if(k === "reccheck_moves_v2") window.__writes++; real(k, v); }; });
   await p.waitForTimeout(12000);
-  ck("an unchanged list is not written again",
+  ck("an unchanged capture is not written again",
      (await p.evaluate(() => window.__writes)) === 0);
+  const lf = await p.evaluate(() => window.__lf || 0);
+  ck("but the page did keep collecting (" + lf + " asks)", lf > 4);
   await p.close();
 
-  /* 7. in legacy it must stay manual — nothing is read at all */
+  /* 7. in legacy nothing is collected at all */
   p = await b.newPage();
   await p.addInitScript(bridgeFor(IH("Guests inhouse: 04/09/26", ROWS), true));
   await p.setViewportSize({width: 1280, height: 620});
@@ -150,118 +167,63 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
   await p.waitForTimeout(250);
   await p.evaluate(() => window.__t.showScreen("tax"));
   await p.waitForTimeout(6000);
-  ck("legacy stays manual — nothing is read, on any screen",
-     await p.evaluate(() => !localStorage.getItem("reccheck_moves_v2")));
+  ck("legacy collects nothing, on any screen",
+     await p.evaluate(() => !localStorage.getItem("reccheck_moves_v2") && !window.__lf));
   await p.close();
 
-  /* 8. an automatic read that finds nothing says so quietly */
+  /* 8. A LIST HE OPENED FOR TWO SECONDS. The window is long gone by the time the page
+        looks — the point of capturing on the event is that the rows are not. */
   p = await b.newPage();
-  await p.addInitScript(bridgeFor(IH("Arrival list 04/09/26", ROWS), false));
+  await p.addInitScript(bridgeFor(IH("Guests inhouse: 04/09/26", ROWS), false, null));
   await p.setViewportSize({width: 1280, height: 620});
   await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
-  await p.waitForTimeout(250);
-  await p.evaluate(() => window.__t.showScreen("tax"));
-  await p.waitForTimeout(900);
-  after = await p.evaluate(() => ({say: document.getElementById("liveSay").textContent,
-                                   led: localStorage.getItem("reccheck_moves_v2") || ""}));
-  ck("an automatic miss is quiet, not an accusation",
-     /not open|δεν είναι ανοιχτή/i.test(after.say) && !/That is not the in-house/.test(after.say));
-  ck("and still records nothing",                    after.led === "");
-  await p.close();
-
-  /* 9. THE RETRY, and it never stops. He can open protel's in-house list at any point in
-        his own work and it lands by itself — that is the whole point of it. */
-  p = await b.newPage();
-  await p.addInitScript(`window.reccheckShortcuts={
-    get:()=>Promise.resolve({profiles:[],active:null,available:true}),
-    helper:()=>Promise.resolve({state:"started"}),
-    inhouse:()=>{ window.__tries=(window.__tries||0)+1;
-                  return Promise.resolve(window.__open ? ${JSON.stringify(IH("Guests inhouse: 04/09/26", ROWS))}
-                                                       : ${JSON.stringify(IH("Arrival list 04/09/26", ROWS))}); }};
-    try{ localStorage.setItem("reccheck_legacy","0"); }catch(e){}`);
-  await p.setViewportSize({width: 1280, height: 620});
-  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
-  await p.waitForTimeout(12000);
-  let tries = await p.evaluate(() => window.__tries || 0);
-  ck("it keeps attempting while protel has nothing open (" + tries + ")", tries >= 3);
-  ck("and has recorded nothing yet",
+  await p.waitForTimeout(1000);
+  ck("nothing captured yet, nothing recorded",
      await p.evaluate(() => !localStorage.getItem("reccheck_moves_v2")));
-
-  /* he opens the in-house list in the middle of his own work — no press, no navigation */
-  await p.evaluate(() => { window.__open = true; });
-  await p.waitForTimeout(6000);
-  ck("opening the list later lands it with no press",
+  /* protel shows the list; the helper takes it; the window closes again */
+  await p.evaluate((txt) => { window.__files.IH = txt; window.__at.IH = 2; },
+                   IH("Guests inhouse: 04/09/26", ROWS));
+  await p.waitForTimeout(7000);
+  ck("a capture that appears later is collected",
      (await p.evaluate(() => localStorage.getItem("reccheck_moves_v2") || "")).indexOf('"426"') >= 0);
-
-  /* and it goes on reading afterwards — his call, made knowing the cost */
-  const settled = await p.evaluate(() => window.__tries);
-  await p.waitForTimeout(12000);
-  const later = await p.evaluate(() => window.__tries);
-  ck("and it does NOT stop after succeeding (" + settled + " -> " + later + ")", later > settled);
   await p.close();
 
-  /* 10. and it is not tied to a screen: leaving the Tax Check must not stop it */
-  p = await b.newPage();
-  await p.addInitScript(`window.reccheckShortcuts={
-    get:()=>Promise.resolve({profiles:[],active:null,available:true}),
-    helper:()=>Promise.resolve({state:"started"}),
-    inhouse:()=>{ window.__tries=(window.__tries||0)+1;
-                  return Promise.resolve(${JSON.stringify(IH("Arrival list 04/09/26", ROWS))}); }};
-    try{ localStorage.setItem("reccheck_legacy","0"); }catch(e){}`);
-  await p.setViewportSize({width: 1280, height: 620});
-  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
-  await p.waitForTimeout(250);
-  await p.evaluate(() => window.__t.showScreen("tax"));
-  await p.waitForTimeout(6000);
-  const before = await p.evaluate(() => window.__tries || 0);
-  await p.evaluate(() => window.__t.showScreen("audit"));
-  await p.waitForTimeout(12000);
-  const off = await p.evaluate(() => window.__tries);
-  ck("it keeps reading away from the Tax Check (" + before + " -> " + off + ")", off > before);
-  await p.close();
-
-  /* 11. A READ THE HELPER CALLED INCOMPLETE MUST NOT REACH THE LEDGER.
-         saveMoves and detectMoves both reason from ABSENCE — a room missing from tonight's
-         list is a room the guest has left. A list cut off at the time budget is a list
-         missing its tail, so writing it unattended reads as a hundred people checking out
-         at once. That is the phantom-departure failure, arriving every five seconds. */
+  /* 9. a capture the helper itself called incomplete must not reach the ledger */
   const CUT = ["TITLE\tGuests inhouse: 04/09/26",
     ...ROWS.map(r => "IH\t" + r.join("\t")),
     "DONE\t2\t250\t83\t5000\tunicode\tcut-short"].join("\n");
-  p = await open(CUT, 1280, false);
-  await p.waitForTimeout(900);
-  ck("a cut-short automatic read writes NOTHING",
+  p = await b.newPage();
+  await p.addInitScript(bridgeFor(CUT, false));
+  await p.setViewportSize({width: 1280, height: 620});
+  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
+  await p.waitForTimeout(1500);
+  ck("a cut-short capture writes NOTHING",
      await p.evaluate(() => !localStorage.getItem("reccheck_moves_v2")));
-  ck("and says so quietly rather than accusing protel",
-     /not open|δεν είναι ανοιχτή/i.test(await p.evaluate(() => document.getElementById("liveSay").textContent)));
   /* but he can still force one by hand, where the line tells him what he is looking at */
   await p.evaluate(() => window.__t.showScreen("tax"));
   await p.click("#liveRead");
-  await p.waitForTimeout(500);
+  await p.waitForTimeout(600);
   ck("a read he PRESSED still goes through",
      (await p.evaluate(() => localStorage.getItem("reccheck_moves_v2") || "")).indexOf('"426"') >= 0);
   ck("and warns him it stopped early",
      /stopped early|σταμάτησε νωρίς/i.test(await p.evaluate(() => document.getElementById("liveSay").textContent)));
   await p.close();
 
-  /* 12. THE AUTOMATIC READ MUST NOT THROW AWAY A DECISION HE MADE BY CLICKING.
-         PAIR_OVERRIDE holds his answer about which adjoining rooms are one stay. Clearing
-         it was written for a button press; on a five-second timer it would undo his answer
-         and put the prompt back on top of the audit he is in the middle of. */
-  p = await open(IH("Guests inhouse: 04/09/26", ROWS), 1280, false);
-  await p.waitForTimeout(900);
+  /* 10. collecting must not throw away a decision he made by clicking */
+  p = await b.newPage();
+  await p.addInitScript(bridgeFor(IH("Guests inhouse: 04/09/26", ROWS), false));
+  await p.setViewportSize({width: 1280, height: 620});
+  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
+  await p.waitForTimeout(1200);
   await p.evaluate(() => { window.__tx.setPair({mine: true}); });
-  /* force a NEW signature so the read does real work rather than returning early */
-  await p.evaluate(() => { window.reccheckShortcuts.inhouse = () => Promise.resolve(
-    ["TITLE\tGuests inhouse: 04/09/26",
+  await p.evaluate(() => { window.__files.IH = ["TITLE\tGuests inhouse: 04/09/26",
      "IH\tSOMEONE ELSE\t201\t2/0/0/0/0\t01/09/26\t09/09/26\tCI",
-     "DONE\t1\t1\t83\t47\tunicode\tcomplete"].join("\n")); });
+     "DONE\t1\t1\t83\t47\tunicode\tcomplete"].join("\n"); window.__at.IH = 3; });
   await p.waitForTimeout(7000);
-  ck("an automatic read really did run",
+  ck("a later capture really was applied",
      (await p.evaluate(() => localStorage.getItem("reccheck_moves_v2") || "")).indexOf('"201"') >= 0);
   ck("and his pairing decision survived it",
      await p.evaluate(() => !!(window.__tx.getPair() && window.__tx.getPair().mine)));
-  /* a read he PRESSES is a question, and still clears it */
   await p.evaluate(() => window.__t.showScreen("tax"));
   await p.click("#liveRead");
   await p.waitForTimeout(600);
@@ -269,54 +231,52 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
      await p.evaluate(() => window.__tx.getPair() === null));
   await p.close();
 
-  /* 13. THE ARRIVAL AND DEPARTURE REPORTS, end to end and unattended.
-         The one that matters: a report names thirty rooms out of two hundred, and both
-         saveMoves and detectMoves reason from ABSENCE. If a report went down that path it
-         would read as a hundred and seventy people leaving at once. So a ledger full of
-         in-house stays must come through a report untouched except for what the report
-         actually names. */
+  /* 11. THE ARRIVAL AND DEPARTURE REPORTS, captured the same way.
+         The one that matters: a report names thirty rooms out of two hundred, and the rest
+         of the ledger reads a missing room as a guest who has left. */
   const RPT = (tag, title, rows) => [
     "TITLE\t" + title,
     ...rows.map(r => tag + "\t" + r.join("\t")),
     "DONE\t" + rows.length + "\t" + rows.length + "\t83\t47\tunicode\tcomplete"].join("\n");
-  const ARR = RPT("AR", "Arrival Report for the 04/09/26", [
-    ["AMANN ANJA/BERND ", "337", "2/0/0/0/0", "14/09/26", "CI"]]);
-  const DEP = RPT("DP", "Departure Report for 04/09/26", [
-    ["BURWIECK/GRUBE TAREK/KATHARINA ", "125", "2/0/0/0/0", "28/08/26", "CO"],
-    ["BRUEMMER FRED/GUDRUN ", "9000", "0/0/0/0/0", "04/09/26", "CO"]]);
-
   p = await b.newPage();
-  await p.addInitScript(`window.reccheckShortcuts={
-    get:()=>Promise.resolve({profiles:[],active:null,available:true}),
-    helper:()=>Promise.resolve({state:"started"}),
-    inhouse:()=>Promise.resolve(${JSON.stringify(IH("Guests inhouse: 04/09/26", ROWS))}),
-    moves:()=>Promise.resolve(null),
-    arrivals:()=>Promise.resolve(${JSON.stringify(ARR)}),
-    departures:()=>Promise.resolve(${JSON.stringify(DEP)})};
-    try{ localStorage.setItem("reccheck_legacy","0"); }catch(e){}`);
+  await p.addInitScript(bridgeFor(IH("Guests inhouse: 04/09/26", ROWS), false));
   await p.setViewportSize({width: 1280, height: 620});
   await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
   await p.waitForTimeout(1200);
-  const led0 = await p.evaluate(() => JSON.parse(localStorage.getItem("reccheck_moves_v2") || "{}"));
-  ck("the in-house list landed first", !!led0["426"] && !!led0["414"]);
-
-  /* the reports take one tick each in rotation, so give the loop time to reach both */
-  await p.waitForTimeout(22000);
+  ck("the in-house capture landed first",
+     (await p.evaluate(() => localStorage.getItem("reccheck_moves_v2") || "")).indexOf('"426"') >= 0);
+  await p.evaluate((o) => { window.__files.AR = o.a; window.__at.AR = 2;
+                            window.__files.DP = o.d; window.__at.DP = 2; }, {
+    a: RPT("AR", "Arrival Report for the 04/09/26", [
+      ["AMANN ANJA/BERND ", "337", "2/0/0/0/0", "14/09/26", "CI"]]),
+    d: RPT("DP", "Departure Report for 04/09/26", [
+      ["BURWIECK/GRUBE TAREK/KATHARINA ", "125", "2/0/0/0/0", "28/08/26", "CO"],
+      ["BRUEMMER FRED/GUDRUN ", "9000", "0/0/0/0/0", "04/09/26", "CO"]])});
+  await p.waitForTimeout(8000);
   const led = await p.evaluate(() => JSON.parse(localStorage.getItem("reccheck_moves_v2") || "{}"));
   ck("the arrival report reached the ledger",   !!(led["337"] && led["337"][20260904]));
-  ck("with its own date as the ARRIVAL and the row's as the departure",
+  ck("its own date is the ARRIVAL, the row's the departure",
      !!(led["337"] && led["337"][20260904] && led["337"][20260904].d === 20260914));
   ck("the departure report reached it too",     !!(led["125"] && led["125"][20260828]));
   ck("with its own date as the DEPARTURE",
      !!(led["125"] && led["125"][20260828] && led["125"][20260828].d === 20260904));
   ck("the holding room 9000 was ignored",       !led["9000"]);
-
-  /* AND THE ROOMS THE REPORTS NEVER MENTION ARE UNTOUCHED */
   ck("the in-house rooms survived both reports", !!led["426"] && !!led["414"]);
   ck("none of them was marked as having left",
      !led["426"][Object.keys(led["426"])[0]].mv && !led["414"][Object.keys(led["414"])[0]].mv);
   ck("nor had its departure rewritten",
      led["426"][20260829] && led["426"][20260829].d === 20260905);
+
+  /* 12. AND A MOVE THAT HAS ALREADY HAPPENED, recorded onto the stays the census made. */
+  await p.evaluate((mv) => { window.__files.MV = mv; window.__at.MV = 2; },
+    ["TITLE\tPerform Move for Date 04/09/26",
+     "MV\t426\tSSV\t333\tSSV\tABBUSHI MIRIAM/OLIVER/NAHLA/HELENA\tX\t29/08/26\t05/09/26",
+     "DONE\t1\t1\t43\t32\tunicode\tcomplete"].join("\n"));
+  await p.waitForTimeout(8000);
+  const led2 = await p.evaluate(() => JSON.parse(localStorage.getItem("reccheck_moves_v2") || "{}"));
+  ck("the room they left is marked vacated",    led2["426"][20260829].mv === 20260904);
+  ck("and it is NOT given a departure protel never called one",
+     led2["426"][20260829].d === 20260905);
   await p.close();
 
   await b.close();

@@ -179,7 +179,7 @@ static class TBind {
      top-level, so reading that caption costs protel nothing — which makes a name change on
      it the free way to know which report he just opened, and on which date. */
 
-  /* ---- reading a list's rows (v19) ----
+  /* ---- reading a list's rows (v21) ----
      LVM_GETITEMTEXT fills a caller-supplied buffer, and for a control in ANOTHER process
      that buffer has to live in that process — hence OpenProcess/VirtualAllocEx/Write/Read.
      This is the part that is NOT free, and it is why the probe reports its own cost.
@@ -2058,6 +2058,51 @@ static class TBind {
     caption = ihCaption;
     return ihList;
   }
+  /* ---- the PING (v20) ----
+
+     His idea, 04/09, and it is a better one than reading every cell to find out whether
+     anything changed: "how feasible would it be to have a ping for the header alone and if
+     it matches the departure arrival or in house list to then make the more thorough
+     probe?"
+
+     Very. And it is cheaper than it sounds, because of where the cost actually is:
+
+       finding the window     ZERO messages. EnumWindows, GetClassName, GetWindowText and
+                              GetWindow are window-manager reads; a caption of another
+                              process's window comes from the cached title with no
+                              WM_GETTEXT sent.
+       the row count          ONE message (LVM_GETITEMCOUNT).
+       the column count       TWO (LVM_GETHEADER, then HDM_GETITEMCOUNT).
+       every cell after that  four operations each, two of them writes into protel's own
+                              address space.
+
+     So a ping is three messages against roughly fifteen hundred for a full read of the
+     in-house list, and -- the part that matters most -- IT NEVER OPENS PROTEL'S PROCESS AND
+     NEVER ALLOCATES ANYTHING IN IT. OpenProcess and VirtualAllocEx belong to the cell path
+     alone. A ping leaves no footprint in protel at all.
+
+     The column count is not decoration: each tag's column map assumes a shape, and a list
+     answering to the same caption with a different one must not be read with the wrong
+     map. The page refuses on the shape before it asks for a single cell. */
+  static void PeekTagged(string tag){
+    string cap;
+    IntPtr lv = FindTaggedList(NeedleFor(tag), out cap);
+    /* tagged, because a ping of all four comes back in one answer and an untagged TITLE
+       would belong to whichever list the reader guessed */
+    if(lv == IntPtr.Zero){ READ.Append("GONE\t" + tag + "\n"); return; }
+    READ.Append("HEAD\t" + tag + "\t" + cap + "\n");
+    IntPtr res;
+    int rows = -1, cols = -1;
+    if(SendMessageTimeout(lv, LVM_GETITEMCOUNT, IntPtr.Zero, IntPtr.Zero, SMTO_ABORTIFHUNG, 250, out res) != IntPtr.Zero)
+      rows = res.ToInt32();
+    if(SendMessageTimeout(lv, LVM_GETHEADER, IntPtr.Zero, IntPtr.Zero, SMTO_ABORTIFHUNG, 250, out res) != IntPtr.Zero
+       && res != IntPtr.Zero){
+      IntPtr hres;
+      if(SendMessageTimeout(res, HDM_GETITEMCOUNT, IntPtr.Zero, IntPtr.Zero, SMTO_ABORTIFHUNG, 250, out hres) != IntPtr.Zero)
+        cols = hres.ToInt32();
+    }
+    READ.Append("PEEK\t" + tag + "\t" + rows + "\t" + cols + "\n");
+  }
   static void ReadInhouse(int maxRows){ ReadTagged("IH", maxRows); }
   static void ReadTagged(string tag, int maxRows){
     int t0 = Environment.TickCount;
@@ -2196,6 +2241,87 @@ static class TBind {
   static string ShiftKey(){
     try{ return DateTime.Now.AddHours(-7.0).ToString("yyyy-MM-dd"); }catch(Exception){ return ""; }
   }
+  /* ---- reading a list THE MOMENT PROTEL OPENS IT (v21) ----
+
+     His words, 04/09: "when a user opens protel the tool knows and scans the list opened".
+
+     This helper is already resident -- it is what serves the tau shortcut -- and it
+     already holds a WinEvent hook on protel's SHOW, HIDE and NAMECHANGE. It is therefore
+     TOLD, in milliseconds, when a list appears. Nothing has to poll for it, nothing has to
+     be launched, and a list he opens for two seconds is caught: the rows are taken at the
+     moment it opens and written to a file, so RecCheck can pick them up long after the
+     window has gone.
+
+     THE READ DOES NOT HAPPEN IN THE CALLBACK, and that is not a detail. A WinEvent
+     callback runs on the hook thread; a full read is ~1500 SendMessageTimeout calls into
+     protel, and doing that inside the callback would stall the delivery of every later
+     event and put a long synchronous conversation with protel in the worst possible place.
+     The callback does one field write. WatchLoop -- the same thread, but between pumps --
+     does the reading.
+
+     Two guards on top, both about protel rather than about us: the same list is not re-read
+     within EV_COOLDOWN_MS however many times protel shows it, and a caption that has not
+     changed since the last successful read is not read again at all. */
+  const int EV_COOLDOWN_MS = 4000;
+  static string evWantTag = "", evWantCap = "";
+  static readonly System.Collections.Generic.Dictionary<string,string> evLastCap =
+    new System.Collections.Generic.Dictionary<string,string>();
+  static readonly System.Collections.Generic.Dictionary<string,int> evLastAt =
+    new System.Collections.Generic.Dictionary<string,int>();
+  /* Which of the four a caption names, or "" for anything else. Same normalisation the
+     hunt uses, so the two can never disagree about what a window is. */
+  static string TagOfCaption(string cap){
+    string u = Squash(cap);
+    if(u.IndexOf("INHOUSE") >= 0) return "IH";
+    if(u.IndexOf("PERFORMMOVE") >= 0) return "MV";
+    if(u.IndexOf("ARRIVALREPORT") >= 0) return "AR";
+    if(u.IndexOf("DEPARTUREREPORT") >= 0) return "DP";
+    return "";
+  }
+  static string ListPath(string tag){
+    try{
+      string b = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+      if(b == null || b.Length == 0) return null;
+      return System.IO.Path.Combine(System.IO.Path.Combine(b, "RecCheck"), "rc-list-" + tag + ".tsv");
+    }catch(Exception){ return null; }
+  }
+  /* Written beside and moved, so RecCheck can never read half a list. */
+  static void WriteList(string tag, string body){
+    try{
+      string p = ListPath(tag);
+      if(p == null) return;
+      System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(p));
+      string tmp = p + ".tmp";
+      System.IO.File.WriteAllText(tmp, body, new System.Text.UTF8Encoding(false));
+      if(System.IO.File.Exists(p)) System.IO.File.Delete(p);
+      System.IO.File.Move(tmp, p);
+    }catch(Exception){}
+  }
+  /* Runs on the pump thread, never in the callback. */
+  static void EvServiceReads(){
+    string tag = evWantTag, cap = evWantCap;
+    if(tag.Length == 0) return;
+    evWantTag = "";
+    try{
+      int now = Environment.TickCount;
+      int last;
+      if(evLastAt.TryGetValue(tag, out last) && now - last < EV_COOLDOWN_MS) return;
+      string had;
+      if(evLastCap.TryGetValue(tag, out had) && had == cap) return;   // same window, already taken
+      evLastAt[tag] = now;
+      READ = new StringBuilder();
+      ReadTagged(tag, 2000);
+      string body = READ.ToString();
+      READ = new StringBuilder();
+      /* only a read that actually produced rows replaces what is on disk */
+      if(body.IndexOf("\n" + tag + "\t") >= 0 || body.StartsWith(tag + "\t")){
+        evLastCap[tag] = cap;
+        WriteList(tag, body);
+        AppendWatch(DateTime.Now.ToString("HH:mm:ss") + "  READ   " + tag
+                    + "  title=\"" + cap + "\"\r\n");
+      }
+    }catch(Exception e){ WriteCrash("evread", e); }
+  }
   static string WatchPath(){
     try{
       string b = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -2274,6 +2400,12 @@ static class TBind {
       }
       AppendWatch(DateTime.Now.ToString("HH:mm:ss") + "  " + what
         + "  " + (top ? "window" : "child ") + "  class=\"" + cls.ToString() + "\"  title=\"" + t + "\"\r\n");
+      /* One field write, and nothing more: this is the hook thread and the read is a long
+         conversation with protel. WatchLoop picks it up between pumps. */
+      if(ev != EVENT_OBJECT_HIDE){
+        string tg = TagOfCaption(t);
+        if(tg.Length > 0){ evWantCap = t; evWantTag = tg; }
+      }
     }catch(Exception){}
   }
   /* protel's process id, or 0. With no focus= target configured there is no protel to
@@ -2333,6 +2465,9 @@ static class TBind {
           TranslateMessage(ref m);
           DispatchMessage(ref m);
         }
+        /* AFTER the pump, so the queue is drained before a read that takes tens of
+           milliseconds, and outside the callback for the reason given at EvServiceReads. */
+        EvServiceReads();
       }catch(Exception e){ WriteCrash("watch", e); }
       Thread.Sleep(100);
     }
@@ -2396,7 +2531,7 @@ static class TBind {
     }catch(Exception){}
   }
 
-  const string VER = "v19";
+  const string VER = "v21";
 
   static int Main(string[] args){
     int parentPid;
@@ -2482,6 +2617,32 @@ static class TBind {
       int secs = 240;
       if(args.Length >= 2) int.TryParse(args[1], out secs);
       return RunSplash(secs);
+    }
+    /* The ping: which window is open, how many rows, how many columns. Three messages and
+       nothing written anywhere. Everything else waits on what this says. */
+    if(args.Length >= 2 && args[0] == "peek"){
+      int ppid;
+      if(!int.TryParse(args[1], out ppid)) return 2;
+      string ptag = args.Length >= 3 ? args[2].ToUpperInvariant() : "ALL";
+      LoadBinds();
+      READ = new StringBuilder();
+      /* All four in ONE process. The window sweep is the same pass whichever list is being
+         looked for, and a launch of this exe costs his machine far more than the three
+         messages a ping costs protel -- so asking about four lists at once is most of the
+         saving, not the ping itself. */
+      if(ptag == "ALL"){
+        string[] tags = new string[4];
+        tags[0] = "IH"; tags[1] = "MV"; tags[2] = "AR"; tags[3] = "DP";
+        for(int i = 0; i < tags.Length; i++){
+          try{ PeekTagged(tags[i]); }
+          catch(Exception e){ READ.Append("ERR\t" + tags[i] + "\t" + e.Message + "\n"); }
+        }
+      }else{
+        if(ptag != "IH" && ptag != "MV" && ptag != "AR" && ptag != "DP") ptag = "IH";
+        try{ PeekTagged(ptag); }catch(Exception e){ READ.Append("ERR\t" + e.Message + "\n"); }
+      }
+      Say(READ.ToString());
+      return 0;
     }
     /* The other three lists, same machinery and the same TSV. Their tags are what the
        page keys on, and each hunts its own caption. */

@@ -101,6 +101,7 @@ binds
 BindsChanged
 BindsPath
 bindsStamp
+body
 Boolean
 BootOn
 BootSet
@@ -114,6 +115,7 @@ Byte
 c
 callback
 CallNextHookEx
+cap
 CAPS_ALPHA
 CAPS_CLASS
 CAPS_DARK
@@ -205,11 +207,17 @@ EnumWindows
 Environment
 erase
 ev
+EV_COOLDOWN_MS
 EVENT_OBJECT_HIDE
 EVENT_OBJECT_NAMECHANGE
 EVENT_OBJECT_SHOW
 evHook
 evHooks
+evLastAt
+evLastCap
+EvServiceReads
+evWantCap
+evWantTag
 Exception
 exe
 ExePath
@@ -416,6 +424,7 @@ list
 List`1
 listBest
 listBestArea
+ListPath
 ListPick
 ListUnder
 LLKHF_INJECTED
@@ -466,6 +475,7 @@ Monitor
 MouseCallback
 mouseData
 MOUSEINPUT
+Move
 MoveNext
 MoveToEx
 ms
@@ -506,6 +516,7 @@ parentPid
 ParseBind
 Path
 PeekMessage
+PeekTagged
 pid
 PM_REMOVE
 POINT
@@ -536,6 +547,7 @@ PS_ENDCAP_ROUND_
 PS_GEOMETRIC
 PS_SOLID
 pt
+ptag
 PtrToStructure
 pts
 PutI
@@ -693,6 +705,8 @@ t
 T_FADE
 T_HOLD
 tag
+TagOfCaption
+tags
 TakeIfMatch
 target64
 TargetFocused
@@ -809,6 +823,7 @@ wParam
 Write
 WriteAllText
 WriteCrash
+WriteList
 WriteProcessMemory
 wrote
 WS_EX_LAYERED

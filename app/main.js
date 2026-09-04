@@ -830,6 +830,30 @@ ipcMain.handle("sc-diag", (_e, delayMs) => new Promise(res => {
    cost — fewer columns, so fewer messages: six of sixteen over 250 rows is 1500 rather
    than 4000. Returns the helper's raw tab-separated answer; the page parses it, because
    the page is where the shape it has to become already lives. */
+/* ---- the lists the resident helper captured when protel opened them ----
+
+   The helper holds a WinEvent hook on protel and reads a list the moment it appears,
+   writing the rows to %LOCALAPPDATA%\\RecCheck\\rc-list-<tag>.tsv. This just hands those
+   files to the page.
+
+   NOTHING HERE LAUNCHES A PROCESS AND NOTHING HERE TOUCHES PROTEL. It is a file read, so
+   the page can ask as often as it likes, and a list he opened for two seconds is still
+   there to be collected minutes later. The mtime is returned so the page can tell a new
+   capture from one it has already taken. */
+ipcMain.handle("sc-listfile", (_e, tag) => {
+  try{
+    const t = String(tag || "").toUpperCase();
+    if(["IH", "MV", "AR", "DP"].indexOf(t) < 0) return null;
+    const fs = require("fs"), path2 = require("path");
+    const base = process.env.LOCALAPPDATA;
+    if(!base) return null;
+    const p = path2.join(base, "RecCheck", "rc-list-" + t + ".tsv");
+    const st = fs.statSync(p);
+    /* a list this old is not news; it is last night's, and the page has had it */
+    if(Date.now() - st.mtimeMs > 20 * 3600e3) return null;
+    return {tag: t, at: st.mtimeMs, text: fs.readFileSync(p, "utf8")};
+  }catch(e){ return null; }
+});
 /* The other three lists. Same shape as sc-inhouse — one verb per list, the helper picks
    its own window by caption, and the answer is the same TSV with a different tag. */
 ["moves", "arrivals", "departures"].forEach(verb => {

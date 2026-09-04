@@ -31,6 +31,14 @@ const taxMark = "/* ============ boot ============ */";
 if(src.indexOf(taxMark) < 0) throw new Error("tax boot anchor moved — fix test/harness.js");
 const mark = "/* ---------- auto-update (active only inside the desktop app) ---------- */";
 if(src.indexOf(mark) < 0) throw new Error("anchor comment moved — fix test/harness.js");
+/* A STAMP OF THE PAGE THIS WAS BUILT FROM.
+
+   h-sweep.html is a COPY, and a stale one tests a page that no longer exists — which has
+   now happened three times in one night, each time passing cheerfully while proving
+   nothing about the code as written. The browser harnesses read this stamp and refuse to
+   run when it does not match app/index.html, so the failure is loud instead of silent. */
+const stamp = require("crypto").createHash("sha256").update(src).digest("hex");
 const out = path.join(__dirname, "browser", "h-sweep.html");
-fs.writeFileSync(out, src.replace(mark, probe + mark).replace(taxMark, taxProbe + taxMark));
+fs.writeFileSync(out, "<!-- built-from " + stamp + " -->\n"
+  + src.replace(mark, probe + mark).replace(taxMark, taxProbe + taxMark));
 console.log("wrote " + out);

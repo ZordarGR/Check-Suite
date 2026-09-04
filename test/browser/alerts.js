@@ -5,6 +5,7 @@
    each; and resolving REMOVES — it is not a flag and not an archive. Plus the one that is
    not in the wording but is in the design: the read never stops, so the same missing X
    arriving every five seconds must never become a second alert. */
+require("./fresh.js")();          // refuse to run against a stale copy
 const {chromium} = require("playwright-core");
 const path = require("path");
 
@@ -21,11 +22,19 @@ const TWO_MISSING = [
   ["85","BGV","153","SPMV","HEINE","X","03/09/26","12/09/26"],
   ["134","SV","306","BGV","HARMS/HABERMEYER","  ","02/09/26","09/09/26"]
 ];
-const bridge = (moves) => `window.reccheckShortcuts={
+/* The rows reach the page as a CAPTURE now: the resident helper reads the move window on
+   the event protel gives it and leaves the rows in a file, and the page collects that.
+   __files/__at are writable so a test can make a new capture appear mid-run. */
+const bridge = (moves) => `
+window.__files = {IH: null, MV: ${JSON.stringify(moves)}, AR: null, DP: null};
+window.__at = {IH: 1, MV: 1, AR: 1, DP: 1};
+window.reccheckShortcuts={
   get:()=>Promise.resolve({profiles:[],active:null,available:true}),
   helper:()=>Promise.resolve({state:"started"}),
   inhouse:()=>Promise.resolve(null),
-  moves:()=>{ window.__mv=(window.__mv||0)+1; return Promise.resolve(${JSON.stringify(moves)}); }};
+  listFile:(tag)=>{ if(tag === "MV") window.__mv=(window.__mv||0)+1;
+    const t = window.__files[tag];
+    return Promise.resolve(t ? {tag: tag, at: window.__at[tag], text: t} : null); }};
   try{ localStorage.setItem("reccheck_legacy","0"); }catch(e){}`;
 
 let bad = 0;
@@ -89,14 +98,11 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok?"ok  ":"FAIL") + "
   ck("and lines up with it",                    box.al === box.xl);
   ck("and sits BELOW it (" + box.top + "px gap)", box.top >= 0 && box.top < 40);
 
-  /* The read never stops, but the moves window takes one tick in three: four lists on
-     every tick would be four process launches every five seconds, some thirty thousand
-     across a shift. So it is read about every fifteen seconds, and the same missing X
-     must still never pile up. */
-  await p.waitForTimeout(26000);
+  /* The page keeps collecting, and the same capture must never pile the same alert up. */
+  await p.waitForTimeout(12000);
   const tries = await p.evaluate(() => window.__mv);
   alerts = await p.evaluate(() => JSON.parse(localStorage.getItem("reccheck_alerts") || "[]"));
-  ck("it keeps reading the moves window (" + tries + " reads)", tries >= 2);
+  ck("it keeps collecting (" + tries + " asks)",  tries >= 2);
   ck("and the same missing X does not pile up",  alerts.length === 2);
 
   /* opening the list stops the pulse but removes nothing */
@@ -147,7 +153,7 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok?"ok  ":"FAIL") + "
   await p.setViewportSize({width: 1280, height: 900});
   await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
   await p.waitForTimeout(1200);
-  ck("legacy reads no moves window either",
+  ck("legacy collects nothing either",
      await p.evaluate(() => !window.__mv && !JSON.parse(localStorage.getItem("reccheck_alerts") || "[]").length));
   await p.close();
 

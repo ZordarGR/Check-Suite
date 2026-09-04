@@ -1,3 +1,4 @@
+require("./fresh.js")();          // refuse to run against a stale copy
 const {chromium} = require("playwright-core");
 const path = require("path");
 const bridge = `window.reccheckShortcuts={get:()=>Promise.resolve({profiles:[],active:null,available:true}),

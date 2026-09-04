@@ -1,11 +1,11 @@
 {
-  "version": "1.17.34",
+  "version": "1.17.35",
   "type": "full",
-  "engine": "1.17.34",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.34/RecCheck-Setup.exe",
-  "setupSha256": "b4ed92d250e347c3638805c8409fd36bfc8e6a469308e0582bc5d4b7ed235ac9",
+  "engine": "1.17.35",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.35/RecCheck-Setup.exe",
+  "setupSha256": "8a6e96654675810814e3cb3be2ae2140d9860426314f52a0a1fae5e35456ec13",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "1e8a32af43e1c6e341b75a56a8a6ee6334fbf2fa8f9176caa25786e0e8a0bb71",
-  "notes": "All four lists now. With legacy mode off the tool reads protel's in-house list every five seconds and takes the move window, the arrival report and the departure report in turn — open any of them in the course of your own work and it is taken as it goes past.\n\nThe arrival and departure reports go in through their own writer, which can only state what its own rows say. A report names thirty rooms out of two hundred, and the rest of the ledger reads a missing room as a guest who has left, so it never goes near that. Room 9000 is ignored.\n\nALERTS is on the home screen below AUDIT: it pulses red while something is unread, groups by date, and Resolve removes for good."
+  "sha256": "cc22cfc5608b7cba06ef32731f8ee4eb7d739771cb06ca336b15e770b019da87",
+  "notes": "The tool is told now instead of asking. RecCheck's helper is already running and already watches protel's windows, so the moment you open the in-house list, the move window, the arrival report or the departure report it reads it there and then. Nothing polls protel any more.\n\nThat means a list you open for two seconds still lands — the rows are taken when the window opens, so they survive it closing. And the departure report is read when you open one, which is when it changes, rather than on any schedule.\n\nRoom moves are recorded too, but only the ones protel has put its X against. A move without one raises an alert instead, because protel will not show it either."
 }

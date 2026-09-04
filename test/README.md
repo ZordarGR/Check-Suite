@@ -20,6 +20,7 @@ Run the ones that need nothing but node:
 | `dst.js` | both boundaries across Greece's real DST transitions — fails on absolute-time arithmetic |
 | `lvitem.cs` | the LVITEM the list control reads, laid out for the **target's** bitness. Get an offset wrong and the read silently returns nothing, which looks exactly like "protel will not allow it" |
 | `livenames.js` | the protel names meeting the .oxps ingest. An uncut name and its truncation are the same guest — read as a turnover it would mark every room movedOn, delete every nickname, fire the watchlist and overwrite the good name with the cut one, all on one report load |
+| `moves.js` | recording a move that has already happened. Only rows protel has marked with its X, never a stay invented, and `mv` must never become a departure — protel did not call it one |
 | `reports.js` | the arrival and departure reports feeding the ledger. Each carries only ONE of the two dates — the other is the report's own — and the writer must never touch a room its rows do not name, because saveMoves and detectMoves reason from absence and a 30-row report would read as 170 people leaving |
 | `alerts.js` | the alerts store: the same missing X seen again by a read that never stops must be the SAME alert, read is not resolved, resolving removes entirely, and broken storage loads as empty rather than throwing |
 | `roomsfile.js` | the room database on disk, through the real main.js handlers: a Greek name round-tripping byte for byte, the file not readable by opening it, every failure returning null rather than throwing, and no half-written file left beside it |
@@ -45,6 +46,10 @@ writes **nothing** to the ledger.
 tax scope. The two <script> blocks share nothing, so a guard in one cannot be reached from
 the other — `__tx` exists because the check that the automatic read leaves his pairing
 decision alone is not testable from outside that scope.
+
+`fresh.js` makes that impossible to forget: `h-sweep.html` carries a sha256 of the page it
+was built from and every browser harness refuses to run when it does not match. It exists
+because a stale copy passed three times in one night while proving nothing.
 
 **Regenerate `h-sweep.html` after every change to `index.html`** — it is a copy, and a
 stale one tests the wrong page.

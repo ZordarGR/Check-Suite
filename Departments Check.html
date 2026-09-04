@@ -1389,7 +1389,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.34";
+const APP_VERSION = "1.17.35";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -6280,7 +6280,8 @@ const LIVE_RETRY_MS = 5000;
    looks unchanged and nothing is ever written back — he would empty it and watch it stay
    empty. The reset lives in the other scope, so this is its door. */
 window.__taForget = function(){
-  try{ LIVE_SIG = ""; MOVES_SIG = ""; RPT_SIG = {}; }catch(e){}
+  try{ LIVE_SIG = ""; RPT_SIG = {}; LIVE_AT = {}; }catch(e){}
+  try{ localStorage.removeItem(MOVES_DONE_KEY); }catch(e){}
 };
 function liveStop(){
   if(LIVE_TIMER){ clearInterval(LIVE_TIMER); LIVE_TIMER = null; }
@@ -6304,19 +6305,38 @@ function liveEnsure(){
    A failed hunt still costs protel nothing at all -- it is window-manager reads and no
    message is sent until the list is found -- so the rotation is about the machine, not
    about protel. */
-let LIVE_TURN = 0;
+/* ---- collecting what the helper captured ----
+
+   His, 04/09: "when a user opens protel the tool knows and scans the list opened".
+
+   THE PAGE NO LONGER DRIVES PROTEL ON A TIMER. The resident helper holds a WinEvent hook
+   and reads a list the moment it appears, leaving the rows in a file. This collects those
+   files, which is a file read through IPC: no process is launched and protel is not
+   touched at all, however often it runs. That is what makes the two-second case work — the
+   rows were taken when the window opened, so they are still there to collect after it has
+   gone, and it also settles the departures cadence he raised: a departure report is read
+   when he opens one, which is when it changes, and never in between.
+
+   The manual button still spawns a read, because pressing it is a question about right
+   now. Legacy mode still switches all of it off. */
+const LIVE_TAGS = ["IH", "MV", "AR", "DP"];
+let LIVE_AT = {};                              // tag -> the capture already taken
 async function autoReadInhouse(){
   if(legacyOn() || !LIVE_OK){ liveStop(); return; }
-  /* Each read is caught on its own. Awaited bare, one throw in the in-house read would
-     stop the moves window and both reports being read for the rest of the night, and
-     nothing on screen would say so. */
-  try{ await readInhouseLive(true); }catch(e){}
-  const turn = LIVE_TURN++ % 3;
-  try{
-    if(turn === 0) await readMovesLive();
-    else if(turn === 1) await readReportLive("arrivals");
-    else await readReportLive("departures");
-  }catch(e){}
+  if(!window.reccheckShortcuts || !window.reccheckShortcuts.listFile) return;
+  for(const tag of LIVE_TAGS){
+    try{
+      const f = await window.reccheckShortcuts.listFile(tag).catch(() => null);
+      if(!f || !f.text || f.at === LIVE_AT[tag]) continue;
+      LIVE_AT[tag] = f.at;
+      await ingestCaptured(tag, f.text);
+    }catch(e){}
+  }
+}
+async function ingestCaptured(tag, txt){
+  if(tag === "IH") return applyInhouse(parseInhouse(txt), true);
+  if(tag === "MV") return applyMoves(parseTagged(txt, "MV"));
+  return applyReport(parseTagged(txt, tag), tag === "AR");
 }
 /* THE MOVES WINDOW, and only for the missing X.
 
@@ -6418,7 +6438,28 @@ function feedStays(recs, night){
       const cur = m[a];
       if(!cur){ m[a] = {d: d, n: r.name || "", seen: night}; wrote++; continue; }
       if(night < (cur.seen || 0)) continue;
-      const next = {d: d || cur.d || 0, n: r.name || cur.n || "", seen: night};
+      /* ON A TIE THE CENSUS WINS, AND THE COMMENT ABOVE ONLY SAID SO UNTIL NOW.
+
+         `seen` is a business night on both sides: saveMoves stamps it with the in-house
+         list's date, this stamps it with tonight. Through a whole shift the two are the
+         SAME NUMBER, so the guard above is a tie and never fires — and the line that
+         followed took the report's departure unconditionally.
+
+         That matters because the two sources are not equally fresh. protel's in-house
+         list is a census this reads again every five seconds; a report window is a
+         snapshot from whenever he printed it. So a departure report printed at six in
+         the evening could overwrite an extension the census had already picked up at one
+         in the morning, and roomMoves puts a pill on a departure whose date equals
+         tonight — a phantom departure on his panel, which is the failure that has cost
+         him twice.
+
+         So within one night a report may CREATE a stay and may FILL a blank, but it may
+         not overwrite what the census holds. On a strictly later night it is the newer
+         word and wins. */
+      const tie = night === (cur.seen || 0);
+      const next = {d: tie ? (cur.d || d || 0) : (d || cur.d || 0),
+                    n: tie ? (cur.n || r.name || "") : (r.name || cur.n || ""),
+                    seen: night};
       if(cur.from) next.from = cur.from;
       if(cur.mv) next.mv = cur.mv;
       if(next.d !== (cur.d || 0) || next.n !== (cur.n || "")) wrote++;
@@ -6435,9 +6476,14 @@ async function readReportLive(fn){
   try{
     const txt = await window.reccheckShortcuts[fn](600).catch(() => null);
     if(!txt) return;
-    const arrIsNight = fn === "arrivals";
-    const p = parseTagged(txt, arrIsNight ? "AR" : "DP");
-    if(p.err || !p.rows.length) return;
+    applyReport(parseTagged(txt, fn === "arrivals" ? "AR" : "DP"), fn === "arrivals");
+  }catch(e){}
+  finally{ RPT_BUSY[fn] = false; }
+}
+function applyReport(p, arrIsNight){
+  const fn = arrIsNight ? "arrivals" : "departures";
+  try{
+    if(!p || p.err || !p.rows.length) return;
     if(!(arrIsNight ? /arrival\s*report/i : /departure\s*report/i).test(p.title)) return;
     /* the same two refusals the in-house read has, and for the same reasons */
     if(p.done && p.done.cut) return;
@@ -6465,26 +6511,31 @@ async function readReportLive(fn){
                                 out.recs.length, wrote, night)
                             + (out.dropped ? t('live_held', out.dropped) : '');
   }catch(e){}
-  finally{ RPT_BUSY[fn] = false; }
 }
-let MOVES_BUSY = false, MOVES_SIG = "";
+let MOVES_BUSY = false, MOVES_ROWS = null, MOVES_NIGHT = 0;
 async function readMovesLive(){
   if(MOVES_BUSY || !window.reccheckShortcuts || !window.reccheckShortcuts.moves) return;
   MOVES_BUSY = true;
   try{
     const txt = await window.reccheckShortcuts.moves(400).catch(() => null);
     if(!txt) return;
-    const p = parseTagged(txt, "MV");
-    if(p.err || !p.rows.length) return;
+    applyMoves(parseTagged(txt, "MV"));
+  }catch(e){}
+  finally{ MOVES_BUSY = false; }
+}
+function applyMoves(p){
+  try{
+    if(!p || p.err || !p.rows.length) return;
     if(!/perform\s*move/i.test(p.title)) return;      // the caption has to name it
     /* A read the helper called incomplete says nothing about which rows lack an X — the
        missing ones may simply be the rows it never got to. */
     if(p.done && p.done.cut) return;
-    const sig = p.title + "\u0000" + p.rows.map(r => r.join("\u0001")).join("\u0002");
-    if(sig === MOVES_SIG) return;                      // unchanged: nothing new to say
-    MOVES_SIG = sig;
     const night = inhouseDate(p.title);
     const key = dkey(night) || 0;
+    /* Kept, because a move can only be recorded once the stay it names exists, and that
+       may not be until the in-house list is read. Nothing here is expensive: the rows are
+       already in hand, the alert dedups on its key and the applied set dedups the write. */
+    MOVES_ROWS = p.rows; MOVES_NIGHT = key;
     for(const r of p.rows){
       const x = String(r[MV.X] || "").trim();
       if(x) continue;                                  // marked, protel will show it
@@ -6505,8 +6556,61 @@ async function readMovesLive(){
         text: t('al_moveNoX', from || '?', to || '?', name || '?')
       });
     }
+    recordMoves(p.rows, key);
   }catch(e){}
-  finally{ MOVES_BUSY = false; }
+}
+/* ---- a move that has already happened ----
+
+   Asked whether "Perform Move for Date" was a list of moves still to do or moves already
+   made, he said: "it is a record of rooms that have moved already indeed". So it can be
+   recorded — and until he said it, nothing was, because writing a move that has not
+   happened puts a guest in a room they are not in.
+
+   ONLY ROWS WITH THE X. His words on that column: it is "the mark that the move is okay
+   for protel to visualize it". A row without one is a move protel itself will not show,
+   and it gets the alert instead. Recording one would be taking a step protel has not.
+
+   It writes the SAME TWO FIELDS detectMoves has always written, and nothing else: the
+   stay in the new room learns where it came from, and the stay in the old room is marked
+   vacated. It does NOT invent either stay. If the in-house list has not been read yet the
+   entries are not there, and the move stays on the pending list to be applied on a later
+   pass — which is why the applied set is what is remembered, and not merely that the
+   window was seen. `mv` deliberately does not set a departure: the guest left that room
+   but protel never called it a departure, and inventing one would put a pill on his panel
+   that protel's own list does not have. That was the 30/08 lesson. */
+const MOVES_DONE_KEY = "reccheck_moves_applied";
+function movesApplied(){
+  try{
+    const o = JSON.parse(localStorage.getItem(MOVES_DONE_KEY) || "{}");
+    return (o && typeof o === "object" && !Array.isArray(o)) ? o : {};
+  }catch(e){ return {}; }
+}
+function recordMoves(rows, night){
+  if(!rows || !rows.length || !night) return 0;
+  const done = movesApplied();
+  let led = null, wrote = 0, changed = false;
+  try{ led = loadLedger(); }catch(e){ return 0; }
+  for(const r of (rows || [])){
+    if(!String(r[MV.X] || "").trim()) continue;         // protel has not marked it
+    const from = String(r[MV.FROM] || "").trim();
+    const to   = String(r[MV.TO] || "").trim();
+    const arr  = dkey(String(r[MV.ARR] || "").trim());
+    if(!/^\d{2,3}$/.test(from) || !/^\d{2,3}$/.test(to) || !arr || from === to) continue;
+    const key = "mv|" + night + "|" + from + "|" + to + "|" + arr;
+    if(done[key]) continue;
+    const dst = led[to] && led[to][arr];
+    const src = led[from] && led[from][arr];
+    if(!dst && !src) continue;                          // neither stay known yet — try again later
+    if(dst && dst.from !== from){ dst.from = from; wrote++; }
+    if(src && src.mv !== night){ src.mv = night; wrote++; }
+    done[key] = night;
+    changed = true;
+  }
+  if(!changed) return 0;
+  try{ localStorage.setItem(MOVES_KEY, JSON.stringify(led)); }catch(e){}
+  try{ localStorage.setItem(MOVES_DONE_KEY, JSON.stringify(done)); }catch(e){}
+  try{ if(wrote) render(); }catch(e){}
+  return wrote;
 }
 async function readInhouseLive(auto){
   const btn = el('liveRead'), say = el('liveSay');
@@ -6518,12 +6622,19 @@ async function readInhouseLive(auto){
   if(!auto) say.textContent = t('live_reading');
   const txt = await window.reccheckShortcuts.inhouse(400).catch(() => null);
   btn.disabled = false;
+  return applyInhouse(txt ? parseInhouse(txt) : null, auto);
+}
+/* The half that turns a parsed list into what the tool holds, kept separate from the half
+   that fetched it: the rows now arrive two ways — spawned on demand when he presses the
+   button, and captured by the resident helper the moment protel opened the window. Both
+   must land in exactly the same place, so there is one of these and not two. */
+function applyInhouse(p, auto){
+  const say = el('liveSay');
   /* An automatic read that found nothing gets a quiet line, not the full explanation:
      the in-house list not being open is the NORMAL state when the screen asked on its
      own. A read he pressed for still says exactly what happened. */
   const quiet = (m) => { say.textContent = auto ? t('live_idle') : m; LIVE_SIG = ""; };
-  if(!txt){ quiet(t('live_none')); return; }
-  const p = parseInhouse(txt);
+  if(!p){ quiet(t('live_none')); return; }
   if(p.err){ quiet(t('live_err') + p.err); return; }
   if(!p.rows.length){ quiet(t('live_none')); return; }
   if(!isInhouseTitle(p.title)){ quiet(t('live_wrong', p.title || '?')); return; }
@@ -6550,6 +6661,11 @@ async function readInhouseLive(auto){
   LIVE_SIG = sig;
   RATE = rate;
   const saved = saveMoves(rate);
+  /* A move can only be written onto a stay that exists, and the in-house list is what
+     creates them. So the last moves capture is offered again here — the applied set makes
+     a second attempt on one already written free, and a move whose stay is still unknown
+     simply waits for the next census. */
+  try{ if(MOVES_ROWS) recordMoves(MOVES_ROWS, MOVES_NIGHT); }catch(e){}
   const named = window.__rcLiveNames ? window.__rcLiveNames(rate) : 0;
   /* Only a read HE asked for clears these. They hold decisions he made by clicking —
      which adjoining pair to treat as one, which prompt he dismissed — and wiping them

@@ -99,6 +99,36 @@ ck("a later read may correct the departure",    R.led()["337"][20260904].d === 2
 R.feedStays([{room:"337", arr:"04/09/26", dep:"20/09/26", name:"AMANN ANJA/BERND"}], 20260901);
 ck("an older read may not overwrite it",        R.led()["337"][20260904].d === 20260907);
 
+/* ON A TIE THE CENSUS WINS — and this is the one the audit caught.
+   `seen` is a business night on both sides, so through a whole shift the in-house census
+   and a report stamp the SAME number and the recency guard is a tie. A report window is a
+   snapshot from whenever it was printed; the in-house list is re-read every five seconds.
+   Letting the snapshot win would push a stale departure back over an extension the census
+   had already picked up — and roomMoves puts a pill on a departure equal to tonight. */
+store["reccheck_moves_v2"] = JSON.stringify({
+  "210": {"20260901": {d: 20260907, n: "EXTENDED GUEST", seen: 20260904}}});
+R.feedStays([{room:"210", arr:"01/09/26", dep:"04/09/26", name:"EXTENDED GUEST"}], 20260904);
+ck("a same-night report may NOT undo the census", R.led()["210"][20260901].d === 20260907);
+/* but it may still fill a blank the census has not answered */
+store["reccheck_moves_v2"] = JSON.stringify({
+  "211": {"20260901": {d: 0, n: "OPEN", seen: 20260904}}});
+R.feedStays([{room:"211", arr:"01/09/26", dep:"04/09/26", name:"OPEN"}], 20260904);
+ck("and it may still fill a blank departure",    R.led()["211"][20260901].d === 20260904);
+/* and on a strictly later night it is the newer word */
+store["reccheck_moves_v2"] = JSON.stringify({
+  "212": {"20260901": {d: 20260907, n: "X", seen: 20260904}}});
+R.feedStays([{room:"212", arr:"01/09/26", dep:"05/09/26", name:"X"}], 20260905);
+ck("a later night's report does correct it",     R.led()["212"][20260901].d === 20260905);
+/* a census name is not replaced by a report name on the same night either */
+store["reccheck_moves_v2"] = JSON.stringify({
+  "213": {"20260901": {d: 20260907, n: "CENSUS NAME", seen: 20260904}}});
+R.feedStays([{room:"213", arr:"01/09/26", dep:"07/09/26", name:"REPORT NAME"}], 20260904);
+ck("nor is the census name replaced on a tie",   R.led()["213"][20260901].n === "CENSUS NAME");
+/* put the ledger back to what the next section expects */
+store["reccheck_moves_v2"] = "";
+R.feedStays(a.recs, 20260904);
+R.feedStays([{room:"337", arr:"04/09/26", dep:"07/09/26", name:"AMANN ANJA/BERND"}], 20260906);
+
 /* IT MUST NEVER TOUCH A ROOM ITS ROWS DO NOT NAME. This is the whole point. */
 const before = Object.keys(R.led()).length;
 R.feedStays(d.recs, 20260904);
