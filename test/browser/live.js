@@ -116,6 +116,110 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
     await p.close();
   }
 
+  /* 6. AUTOMATIC when legacy is off. His words: legacy is the manual way, the new way is
+        the tool getting the data by itself — and then, on why it must not wait to be
+        asked: "we want to obtain data from real usage, not when we need them to be shown
+        on the tool because it becomes the same hassle if not more than feeding a xps
+        file". So it runs from the moment the app is up, on whatever screen. */
+  p = await b.newPage();
+  await p.addInitScript(bridgeFor(IH("Guests inhouse: 04/09/26", ROWS), false));
+  await p.setViewportSize({width: 1280, height: 620});
+  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
+  await p.waitForTimeout(900);
+  let after = await p.evaluate(() => ({
+    led: localStorage.getItem("reccheck_moves_v2") || "",
+    rooms: localStorage.getItem("reccheck_rooms") || ""
+  }));
+  ck("it reads without the Tax Check ever being opened", after.led.indexOf('"426"') >= 0);
+  ck("and the names land with it",                       after.rooms.indexOf("NAHLA") >= 0);
+  /* the reading continues, but an UNCHANGED list must not rewrite and redraw twenty times
+     a minute under his hands */
+  await p.evaluate(() => { window.__writes = 0;
+    const real = localStorage.setItem.bind(localStorage);
+    localStorage.setItem = (k, v) => { if(k === "reccheck_moves_v2") window.__writes++; real(k, v); }; });
+  await p.waitForTimeout(12000);
+  ck("an unchanged list is not written again",
+     (await p.evaluate(() => window.__writes)) === 0);
+  await p.close();
+
+  /* 7. in legacy it must stay manual — nothing is read at all */
+  p = await b.newPage();
+  await p.addInitScript(bridgeFor(IH("Guests inhouse: 04/09/26", ROWS), true));
+  await p.setViewportSize({width: 1280, height: 620});
+  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
+  await p.waitForTimeout(250);
+  await p.evaluate(() => window.__t.showScreen("tax"));
+  await p.waitForTimeout(6000);
+  ck("legacy stays manual — nothing is read, on any screen",
+     await p.evaluate(() => !localStorage.getItem("reccheck_moves_v2")));
+  await p.close();
+
+  /* 8. an automatic read that finds nothing says so quietly */
+  p = await b.newPage();
+  await p.addInitScript(bridgeFor(IH("Arrival list 04/09/26", ROWS), false));
+  await p.setViewportSize({width: 1280, height: 620});
+  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
+  await p.waitForTimeout(250);
+  await p.evaluate(() => window.__t.showScreen("tax"));
+  await p.waitForTimeout(900);
+  after = await p.evaluate(() => ({say: document.getElementById("liveSay").textContent,
+                                   led: localStorage.getItem("reccheck_moves_v2") || ""}));
+  ck("an automatic miss is quiet, not an accusation",
+     /not open|δεν είναι ανοιχτή/i.test(after.say) && !/That is not the in-house/.test(after.say));
+  ck("and still records nothing",                    after.led === "");
+  await p.close();
+
+  /* 9. THE RETRY, and it never stops. He can open protel's in-house list at any point in
+        his own work and it lands by itself — that is the whole point of it. */
+  p = await b.newPage();
+  await p.addInitScript(`window.reccheckShortcuts={
+    get:()=>Promise.resolve({profiles:[],active:null,available:true}),
+    helper:()=>Promise.resolve({state:"started"}),
+    inhouse:()=>{ window.__tries=(window.__tries||0)+1;
+                  return Promise.resolve(window.__open ? ${JSON.stringify(IH("Guests inhouse: 04/09/26", ROWS))}
+                                                       : ${JSON.stringify(IH("Arrival list 04/09/26", ROWS))}); }};
+    try{ localStorage.setItem("reccheck_legacy","0"); }catch(e){}`);
+  await p.setViewportSize({width: 1280, height: 620});
+  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
+  await p.waitForTimeout(12000);
+  let tries = await p.evaluate(() => window.__tries || 0);
+  ck("it keeps attempting while protel has nothing open (" + tries + ")", tries >= 3);
+  ck("and has recorded nothing yet",
+     await p.evaluate(() => !localStorage.getItem("reccheck_moves_v2")));
+
+  /* he opens the in-house list in the middle of his own work — no press, no navigation */
+  await p.evaluate(() => { window.__open = true; });
+  await p.waitForTimeout(6000);
+  ck("opening the list later lands it with no press",
+     (await p.evaluate(() => localStorage.getItem("reccheck_moves_v2") || "")).indexOf('"426"') >= 0);
+
+  /* and it goes on reading afterwards — his call, made knowing the cost */
+  const settled = await p.evaluate(() => window.__tries);
+  await p.waitForTimeout(12000);
+  const later = await p.evaluate(() => window.__tries);
+  ck("and it does NOT stop after succeeding (" + settled + " -> " + later + ")", later > settled);
+  await p.close();
+
+  /* 10. and it is not tied to a screen: leaving the Tax Check must not stop it */
+  p = await b.newPage();
+  await p.addInitScript(`window.reccheckShortcuts={
+    get:()=>Promise.resolve({profiles:[],active:null,available:true}),
+    helper:()=>Promise.resolve({state:"started"}),
+    inhouse:()=>{ window.__tries=(window.__tries||0)+1;
+                  return Promise.resolve(${JSON.stringify(IH("Arrival list 04/09/26", ROWS))}); }};
+    try{ localStorage.setItem("reccheck_legacy","0"); }catch(e){}`);
+  await p.setViewportSize({width: 1280, height: 620});
+  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
+  await p.waitForTimeout(250);
+  await p.evaluate(() => window.__t.showScreen("tax"));
+  await p.waitForTimeout(6000);
+  const before = await p.evaluate(() => window.__tries || 0);
+  await p.evaluate(() => window.__t.showScreen("audit"));
+  await p.waitForTimeout(12000);
+  const off = await p.evaluate(() => window.__tries);
+  ck("it keeps reading away from the Tax Check (" + before + " -> " + off + ")", off > before);
+  await p.close();
+
   await b.close();
   console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");
   process.exit(bad ? 1 : 0);

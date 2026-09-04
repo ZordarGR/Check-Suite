@@ -1364,7 +1364,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.30";
+const APP_VERSION = "1.17.31";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1931,6 +1931,33 @@ function loadRooms(){
 }
 function saveRooms(){
   try{ localStorage.setItem(ROOMS_KEY, JSON.stringify(ROOMS)); }catch(e){}
+  /* And a mirror in the app's own folder, obfuscated — his call, 04/09. localStorage
+     stays the working store because the renderer boots off it synchronously; this is a
+     copy beside it, so a browser that cleared its site data has not taken the room
+     database with it. It cannot cost anything: it is fire-and-forget and nothing waits
+     on the answer. */
+  try{ if(window.reccheckRooms) window.reccheckRooms.write(ROOMS); }catch(e){}
+}
+/* Read the disk mirror back and fill in ONLY what localStorage does not have. Never the
+   other way round: the store the app has been running on wins every conflict, because a
+   stale file quietly replacing tonight's work is the failure that would matter. */
+async function mergeRoomsFromDisk(){
+  try{
+    if(!window.reccheckRooms) return 0;
+    const disk = await window.reccheckRooms.read();
+    if(!disk || typeof disk !== "object") return 0;
+    let added = 0;
+    for(const room of Object.keys(disk)){
+      if(ROOMS[room]) continue;
+      const e = disk[room];
+      if(e && typeof e === "object"){ ROOMS[room] = e; added++; }
+    }
+    if(added){
+      try{ localStorage.setItem(ROOMS_KEY, JSON.stringify(ROOMS)); }catch(e){}
+      if(MODEL) NAMES_STALE = true;
+    }
+    return added;
+  }catch(e){ return 0; }
 }
 /* THE PROTEL NAMES, straight into the room database. His call, 04/09.
 
@@ -3441,6 +3468,11 @@ function showScreen(which){
   const mainEl = document.querySelector("main");
   const tax = document.getElementById("taxScreen");
   if(tax) tax.style.display = which === "tax" ? "" : "none";
+  /* Arriving at the Tax Check starts the automatic protel read, and leaving it stops the
+     retry. The read itself lives in the other <script> scope, so this is a door, the same
+     shape as __taLegacy. Never awaited — the screen must appear at once and the line
+     fills in when protel answers. */
+  try{ if(window.__taScreen) window.__taScreen(which); }catch(e){}
   $("#rail").style.display = (which === "app" && MODEL) ? "flex" : "none";
   if(which !== "app" && typeof closeDrawer === "function") closeDrawer();
   if(which === "app"){
@@ -3640,6 +3672,10 @@ async function loadReport(buf, fname){
     STATE = loadState(MODEL.reportDate);
     loadWatch();
     loadRooms();
+    /* Before syncRooms, so a room the mirror knows about is already in hand when the
+       report's names meet it — otherwise the ingest would create it fresh from the CUT
+       name and the protel one would be lost. */
+    await mergeRoomsFromDisk();
     syncRooms();
     renderAll(fname);
     if(!MODEL.receipts.length){
@@ -5262,6 +5298,12 @@ $("#resetDay").onclick = () => {
         if(task){ task.done = !task.done; saveCL(); renderChecklist(); }
       });
   }
+  /* The room database the app's own folder is holding, pulled in at start so the nickname
+     panel and the names are complete before any report is opened. NOT awaited: nothing on
+     this screen needs it yet, and a boot that waits on an IPC round-trip is a boot that
+     can hang on one. Opening a report does await it, which is where it has to be right. */
+  loadRooms();
+  mergeRoomsFromDisk();
   paintSevSel();
   clNightCheck();
   applyLang();
@@ -5330,6 +5372,7 @@ const I18N={
   live_err:"protel said: ", live_got:"{0} of {1} rows \u2014 {2} rooms, {3} stays recorded for {4}. {5} messages, {6} ms.",
   live_cut:" Stopped early \u2014 protel was answering slowly.", live_cancel:" {0} cancelled row(s) ignored.",
   live_named:" {0} room(s) took their name from protel, uncut.",
+  live_idle:"protel\u2019s in-house list is not open \u2014 press to read it once it is.",
   live_wrong:"That is not the in-house list \u2014 the window it found says \u201c{0}\u201d. Nothing was recorded.",
   live_nodate:"No date in \u201c{0}\u201d, so there is no night to file these under. Nothing was recorded.",
   slot_rate:"Rate Check", slot_rate_sub:"in-house list · pre-EOD", slot_tax:"Tax Check", slot_tax_sub:"charges history · post-EOD",
@@ -5392,6 +5435,7 @@ const I18N={
   live_err:"το protel είπε: ", live_got:"{0} από {1} γραμμές — {2} δωμάτια, {3} διαμονές για {4}. {5} μηνύματα, {6} ms.",
   live_cut:" Σταμάτησε νωρίς — το protel απαντούσε αργά.", live_cancel:" {0} ακυρωμένες γραμμές αγνοήθηκαν.",
   live_named:" {0} δωμάτια πήραν το όνομά τους από το protel, ακέραιο.",
+  live_idle:"Η λίστα παραμονών του protel δεν είναι ανοιχτή — πάτησε για ανάγνωση μόλις ανοίξει.",
   live_wrong:"Αυτή δεν είναι η λίστα παραμονών — το παράθυρο που βρέθηκε λέει «{0}». Δεν καταγράφηκε τίποτα.",
   live_nodate:"Δεν υπάρχει ημερομηνία στο «{0}», οπότε δεν υπάρχει νύχτα για να καταχωρηθούν. Δεν καταγράφηκε τίποτα.",
   slot_rate:"Rate Check", slot_rate_sub:"λίστα παραμονών · πριν το EOD", slot_tax:"Tax Check", slot_tax_sub:"ιστορικό χρεώσεων · μετά το EOD",
@@ -6004,24 +6048,73 @@ function inhouseDate(title){
   const m = String(title || "").match(/(\d{1,2}\/\d{1,2}\/\d{2,4})/g);
   return m && m.length ? m[m.length - 1] : "";
 }
-async function readInhouseLive(){
+/* HIS CAVEAT, 04/09: "for the tool to truly read automatically the data make it attempt
+   to read every 3 seconds" — and, when this stopped after the first success: "we dont
+   want it to stop, as long as the process is open and running it keeps running".
+
+   So it runs for the life of the app, on every screen, whether or not it has already got
+   tonight's list. That was put to him with the cost: a FAILED attempt costs protel
+   nothing at all — the hunt is window-manager reads, and not one message is sent until
+   the list is found — but a SUCCESSFUL one is about 1500 messages, so every three seconds
+   is roughly 30,000 a minute, all shift, against software that is not his. He was told
+   that plainly and chose this. It is his machine and his call; it is recorded here so it
+   is a decision and not a drift.
+
+   WHAT IS NOT REPEATED is the work behind the read. A list that has not changed since the
+   last tick writes nothing and redraws nothing: re-saving the ledger and re-rendering
+   twenty times a minute would move the page under his hands mid-audit, and that is a
+   fault rather than a faithfulness. The read still happens at his cadence. */
+let LIVE_TIMER = null;
+let LIVE_SIG = "";                       // the last list seen, so an unchanged one is cheap
+/* He asked for three seconds and then offered five "if you think its going to cause
+   issues". Five, and the reason is the successful read rather than the failed one: at
+   three it is about 30,000 messages a minute into protel all shift, at five about 18,000.
+   Two seconds is nothing to him — the list lands while he is still looking at protel —
+   and it is a third off the load on software that is not his. */
+const LIVE_RETRY_MS = 5000;
+function liveStop(){
+  if(LIVE_TIMER){ clearInterval(LIVE_TIMER); LIVE_TIMER = null; }
+}
+/* Started at boot and whenever legacy changes. Legacy is the manual mode, so it is the
+   one thing that switches this off. */
+function liveEnsure(){
+  if(legacyOn() || !LIVE_OK){ liveStop(); return; }
+  if(LIVE_TIMER) return;
+  autoReadInhouse();
+  LIVE_TIMER = setInterval(autoReadInhouse, LIVE_RETRY_MS);
+}
+async function autoReadInhouse(){
+  if(legacyOn() || !LIVE_OK){ liveStop(); return; }
+  await readInhouseLive(true);
+}
+async function readInhouseLive(auto){
   const btn = el('liveRead'), say = el('liveSay');
   if(!window.reccheckShortcuts || !window.reccheckShortcuts.inhouse || btn.disabled) return;
   btn.disabled = true; say.textContent = t('live_reading');
   const txt = await window.reccheckShortcuts.inhouse(400).catch(() => null);
   btn.disabled = false;
-  if(!txt){ say.textContent = t('live_none'); return; }
+  /* An automatic read that found nothing gets a quiet line, not the full explanation:
+     the in-house list not being open is the NORMAL state when the screen asked on its
+     own. A read he pressed for still says exactly what happened. */
+  const quiet = (m) => { say.textContent = auto ? t('live_idle') : m; LIVE_SIG = ""; };
+  if(!txt){ quiet(t('live_none')); return; }
   const p = parseInhouse(txt);
-  if(p.err){ say.textContent = t('live_err') + p.err; return; }
-  if(!p.rows.length){ say.textContent = t('live_none'); return; }
-  if(!isInhouseTitle(p.title)){ say.textContent = t('live_wrong', p.title || '?'); return; }
+  if(p.err){ quiet(t('live_err') + p.err); return; }
+  if(!p.rows.length){ quiet(t('live_none')); return; }
+  if(!isInhouseTitle(p.title)){ quiet(t('live_wrong', p.title || '?')); return; }
   const biz = inhouseDate(p.title);
   /* The caption is the only place the live path can learn the night from. Filing 250
      stays under a guessed date is exactly the kind of helpful deduction that put 83
      departures on his panel, so it does not happen: it refuses and says why. */
-  if(!biz){ say.textContent = t('live_nodate', p.title || '?'); return; }
+  if(!biz){ quiet(t('live_nodate', p.title || '?')); return; }
   const rate = inhouseToRate(p.rows, biz);
-  if(!rate.count){ say.textContent = t('live_none'); return; }
+  if(!rate.count){ quiet(t('live_none')); return; }
+  /* Nothing has moved in protel since the last tick. Writing the same ledger again and
+     redrawing the page under him twenty times a minute is not faithfulness, it is a
+     fault. A read he PRESSED still goes through, because pressing it is a question. */
+  const sig = p.title + "\u0000" + p.rows.length + "\u0000" + p.rows.map(r => r.join("\u0001")).join("\u0002");
+  if(auto && sig === LIVE_SIG) return;
+  LIVE_SIG = sig;
   RATE = rate;
   const saved = saveMoves(rate);
   const named = window.__rcLiveNames ? window.__rcLiveNames(rate) : 0;
@@ -6045,7 +6138,7 @@ try{
   if(window.reccheckShortcuts && window.reccheckShortcuts.inhouse){
     LIVE_OK = true;
     el('liveRead').textContent = t('live_read');
-    el('liveRead').addEventListener('click', readInhouseLive);
+    el('liveRead').addEventListener('click', () => readInhouseLive(false));
   }
 }catch(e){}
 el('file-rate').addEventListener('change',e=>loadRate(e.target.files[0]));
@@ -6078,7 +6171,15 @@ function applyLegacy(on){
 function legacyOn(){
   try{ return localStorage.getItem('reccheck_legacy') !== '0'; }catch(e){ return true; }
 }
-window.__taLegacy = function(on){ applyLegacy(!!on); };
+window.__taLegacy = function(on){
+  applyLegacy(!!on);
+  /* Switching legacy off while standing on the Tax Check should start reading, not wait
+     for him to leave and come back. */
+  try{ if(on) liveStop(); else liveEnsure(); }catch(e){}
+};
+/* It runs for the life of the app now, not while a screen is open, so this only makes
+   sure it is running — arriving at the Tax Check is no longer what starts it. */
+window.__taScreen = function(){ try{ liveEnsure(); }catch(e){} };
 
 /* time safeguard: warn when a loaded report is for a past working night. Separate scope
    from the audit half, so the 03:30 boundary is repeated here rather than shared. */
@@ -6095,7 +6196,7 @@ window.__taSimulate=function(rk,tk){RATE=rk?{kind:'rate',dateKey:rk,bizDate:dfmt
 
 /* ============ boot ============ */
 function pruneZeroMem(){const mem=loadMem();let ch=false;for(const room of Object.keys(mem)){const rec=mem[room];for(const d of Object.keys(rec)){const e=rec[d];if(((e.arr||0)+(e.auto||0)+(e.man||0))===0){delete rec[d];ch=true;}}if(!Object.keys(rec).length){delete mem[room];ch=true;}}if(ch)saveMem(mem);}
-(function boot(){el('taxBack').textContent='← '+(LANG==='el'?'ΕΛΕΓΧΟΣ':'AUDIT');applyLegacy(legacyOn());pruneZeroMem();const mem=loadMem();const ds=recentDates(mem,7);if(ds.length)EXPANDED.add(ds[0]);applyStatic();renderMemory();el('memsec').style.display=ds.length?'block':'none';})();
+(function boot(){liveEnsure();el('taxBack').textContent='← '+(LANG==='el'?'ΕΛΕΓΧΟΣ':'AUDIT');applyLegacy(legacyOn());pruneZeroMem();const mem=loadMem();const ds=recentDates(mem,7);if(ds.length)EXPANDED.add(ds[0]);applyStatic();renderMemory();el('memsec').style.display=ds.length?'block':'none';})();
 })();
 </script>
 </body>

@@ -14,6 +14,12 @@ contextBridge.exposeInMainWorld("reccheckFiles", {
   perTool: true,
   onDirEvent: (cb) => ipcRenderer.on("reccheck-dir-event", (_e, profile) => cb(profile))
 });
+/* The room database mirrored into the app's own folder. Obfuscated, not encrypted — the
+   key is in the program. Named for what it is so nobody reading this assumes otherwise. */
+contextBridge.exposeInMainWorld("reccheckRooms", {
+  read: () => ipcRenderer.invoke("rooms-read"),
+  write: (obj) => ipcRenderer.invoke("rooms-write", obj)
+});
 contextBridge.exposeInMainWorld("reccheckOverlay", {
   toggle: () => ipcRenderer.invoke("overlay-toggle"),
   state: () => ipcRenderer.invoke("overlay-state"),

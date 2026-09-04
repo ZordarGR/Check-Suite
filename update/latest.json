@@ -1,11 +1,11 @@
 {
-  "version": "1.17.30",
-  "type": "html",
-  "engine": "1.17.29",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.29/RecCheck-Setup.exe",
-  "setupSha256": "29e30681ea9e24949b2bb6f56594ff492f8c89c6511693a7ba3aab911465589f",
+  "version": "1.17.31",
+  "type": "full",
+  "engine": "1.17.31",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.31/RecCheck-Setup.exe",
+  "setupSha256": "bab539e9f401a563dd8150fe6775343f18c61b08463ba19196e488919e08722c",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "2fcc2424106e16642abe0d4eca822d0f7a7ffd0622200ac883c1741258bde24a",
-  "notes": "Guest names now come from protel uncut. They went into the ledger before and stopped there — the cards still showed the truncated name off the xps file. They reach the room database now, and the card, whole.\n\nAnd legacy mode is what the tool starts in: both checks fed from xps files. The live read of protel is what you switch ON in OPTIONS, not off."
+  "sha256": "f4a56fd2f27bdb17240d41b718c5fc9c9c6b7f5cba82a514d4dac44251c88867",
+  "notes": "Two things. The room database now lives in RecCheck's own folder as well, not only in the browser store, and it is scrambled so it cannot be read by opening it — it is obfuscation, not real encryption, because the key is inside the program.\n\nAnd with legacy mode switched off in OPTIONS, the tool reads protel's in-house list by itself every five seconds, on whatever screen you are on, for as long as it is running. Open the list in the course of your own work and it is taken as it goes past. A list that has not changed is not written or redrawn again. Legacy mode stays the default and stays entirely manual."
 }
