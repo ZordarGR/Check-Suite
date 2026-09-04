@@ -43,6 +43,9 @@
 <>f__mg$cache5
 <>f__mg$cache6
 <>f__mg$cache7
+<>f__mg$cache8
+<>f__mg$cache9
+<>f__mg$cacheA
 <>m__0
 <Main>m__0
 <Main>m__1
@@ -124,6 +127,7 @@ CapsPaint
 capsWnd
 CapsWndProc
 caption
+CaptionSaysInhouse
 CB_GETCOUNT
 cbClsExtra
 cbSize
@@ -188,6 +192,7 @@ entry
 EnumChildWindows
 Enumerator
 EnumProc
+EnumWindows
 Environment
 erase
 ev
@@ -212,6 +217,7 @@ fgWnd
 File
 FillRect
 fIncUpdate
+FindInhouseList
 FindWindow
 flags
 Flush
@@ -336,10 +342,15 @@ IH_NAME
 IH_OCC
 IH_ROOM
 IH_STATUS
+ihCaption
 IhCols
+ihFound
+ihList
+ihPids
 InArray
 IndexOf
 inherit
+InhouseUnder
 INPUT
 inputs
 InputUnion
@@ -647,6 +658,7 @@ ToArray
 ToInt32
 ToInt64
 top
+TopHunt
 ToString
 ToUpperInvariant
 TranslateMessage
