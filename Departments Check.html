@@ -1359,7 +1359,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.25";
+const APP_VERSION = "1.17.26";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1388,6 +1388,9 @@ en: {
   "ov.doneMsg": "Remind me when the night is already finished",
   "ov.doneMsgSub": "the overlay puts itself away once every task is ticked — with this on, asking for it back says so instead of doing nothing",
   "ov.mbNone": "not set",
+  "ov.mbPress": "press the mouse button now\u2026 (Esc cancels)",
+  "ov.mbFail": "No button was detected \u2014 try again (only the middle and the side buttons can be bound).",
+  "ov.mbClear": "remove the binding",
   "ov.mbMid": "Middle button", "ov.mbBack": "Side button — Back", "ov.mbFwd": "Side button — Forward",
   "sc.menu": "PROTEL SHORTCUTS",
   "sc.title": "PROTEL SHORTCUTS",
@@ -1432,6 +1435,7 @@ en: {
   "sc.focusSelf": "That was RecCheck, not protel. Start it again and bring protel forward before the count ends.",
   "sc.tauEnterLabel": "Press Enter for me after the \u03c4",
   "sc.tauEnterOn": "The helper waits for protel to react, then presses Enter \u2014 the same way the invoice run times its own keys.",
+  "sc.tauEnterWait": "wait",
   "sc.tauEnterOff": "The \u03c4 is sent on its own. Press Enter yourself, and not too quickly.",
   "sc.ledgerLabel": "Room movements memory",
   "sc.ledgerSub": "{rooms} rooms, {res} stays. Everything the movements panel shows comes from here. A stay recorded under a wrong date can never be corrected by a later list \u2014 only cleared.",
@@ -1445,6 +1449,10 @@ en: {
   "sc.bootStopped": "Set to start with Windows, but it is not running right now.",
   "sc.moves": "Why the room pills say what they say",
   "sc.scan": "What the window in front is built from",
+  "sc.read": "Read the list in front",
+  "sc.readHint": "NOT free \u2014 the only thing here that is not. The list writes its answer into a buffer, and for a list in another program that buffer has to sit in that program, so a scratch page is made there and freed again. protel's own memory is never written and every message is a getter. Bring the report you want in front and press it; the report ends with what it cost.",
+  "sc.readWait": "Bring the protel list to the front \u2014 reading in {n}\u2026",
+  "sc.readNone": "Nothing came back. Either protel was not in front, the window holds no list, or protel runs with more rights than RecCheck.",
   "sc.watch": "What protel opened tonight",
   "sc.watchHint": "Zero-touch \u2014 nothing at all is sent to protel. Windows tells RecCheck when a protel window opens or closes, and the caption is the one Windows already holds. Kept for the night only and cleared at 07:00 with the shift.",
   "sc.watchNone": "Nothing recorded this shift. It only watches once a protel window has been picked as the target (PROTEL SHORTCUTS \u2192 only while protel is in front), and it clears itself at 07:00.",
@@ -1661,6 +1669,10 @@ gr: {
   "sc.bootStopped": "Έχει οριστεί να ξεκινά με τα Windows, αλλά αυτή τη στιγμή δεν τρέχει.",
   "sc.moves": "Γιατί λένε αυτό τα πλακίδια δωματίων",
   "sc.scan": "Από τι αποτελείται το μπροστινό παράθυρο",
+  "sc.read": "Διάβασε τη λίστα μπροστά",
+  "sc.readHint": "ΔΕΝ είναι δωρεάν — το μόνο εδώ που δεν είναι. Η λίστα γράφει την απάντηση σε buffer, και για λίστα άλλου προγράμματος ο buffer πρέπει να είναι μέσα σε εκείνο, οπότε δεσμεύεται μια σελίδα εκεί και ελευθερώνεται μετά. Η μνήμη του protel δεν γράφεται ποτέ. Φέρε μπροστά την αναφορά και πάτα το· η αναφορά τελειώνει με το κόστος της.",
+  "sc.readWait": "Φέρε τη λίστα του protel μπροστά — διάβασμα σε {n}…",
+  "sc.readNone": "Δεν ήρθε τίποτα. Είτε το protel δεν ήταν μπροστά, είτε το παράθυρο δεν έχει λίστα, είτε το protel τρέχει με περισσότερα δικαιώματα.",
   "sc.watch": "Τι άνοιξε το protel απόψε",
   "sc.watchHint": "Μηδενική επαφή — τίποτα δεν στέλνεται στο protel. Τα Windows λένε στο RecCheck όταν ανοίγει ή κλείνει παράθυρο του protel, και ο τίτλος είναι αυτός που έχουν ήδη. Κρατιέται μόνο για τη νύχτα και σβήνει στις 07:00 με τη βάρδια.",
   "sc.watchNone": "Δεν καταγράφηκε τίποτα αυτή τη βάρδια. Παρακολουθεί μόνο αφού οριστεί το παράθυρο του protel ως στόχος, και σβήνει μόνο του στις 07:00.",
@@ -3003,9 +3015,11 @@ function openDebug(){
       '<button class="btn" id="scMoves">' + t("sc.moves") + '</button>' +
       '<button class="btn" id="scScan">' + t("sc.scan") + '</button>' +
       '<button class="btn" id="scWatch">' + t("sc.watch") + '</button>' +
+      '<button class="btn" id="scRead">' + t("sc.read") + '</button>' +
     '</div>' +
     '<div class="err" style="color:var(--faint)">' + t("sc.scanHint") + '</div>' +
     '<div class="err" style="color:var(--faint)">' + t("sc.watchHint") + '</div>' +
+    '<div class="err" style="color:var(--faint)">' + t("sc.readHint") + '</div>' +
     '<div class="err" style="color:var(--faint)">' + t("sc.testHint") + '</div>' +
     '<pre id="scDiag" style="display:none"></pre>' +
     '<div class="actions">' +
@@ -3059,6 +3073,29 @@ function openDebug(){
     if(log){
       copy.style.display = "";
       copy.onclick = () => { try{ navigator.clipboard.writeText(log); }catch(e){} };
+    }else copy.style.display = "none";
+  };
+  /* ---- reading the list in front ----
+     The only thing in DEBUG that costs protel real work, and it is a PROBE: it reports
+     what came back and what it cost, and feeds nothing. Nothing is wired to the ledger
+     until this has been seen to work on his machine, because none of it can be run in
+     the container it was written in. */
+  $("#scRead").onclick = async () => {
+    const pre = $("#scDiag"), copy = $("#scCopy"), b = $("#scRead");
+    if(!sc || !sc.readList || b.dataset.busy) return;
+    b.dataset.busy = "1";
+    copy.style.display = "none";
+    pre.style.display = "";
+    let left = 6;
+    pre.textContent = t("sc.readWait", {n: left});
+    const tick = setInterval(() => { left--; if(left > 0) pre.textContent = t("sc.readWait", {n: left}); }, 1000);
+    const rep = await sc.readList(6000, 5).catch(() => null);
+    clearInterval(tick);
+    delete b.dataset.busy;
+    pre.textContent = rep || t("sc.readNone");
+    if(rep){
+      copy.style.display = "";
+      copy.onclick = () => { try{ navigator.clipboard.writeText(rep); }catch(e){} };
     }else copy.style.display = "none";
   };
   /* ---- the window scan ----

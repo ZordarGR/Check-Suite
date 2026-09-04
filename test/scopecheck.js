@@ -2,8 +2,16 @@ const fs = require("fs");
 const src = fs.readFileSync("app/index.html", "utf8");
 const lines = src.split("\n");
 
-// the IIFE that holds renderMoves: script tags at 981 / 1323 / 4938
-const iife = lines.slice(1322, 4937).join("\n");
+/* The <script> block that holds renderMoves, found by SEARCHING for it rather than by
+   line number. It used to be lines.slice(1322, 4937) — hardcoded — and as the page grew
+   that window drifted off the declarations, so the check quietly started reporting
+   things as undefined that were declared just outside it. A guard that silently stops
+   guarding is worse than none. */
+const blocks = [];
+{ const re = /<script[^>]*>([\s\S]*?)<\/script>/g; let m;
+  while ((m = re.exec(src))) blocks.push(m[1]); }
+const iife = blocks.find(b => b.indexOf("function renderMoves(") >= 0);
+if (!iife) { console.log("scopecheck could not find the block holding renderMoves"); process.exit(1); }
 
 // declarations visible in that scope
 const decl = new Set();
@@ -25,8 +33,15 @@ const GLOBALS = new Set(["Object","String","Number","Array","Set","Map","JSON","
   "parseInt","parseFloat","isNaN","document","window","localStorage","console","el","$",
   "if","for","while","switch","catch","return","typeof","new","function","of","in"]);
 
+/* Comments are prose, and prose contains things that look like calls — "at all (65, 94,
+   124, 129 among them)" in one of roomMoves' own comments was reported as an undefined
+   function `all`. A checker that cries wolf over its own commentary gets ignored, which
+   is the one thing this must not be. */
+function stripComments(js){
+  return js.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/[^\n]*/g, "$1 ");
+}
 for (const fn of ["renderMoves","roomMoves","movesReport"]) {
-  const body = bodyOf(fn);
+  const body = stripComments(bodyOf(fn));
   const missing = new Set();
   for (const m of body.matchAll(/\b([A-Za-z_$][\w$]*)\s*\(/g)) {
     const id = m[1];
@@ -37,4 +52,27 @@ for (const fn of ["renderMoves","roomMoves","movesReport"]) {
     missing.add(id);
   }
   console.log(fn.padEnd(12), missing.size ? "UNDEFINED -> " + [...missing].join(", ") : "all calls resolve");
+}
+
+/* ---- the two language tables must hold the same keys ----
+   A key present in one and not the other renders as the key itself for anyone using the
+   other language, and nothing in the page complains. Four had drifted into Greek-only
+   before an audit noticed. */
+const i18nLines = src.split("\n");
+const at = [];
+i18nLines.forEach((l, i) => { if (/^\s*"menu\.audit"\s*:/.test(l)) at.push(i + 1); });
+if (at.length !== 2) { console.log("i18n       could not find both tables — check test/scopecheck.js"); }
+else {
+  const en = new Set(), gr = new Set();
+  i18nLines.forEach((l, i) => {
+    const n = i + 1;
+    if (n < at[0] - 40 || n > at[1] + 400) return;
+    const re = /"([A-Za-z0-9_]+\.[A-Za-z0-9_]+)"\s*:/g; let m;
+    while ((m = re.exec(l))) (n < at[1] ? en : gr).add(m[1]);
+  });
+  const onlyG = [...gr].filter(k => !en.has(k)), onlyE = [...en].filter(k => !gr.has(k));
+  console.log("i18n       " + (onlyG.length + onlyE.length === 0
+    ? "both tables hold the same " + en.size + " keys"
+    : "MISMATCH — only in greek: [" + onlyG + "]  only in english: [" + onlyE + "]"));
+  if (onlyG.length + onlyE.length) process.exitCode = 1;
 }

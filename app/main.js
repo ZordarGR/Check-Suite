@@ -273,16 +273,17 @@ function helperVerb(verb){
   return new Promise(res => {
     const exe = tauPath();
     if(process.platform !== "win32" || !exe){ res({available: false, on: false, running: false}); return; }
-    let out = "", done = false;
+    const chunks = []; let done = false;
     const fin = () => {
       if(done) return; done = true;
+      const out = Buffer.concat(chunks).toString("utf8");
       const m = /^RCTBIND\s+(on|off)\s+(running|stopped)\s+(\S+)/m.exec(out);
       res(m ? {available: true, on: m[1] === "on", running: m[2] === "running", ver: m[3]}
             : {available: true, on: false, running: false, err: (out.trim() || "no answer").slice(0, 120)});
     };
     try{
       const child = spawn(exe, [verb], {windowsHide: true});
-      child.stdout.on("data", d => { out += d; });
+      child.stdout.on("data", d => { chunks.push(d); });
       child.on("exit", fin);
       child.on("error", fin);
       setTimeout(fin, 4000);                  // never leave the settings panel waiting
@@ -642,9 +643,10 @@ ipcMain.handle("sc-focus-set", (_e, on, needle) => {
 ipcMain.handle("sc-focus-pick", (_e, delayMs) => new Promise(res => {
   if(process.platform !== "win32" || !tauPath()){ res(null); return; }
   const wait = Math.max(1000, Math.min(30000, +delayMs || 5000));
-  let out = "", done = false;
+  const chunks = []; let done = false;
   const finish = () => {
     if(done) return; done = true;
+    const out = Buffer.concat(chunks).toString("utf8");
     const line = /^FG\t(.*)$/m.exec(out);
     if(!line){ res(null); return; }
     const [exe, cls, title] = (line[1] + "\t\t").split("\t");
@@ -657,7 +659,7 @@ ipcMain.handle("sc-focus-pick", (_e, delayMs) => new Promise(res => {
   };
   try{
     const child = spawn(tauPath(), ["fg", String(process.pid), String(wait)], {windowsHide: true});
-    child.stdout.on("data", d => { out += d; });
+    child.stdout.on("data", d => { chunks.push(d); });
     child.on("exit", finish);
     child.on("error", finish);
     setTimeout(() => { try{ child.kill(); }catch(e){} finish(); }, wait + 10000);
@@ -672,13 +674,14 @@ ipcMain.handle("sc-detect", (_e, action) => new Promise(async res => {
      press we are trying to read. AWAITED, not fired and hoped for: it is a separate
      process now, so "asked it to stop" and "it has stopped" are not the same moment. */
   await tauStop();
-  let out = "", done = false;
+  const chunks = []; let done = false;
   const finish = v => { if(done) return; done = true; TAU_DETECT = null; tauStart(); res(v); };
   try{
     const child = spawn(tauPath(), ["detect", String(process.pid)], {windowsHide: true});
     TAU_DETECT = child;
     child.stdout.on("data", d => {
-      out += d;
+      chunks.push(d);
+      const out = Buffer.concat(chunks).toString("utf8");
       /* The helper reports "BTN:<mods>-<btn>" since 1.15. The older single-number form
          is still accepted so a mismatched pair can never silently store nonsense — which
          is exactly what happened when only one side of this was updated. */
@@ -715,11 +718,15 @@ ipcMain.handle("sc-detect", (_e, action) => new Promise(async res => {
 ipcMain.handle("sc-diag", (_e, delayMs) => new Promise(res => {
   if(process.platform !== "win32" || !tauPath()){ res(null); return; }
   const wait = Math.max(1000, Math.min(30000, +delayMs || 5000));
-  let out = "", done = false;
-  const finish = () => { if(done) return; done = true; res(out || null); };
+  const chunks = []; let done = false;
+  /* concat first, decode once: a Greek character split across two chunks is destroyed
+     by decoding each chunk on its own. */
+  const finish = () => { if(done) return; done = true;
+    const out = Buffer.concat(chunks).toString("utf8");
+    res(out || null); };
   try{
     const child = spawn(tauPath(), ["diag", String(process.pid), String(wait)], {windowsHide: true});
-    child.stdout.on("data", d => { out += d; });
+    child.stdout.on("data", d => { chunks.push(d); });
     child.on("exit", finish);
     child.on("error", finish);
     setTimeout(() => { try{ child.kill(); }catch(e){} finish(); }, wait + 20000);
@@ -729,14 +736,41 @@ ipcMain.handle("sc-diag", (_e, delayMs) => new Promise(res => {
    that walks the window in front and prints what it is built from — plus, at the end,
    how many messages it asked of protel and how long the sweep took. That last line is
    the whole basis on which he decides whether this stays. */
+/* Read a few rows out of the list in the window in front. This is the ONE thing the tool
+   does that is not free — the list control writes its answer into a buffer, and for a
+   control in another process that buffer must live in that process. The report says so
+   itself and prints how many messages it asked and how long it took, the same terms the
+   window scan shipped on. Nothing here feeds the ledger yet. */
+ipcMain.handle("sc-readlist", (_e, delayMs, rows) => new Promise(res => {
+  if(process.platform !== "win32" || !tauPath()){ res(null); return; }
+  const wait = Math.max(1000, Math.min(30000, +delayMs || 6000));
+  const n = Math.max(1, Math.min(50, +rows || 5));
+  const chunks = []; let done = false;
+  /* concat first, decode once: a Greek character split across two chunks is destroyed
+     by decoding each chunk on its own. */
+  const finish = () => { if(done) return; done = true;
+    const out = Buffer.concat(chunks).toString("utf8");
+    res(out || null); };
+  try{
+    const child = spawn(tauPath(), ["readlist", String(process.pid), String(wait), String(n)], {windowsHide: true});
+    child.stdout.on("data", d => { chunks.push(d); });
+    child.on("exit", finish);
+    child.on("error", finish);
+    setTimeout(() => { try{ child.kill(); }catch(e){} finish(); }, wait + 30000);
+  }catch(e){ finish(); }
+}));
 ipcMain.handle("sc-scan", (_e, delayMs) => new Promise(res => {
   if(process.platform !== "win32" || !tauPath()){ res(null); return; }
   const wait = Math.max(1000, Math.min(30000, +delayMs || 6000));
-  let out = "", done = false;
-  const finish = () => { if(done) return; done = true; res(out || null); };
+  const chunks = []; let done = false;
+  /* concat first, decode once: a Greek character split across two chunks is destroyed
+     by decoding each chunk on its own. */
+  const finish = () => { if(done) return; done = true;
+    const out = Buffer.concat(chunks).toString("utf8");
+    res(out || null); };
   try{
     const child = spawn(tauPath(), ["scan", String(process.pid), String(wait)], {windowsHide: true});
-    child.stdout.on("data", d => { out += d; });
+    child.stdout.on("data", d => { chunks.push(d); });
     child.on("exit", finish);
     child.on("error", finish);
     setTimeout(() => { try{ child.kill(); }catch(e){} finish(); }, wait + 30000);
@@ -756,13 +790,14 @@ ipcMain.handle("sc-helper", () => new Promise(res => {
                        specs: TAUINFO.specs, since: TAUINFO.since, crash: tauCrash()});
   if(process.platform !== "win32"){ const i = snap(); i.probe = "not-windows"; res(i); return; }
   if(!exe){ const i = snap(); i.probe = "missing"; res(i); return; }
-  let out = "", done = false;
+  const chunks = []; let done = false;
   const fin = p => { if(done) return; done = true; const i = snap(); i.probe = p; res(i); };
   try{
     const child = spawn(exe, ["ping"], {windowsHide: true});
-    child.stdout.on("data", d => { out += d; });
+    child.stdout.on("data", d => { chunks.push(d); });
     child.on("error", e => fin("spawn-error:" + ((e && (e.code || e.message)) || "unknown")));
-    child.on("exit", c => fin(/RCTBIND OK/.test(out) ? "ok" : ("no-reply:exit=" + c)));
+    child.on("exit", c => fin(/RCTBIND OK/.test(Buffer.concat(chunks).toString("utf8"))
+                              ? "ok" : ("no-reply:exit=" + c)));
     setTimeout(() => { try{ child.kill(); }catch(e){} fin("timeout"); }, 5000);
   }catch(e){ fin("throw:" + ((e && (e.code || e.message)) || "unknown")); }
 }));

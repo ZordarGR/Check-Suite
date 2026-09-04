@@ -36,7 +36,7 @@ stays whose arrival or departure lands near this night:
     });
     console.log("window " + W + "  modal w/scrollW " + r.modal + "   report pane " + r.report);
     r.btns.forEach(x => console.log("   " + x));
-    await p.screenshot({path: "dbg-" + W + ".png"});
+    await p.screenshot({path: path.resolve(__dirname, "dbg-" + W + ".png")});
     await p.close();
   }
   await b.close();

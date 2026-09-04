@@ -17,6 +17,9 @@ Run the ones that need nothing but node:
 | `poison.js` | one reservation printed `31/12/99` must not delete the ledger |
 | `names.js` | a charge takes its room's name; a nickname still overrides; the printed name survives on the tooltip |
 | `nighttest.js` | the working night turns at 03:30, the shift at 07:00, and the upgrade never wipes a tick mid-shift |
+| `dst.js` | both boundaries across Greece's real DST transitions — fails on absolute-time arithmetic |
+| `lvitem.cs` | the LVITEM the list control reads, laid out for the **target's** bitness. Get an offset wrong and the read silently returns nothing, which looks exactly like "protel will not allow it" |
+| `stdout.js` | the helper's output reaches RecCheck as bytes. Greek guest names are the first non-ASCII thing to cross that pipe — this splits one mid-character across two chunks and checks it survives |
 | `quiet.js` | the real `main.js` with electron stubbed: the 07:00 reset must not summon the overlay |
 
 ## Browser harnesses

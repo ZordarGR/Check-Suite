@@ -11,7 +11,7 @@ const path = require("path");
   await p.hover("#mcOptionsBtn").catch(()=>{});
   await p.click("#mcOptionsBtn").catch(()=>{});
   await p.waitForTimeout(350);
-  await p.screenshot({path:"opts.png"});
+  await p.screenshot({path: path.resolve(__dirname, "opts.png")});
   console.log(await p.evaluate(() => {
     const b = document.querySelector("#mLegacy");
     const cs = getComputedStyle(b), r = b.getBoundingClientRect();
