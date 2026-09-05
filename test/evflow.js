@@ -139,6 +139,23 @@ const rig = `
     Fire(EVENT_OBJECT_NAMECHANGE, DP); Fire(EVENT_OBJECT_NAMECHANGE, DP);
     Ck("a window's caption change is logged once", FAKE.log.Count == before + 1);
 
+    /* 8. the watcher's target comes from its own line, and an old binds file with only
+          focus= still works (helper v27) */
+    string bp = BindsPath();
+    System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(bp));
+    System.IO.File.WriteAllText(bp, "# test\\r\\nwatch=prot32\\r\\n");
+    LoadBinds();
+    Ck("watch= alone sets the watcher's target and no gate", WatchTarget() == "PROT32" && focusNeedle == null);
+    System.IO.File.WriteAllText(bp, "focus=prot32\\r\\n");
+    LoadBinds();
+    Ck("an old file with only focus= still gives the watcher a target", WatchTarget() == "PROT32" && focusNeedle == "PROT32");
+    System.IO.File.WriteAllText(bp, "focus=prot32\\r\\nwatch=other\\r\\n");
+    LoadBinds();
+    Ck("when both are present the watcher takes its own", WatchTarget() == "OTHER" && focusNeedle == "PROT32");
+    System.IO.File.WriteAllText(bp, "# nothing picked\\r\\n");
+    LoadBinds();
+    Ck("nothing picked, nothing watched", WatchTarget() == null);
+
     Console.WriteLine(bad > 0 ? "\\n" + bad + " FAILURES" : "\\nall pass");
     return bad > 0 ? 1 : 0;
   }

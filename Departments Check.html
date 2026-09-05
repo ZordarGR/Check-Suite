@@ -122,7 +122,7 @@ body.onMenu #clList.moreBelow{
    follows it rather than drifting off the row it belongs to */
 body.onMenu #userBtn{top:clamp(10px,1.6vh,16px)}
 /* the one button that starts the night never gives up its place */
-body.onMenu #auditBtn,body.onMenu #alertsBtn{flex:0 0 auto}
+body.onMenu #auditBtn,body.onMenu #alertsBtn,body.onMenu #statusBtn{flex:0 0 auto}
 
 /* ---------- and it uses the width it has ----------
    Fitting the window is not the same as showing everything at once: a 640px strip down
@@ -135,7 +135,7 @@ body.onMenu #auditBtn,body.onMenu #alertsBtn{flex:0 0 auto}
    the CSS only says what to do with them. */
 body.onMenu{--homeW:640px}
 body.onMenu #landing{max-width:min(1560px,96vw)}
-body.onMenu #homeBar,body.onMenu #checklist,body.onMenu #auditBtn,body.onMenu #alertsBtn{max-width:var(--homeW)}
+body.onMenu #homeBar,body.onMenu #checklist,body.onMenu #auditBtn,body.onMenu #alertsBtn,body.onMenu #statusBtn{max-width:var(--homeW)}
 body.onMenu #clList{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
   grid-template-rows:repeat(var(--clRows,999),auto);column-gap:22px;align-content:start}
 .mcat{position:relative}
@@ -217,8 +217,24 @@ body.onMenu #clList{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
 .clRow .clBtns button.clMove{padding:2px 7px;font-size:10px;line-height:1.5}
 .clRow .clBtns button.clMove:disabled{opacity:.28;cursor:default;border-color:var(--line);color:var(--dim)}
 .clEmpty{color:var(--faint);font-size:13px;font-family:var(--mono);padding:14px 4px}
-#auditBtn,#alertsBtn{max-width:640px;margin:0 auto;width:100%}
-#alertsBtn{margin-top:8px}
+#auditBtn,#alertsBtn,#statusBtn{max-width:640px;margin:0 auto;width:100%}
+#alertsBtn,#statusBtn{margin-top:8px}
+/* STATUS: what protel has told the tool. Every rule scoped — the bare-selector leak is a
+   landmine here (see the notes). The tables want more room than the menu column. */
+#statusScreen .mNav{max-width:900px}
+#statusScreen .stNote{font-size:12px;color:var(--faint);padding:4px 2px}
+#statusScreen .stNote.warn{color:#fbbf24}
+#statusScreen .stBlock{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--panel)}
+#statusScreen .stHead{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;margin-bottom:6px}
+#statusScreen .stName{font-family:var(--mono);letter-spacing:.12em;font-size:13px;font-weight:600;color:var(--amber)}
+#statusScreen .stMeta{font-size:12px;color:var(--faint)}
+#statusScreen .stState{font-size:12px}
+#statusScreen .stState.good{color:#4ade80}
+#statusScreen .stState.bad{color:#f87171}
+#statusScreen .stWrap{overflow-x:auto;max-height:420px;overflow-y:auto}
+#statusScreen table.st{width:100%;border-collapse:collapse;font-size:12px}
+#statusScreen table.st th,#statusScreen table.st td{text-align:left;padding:3px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+#statusScreen table.st th{color:var(--faint);font-weight:500;position:sticky;top:0;background:var(--panel)}
 #auditScreen{margin-top:60px}
 .mNav{display:flex;flex-direction:column;gap:10px;max-width:430px;margin:0 auto}
 .mItem{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;background:var(--panel);
@@ -866,12 +882,20 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
     </div>
     <button class="mItem primary" id="auditBtn"><span class="mLabel"></span><span class="mSub"></span></button>
     <button class="mItem primary" id="alertsBtn"><span class="mLabel"></span><span class="mSub"></span></button>
+    <button class="mItem primary" id="statusBtn"><span class="mLabel"></span><span class="mSub"></span></button>
   </div>
 
   <div id="alertsScreen" style="display:none">
     <div class="mNav">
       <div id="alList"></div>
       <button class="btn small" id="alBack" style="margin-top:6px"></button>
+    </div>
+  </div>
+
+  <div id="statusScreen" style="display:none">
+    <div class="mNav">
+      <div id="stList"></div>
+      <button class="btn small" id="stBack" style="margin-top:6px"></button>
     </div>
   </div>
 
@@ -1392,7 +1416,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.40";
+const APP_VERSION = "1.17.41";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1402,6 +1426,7 @@ const T = {
 en: {
   subTag: "Nightly POS receipt audit — protel checkcharge1 (.oxps)",
   "menu.audit": "AUDIT", "menu.auditSub": "the nightly checks — receipts and accommodation tax",
+  "menu.status": "STATUS", "menu.statusSub": "what protel has told the tool — in-house, arrivals, departures, moves",
   "menu.options": "OPTIONS ▾", "menu.editHome": "EDIT HOME SCREEN ▾",
   "menu.editCl": "EDIT CHECKLIST", "menu.editClSub": "add, edit or remove tasks and their importance",
   "audit.dept": "DEPARTMENT CHECK", "audit.deptSub": "POS receipts vs the checkcharge report",
@@ -1636,6 +1661,7 @@ en: {
 gr: {
   subTag: "Νυχτερινός έλεγχος αποδείξεων POS — protel checkcharge1 (.oxps)",
   "menu.audit": "ΕΛΕΓΧΟΣ", "menu.auditSub": "οι νυχτερινοί έλεγχοι — αποδείξεις και τέλος διαμονής",
+  "menu.status": "ΚΑΤΑΣΤΑΣΗ", "menu.statusSub": "τι έχει πάρει το εργαλείο από το protel — παραμονές, αφίξεις, αναχωρήσεις, μετακινήσεις",
   "menu.options": "ΕΠΙΛΟΓΕΣ ▾", "menu.editHome": "ΕΠΕΞΕΡΓΑΣΙΑ ΑΡΧΙΚΗΣ ▾",
   "menu.editCl": "ΕΠΕΞΕΡΓΑΣΙΑ ΛΙΣΤΑΣ", "menu.editClSub": "προσθήκη, αλλαγή ή διαγραφή εργασιών και σημαντικότητας",
   "audit.dept": "ΕΛΕΓΧΟΣ ΤΜΗΜΑΤΩΝ", "audit.deptSub": "αποδείξεις POS vs αναφορά checkcharge",
@@ -1907,6 +1933,7 @@ function applyLang(){
   const me = $("#mExport"); me.querySelector(".mLabel").textContent = t("land.export"); me.querySelector(".mSub").textContent = t("land.dataHint");
   const mim = $("#mImport"); mim.querySelector(".mLabel").textContent = t("land.import"); mim.querySelector(".mSub").textContent = t("land.dataHint");
   mi("#auditBtn", "menu.audit", "menu.auditSub");
+  mi("#statusBtn", "menu.status", "menu.statusSub");
   mi("#aDept", "audit.dept", "audit.deptSub");
   mi("#aTax", "audit.tax", "audit.taxSub");
   $("#aBack").textContent = t("audit.back");
@@ -3757,6 +3784,7 @@ function showScreen(which){
   $("#auditScreen").style.display = which === "audit" ? "" : "none";
   $("#filesScreen").style.display = which === "files" ? "" : "none";
   $("#alertsScreen").style.display = which === "alerts" ? "" : "none";
+  $("#statusScreen").style.display = which === "status" ? "" : "none";
   if(which === "menu") renderChecklist();
   /* Opening the list is what "read" means — the pulse stops here and nowhere else. */
   if(which === "alerts"){ renderAlerts(); markAlertsRead(); }
@@ -5375,10 +5403,13 @@ $("#auditBtn").onclick = () => showScreen("audit");
 $("#aBack").onclick = () => showScreen("menu");
 $("#alertsBtn").onclick = () => showScreen("alerts");
 $("#alBack").onclick = () => showScreen("menu");
+$("#statusBtn").onclick = () => showScreen("status");
+$("#stBack").onclick = () => showScreen("menu");
 /* the two strings the alerts screen owns, repainted with the rest on a language change */
 function paintAlertsStatic(){
   try{
     $("#alBack").textContent = t("al.back");
+    $("#stBack").textContent = t("al.back");
     paintAlertsBtn();
     if(SCREEN === "alerts") renderAlerts();
   }catch(e){}
@@ -5664,7 +5695,12 @@ const I18N={
   why_cut:"the read was cut short", why_wrong:"the caption does not name it", why_nodate:"no date in the caption",
   why_err:"protel error", why_empty:"no rows came back", why_none:"no usable rows",
   why_failed:"the ledger could not be written", why_threw:"the ingest threw", why_unknown:"reason unknown",
-  rpt_AR:"Arrival report", rpt_DP:"Departure report", rpt_IH:"In-house list",
+  rpt_AR:"Arrival report", rpt_DP:"Departure report", rpt_IH:"In-house list", rpt_MV:"Moves window",
+  st_note:"Captured by the helper the moment protel showed each list. Nothing on this screen asks protel for anything.",
+  st_legacy:"Legacy mode is on: the tool is fed from files and nothing is captured from protel. Switch legacy off in OPTIONS to turn the automatic read on.",
+  st_none:"no capture in the last 20 hours",
+  st_taken:"taken", st_takenAt:"taken at {0}",
+  st_room:"Room", st_name:"Name", st_arr:"Arrival", st_dep:"Departure", st_status:"Status", st_from:"From", st_to:"To", st_x:"X",
   live_kept:" {0} kept as the census had them.",
   live_rnone:"{0} \u201c{1}\u201d: no rows came back.",
   live_rwrong:"That window is not the {0} \u2014 it says \u201c{1}\u201d. Nothing was recorded.",
@@ -5747,7 +5783,12 @@ const I18N={
   why_cut:"η ανάγνωση κόπηκε νωρίς", why_wrong:"ο τίτλος δεν την ονομάζει", why_nodate:"χωρίς ημερομηνία στον τίτλο",
   why_err:"σφάλμα protel", why_empty:"δεν ήρθαν γραμμές", why_none:"καμία αξιοποιήσιμη γραμμή",
   why_failed:"το αρχείο δεν γράφτηκε", why_threw:"η καταχώρηση απέτυχε", why_unknown:"άγνωστος λόγος",
-  rpt_AR:"Αφίξεις", rpt_DP:"Αναχωρήσεις", rpt_IH:"Λίστα παραμονών",
+  rpt_AR:"Αφίξεις", rpt_DP:"Αναχωρήσεις", rpt_IH:"Λίστα παραμονών", rpt_MV:"Παράθυρο μετακινήσεων",
+  st_note:"Λήφθηκαν από τον βοηθό τη στιγμή που το protel έδειξε κάθε λίστα. Τίποτα σε αυτή την οθόνη δεν ζητάει κάτι από το protel.",
+  st_legacy:"Η παλαιά λειτουργία είναι ενεργή: το εργαλείο τροφοδοτείται από αρχεία XPS και δεν λαμβάνει τίποτα από το protel. Κλείσε την παλαιά λειτουργία στις ΕΠΙΛΟΓΕΣ για να ανοίξει η αυτόματη ανάγνωση.",
+  st_none:"καμία λήψη τις τελευταίες 20 ώρες",
+  st_taken:"καταχωρήθηκε", st_takenAt:"λήψη {0}",
+  st_room:"Δωμάτιο", st_name:"Όνομα", st_arr:"Άφιξη", st_dep:"Αναχώρηση", st_status:"Κατάσταση", st_from:"Από", st_to:"Σε", st_x:"X",
   live_kept:" {0} έμειναν όπως τις είχε η λίστα παραμονών.",
   live_rnone:"{0} «{1}»: δεν ήρθαν γραμμές.",
   live_rwrong:"Αυτό το παράθυρο δεν είναι {0} — λέει «{1}». Δεν καταγράφηκε τίποτα.",
@@ -6453,6 +6494,8 @@ let LIVE_AT = {};                              // tag -> the capture already tak
    changes and cached otherwise, so a list of 250 rows is not re-scanned every 5 s. */
 let LIVE_HELD = {};                            // tag -> {at, date, rows, total, why}
 let LIVE_ERR = {};                             // tag -> why its capture file could not be read
+let LIVE_ROWS = {};                            // tag -> {p: the parsed capture, at} — what STATUS shows
+let STATUS_SIG = "";                           // what STATUS last drew, so it is not redrawn under him
 function heldOf(tag, at, txt){
   let date = "", rows = 0, total = 0;
   for(const line of String(txt || "").split(/\r?\n/)){
@@ -6516,11 +6559,15 @@ async function autoReadInhouse(){
          file that is there and could not be READ is neither: what was held stays held, and
          the failure is said as a failure, not as protel having opened nothing. The held
          summary is kept for EVERY file that is there, new or not — that is the point. */
-      if(!f || f.why === "old" || (!f.why && !f.text)){ delete LIVE_HELD[tag]; delete LIVE_ERR[tag]; continue; }
+      if(!f || f.why === "old" || (!f.why && !f.text)){ delete LIVE_HELD[tag]; delete LIVE_ERR[tag]; delete LIVE_ROWS[tag]; continue; }
       if(f.why){ LIVE_ERR[tag] = f.detail || f.why; continue; }
       delete LIVE_ERR[tag];
-      if(!LIVE_HELD[tag] || LIVE_HELD[tag].at !== f.at)
+      if(!LIVE_HELD[tag] || LIVE_HELD[tag].at !== f.at){
         LIVE_HELD[tag] = heldOf(tag, +f.at || 0, f.text);
+        /* the rows themselves, for STATUS — parsed once per capture, never per tick */
+        try{ LIVE_ROWS[tag] = {p: tag === "IH" ? parseInhouse(f.text) : parseTagged(f.text, tag), at: +f.at || 0}; }
+        catch(e){ delete LIVE_ROWS[tag]; }
+      }
       if(f.at === LIVE_AT[tag]) continue;
       LIVE_AT[tag] = f.at;
       got.push({tag: tag, at: +f.at || 0, text: f.text});
@@ -6539,6 +6586,61 @@ async function autoReadInhouse(){
     if(h && h.at === g.at) h.why = (r === "ok") ? "" : r;
   }
   try{ paintHeld(); }catch(e){}
+  if(TAX_SCREEN === "status"){ try{ renderStatus(); }catch(e){} }
+}
+/* ---- STATUS: what protel has told the tool ----
+
+   His idea, 05/09: "a third main menu category 'status' which will hold the data taken
+   from protel regarding arrivals, departures, moves and in house and the tools will take
+   the needed data from that". The four captures had no home — the in-house list was
+   shown on the Tax Check because that is where the code that reads it lives, the moves
+   window nowhere at all, the two reports on one line and then gone. This screen simply
+   SAYS what protel has told the tool: each list as captured, with its date, when it was
+   taken, whether the ingest took it and if not why, and the rows themselves.
+
+   READ-ONLY, by design. Nothing here asks protel for anything: the rows are the capture
+   files the helper wrote the moment protel showed each list, already read every tick.
+   Redrawn only when a capture changes — a table of 250 rows redrawn every five seconds
+   would move under his hands. */
+function stEsc(s){ return escHtml(String(s == null ? "" : s)); }
+function statusCols(tag){
+  if(tag === "IH") return [["st_room", r => r[IH.ROOM]], ["st_name", r => r[IH.NAME]], ["st_arr", r => r[IH.ARR]], ["st_dep", r => r[IH.DEP]], ["st_status", r => r[IH.STATUS]]];
+  if(tag === "AR") return [["st_room", r => r[AR.ROOM]], ["st_name", r => r[AR.NAME]], ["st_dep", r => r[AR.DEP]], ["st_status", r => r[AR.STATUS]]];
+  if(tag === "DP") return [["st_room", r => r[DP.ROOM]], ["st_name", r => r[DP.NAME]], ["st_arr", r => r[DP.ARR]], ["st_status", r => r[DP.STATUS]]];
+  return [["st_from", r => r[MV.FROM]], ["st_to", r => r[MV.TO]], ["st_name", r => r[MV.NAME]], ["st_x", r => r[MV.X]], ["st_arr", r => r[MV.ARR]], ["st_dep", r => r[MV.DEP]]];
+}
+function renderStatus(){
+  const box = el('stList');
+  if(!box) return;
+  const sig = JSON.stringify([legacyOn(), LANG, LIVE_TAGS.map(tg => [tg, LIVE_HELD[tg] ? [LIVE_HELD[tg].at, LIVE_HELD[tg].why] : null, LIVE_ERR[tg] || ""])]);
+  if(sig === STATUS_SIG) return;
+  STATUS_SIG = sig;
+  let h = "";
+  if(legacyOn()) h += '<div class="stNote warn">' + stEsc(t('st_legacy')) + '</div>';
+  h += '<div class="stNote">' + stEsc(t('st_note')) + '</div>';
+  for(const tag of LIVE_TAGS){
+    const held = LIVE_HELD[tag], cap = LIVE_ROWS[tag];
+    h += '<div class="stBlock"><div class="stHead"><span class="stName">' + stEsc(t('rpt_' + tag)) + '</span>';
+    if(!held){
+      h += '<span class="stMeta">' + stEsc(LIVE_ERR[tag] ? t('held_unread', t('held_' + tag), LIVE_ERR[tag]) : t('st_none')) + '</span></div></div>';
+      continue;
+    }
+    const when = hhmm(held.at);
+    const n = (held.total && held.total !== held.rows) ? t('held_rows2', held.rows, held.total) : t('held_rows', held.rows);
+    h += '<span class="stMeta">' + stEsc((held.date || "?") + " \u00b7 " + n + (when ? " \u00b7 " + t('st_takenAt', when) : "")) + '</span>';
+    h += '<span class="stState ' + (held.why ? "bad" : "good") + '">' + stEsc(held.why ? t('held_not') + t('why_' + held.why) : t('st_taken')) + '</span></div>';
+    const p = cap && cap.p;
+    if(p && p.rows && p.rows.length){
+      const cols = statusCols(tag);
+      const key = r => String(cols[0][1](r) || "");
+      const sorted = p.rows.slice().sort((a, b) => key(a).localeCompare(key(b), undefined, {numeric: true}));
+      h += '<div class="stWrap"><table class="st"><thead><tr>' + cols.map(c => '<th>' + stEsc(t(c[0])) + '</th>').join("") + '</tr></thead><tbody>';
+      for(const r of sorted) h += '<tr>' + cols.map(c => '<td>' + stEsc(c[1](r)) + '</td>').join("") + '</tr>';
+      h += '</tbody></table></div>';
+    }
+    h += '</div>';
+  }
+  box.innerHTML = h;
 }
 async function ingestCaptured(tag, txt){
   if(tag === "IH") return applyInhouse(parseInhouse(txt), true);
@@ -6657,6 +6759,18 @@ function reportToStays(rows, night, arrIsNight){
    for is to tell him which he is looking at. So the three outcomes are counted apart —
    made, corrected, already known — and a write that THREW is its own answer again rather
    than an innocent-looking nought. */
+/* WHICH CLOCK STAMPS A REPORT — the 7a question, decided 05/09 under his go to build what
+   the automatic read needs. saveMoves stamps `seen` with the in-house list's own date,
+   which is protel's business date; this used to stamp reports with the tool's 03:30 night.
+   The two are the same number only while protel's date and the tool's agree, and the whole
+   recency guard in feedStays compares them. So a report is stamped with the census's date
+   whenever a census has been captured — the same clock as the other writer, protel's — and
+   with the tool's night only before the first census of the day. */
+function censusNight(){
+  const h = LIVE_HELD.IH;
+  const k = h && h.date ? dkey(h.date) : 0;
+  return k || bnk();
+}
 function feedStays(recs, night){
   const tally = {made: 0, fixed: 0, same: 0, kept: 0, failed: false};
   if(!recs || !recs.length || !night) return tally;
@@ -6747,7 +6861,7 @@ function applyReport(p, arrIsNight){
     const sig = p.title + "|" + p.rows.map(r => r.join("~")).join(";");
     if(sig === RPT_SIG[fn]){ quiet(t('live_rsame', label, night)); return "ok"; }
     const out = reportToStays(p.rows, night, arrIsNight);
-    const w = feedStays(out.recs, bnk());
+    const w = feedStays(out.recs, censusNight());
     /* THE REPORT NAMES DO NOT GO INTO THE ROOM DATABASE, and the first cut of this had
        them doing exactly that. __rcLiveNames is the CENSUS door: it says "this is who is
        in this room now", and syncRooms then treats a stored name that does not match the
@@ -7017,7 +7131,12 @@ window.__taLegacy = function(on){
 };
 /* It runs for the life of the app now, not while a screen is open, so this only makes
    sure it is running — arriving at the Tax Check is no longer what starts it. */
-window.__taScreen = function(){ try{ liveEnsure(); }catch(e){} };
+let TAX_SCREEN = "";
+window.__taScreen = function(which){
+  TAX_SCREEN = String(which || "");
+  try{ liveEnsure(); }catch(e){}
+  if(TAX_SCREEN === "status"){ STATUS_SIG = ""; try{ renderStatus(); }catch(e){} }
+};
 
 /* time safeguard: warn when a loaded report is for a past working night. Separate scope
    from the audit half, so the 03:30 boundary is repeated here rather than shared. */

@@ -25,7 +25,8 @@ const taxProbe = `
 try{ window.__tx = { setPair:function(v){ PAIR_OVERRIDE = v; },
                      getPair:function(){ return PAIR_OVERRIDE; },
                      read:function(auto){ return readInhouseLive(auto); },
-                     sig:function(){ return LIVE_SIG; } }; }catch(e){}
+                     sig:function(){ return LIVE_SIG; },
+                     bnk:function(){ return bnk(); }, censusNight:function(){ return censusNight(); } }; }catch(e){}
 `;
 const taxMark = "/* ============ boot ============ */";
 if(src.indexOf(taxMark) < 0) throw new Error("tax boot anchor moved — fix test/harness.js");
