@@ -304,25 +304,29 @@ function bindsPath(){
    one grep hit in the whole of main.js, the read. So DEBUG's detail line never printed
    binds= for anybody, and its absence looked like "nothing is bound". It was read as
    exactly that here on 05/09 and the conclusion drawn from it was wrong. A diagnostic
-   field that is always empty is worse than no field: it reads as a measurement. */
+   field that is always empty is worse than no field: it reads as a measurement.
+
+   And it is set only once the write has SUCCEEDED. The first cut assigned it before the
+   try, so a binds file that could not be written still had its contents printed as
+   published, while the one field saying it failed never left this process. */
 let LAST_SPECS = [];
 function writeBinds(){
   const f = bindsPath();
-  if(!f) return false;
+  if(!f){ LAST_SPECS = []; return false; }
   let binds = {};
   try{ binds = activeBinds(); }catch(e){}
   const focus = focusSpec();
   const acts = ACTIONS.filter(a => binds[a])
       .map(a => binds[a] + "=" + (a === "seq" ? seqSpec() : a === "tau" ? tauSpec() : a));
-  LAST_SPECS = focus.concat(acts);
   const lines = ["# written by RecCheck — edited here has no effect, use the app"]
     .concat(focus).concat(acts);
   try{
     const fs = require("fs");
     fs.mkdirSync(path.dirname(f), {recursive: true});
     fs.writeFileSync(f, lines.join("\r\n") + "\r\n");
+    LAST_SPECS = focus.concat(acts);
     return true;
-  }catch(e){ return false; }
+  }catch(e){ LAST_SPECS = []; return false; }
 }
 /* kill any rc-tbind left over from a previous run (incl. crashed/old versions) */
 function tauKillStrays(cb){
@@ -364,8 +368,19 @@ function tauStart(){
     if(st.available && !st.running){
       try{
         const child = spawn(exe, ["run"], {detached: true, stdio: "ignore", windowsHide: true});
+        /* A spawn Windows refuses (antivirus, policy) is NOT a throw: node reports it as
+           an asynchronous "error" event on the child. With no listener that was an
+           uncaught exception in the main process, and TAUINFO stayed at "started" — which
+           the page then showed as running. The catch below only ever sees a bad argument. */
+        child.on("error", e => {
+          TAUINFO = Object.assign({}, TAUINFO, {state: "spawn-failed",
+                     err: (e && (e.code || e.message)) || "unknown"});
+        });
         child.unref();
-        TAUINFO = Object.assign({}, TAUINFO, {state: "started", pid: child.pid});
+        /* `since` lets the page tell "just spawned, window not up yet" from "started and
+           then died": for a couple of seconds after this line the resident's absence is
+           not yet evidence of anything */
+        TAUINFO = Object.assign({}, TAUINFO, {state: "started", pid: child.pid, since: Date.now()});
       }catch(e){
         TAUINFO = Object.assign({}, TAUINFO, {state: "spawn-failed",
                    err: (e && (e.code || e.message)) || "unknown"});
@@ -851,19 +866,28 @@ ipcMain.handle("sc-diag", (_e, delayMs) => new Promise(res => {
    the page can ask as often as it likes, and a list he opened for two seconds is still
    there to be collected minutes later. The mtime is returned so the page can tell a new
    capture from one it has already taken. */
+/* WHICH NOTHING IT IS, here too. This returned null for a file that is not there, a
+   file that is there but too old, a file that could not be read, and no app-data folder
+   at all — and the page turned every one into "nothing captured from protel yet", a claim
+   about protel made from the tool's own failure. null now means exactly "there is no
+   such file"; everything else says what it is. */
 ipcMain.handle("sc-listfile", (_e, tag) => {
-  try{
-    const t = String(tag || "").toUpperCase();
-    if(["IH", "MV", "AR", "DP"].indexOf(t) < 0) return null;
-    const fs = require("fs"), path2 = require("path");
-    const base = process.env.LOCALAPPDATA;
-    if(!base) return null;
-    const p = path2.join(base, "RecCheck", "rc-list-" + t + ".tsv");
-    const st = fs.statSync(p);
-    /* a list this old is not news; it is last night's, and the page has had it */
-    if(Date.now() - st.mtimeMs > 20 * 3600e3) return null;
-    return {tag: t, at: st.mtimeMs, text: fs.readFileSync(p, "utf8")};
-  }catch(e){ return null; }
+  const t = String(tag || "").toUpperCase();
+  if(["IH", "MV", "AR", "DP"].indexOf(t) < 0) return null;
+  const fs = require("fs"), path2 = require("path");
+  const base = process.env.LOCALAPPDATA;
+  if(!base) return {tag: t, why: "nobase"};
+  const p = path2.join(base, "RecCheck", "rc-list-" + t + ".tsv");
+  let st;
+  try{ st = fs.statSync(p); }
+  catch(e){
+    const code = (e && (e.code || e.message)) || "unknown";
+    return code === "ENOENT" ? null : {tag: t, why: "unread", detail: String(code)};
+  }
+  /* a list this old is not news; it is last night's, and the page has had it */
+  if(Date.now() - st.mtimeMs > 20 * 3600e3) return {tag: t, why: "old", at: st.mtimeMs};
+  try{ return {tag: t, at: st.mtimeMs, text: fs.readFileSync(p, "utf8")}; }
+  catch(e){ return {tag: t, why: "unread", detail: String((e && (e.code || e.message)) || "unknown")}; }
 });
 /* The other three lists. Same shape as sc-inhouse — one verb per list, the helper picks
    its own window by caption, and the answer is the same TSV with a different tag. */
@@ -933,28 +957,46 @@ ipcMain.handle("sc-scan", (_e, delayMs) => new Promise(res => {
     setTimeout(() => { try{ child.kill(); }catch(e){} finish(); }, wait + 30000);
   }catch(e){ finish(); }
 }));
-/* Ask the helper to say hello and report what came back, alongside what the bound
-   helper is currently doing. This is the difference between "you have not bound
-   anything", "the file is not on disk", "Windows will not start it" and "it starts
-   and is then refused its hooks" — four causes with one symptom. */
+/* Ask the helper what it knows and report what came back, alongside what this process
+   last did with it. This is the difference between "the file is not on disk", "Windows
+   will not start it", "it starts and is then refused its hooks" and "it is up" — four
+   causes with one symptom.
+
+   THE PRESS ASKS `status`, NOT `ping`. Both run a fresh copy of the exe on disk; `ping`
+   proves only that the exe runs. `status` also LOOKS FOR the resident's window, which is
+   the one fact about the helper in memory that can be established from outside it. It
+   used to run `ping` and the page then read the state written at SPAWN TIME as "running"
+   for the rest of the night — a helper that died 53 ms in showed green. The version in
+   the answer is the exe's own: neither verb asks the resident what it is.
+
+   TAUINFO is read when the answer is sent, not when it is asked for: a helper that fails
+   to start reports that through an async "error" event, so a snapshot taken up front
+   would still say "started". The probe below gives it that moment. */
 ipcMain.handle("sc-helper", () => new Promise(res => {
   const exe = tauPath();
-  /* TAUINFO is read when the answer is sent, not when it is asked for: a helper that
-     fails to start reports that through an async "error" event, so a snapshot taken
-     up front would still say "running". The probe below gives it that moment. */
   const snap = () => ({exe: exe, state: TAUINFO.state, code: TAUINFO.code, signal: TAUINFO.signal,
                        err: TAUINFO.err, pid: TAUINFO.pid, ranMs: TAUINFO.ranMs,
-                       specs: TAUINFO.specs, since: TAUINFO.since, crash: tauCrash()});
+                       specs: TAUINFO.specs, since: TAUINFO.since, crash: tauCrash(),
+                       ver: TAUINFO.ver, binds: TAUINFO.binds, boot: TAUINFO.boot});
   if(process.platform !== "win32"){ const i = snap(); i.probe = "not-windows"; res(i); return; }
   if(!exe){ const i = snap(); i.probe = "missing"; res(i); return; }
   const chunks = []; let done = false;
-  const fin = p => { if(done) return; done = true; const i = snap(); i.probe = p; res(i); };
+  const fin = (p, st) => {
+    if(done) return; done = true;
+    const i = snap(); i.probe = p;
+    if(st){ i.running = st.running; i.ver = st.ver; i.boot = st.on; }
+    res(i);
+  };
   try{
-    const child = spawn(exe, ["ping"], {windowsHide: true});
+    const child = spawn(exe, ["status"], {windowsHide: true});
     child.stdout.on("data", d => { chunks.push(d); });
     child.on("error", e => fin("spawn-error:" + ((e && (e.code || e.message)) || "unknown")));
-    child.on("exit", c => fin(/RCTBIND OK/.test(Buffer.concat(chunks).toString("utf8"))
-                              ? "ok" : ("no-reply:exit=" + c)));
+    child.on("exit", c => {
+      const out = Buffer.concat(chunks).toString("utf8");
+      const m = /^RCTBIND\s+(on|off|on-failed|off-failed)\s+(running|stopped)\s+(\S+)/m.exec(out);
+      fin(m ? "ok" : ("no-reply:exit=" + c),
+          m ? {on: m[1] === "on", running: m[2] === "running", ver: m[3]} : null);
+    });
     setTimeout(() => { try{ child.kill(); }catch(e){} fin("timeout"); }, 5000);
   }catch(e){ fin("throw:" + ((e && (e.code || e.message)) || "unknown")); }
 }));

@@ -8,7 +8,7 @@ on:
 permissions:
   contents: write
 env:
-  VERSION: v1.17.38
+  VERSION: v1.17.39
   SETUP_SHA256: 1a74830502bafe9dc578236c036ec158fabccada66ffbbfbc3934a521a1cef1a
 jobs:
   release:
@@ -31,6 +31,20 @@ jobs:
         run: |
           cat dist-win64/parts/RecCheck-Setup.exe.* > RecCheck-Setup.exe
           echo "$SETUP_SHA256  RecCheck-Setup.exe" | sha256sum -c -
+      # The release page was published from a static file that said "1.17.14" on every
+      # release after it, because nothing ever rewrote it. The app already shows the
+      # right notes from update/latest.json; the release page now says the same thing,
+      # and refuses to publish if the manifest and this file name different versions.
+      - name: Refuse to release with the manifest and the workflow naming different versions
+        run: |
+          mv="v$(jq -r .version update/latest.json)"
+          [ "$mv" = "$VERSION" ] || { echo "update/latest.json says $mv, this workflow says $VERSION" >&2; exit 1; }
+      - name: Write the release notes from the manifest
+        run: |
+          { printf '## RecCheck %s — Windows\n\n' "${VERSION#v}"
+            jq -r .notes update/latest.json
+            printf '\n'
+            cat .github/release-notes.md; } > release-notes.md
       - name: Publish release with installer asset
         env:
           GH_TOKEN: ${{ github.token }}
@@ -39,5 +53,5 @@ jobs:
           git push --delete origin "refs/tags/$VERSION" || true
           gh release create "$VERSION" RecCheck-Setup.exe \
             --title "RecCheck ${VERSION#v} — Windows" \
-            --notes-file .github/release-notes.md \
+            --notes-file release-notes.md \
             --latest

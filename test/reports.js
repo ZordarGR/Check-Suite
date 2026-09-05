@@ -145,7 +145,7 @@ ck("a recorded move is not dropped by a report", R.led()["148"][20260901].from =
 ck("while the departure still updates",          R.led()["148"][20260901].d === 20260912);
 
 /* rubbish must not take the ledger down */
-const nil = t => t && t.made === 0 && t.fixed === 0 && t.same === 0 && !t.failed;
+const nil = t => t && t.made === 0 && t.fixed === 0 && t.same === 0 && t.kept === 0 && !t.failed;
 ck("no rows writes nothing",                     nil(R.feedStays([], 20260904)));
 ck("no night writes nothing",                    nil(R.feedStays(a.recs, 0)));
 const keep = JSON.stringify(R.led());
@@ -171,10 +171,23 @@ ck("a later report that moves the departure is CORRECTED",
    (() => { const t = T.feedStays([{room:"401", arr:"01/09/26", dep:"09/09/26", name:"NEW"}], 20260907);
             return t.made === 0 && t.fixed === 1 && t.same === 0; })());
 ck("and the correction really is in the ledger",   T.led()["401"][20260901].d === 20260909);
-ck("a report older than the ledger's word is ALREADY KNOWN, and changes nothing",
+/* "ALREADY KNOWN" IS AGREEMENT. A row the ledger refused while it said something
+   DIFFERENT used to be counted as already known — the report said the 2nd, the ledger
+   held the 9th, and the line asserted agreement it had never checked. The ledger is right
+   to keep its word; the line has to say that it did. */
+ck("a report older than the ledger's word, saying otherwise, is KEPT as the ledger had it — and changes nothing",
    (() => { const t = T.feedStays([{room:"401", arr:"01/09/26", dep:"02/09/26", name:"NEW"}], 20260903);
-            return t.made === 0 && t.fixed === 0 && t.same === 1
+            return t.made === 0 && t.fixed === 0 && t.same === 0 && t.kept === 1
                    && T.led()["401"][20260901].d === 20260909; })());
+ck("a same-night report that loses the tie with a different departure is KEPT, not already known",
+   (() => { const t = T.feedStays([{room:"401", arr:"01/09/26", dep:"05/09/26", name:"NEW"}], 20260907);
+            return t.kept === 1 && t.same === 0 && t.fixed === 0 && T.led()["401"][20260901].d === 20260909; })());
+ck("a same-night report that says nothing about the departure agrees with whatever is held",
+   (() => { const t = T.feedStays([{room:"401", arr:"01/09/26", dep:"", name:"NEW"}], 20260907);
+            return t.same === 1 && t.kept === 0 && T.led()["401"][20260901].d === 20260909; })());
+ck("and one that says the same thing is already known",
+   (() => { const t = T.feedStays([{room:"401", arr:"01/09/26", dep:"09/09/26", name:"NEW"}], 20260907);
+            return t.same === 1 && t.kept === 0; })());
 
 /* forty-one rows the census already holds: the exact shape of his line */
 const C = mk();
@@ -207,13 +220,17 @@ const mixed = R.reportToStays([
   ["NO DATE ",      "301",  "2/0/0/0/0", "",         "CO"],   // arrival unreadable
   ["",              "302",  "2/0/0/0/0", "01/09/26", "CO"],   // name never arrived
   ["HALF READ ",    "303",  "2/0/0/0/0", "01/09/26", ""],     // status never arrived
+  ["NO ROOM CELL ", "",     "2/0/0/0/0", "01/09/26", "CO"],   // the ROOM never arrived
   ["GOOD GUEST ",   "304",  "2/0/0/0/0", "01/09/26", "CO"]
 ], "04/09/26", false);
 ck("the one good row is the only stay",          mixed.recs.length === 1);
 ck("the holding room is counted as a holding room", mixed.held === 1);
 ck("an unreadable arrival date is its own count",   mixed.nodate === 1);
-ck("a half-read row is its own count",              mixed.partial === 2);
-ck("and the old total still adds up",               mixed.dropped === 4);
+/* an EMPTY room cell is ReadCell's answer for a failed read — it was counted as a
+   holding room, the exact mislabel the split of these counters was made to end */
+ck("a half-read row is its own count, whichever cell failed", mixed.partial === 3);
+ck("and nothing but the holding room is called one",  mixed.held === 1 && mixed.partial === 3);
+ck("and the old total still adds up",               mixed.dropped === 5);
 ck("a cancelled row is none of those three",
    (() => { const c = R.reportToStays([["X ", "201", "2/0/0/0/0", "09/09/26", "Reversal/Void"]], "04/09/26", false);
             return c.cancelled === 1 && c.dropped === 0 && c.recs.length === 0; })());

@@ -1392,7 +1392,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.38";
+const APP_VERSION = "1.17.39";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1488,8 +1488,9 @@ en: {
   "sc.readNone": "Nothing came back. Either protel was not in front, the window holds no list, or protel runs with more rights than RecCheck.",
   "sc.watch": "What protel opened tonight",
   "sc.watchHint": "Zero-touch \u2014 nothing at all is sent to protel. Windows tells RecCheck when a protel window opens or closes, and the caption is the one Windows already holds. Kept for the night only and cleared at 07:00 with the shift.",
-  "sc.watchNoFile": "There is no watch log on disk. The helper writes one the moment it has anything to say \u2014 including a line saying it is watching nothing \u2014 so this means it has not run since 07:00, or is not running now.",
-  "sc.watchBlank": "The log is there and empty. Nothing has been written to it this shift.",
+  "sc.watchNoFile": "There is no watch log on this computer. The helper writes one on its first tick and never deletes it, so either no helper of this build has run here yet, or the RecCheck folder under local app-data was removed. It says nothing about the shift.",
+  "sc.watchBlank": "The log is there and empty. The helper writes a header before anything else, so an empty file is a write that failed, not a quiet shift.",
+  "sc.watchFail": "The request to read the log failed",
   "sc.watchNoBase": "Windows did not name a local app-data folder, so the log cannot be found. Nothing is known about the shift.",
   "sc.watchUnread": "The log is there and could not be read.",
   "sc.noDoor": "This build cannot reach the helper, so nothing can be reported here.",
@@ -1716,8 +1717,9 @@ gr: {
   "sc.readNone": "Δεν ήρθε τίποτα. Είτε το protel δεν ήταν μπροστά, είτε το παράθυρο δεν έχει λίστα, είτε το protel τρέχει με περισσότερα δικαιώματα.",
   "sc.watch": "Τι άνοιξε το protel απόψε",
   "sc.watchHint": "Μηδενική επαφή — τίποτα δεν στέλνεται στο protel. Τα Windows λένε στο RecCheck όταν ανοίγει ή κλείνει παράθυρο του protel, και ο τίτλος είναι αυτός που έχουν ήδη. Κρατιέται μόνο για τη νύχτα και σβήνει στις 07:00 με τη βάρδια.",
-  "sc.watchNoFile": "Δεν υπάρχει αρχείο καταγραφής. Ο βοηθός γράφει ένα μόλις έχει κάτι να πει — ακόμη και γραμμή ότι δεν παρακολουθεί τίποτα — άρα δεν έχει τρέξει από τις 07:00, ή δεν τρέχει τώρα.",
-  "sc.watchBlank": "Το αρχείο υπάρχει και είναι άδειο. Δεν γράφτηκε τίποτα αυτή τη βάρδια.",
+  "sc.watchNoFile": "Δεν υπάρχει αρχείο καταγραφής σε αυτόν τον υπολογιστή. Ο βοηθός το γράφει στον πρώτο του κύκλο και δεν το σβήνει ποτέ, άρα είτε δεν έχει τρέξει εδώ βοηθός αυτής της έκδοσης, είτε αφαιρέθηκε ο φάκελος RecCheck στο local app-data. Δεν λέει τίποτα για τη βάρδια.",
+  "sc.watchBlank": "Το αρχείο υπάρχει και είναι άδειο. Ο βοηθός γράφει πρώτα επικεφαλίδα, οπότε άδειο αρχείο σημαίνει εγγραφή που απέτυχε, όχι ήσυχη βάρδια.",
+  "sc.watchFail": "Το αίτημα ανάγνωσης του αρχείου απέτυχε",
   "sc.watchNoBase": "Τα Windows δεν έδωσαν φάκελο local app-data, οπότε το αρχείο δεν βρίσκεται. Δεν είναι γνωστό τίποτα για τη βάρδια.",
   "sc.watchUnread": "Το αρχείο υπάρχει και δεν διαβάστηκε.",
   "sc.noDoor": "Αυτό το build δεν φτάνει τον βοηθό, οπότε δεν μπορεί να αναφερθεί τίποτα εδώ.",
@@ -2061,7 +2063,7 @@ window.__rcLiveNames = function(rate){
    the body class and rebuilds LEAVING, all of which refresh() does anyway, and none of
    which moves him or touches his data. Nothing here decides anything — it draws what is
    already recorded. */
-window.__rcMovesChanged = function(){ try{ renderMoves(); }catch(e){} };
+window.__rcMovesChanged = function(){ try{ renderMoves(); }catch(e){ uiFault("movesChanged", e); } };
 /* feed tonight's report into the DB: rooms are the stable keys, guest names the
    changing part — a changed guest resets that room's nickname.
    Two guards keep this honest:
@@ -3247,6 +3249,7 @@ function openProfiles(){
 /* Say plainly whether the helper behind the shortcuts is running, and if it is not,
    which of the four causes it is. Until 1.16 every one of these ended in an empty
    catch, so a blocked helper and an unbound button looked identical from the app. */
+const HELPER_GRACE_MS = 2500;
 function helperVerdict(h){
   if(!h) return {key: "sc.hDead", tone: "warn"};
   const probe = h.probe || "";
@@ -3255,14 +3258,30 @@ function helperVerdict(h){
      probe.indexOf("throw:") === 0 || probe.indexOf("no-reply:") === 0)
     return {key: "sc.hBlocked", tone: "bad"};
   if(h.state === "spawn-failed") return {key: "sc.hBlocked", tone: "bad"};
-  /* "started" is what tauStart writes the moment it has SPAWNED the helper, and this
-     had no case for it — so it fell to the end of the function and came back as
-     sc.hIdle: "Ready. Nothing is bound yet, so it is not running." A running helper,
-     described as not running, with advice to bind something. He read that line on
-     05/09 while his shortcuts were working perfectly, which is exactly what it should
-     never have been able to say. */
-  if(h.state === "running" || h.state === "started") return {key: "sc.hOk", tone: "good"};
-  if(h.state === "idle") return {key: "sc.hIdle", tone: "faint"};
+  /* THE RESIDENT, LOOKED FOR. `running` is the status verb's answer to "is the helper's
+     window there?" — the one fact about the process in memory that can be established
+     from outside it, and it is asked on every press. 1.17.38 read `state` instead, which
+     is what tauStart writes the moment it has SPAWNED the helper and never revisits:
+     "started" came back as sc.hIdle before it (a running helper described as not
+     running, with advice to bind something — he read that on 05/09 while his shortcuts
+     worked) and as sc.hOk after it, so a helper that died 53 ms in, the Split landmine,
+     would have shown green all night with its own crash text printed underneath.
+     Neither was established. This is. */
+  if(h.running === true) return {key: "sc.hOk", tone: "good"};
+  if(h.running === false){
+    /* just spawned: the window takes a moment to exist, and a press that lands inside
+       that moment — the shortcuts panel re-asks on every rebind — has not established
+       that it died. It says checking, and asks once more shortly. */
+    if(h.state === "started" && h.since && Date.now() - h.since < HELPER_GRACE_MS)
+      return {key: "sc.hChecking", tone: "faint"};
+    if(h.crash) return {key: "sc.hCrash", tone: "bad"};
+    if(h.state === "started" || h.state === "running") return {key: "sc.hDead", tone: "warn"};
+    return {key: "sc.hIdle", tone: "faint"};
+  }
+  /* no `running` in the answer: a main.js from before 1.17.39, so the spawn-time state is
+     all there is and nothing about the process in memory is claimed */
+  if(h.state === "running") return {key: "sc.hOk", tone: "good"};
+  if(h.state === "started" || h.state === "idle") return {key: "sc.hIdle", tone: "faint"};
   // exit 3 is the helper's own "Windows would not give me the hooks"
   if(h.state === "exited"){
     if(h.code === 3) return {key: "sc.hRefused", tone: "bad"};
@@ -3277,16 +3296,23 @@ function helperDetail(h){
   const bits = [];
   if(h.probe) bits.push("probe=" + h.probe);
   if(h.state) bits.push("state=" + h.state);
-  /* WHICH HELPER IS ACTUALLY RUNNING — collected since 1.17.11 and never once shown.
-     main.js sets TAUINFO.ver from the status verb's own answer and sc-helper passes it
-     through, and this function listed every other field but that one. It is the single
-     number that says whether the helper an update shipped is the helper in memory, and
-     for three releases of chasing a feed that would not start, nobody could see it. */
-  if(h.ver) bits.push("helper=" + h.ver);
+  /* WHICH EXE ANSWERED — collected since 1.17.11 and shown to nobody until 1.17.39: the
+     1.17.38 line that promised "helper=vNN" never received it, because sc-helper's
+     snapshot did not copy TAUINFO.ver, and the comment here asserted a data path that did
+     not exist. It is labelled for what it is now. The status and ping verbs both print
+     the VERSION OF THE FILE ON DISK that answered; neither asks the resident what it is,
+     so "helper=" would claim a fact about the process in memory that nothing here has
+     established. resident= is the status verb's answer to whether that process's window
+     exists — established on every press, and what the verdict is built on. */
+  if(h.ver) bits.push("exe=" + h.ver);
+  if(h.running === true || h.running === false) bits.push("resident=" + (h.running ? "up" : "down"));
   if(h.code !== null && h.code !== undefined) bits.push("exit=" + h.code);
   if(h.err) bits.push("err=" + h.err);
   if(h.ranMs !== null && h.ranMs !== undefined) bits.push("ran=" + h.ranMs + "ms");
-  if(h.specs && h.specs.length) bits.push("binds=" + h.specs.join(","));
+  /* the binds file that could not be written says so, instead of its intended contents
+     being listed as published */
+  if(h.binds === "COULD NOT WRITE") bits.push("binds=COULD NOT WRITE");
+  else if(h.specs && h.specs.length) bits.push("binds=" + h.specs.join(","));
   if(h.exe) bits.push(h.exe);
   if(h.crash) bits.push("\n" + h.crash);      // the exception itself, when there is one
   return bits.join("  ");
@@ -3307,6 +3333,8 @@ function refreshHelperStatus(sel, raw){
     const el2 = $(sel);
     if(!el2) return;                          // dialog closed while we were asking
     const v = helperVerdict(h), d = helperDetail(h);
+    /* inside the grace after a spawn: one more look, when the answer is settled */
+    if(v.key === "sc.hChecking") setTimeout(() => refreshHelperStatus(sel, raw), HELPER_GRACE_MS + 200);
     el2.innerHTML =
       '<span style="color:' + TONE[v.tone] + '">\u25cf</span> ' +
       '<span style="color:var(--faint)">' + t("sc.hStatus") + ':</span> ' +
@@ -3399,7 +3427,11 @@ function openDebug(){
     pre.style.display = "";
     copy.style.display = "none";
     if(!sc || !sc.watchLog){ pre.textContent = t("sc.noDoor"); return; }
-    const r = await sc.watchLog().catch(() => null);
+    /* a request that FAILED is not a build without the door: the door is there and was
+       used, and the answer is the failure itself */
+    let r;
+    try{ r = await sc.watchLog(); }
+    catch(e){ pre.textContent = t("sc.watchFail") + " (" + ((e && e.message) || e || "?") + ")"; return; }
     const log = r && r.log ? r.log : "";
     if(!log){
       pre.textContent = r && WATCH_WHY[r.why]
@@ -5625,9 +5657,19 @@ const I18N={
   live_arr:"Arrival report {0}: {1} rows read, {2} usable \u2014 {3} new, {4} corrected, {5} already known.",
   live_dep:"Departure report {0}: {1} rows read, {2} usable \u2014 {3} new, {4} corrected, {5} already known.",
   live_same:"protel\u2019s in-house list \u2014 {0} rooms for {1}, unchanged since the last read.",
-  held_lead:"holding: ", held_rows:"{0} rows",
+  held_lead:"from protel: ", held_rows:"{0} rows", held_rows2:"{0} of {1} rows",
   held_IH:"in-house", held_MV:"moves", held_AR:"arrivals", held_DP:"departures",
-  held_none:"nothing captured from protel yet \u2014 open a list in protel and it is taken as it goes past.",
+  held_none:"no protel list captured in the last 20 hours.",
+  held_not:"not taken: ", held_unread:"{0}: the capture file could not be read ({1})",
+  why_cut:"the read was cut short", why_wrong:"the caption does not name it", why_nodate:"no date in the caption",
+  why_err:"protel error", why_empty:"no rows came back", why_none:"no usable rows",
+  why_failed:"the ledger could not be written", why_threw:"the ingest threw", why_unknown:"reason unknown",
+  rpt_AR:"Arrival report", rpt_DP:"Departure report", rpt_IH:"In-house list",
+  live_kept:" {0} kept as the census had them.",
+  live_rnone:"{0} \u201c{1}\u201d: no rows came back.",
+  live_rwrong:"That window is not the {0} \u2014 it says \u201c{1}\u201d. Nothing was recorded.",
+  live_rcut:"{0} \u201c{1}\u201d: the read stopped early, so nothing was recorded \u2014 a list missing its tail must not feed the ledger.",
+  live_rsame:"{0} {1}: unchanged since the last read.",
   live_held:" {0} holding-room row(s) ignored.",
   live_nodate2:" {0} row(s) had no readable arrival date.",
   live_partial:" {0} row(s) came back incomplete and were left out.",
@@ -5698,9 +5740,19 @@ const I18N={
   live_arr:"Αφίξεις {0}: {1} γραμμές, {2} αξιοποιήσιμες — {3} νέες, {4} διορθώθηκαν, {5} ήδη γνωστές.",
   live_dep:"Αναχωρήσεις {0}: {1} γραμμές, {2} αξιοποιήσιμες — {3} νέες, {4} διορθώθηκαν, {5} ήδη γνωστές.",
   live_same:"Λίστα παραμονών protel — {0} δωμάτια για {1}, χωρίς αλλαγή από την προηγούμενη ανάγνωση.",
-  held_lead:"έχει: ", held_rows:"{0} γραμμές",
+  held_lead:"από το protel: ", held_rows:"{0} γραμμές", held_rows2:"{0} από {1} γραμμές",
   held_IH:"παραμονές", held_MV:"μετακινήσεις", held_AR:"αφίξεις", held_DP:"αναχωρήσεις",
-  held_none:"τίποτα από το protel ακόμη — άνοιξε μια λίστα και θα ληφθεί καθώς περνάει.",
+  held_none:"καμία λίστα από το protel τις τελευταίες 20 ώρες.",
+  held_not:"δεν λήφθηκε: ", held_unread:"{0}: το αρχείο λήψης δεν διαβάστηκε ({1})",
+  why_cut:"η ανάγνωση κόπηκε νωρίς", why_wrong:"ο τίτλος δεν την ονομάζει", why_nodate:"χωρίς ημερομηνία στον τίτλο",
+  why_err:"σφάλμα protel", why_empty:"δεν ήρθαν γραμμές", why_none:"καμία αξιοποιήσιμη γραμμή",
+  why_failed:"το αρχείο δεν γράφτηκε", why_threw:"η καταχώρηση απέτυχε", why_unknown:"άγνωστος λόγος",
+  rpt_AR:"Αφίξεις", rpt_DP:"Αναχωρήσεις", rpt_IH:"Λίστα παραμονών",
+  live_kept:" {0} έμειναν όπως τις είχε η λίστα παραμονών.",
+  live_rnone:"{0} «{1}»: δεν ήρθαν γραμμές.",
+  live_rwrong:"Αυτό το παράθυρο δεν είναι {0} — λέει «{1}». Δεν καταγράφηκε τίποτα.",
+  live_rcut:"{0} «{1}»: η ανάγνωση σταμάτησε νωρίς, οπότε δεν καταγράφηκε τίποτα — λίστα χωρίς την ουρά της δεν τροφοδοτεί το αρχείο.",
+  live_rsame:"{0} {1}: χωρίς αλλαγή από την προηγούμενη ανάγνωση.",
   live_held:" {0} γραμμές δωματίου αναμονής αγνοήθηκαν.",
   live_nodate2:" {0} γραμμές χωρίς αναγνώσιμη ημερομηνία άφιξης.",
   live_partial:" {0} γραμμές ήρθαν ελλιπείς και δεν καταγράφηκαν.",
@@ -6345,7 +6397,7 @@ const LIVE_RETRY_MS = 5000;
    looks unchanged and nothing is ever written back — he would empty it and watch it stay
    empty. The reset lives in the other scope, so this is its door. */
 window.__taForget = function(){
-  try{ LIVE_SIG = ""; RPT_SIG = {}; LIVE_AT = {}; LIVE_HELD = {}; }catch(e){}
+  try{ LIVE_SIG = ""; RPT_SIG = {}; LIVE_AT = {}; LIVE_HELD = {}; LIVE_ERR = {}; }catch(e){}
   try{ localStorage.removeItem(MOVES_DONE_KEY); }catch(e){}
 };
 function liveStop(){
@@ -6399,15 +6451,19 @@ let LIVE_AT = {};                              // tag -> the capture already tak
    was taken. It costs protel NOTHING: the files are already on disk and already read
    every tick, and this only reads their captions. Recomputed when a capture's timestamp
    changes and cached otherwise, so a list of 250 rows is not re-scanned every 5 s. */
-let LIVE_HELD = {};                            // tag -> {at, date, rows}
+let LIVE_HELD = {};                            // tag -> {at, date, rows, total, why}
+let LIVE_ERR = {};                             // tag -> why its capture file could not be read
 function heldOf(tag, at, txt){
-  let date = "", rows = 0;
+  let date = "", rows = 0, total = 0;
   for(const line of String(txt || "").split(/\r?\n/)){
     if(!line) continue;
     if(line.indexOf(tag + "\t") === 0) rows++;
     else if(line.indexOf("TITLE\t") === 0) date = inhouseDate(line.slice(6));
+    /* what protel's list HELD, beside what the helper got of it: a cut-short capture
+       used to be summarised by the smaller number alone, as though it were the list */
+    else if(line.indexOf("DONE\t") === 0) total = +line.split("\t")[2] || 0;
   }
-  return {at: at, date: date, rows: rows};
+  return {at: at, date: date, rows: rows, total: total, why: ""};
 }
 function hhmm(at){
   /* mtimes only. A test fixture numbers its captures 1, 2, 9 — printing 1970 for those
@@ -6423,10 +6479,14 @@ function paintHeld(){
   const bits = [];
   for(const tag of LIVE_TAGS){
     const h = LIVE_HELD[tag];
-    if(!h) continue;
-    const when = hhmm(h.at);
-    bits.push(t('held_' + tag) + " " + (h.date || "?")
-              + " \u00b7 " + t('held_rows', h.rows) + (when ? " \u00b7 " + when : ""));
+    if(h){
+      const when = hhmm(h.at);
+      const n = (h.total && h.total !== h.rows) ? t('held_rows2', h.rows, h.total) : t('held_rows', h.rows);
+      bits.push(t('held_' + tag) + " " + (h.date || "?") + " \u00b7 " + n + (when ? " \u00b7 " + when : "")
+                /* a capture the ingest refused is on disk and NOT in — it says so */
+                + (h.why ? " \u2014 " + t('held_not') + t('why_' + h.why) : ""));
+    }
+    if(LIVE_ERR[tag]) bits.push(t('held_unread', t('held_' + tag), LIVE_ERR[tag]));
   }
   box.textContent = bits.length ? t('held_lead') + bits.join("   ") : t('held_none');
 }
@@ -6449,10 +6509,16 @@ async function autoReadInhouse(){
   const got = [];
   for(const tag of LIVE_TAGS){
     try{
-      const f = await window.reccheckShortcuts.listFile(tag).catch(() => null);
-      /* the held summary is kept for EVERY file that is there, new or not — that is the
-         whole point of it — and dropped the moment the file is gone */
-      if(!f || !f.text){ delete LIVE_HELD[tag]; continue; }
+      const f = await window.reccheckShortcuts.listFile(tag)
+                  .catch(e => ({why: "unread", detail: String((e && e.message) || e || "?")}));
+      /* WHICH NOTHING. null is "no such file", and a file older than twenty hours is one
+         the page has had — both mean the capture is gone and its summary goes with it. A
+         file that is there and could not be READ is neither: what was held stays held, and
+         the failure is said as a failure, not as protel having opened nothing. The held
+         summary is kept for EVERY file that is there, new or not — that is the point. */
+      if(!f || f.why === "old" || (!f.why && !f.text)){ delete LIVE_HELD[tag]; delete LIVE_ERR[tag]; continue; }
+      if(f.why){ LIVE_ERR[tag] = f.detail || f.why; continue; }
+      delete LIVE_ERR[tag];
       if(!LIVE_HELD[tag] || LIVE_HELD[tag].at !== f.at)
         LIVE_HELD[tag] = heldOf(tag, +f.at || 0, f.text);
       if(f.at === LIVE_AT[tag]) continue;
@@ -6462,7 +6528,15 @@ async function autoReadInhouse(){
   }
   got.sort((a, b) => a.at - b.at);
   for(const g of got){
-    try{ await ingestCaptured(g.tag, g.text); }catch(e){}
+    /* WHAT BECAME OF IT. The summary used to be drawn from the file's presence alone, so
+       a capture the ingest REFUSED — cut short, wrong caption, no date — was announced as
+       held: the one claim the line exists to make, and false. Each ingest answers "ok" or
+       why not, and the answer rides on the entry. */
+    let r = "threw";
+    try{ const a = await ingestCaptured(g.tag, g.text); r = (a === undefined) ? "unknown" : String(a); }
+    catch(e){ r = "threw"; }
+    const h = LIVE_HELD[g.tag];
+    if(h && h.at === g.at) h.why = (r === "ok") ? "" : r;
   }
   try{ paintHeld(); }catch(e){}
 }
@@ -6524,6 +6598,11 @@ function stayFromRow(r, map, night, arrIsNight){
   if(/reversal|void/i.test(status)) return {cancelled: true};
   const cell = String(r[map.ROOM] || "").trim();
   const room = (cell.split("-")[0] || "").trim();
+  /* An EMPTY room cell is ReadCell's answer for a read that failed, not a holding room.
+     It used to fall into the holding-room count, so N rows that came back half-read on a
+     slow protel printed as "N holding-room row(s) ignored" — the very mislabel the split
+     of these counters was made to end. */
+  if(!cell) return {dropped: "partial"};
   if(!/^\d{2,3}$/.test(room)) return {dropped: "held"};
   const other = String(r[arrIsNight ? map.DEP : map.ARR] || "").trim();
   const arr = arrIsNight ? night : other;
@@ -6579,7 +6658,7 @@ function reportToStays(rows, night, arrIsNight){
    made, corrected, already known — and a write that THREW is its own answer again rather
    than an innocent-looking nought. */
 function feedStays(recs, night){
-  const tally = {made: 0, fixed: 0, same: 0, failed: false};
+  const tally = {made: 0, fixed: 0, same: 0, kept: 0, failed: false};
   if(!recs || !recs.length || !night) return tally;
   try{
     const led = loadLedger();
@@ -6587,10 +6666,18 @@ function feedStays(recs, night){
       const a = dkey(r.arr);
       if(!r.room || !a) continue;
       const d = dkey(r.dep) || 0;
+      const nm = r.name || "";
       const m = led[r.room] || (led[r.room] = {});
       const cur = m[a];
-      if(!cur){ m[a] = {d: d, n: r.name || "", seen: night}; tally.made++; continue; }
-      if(night < (cur.seen || 0)){ tally.same++; continue; }
+      if(!cur){ m[a] = {d: d, n: nm, seen: night}; tally.made++; continue; }
+      /* "ALREADY KNOWN" IS AGREEMENT, NOT DEFEAT. A row the ledger refused — older than
+         its word, or the loser of a same-night tie while stating a DIFFERENT departure —
+         used to be counted as already known, so the line asserted agreement that was never
+         checked: the report said the 5th, the ledger held the 7th, and the screen said
+         "already known". The ledger is right to keep its word; the line has to say that it
+         did. A row that says nothing about a date agrees with whatever the ledger holds. */
+      const agrees = (!d || d === (cur.d || 0)) && (!nm || nm === (cur.n || ""));
+      if(night < (cur.seen || 0)){ if(agrees) tally.same++; else tally.kept++; continue; }
       /* ON A TIE THE CENSUS WINS, AND THE COMMENT ABOVE ONLY SAID SO UNTIL NOW.
 
          `seen` is a business night on both sides: saveMoves stamps it with the in-house
@@ -6615,11 +6702,13 @@ function feedStays(recs, night){
                     seen: night};
       if(cur.from) next.from = cur.from;
       if(cur.mv) next.mv = cur.mv;
-      if(next.d !== (cur.d || 0) || next.n !== (cur.n || "")) tally.fixed++; else tally.same++;
+      if(next.d !== (cur.d || 0) || next.n !== (cur.n || "")) tally.fixed++;
+      else if(agrees) tally.same++;
+      else tally.kept++;
       m[a] = next;
     }
     localStorage.setItem(MOVES_KEY, JSON.stringify(led));
-  }catch(e){ return {made: 0, fixed: 0, same: 0, failed: true}; }
+  }catch(e){ return {made: 0, fixed: 0, same: 0, kept: 0, failed: true}; }
   return tally;
 }
 let RPT_BUSY = {}, RPT_SIG = {};
@@ -6635,16 +6724,28 @@ async function readReportLive(fn){
 }
 function applyReport(p, arrIsNight){
   const fn = arrIsNight ? "arrivals" : "departures";
+  const label = t(arrIsNight ? 'rpt_AR' : 'rpt_DP');
+  /* EVERY REFUSAL SAYS WHY, and the function answers what became of the capture. It
+     used to return in silence on a wrong caption, a cut-short read, a caption with no date
+     and an unchanged signature — so the newest capture did not always get the last word
+     on the line after all, and the held summary could not tell a report the ledger took
+     from one it refused. The answer is "ok" or the reason, and it rides on that summary. */
+  const say = el('liveSay');
+  const quiet = (m) => { if(say) say.textContent = m; };
   try{
-    if(!p || p.err || !p.rows.length) return;
-    if(!(arrIsNight ? /arrival\s*report/i : /departure\s*report/i).test(p.title)) return;
+    if(!p) return "empty";
+    if(p.err){ quiet(t('live_err') + p.err); return "err"; }
+    if(!p.rows.length){ quiet(t('live_rnone', label, p.title || '?')); return "empty"; }
+    if(!(arrIsNight ? /arrival\s*report/i : /departure\s*report/i).test(p.title)){
+      quiet(t('live_rwrong', label, p.title || '?')); return "wrong";
+    }
     /* the same two refusals the in-house read has, and for the same reasons */
-    if(p.done && p.done.cut) return;
+    if(p.done && p.done.cut){ quiet(t('live_rcut', label, p.title || '?')); return "cut"; }
     const night = inhouseDate(p.title);
     const key = dkey(night);
-    if(!key) return;
+    if(!key){ quiet(t('live_nodate', p.title || '?')); return "nodate"; }
     const sig = p.title + "|" + p.rows.map(r => r.join("~")).join(";");
-    if(sig === RPT_SIG[fn]) return;
+    if(sig === RPT_SIG[fn]){ quiet(t('live_rsame', label, night)); return "ok"; }
     const out = reportToStays(p.rows, night, arrIsNight);
     const w = feedStays(out.recs, bnk());
     /* THE REPORT NAMES DO NOT GO INTO THE ROOM DATABASE, and the first cut of this had
@@ -6664,7 +6765,6 @@ function applyReport(p, arrIsNight){
     /* A report EVERY row of which was dropped used to return before this line, so the one
        case where he most needs to be told something came back and none of it could be used
        said nothing at all. It says it now. */
-    const say = el('liveSay');
     /* BOTH NUMBERS. "{0} rows" used to be handed out.recs.length — the records BUILT — so
        a report whose rows half failed to parse reported the smaller number as though it
        were everything protel had shown, and the arithmetic on the line could never be
@@ -6677,8 +6777,10 @@ function applyReport(p, arrIsNight){
                             + (out.nodate  ? t('live_nodate2', out.nodate)  : '')
                             + (out.partial ? t('live_partial', out.partial) : '')
                             + (out.cancelled ? t('live_cancel', out.cancelled) : '')
+                            + (w.kept ? t('live_kept', w.kept) : '')
                             + (w.failed ? t('live_wfail') : '');
-  }catch(e){}
+    return w.failed ? "failed" : "ok";
+  }catch(e){ return "threw"; }
 }
 let MOVES_BUSY = false, MOVES_ROWS = null, MOVES_NIGHT = 0;
 async function readMovesLive(){
@@ -6693,11 +6795,13 @@ async function readMovesLive(){
 }
 function applyMoves(p){
   try{
-    if(!p || p.err || !p.rows.length) return;
-    if(!/perform\s*move/i.test(p.title)) return;      // the caption has to name it
+    if(!p || !p.rows) return "empty";
+    if(p.err) return "err";
+    if(!p.rows.length) return "empty";
+    if(!/perform\s*move/i.test(p.title)) return "wrong";   // the caption has to name it
     /* A read the helper called incomplete says nothing about which rows lack an X — the
        missing ones may simply be the rows it never got to. */
-    if(p.done && p.done.cut) return;
+    if(p.done && p.done.cut) return "cut";
     const night = inhouseDate(p.title);
     const key = dkey(night) || 0;
     /* Kept, because a move can only be recorded once the stay it names exists, and that
@@ -6725,7 +6829,8 @@ function applyMoves(p){
       });
     }
     recordMoves(p.rows, key);
-  }catch(e){}
+    return "ok";
+  }catch(e){ return "threw"; }
 }
 /* ---- a move that has already happened ----
 
@@ -6797,17 +6902,17 @@ function applyInhouse(p, auto){
      is a line — it interrupts nothing. Nothing came back is the only case that is genuinely
      ordinary, and it is the only one that says so. */
   const quiet = (m) => { say.textContent = m; LIVE_SIG = ""; };
-  if(!p){ quiet(t('live_idle')); return; }
-  if(p.err){ quiet(t('live_err') + p.err); return; }
-  if(!p.rows.length){ quiet(t('live_none')); return; }
-  if(!isInhouseTitle(p.title)){ quiet(t('live_wrong', p.title || '?')); return; }
+  if(!p){ quiet(t('live_idle')); return "empty"; }
+  if(p.err){ quiet(t('live_err') + p.err); return "err"; }
+  if(!p.rows.length){ quiet(t('live_none')); return "empty"; }
+  if(!isInhouseTitle(p.title)){ quiet(t('live_wrong', p.title || '?')); return "wrong"; }
   const biz = inhouseDate(p.title);
   /* The caption is the only place the live path can learn the night from. Filing 250
      stays under a guessed date is exactly the kind of helpful deduction that put 83
      departures on his panel, so it does not happen: it refuses and says why. */
-  if(!biz){ quiet(t('live_nodate', p.title || '?')); return; }
+  if(!biz){ quiet(t('live_nodate', p.title || '?')); return "nodate"; }
   const rate = inhouseToRate(p.rows, biz);
-  if(!rate.count){ quiet(t('live_none')); return; }
+  if(!rate.count){ quiet(t('live_none')); return "none"; }
   /* Nothing has moved in protel since the last tick. Writing the same ledger again and
      redrawing the page under him twenty times a minute is not faithfulness, it is a
      fault. But it used to return in SILENCE, and it is the only refusal in this function
@@ -6822,9 +6927,9 @@ function applyInhouse(p, auto){
      once. That is the phantom-departure failure, arriving unattended every five seconds.
      He can still force one by pressing the button, where the "stopped early" line tells
      him what he is looking at. */
-  if(auto && p.done && p.done.cut){ say.textContent = t('live_idle'); LIVE_SIG = ""; return; }
+  if(auto && p.done && p.done.cut){ quiet(t('live_rcut', t('rpt_IH'), p.title || '?')); return "cut"; }
   const sig = p.title + "\u0000" + p.rows.length + "\u0000" + p.rows.map(r => r.join("\u0001")).join("\u0002");
-  if(auto && sig === LIVE_SIG){ say.textContent = t('live_same', rate.count, biz || '?'); return; }
+  if(auto && sig === LIVE_SIG){ say.textContent = t('live_same', rate.count, biz || '?'); return "ok"; }
   RATE = rate;
   const saved = saveMoves(rate);
   /* A move can only be written onto a stay that exists, and the in-house list is what
@@ -6856,6 +6961,7 @@ function applyInhouse(p, auto){
   /* the census writes the ledger too, so the panel is stale until told */
   try{ if(window.__rcMovesChanged) window.__rcMovesChanged(); }catch(e){}
   render();
+  return "ok";
 }
 async function loadRate(file){clearErr();el('fn-rate').textContent=file?file.name:'';el('mv-rate').textContent='';if(!file)return;try{const pages=await readOxps(file);const r=parseRate(pages);if(!r.count){showErr(t('err_norooms'));return;}RATE=r;showMoveSave(saveMoves(r));PAIR_OVERRIDE=null;ADJ_OPEN_OVERRIDE=null;el('slot-rate').classList.add('loaded');render();}catch(e){showErr(e.message==='notxps'?t('err_notxps'):t('err_read')+e.message);}}
 async function loadTax(file){clearErr();el('fn-tax').textContent=file?file.name:'';if(!file)return;try{const pages=await readOxps(file);const tokens=pagesToTokens(pages);const r=parseTax(tokens);if(!r.totalRooms){showErr(t('err_norooms'));return;}TAX=r;PAIR_OVERRIDE=null;ADJ_OPEN_OVERRIDE=null;ingestTax(r);if(r.fileDate)EXPANDED.add(r.fileDate);el('slot-tax').classList.add('loaded');render();}catch(e){showErr(e.message==='notxps'?t('err_notxps'):t('err_read')+e.message);}}

@@ -92,7 +92,8 @@ const src = fs.readFileSync("app/index.html", "utf8");
 const lift = n => { const at = src.indexOf("\nfunction " + n + "("); if(at < 0) throw new Error("no " + n);
   let d = 0, i = src.indexOf("{", at);
   for(let j = i; j < src.length; j++){ if(src[j] === "{") d++; else if(src[j] === "}"){ d--; if(!d) return src.slice(at + 1, j + 1); } } };
-const page = new Function(lift("helperVerdict") + "\n" + lift("helperDetail") + "\nreturn {helperVerdict, helperDetail};")();
+const graceDecl = src.match(/^const HELPER_GRACE_MS = .*$/m)[0];   // the constant the verdict reads
+const page = new Function(graceDecl + "\n" + lift("helperVerdict") + "\n" + lift("helperDetail") + "\nreturn {helperVerdict, helperDetail};")();
 
 let bad = 0;
 const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL") + "  " + l); };
@@ -133,6 +134,12 @@ async function press(){ spawned.length = 0; const h = await handlers["sc-helper"
   ck("RecCheck tried to start it", spawned.indexOf("run") >= 0);
   fs.mkdirSync(path.dirname(CRASH), {recursive: true});
   fs.writeFileSync(CRASH, "run: MissingMethodException at ParseBind\n");
+  h = await press();
+  /* a press that lands right after the spawn has not established that it died: the
+     window takes a moment to exist */
+  ck("right after the spawn the absence of the window is not yet a verdict",
+     page.helperVerdict(h).key === "sc.hChecking" && h.since > 0);
+  await new Promise(r => setTimeout(r, 2700));       // past the grace
   h = await press();
   ck("the snapshot says the resident was NOT found", h.running === false);
   ck("state still says started — the spawn is all main.js ever saw", h.state === "started");
@@ -180,6 +187,10 @@ async function press(){ spawned.length = 0; const h = await handlers["sc-helper"
      page.helperVerdict({state: "started", probe: "ok", running: true}).key === "sc.hOk");
   ck("probe ok + resident not found + started = started and stopped",
      page.helperVerdict({state: "started", probe: "ok", running: false}).key === "sc.hDead");
+  ck("... unless the spawn was a moment ago, which is not yet evidence",
+     page.helperVerdict({state: "started", probe: "ok", running: false, since: Date.now()}).key === "sc.hChecking");
+  ck("and a spawn five seconds ago with no window is",
+     page.helperVerdict({state: "started", probe: "ok", running: false, since: Date.now() - 5000}).key === "sc.hDead");
   ck("probe ok + resident not found + crash = crashed",
      page.helperVerdict({state: "started", probe: "ok", running: false, crash: "x"}).key === "sc.hCrash");
   ck("no reply = blocked even if the resident was seen earlier",
