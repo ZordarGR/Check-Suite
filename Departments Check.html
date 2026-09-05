@@ -1431,7 +1431,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.42";
+const APP_VERSION = "1.17.43";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -2109,7 +2109,10 @@ window.__rcLiveNames = function(rate){
    the body class and rebuilds LEAVING, all of which refresh() does anyway, and none of
    which moves him or touches his data. Nothing here decides anything — it draws what is
    already recorded. */
-window.__rcMovesChanged = function(){ try{ renderMoves(); }catch(e){ uiFault("movesChanged", e); } };
+window.__rcMovesChanged = function(){
+  try{ renderMoves(); }catch(e){ uiFault("movesChanged", e); }
+  try{ refreshSearchMarks(); }catch(e){ uiFault("searchMarks", e); }
+};
 /* feed tonight's report into the DB: rooms are the stable keys, guest names the
    changing part — a changed guest resets that room's nickname.
    Two guards keep this honest:
@@ -3349,8 +3352,13 @@ function helperDetail(h){
      the VERSION OF THE FILE ON DISK that answered; neither asks the resident what it is,
      so "helper=" would claim a fact about the process in memory that nothing here has
      established. resident= is the status verb's answer to whether that process's window
-     exists — established on every press, and what the verdict is built on. */
+     exists — established on every press, and what the verdict is built on.
+
+     Since helper v28 (1.17.43) the status verb ALSO reads the resident's version off its
+     own window's caption, so helper= is back and means the process in memory: "-" is no
+     resident, "?" a resident older than v28 whose caption carries no version. */
   if(h.ver) bits.push("exe=" + h.ver);
+  if(h.res && h.res !== "-") bits.push("helper=" + (h.res === "?" ? "pre-v28" : h.res));
   if(h.running === true || h.running === false) bits.push("resident=" + (h.running ? "up" : "down"));
   if(h.code !== null && h.code !== undefined) bits.push("exit=" + h.code);
   if(h.err) bits.push("err=" + h.err);
@@ -4716,6 +4724,7 @@ function searchInput(){
   if(!q) return;
 
   LEAVING = leavingIndex();          // once per search, not once per card
+  LEAVING_SIG = JSON.stringify(LEAVING);
   const ms = findMatches(q);
   const xs = findExtras(q);
   currentMatches = ms;               // Enter confirms a report receipt; an entry you
@@ -4737,6 +4746,22 @@ function searchInput(){
   for(const x of xs) box.append(extraMatchCard(x));
 }
 
+/* THE CARDS ON SCREEN AFTER A CAPTURE (queued 05/09, built 1.17.43 under his go). The door
+   redrew the panel and rebuilt LEAVING, but the cards he had already searched kept the
+   marks they were drawn with until he retyped — a departure list captured mid-search left
+   a receipt unmarked that should have been red. Redrawing on a timer would move the page
+   under his hands, so the cards are redrawn ONLY when who-is-leaving actually changed for
+   the report's night; a capture that changes nothing for them moves nothing. */
+let LEAVING_SIG = "";
+function refreshSearchMarks(){
+  const box = $("#matches");
+  if(!box || !box.children.length || !MODEL) return;
+  const f = inp();
+  if(!f || !f.value.trim()) return;
+  const sig = JSON.stringify(leavingIndex());
+  if(sig === LEAVING_SIG) return;
+  searchInput();                                 // recomputes LEAVING and LEAVING_SIG
+}
 /* ---- a receipt on a room that is leaving today ----
    His case, in his words: sixteen rooms were due out on 01/09 and they did not all leave
    at 11:00. Some charged something to the room and only then came to the desk. A receipt
@@ -4757,6 +4782,20 @@ function leavingIndex(){
   const out = {};
   const night = MODEL ? dateNum(MODEL.reportDate) : 0;
   if(!night) return out;                       // no night, no claim
+  /* LEGACY MODE IS FED FROM FILES (his word: the files stay as the fallback), and nothing
+     is captured in it, so the store is empty there. It reads the ledger the rate list
+     wrote, exactly as it did before 1.17.42; with legacy off the departure list alone. */
+  if(legacyOn()){
+    const led = loadMoves();
+    for(const room of Object.keys(led)){
+      for(const a of Object.keys(led[room])){
+        const e = led[room][a];
+        if((e.d || 0) !== night) continue;    // not on today's departure list
+        (out[room] = out[room] || []).push(e.n || "");
+      }
+    }
+    return out;
+  }
   for(const r of statusRows(loadStatus(), "DP", night)){
     const room = pillRoom(r.room);
     if(room) (out[room] = out[room] || []).push(r.name || "");
@@ -5008,6 +5047,9 @@ function roomMoves(nightArg){
   const out = {};
   const night = nightArg || (MODEL ? dateNum(MODEL.reportDate) : 0);
   if(!night) return out;
+  /* legacy mode: nothing is captured, so the store is empty; the XPS-fed ledger draws the
+     pills as it did before 1.17.42 (queued 05/09, built 1.17.43 under his go) */
+  if(legacyOn()) return ledgerMoves(night);
   const st = loadStatus();
   const acc = {};
   const slot = room => (acc[room] = acc[room] || {arr: false, dep: false, move: null, who: [], names: {dep: [], move: []}});
@@ -5044,7 +5086,7 @@ function ledgerMoves(nightArg){
   const led = loadMoves();
   for(const room of Object.keys(led)){
     let arr = false, dep = false, from = 0;
-    const who = [];
+    const who = [], names = {dep: [], move: []};   // the dot matches on these, as roomMoves's do
     let moved = null;
     for(const a of Object.keys(led[room])){
       const r = led[room][a], A = Number(a), D = r.d || 0;
@@ -5054,11 +5096,12 @@ function ledgerMoves(nightArg){
       if(r.mv) continue;
       if(A === night){
         arr = true; from = Math.max(from, r.seen || 0);
-        if(r.from) moved = r.from;              // arrived here by moving out of that room
+        if(r.from){ moved = r.from; names.move.push(r.n || ""); }   // arrived here by moving out of that room
         if(r.n) who.push((r.from ? "\u21b3 " : "\u2192 ") + r.n + (r.from ? "  (" + r.from + " \u2192 " + room + ")" : ""));
       }
       if(D === night){
         dep = true; from = Math.max(from, r.seen || 0);
+        names.dep.push(r.n || "");
         if(r.n) who.push("\u2190 " + r.n);
       }
     }
@@ -5066,7 +5109,7 @@ function ledgerMoves(nightArg){
     /* A move that also departs tonight is still a turnover — the room changed hands
        twice and that is the louder fact. */
     const kind = (arr && dep) ? "turn" : (arr ? (moved ? "move" : "arr") : "dep");
-    out[room] = {kind: kind, who: who, sure: true, from: from, movedFrom: moved};
+    out[room] = {kind: kind, who: who, sure: true, from: from, movedFrom: moved, names: names};
   }
   /* There was a second pass here that added a dashed TURNOVER pill for any room whose
      name in the department report differed from the name cached for it — "the report

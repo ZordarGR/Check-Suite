@@ -1,11 +1,11 @@
 {
-  "version": "1.17.42",
-  "type": "html",
-  "engine": "1.17.41",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.41/RecCheck-Setup.exe",
-  "setupSha256": "9b9e2a4a4ab2f9855637f072bf06b2fc6d0578d9b8455afcfaea8d218afef230",
+  "version": "1.17.43",
+  "type": "full",
+  "engine": "1.17.43",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.43/RecCheck-Setup.exe",
+  "setupSha256": "3e6834cfbc407b98876eea09a86e932abdddab5ca2c7e50932405e4592b46ea5",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "80a9002632d0bfc89447377433e8097ac86b3f360b0e9e8137683309ba273940",
-  "notes": "STATUS is four lists now — Arrivals, Departures, In-house, Moves — each kept for the day from every capture the helper took, so a row that left protel's list is still there, marked as gone since when.\n\nAn arrival is marked checked in only when the in-house list shows the same name and room with CI. A departure is marked checked out only when a complete in-house list for that day does not show that name and room, or shows it with CO; a cut-short in-house read proves nothing and says so. A row leaving either list proves nothing on its own — the departure date can be wrong.\n\nThe pills in the department check come from these lists and not from the rate list's ledger or an XPS: the departure list draws DEPARTED, the arrival list ARRIVED, both TURNOVER, a moves row with protel's X MOVED. A dot on a departed, turnover or moved pill means a receipt in tonight's report carries that reservation's own name."
+  "sha256": "6e73d9b422426f24cfbfddc3d31c85a9e2bfb95ffcfd05bffb2d66bda19704f2",
+  "notes": "The DEBUG helper line now names the helper actually running, not only the file on disk: the resident reports its own version (helper v28), and an older resident is said to be older.\n\nA departure list captured while a search is on screen marks the departing guest's receipt red at once, without retyping the serial. Nothing is redrawn when a capture changes nothing for the cards on screen.\n\nLegacy mode draws the room pills and the leaving-today mark from the rate list's ledger again, as it did before 1.17.42 — nothing is captured in legacy mode, so the lists STATUS reads stay empty there."
 }

@@ -863,3 +863,5 @@ KeyValuePair`2
 evWant
 watchNeedle
 WatchTarget
+IsDigit
+ResidentVer

@@ -24,7 +24,7 @@ Object.defineProperty(Node.prototype, "innerHTML", {set(v){ if(v==="") this.chil
 
 /* the store the two halves share; the tax half's shipped writer fills the STATUS part */
 function makeStore(led){
-  const store = {reccheck_moves_v2: JSON.stringify(led)};
+  const store = {reccheck_moves_v2: JSON.stringify(led), reccheck_legacy: "0"};
   const localStorage = {getItem:k=>(k in store?store[k]:null), setItem:(k,v)=>store[k]=String(v), removeItem:k=>{delete store[k];}};
   const ingest = new Function("localStorage", "t", "I18N", [
     line(/^const IH = \{NAME: 0.*$/m), line(/^const AR = \{NAME: 0.*$/m), line(/^const DP = \{NAME: 0.*$/m), line(/^const MV = \{FROM: 0.*$/m),
@@ -47,6 +47,7 @@ function run(localStorage, ROOMS, receipts, reportDate){
     "const effRoom = (r) => { " + effRoomLine.replace(/^function effRoom\(r\)\{/, "").replace(/\}$/, "") + " };",
     lift("checkableList"), lift("sameName"),
     "const STATUS_KEY = \"reccheck_status_v1\";", lift("loadStatus"), lift("statusRows"), lift("pillRoom"),
+    "const LEGACY_KEY = \"reccheck_legacy\";", lift("legacyOn"), line(/^const MOVES_KEY = .*$/m), lift("loadMoves"), lift("ledgerMoves"), 
     lift("leavingIndex"), "let LEAVING = {};", lift("isLeaving"),
     lift("roomMoves"), lift("renderMovesFor"), lift("renderMoves"),
     "renderMoves(); return {classes:[...classes], root:moves};"].join("\n");

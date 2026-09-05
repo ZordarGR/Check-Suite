@@ -284,8 +284,11 @@ function helperVerb(verb){
     const fin = () => {
       if(done) return; done = true;
       const out = Buffer.concat(chunks).toString("utf8");
-      const m = /^RCTBIND\s+(on|off)\s+(running|stopped)\s+(\S+)/m.exec(out);
-      res(m ? {available: true, on: m[1] === "on", running: m[2] === "running", ver: m[3]}
+      /* four fields since helper v28: the last is the RESIDENT's version, read off its
+         own window's caption ("-" no resident, "?" a resident older than v28); a v27
+         helper prints three and the fourth is simply absent */
+      const m = /^RCTBIND\s+(on|off)\s+(running|stopped)\s+(\S+)(?:[ \t]+(\S+))?/m.exec(out);
+      res(m ? {available: true, on: m[1] === "on", running: m[2] === "running", ver: m[3], res: m[4] || ""}
             : {available: true, on: false, running: false, err: (out.trim() || "no answer").slice(0, 120)});
     };
     try{
@@ -370,7 +373,7 @@ function tauStart(){
   const wrote = writeBinds();
   helperVerb("status").then(st => {
     TAUINFO = {state: st.running ? "running" : "stopped", exe: exe, boot: !!st.on,
-               ver: st.ver, binds: wrote ? bindsPath() : "COULD NOT WRITE", err: st.err,
+               ver: st.ver, res: st.res, binds: wrote ? bindsPath() : "COULD NOT WRITE", err: st.err,
                specs: LAST_SPECS.slice()};
     if(st.available && !st.running){
       try{
@@ -984,14 +987,14 @@ ipcMain.handle("sc-helper", () => new Promise(res => {
   const snap = () => ({exe: exe, state: TAUINFO.state, code: TAUINFO.code, signal: TAUINFO.signal,
                        err: TAUINFO.err, pid: TAUINFO.pid, ranMs: TAUINFO.ranMs,
                        specs: TAUINFO.specs, since: TAUINFO.since, crash: tauCrash(),
-                       ver: TAUINFO.ver, binds: TAUINFO.binds, boot: TAUINFO.boot});
+                       ver: TAUINFO.ver, res: TAUINFO.res, binds: TAUINFO.binds, boot: TAUINFO.boot});
   if(process.platform !== "win32"){ const i = snap(); i.probe = "not-windows"; res(i); return; }
   if(!exe){ const i = snap(); i.probe = "missing"; res(i); return; }
   const chunks = []; let done = false;
   const fin = (p, st) => {
     if(done) return; done = true;
     const i = snap(); i.probe = p;
-    if(st){ i.running = st.running; i.ver = st.ver; i.boot = st.on; }
+    if(st){ i.running = st.running; i.ver = st.ver; i.res = st.res; i.boot = st.on; }
     res(i);
   };
   try{
@@ -1000,9 +1003,9 @@ ipcMain.handle("sc-helper", () => new Promise(res => {
     child.on("error", e => fin("spawn-error:" + ((e && (e.code || e.message)) || "unknown")));
     child.on("exit", c => {
       const out = Buffer.concat(chunks).toString("utf8");
-      const m = /^RCTBIND\s+(on|off|on-failed|off-failed)\s+(running|stopped)\s+(\S+)/m.exec(out);
+      const m = /^RCTBIND\s+(on|off|on-failed|off-failed)\s+(running|stopped)\s+(\S+)(?:[ \t]+(\S+))?/m.exec(out);
       fin(m ? "ok" : ("no-reply:exit=" + c),
-          m ? {on: m[1] === "on", running: m[2] === "running", ver: m[3]} : null);
+          m ? {on: m[1] === "on", running: m[2] === "running", ver: m[3], res: m[4] || ""} : null);
     });
     setTimeout(() => { try{ child.kill(); }catch(e){} fin("timeout"); }, 5000);
   }catch(e){ fin("throw:" + ((e && (e.code || e.message)) || "unknown")); }

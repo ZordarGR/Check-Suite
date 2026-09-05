@@ -1336,7 +1336,7 @@ static class TBind {
       if(RegisterClassEx(ref wc) == 0) return false;
       capsWnd = CreateWindowEx(
         WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-        CAPS_CLASS, "RecCheck Caps Lock", WS_POPUP,
+        CAPS_CLASS, "RecCheck Caps Lock " + VER, WS_POPUP,
         (GetSystemMetrics(SM_CXSCREEN) - CAPS_W) / 2,
         (GetSystemMetrics(SM_CYSCREEN) - CAPS_H) / 2, CAPS_W, CAPS_H,
         IntPtr.Zero, IntPtr.Zero, inst, IntPtr.Zero);
@@ -2658,6 +2658,24 @@ static class TBind {
     }catch(Exception){ return false; }
   }
   static bool AlreadyRunning(){ return FindWindow(CAPS_CLASS, null) != IntPtr.Zero; }
+  /* THE RESIDENT'S OWN VERSION (v28). `status` and `ping` answer for the exe on disk; the
+     process in memory could be older, and until now nothing asked it. Its Caps Lock window
+     carries VER in its caption since v28, and this reads it back with GetWindowText — a
+     top-level window's cached caption, message-free (see the v13 note), and OUR window,
+     not protel's. "-" when there is no resident; "?" when the resident's caption carries
+     no version, which means a resident older than v28. */
+  static string ResidentVer(){
+    try{
+      IntPtr h = FindWindow(CAPS_CLASS, null);
+      if(h == IntPtr.Zero) return "-";
+      StringBuilder b = new StringBuilder(64);
+      GetWindowText(h, b, b.Capacity);
+      string s = b.ToString().Trim();
+      int sp = s.LastIndexOf(' ');
+      string last = sp >= 0 ? s.Substring(sp + 1) : s;
+      return (last.Length >= 2 && last[0] == 'v' && char.IsDigit(last[1])) ? last : "?";
+    }catch(Exception){ return "?"; }
+  }
   static void StopRunning(){
     IntPtr other = FindWindow(CAPS_CLASS, null);
     if(other != IntPtr.Zero) PostMessage(other, WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
@@ -2688,14 +2706,15 @@ static class TBind {
     }catch(Exception){}
   }
 
-  const string VER = "v27";
+  const string VER = "v28";
 
   static int Main(string[] args){
     int parentPid;
     /* ---- the login entry. HKCU, so no admin and nothing is "installed". ---- */
     if(args.Length >= 1 && args[0] == "status"){
+      /* four fields since v28: the last is the RESIDENT's version, read off its window */
       Say("RCTBIND " + (BootOn() ? "on" : "off") + " "
-                     + (AlreadyRunning() ? "running" : "stopped") + " " + VER);
+                     + (AlreadyRunning() ? "running" : "stopped") + " " + VER + " " + ResidentVer());
       return 0;
     }
     if(args.Length >= 1 && args[0] == "install"){
