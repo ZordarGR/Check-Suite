@@ -38,6 +38,9 @@ window.reccheckShortcuts={
   helper:()=>Promise.resolve({state:"started"}),
   listFile:(tag)=>{ window.__lf=(window.__lf||0)+1;
     const t = window.__files[tag];
+    /* a string is a capture; an object is main.js's own answer shape ({why: ...}), or
+       {reject: ...} to make the IPC itself fail — both are things the loop has to read */
+    if(t && typeof t === "object") return t.reject ? Promise.reject(new Error(t.reject)) : Promise.resolve(Object.assign({tag: tag}, t));
     return Promise.resolve(t ? {tag: tag, at: window.__at[tag], text: t} : null); }
   ${payload === null ? "" : ",inhouse:()=>Promise.resolve(" + JSON.stringify(payload) + ")"}};
 try{ localStorage.setItem("reccheck_legacy", ${legacy ? '"1"' : '"0"'}); }catch(e){}`;
@@ -329,16 +332,121 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
       ["HOLDING ROOM ", "9000", "0/0/0/0/0", "28/08/26", "CO"],   // a real holding room
       ["NO DATE AT ALL ", "301", "2/0/0/0/0", "", "CO"],          // arrival unreadable
       ["", "302", "2/0/0/0/0", "01/09/26", "CO"],                 // never fully read
+      ["NO ROOM CELL ", "", "2/0/0/0/0", "01/09/26", "CO"],       // the ROOM cell never arrived
       ["GOOD GUEST ", "303", "2/0/0/0/0", "01/09/26", "CO"]]));
   await p.evaluate(() => window.__t.showScreen("tax"));
   await p.waitForTimeout(7000);
   const line14 = await p.evaluate(() => document.getElementById("liveSay").textContent);
-  ck("the one real stay is reported as new",     /1 rows|1 new/.test(line14));
+  /* the two assertions this used to make, "1 rows|1 new" and one mention of holding-room,
+     were satisfied by the PRE-fix sentence as well; these are not */
+  ck("every row read is counted, and the one real stay is new",
+     /5 rows read, 1 usable/.test(line14) && /1 new, 0 corrected, 0 already known/.test(line14));
   ck("the holding room is named as a holding room", /1 holding-room/.test(line14));
-  ck("the unreadable date is its own sentence",  /no readable arrival date/i.test(line14));
-  ck("and the half-read row is its own too",     /came back incomplete/i.test(line14));
-  ck("nothing is called a holding room but the holding room",
-     (line14.match(/holding-room/g) || []).length === 1);
+  ck("the unreadable date is its own sentence",  /1 row\(s\) had no readable arrival date/.test(line14));
+  ck("and the half-read rows are their own, whichever cell failed to arrive",
+     /2 row\(s\) came back incomplete/.test(line14));
+  ck("nothing is called a holding room but the holding room", !/[02-9]\d* holding-room/.test(line14));
+  await p.close();
+
+  /* 15. WHAT THE TOOL IS HOLDING, said even when nothing new arrives.
+         His, 05/09: "i see the in house list opened but no refresh in reccheck". The
+         helper does not re-read a caption it has already read, so no new file appears and
+         nothing is ingested — and the screen had no way to say the list was already in. */
+  p = await b.newPage();
+  await p.addInitScript(bridgeFor(null, false));
+  await p.setViewportSize({width: 1280, height: 620});
+  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
+  await p.evaluate(() => window.__t.showScreen("tax"));
+  await p.waitForTimeout(1500);
+  const none15 = await p.evaluate(() => document.getElementById("liveHeld").textContent);
+  ck("with nothing captured it says so, and promises nothing",
+     /no protel list captured/i.test(none15) && !/open a list/.test(none15));
+  await p.evaluate((o) => { window.__files.IH = o.h; window.__at.IH = 9;
+                            window.__files.DP = o.d; window.__at.DP = 5; }, {
+    h: IH("Guests inhouse: 04/09/26", ROWS),
+    d: RPT("DP", "Departure Report for 04/09/26", [
+      ["BURWIECK/GRUBE TAREK/KATHARINA ", "125", "2/0/0/0/0", "28/08/26", "CO"]])});
+  await p.waitForTimeout(7000);
+  const held1 = await p.evaluate(() => document.getElementById("liveHeld").textContent);
+  ck("it names the in-house list it holds",   /in-house 04\/09\/26/.test(held1));
+  ck("with the rows it holds for it",         /in-house 04\/09\/26 · \d+ rows/.test(held1));
+  ck("and the departure report beside it",    /departures 04\/09\/26/.test(held1));
+  ck("a list never captured is not claimed",  !/arrivals|moves/.test(held1));
+  /* the same captures again, unchanged: the tool still says it holds them */
+  await p.waitForTimeout(6000);
+  const held2 = await p.evaluate(() => document.getElementById("liveHeld").textContent);
+  ck("and it still says so when nothing new arrives", held2 === held1);
+  /* any clock at all: the old "1970|00:00" only bit in UTC, where the epoch is midnight */
+  ck("a fixture's fake timestamp is not printed as a real clock", !/\d\d:\d\d/.test(held2));
+  await p.close();
+
+  /* 16. A CAPTURE THE INGEST REFUSED IS ON DISK AND NOT IN — and the line says so.
+         The 1.17.38 summary was drawn from the file's presence alone: a cut-short in-house
+         read, refused by applyInhouse (correctly — a partial census reads as departures),
+         was announced as "holding: in-house … N rows" under a #liveSay saying nothing came
+         back. And a file the tool could not READ, or one older than twenty hours, printed
+         "nothing captured from protel yet — open a list", a claim about protel made from
+         the tool's own failure, promising a re-capture the helper does not make for a
+         caption it already took. */
+  p = await b.newPage();
+  await p.addInitScript(bridgeFor(null, false));
+  await p.setViewportSize({width: 1280, height: 620});
+  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
+  await p.evaluate(() => window.__t.showScreen("tax"));
+  await p.waitForTimeout(400);
+  const CUT16 = ["TITLE\tGuests inhouse: 04/09/26", ...ROWS.map(r => "IH\t" + r.join("\t")),
+                 "DONE\t2\t250\t83\t47\tunicode\tcut-short"].join("\n");
+  await p.evaluate((o) => { window.__files.IH = o.c; window.__at.IH = 4;
+                            window.__files.DP = o.d; window.__at.DP = 6; },
+    {c: CUT16, d: "TITLE\tDeparture Report for 04/09/26\nERR\tprotel would not let this process read it\nDP\tX\t125\t2/0/0/0/0\t28/08/26\tCO\n"});
+  await p.waitForTimeout(6500);
+  const held16 = await p.evaluate(() => document.getElementById("liveHeld").textContent);
+  const say16 = await p.evaluate(() => document.getElementById("liveSay").textContent);
+  ck("a cut-short in-house capture is named as NOT taken, with the reason and the list's real size",
+     /in-house 04\/09\/26 · 2 of 250 rows.*not taken: the read was cut short/.test(held16));
+  ck("a departure capture protel refused is NOT taken either",
+     /departures 04\/09\/26.*not taken: protel error/.test(held16));
+  ck("and the newest capture — the refused report — has the last word on the line",
+     /protel said: protel would not let/.test(say16));
+  ck("the ledger holds nothing from either",
+     !(await p.evaluate(() => localStorage.getItem("reccheck_moves_v2"))));
+  /* the file is there and cannot be read: what was known stays, the failure is said */
+  await p.evaluate(() => { window.__files.IH = {reject: "EACCES"}; });
+  await p.waitForTimeout(5500);
+  const held16b = await p.evaluate(() => document.getElementById("liveHeld").textContent);
+  ck("a capture file that cannot be read is said as a failure, not as protel opening nothing",
+     /in-house: the capture file could not be read \(EACCES\)/.test(held16b) && !/no protel list/.test(held16b));
+  ck("and what was known of it is still there", /in-house 04\/09\/26 · 2 of 250/.test(held16b));
+  /* older than twenty hours: main.js says so, and the entry goes with it */
+  await p.evaluate(() => { window.__files.IH = {why: "old", at: 3}; window.__files.DP = null; });
+  await p.waitForTimeout(5500);
+  const held16c = await p.evaluate(() => document.getElementById("liveHeld").textContent);
+  ck("with every capture gone or old it says exactly that, and promises nothing",
+     /no protel list captured in the last 20 hours/.test(held16c) && !/open a list/.test(held16c));
+  await p.close();
+
+  /* 17. THE PANEL REDRAWS WHEN A CAPTURE WRITES THE LEDGER — the first thing he reported
+         on 05/09 ("departures do not show"), fixed in 1.17.37 by the __rcMovesChanged
+         door, and until now covered by nothing: deleting the door left every harness
+         green. */
+  p = await b.newPage();
+  await p.addInitScript(bridgeFor(null, false));
+  await p.setViewportSize({width: 1280, height: 620});
+  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
+  await p.evaluate(() => { window.__t.setModel({reportDate: "4/9/2026", receipts: []}); });
+  await p.evaluate(() => window.__t.showScreen("tax"));
+  await p.waitForTimeout(400);
+  const before17 = await p.evaluate(() => document.getElementById("moves").textContent);
+  ck("with an empty ledger the panel names no room", !/125/.test(before17));
+  await p.evaluate((d) => { window.__files.DP = d; window.__at.DP = 7; },
+    RPT("DP", "Departure Report for 04/09/26", [["BURWIECK/GRUBE TAREK/KATHARINA ", "125", "2/0/0/0/0", "28/08/26", "CO"]]));
+  await p.waitForTimeout(6500);
+  const after17 = await p.evaluate(() => ({txt: document.getElementById("moves").textContent,
+                                           cls: document.body.classList.contains("hasMoves"),
+                                           tax: getComputedStyle(document.getElementById("taxScreen")).display}));
+  ck("a departure report captured while he is on another screen puts the room on the panel", /125/.test(after17.txt));
+  ck("and the body knows the panel is populated", after17.cls === true);
+  ck("and he was not moved off the screen he was on", after17.tax !== "none");
   await p.close();
 
   await b.close();

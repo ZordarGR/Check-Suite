@@ -1,11 +1,11 @@
 {
-  "version": "1.17.37",
+  "version": "1.17.39",
   "type": "full",
-  "engine": "1.17.37",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.37/RecCheck-Setup.exe",
-  "setupSha256": "32d97b88da8a1947e9b1f739ba1fff2a9329064389bb7bbb1a845bc3883ca86b",
+  "engine": "1.17.39",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.39/RecCheck-Setup.exe",
+  "setupSha256": "ac6c10b487ce0e2b799e14f0569153b7a722f39e42086d71893965ddac0aed4c",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "e895d9e80ef10c2ba7cd72b4f65a2f18e610c8109e860e708be621e7baf856c7",
-  "notes": "The window watcher could go deaf and stay deaf. After four thousand protel windows in one run it stopped logging AND stopped reading lists, for as long as the helper was up — and the 07:00 reset could no longer reach it. Nothing was captured after that, with an empty watch log as the only sign.\n\nThe room panel now redraws when a captured list writes the ledger. It was only ever drawn when a department report was loaded, so a departure report opened in protel afterwards changed nothing on screen.\n\nThe live line says which list it is talking about — the newest capture now has the last word instead of whichever came last in the list — and what actually happened to the rows: how many were read, how many were usable, and how many were new, corrected or already known. \"0 stays recorded\" used to mean both a clean report the ledger already agreed with and a write that failed.\n\nRows that are dropped say why. \"Holding-room rows ignored\" was one count covering three different reasons, only one of which is a holding room.\n\nDEBUG stops claiming the shift was quiet when it does not know that. The helper writes a line naming what it is watching, including when it is watching nothing."
+  "sha256": "ca98333d5457044fc6759cbac085143969095f33948546830b1a84def196411f",
+  "notes": "1.17.38 had been built and published but never merged, so no installed app could see it. This carries it, and what a check of it found.\n\nDEBUG's helper line now says what it can establish: the press asks the helper's status, which looks for the running helper's own window. Found means running; not found means crashed or stopped, and it says which. It used to print “Running — your bindings are live” from the moment the helper was started, whether or not it was still there. The version shown is labelled exe=, because it is the version of the file on disk that answered.\n\nThe line under the Tax Check no longer claims a list the tool refused. A capture that was cut short, or whose caption carried no date, is named as not taken, with the reason; a capture file that could not be read says so instead of saying protel opened nothing.\n\nThe helper (v25) reads a list that was shown before it had rows. In v24 a report opened empty was read once and never asked for again; the request is now placed before anything can discard it.\n\n“Already known” now means the ledger agreed with the report. A row the ledger refused while stating a different departure is counted as kept as the census had it. An empty room cell is a failed read, not a holding room, and every refusal of a report says why.\n\nThe release page on GitHub describes the release it belongs to; it had shown 1.17.14’s text since 1.17.14."
 }

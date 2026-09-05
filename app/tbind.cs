@@ -2307,11 +2307,15 @@ static class TBind {
   static void EvServiceReads(){
     string tag = evWantTag, cap = evWantCap;
     if(tag.Length == 0) return;
-    evWantTag = "";
     try{
       int now = Environment.TickCount;
       int last;
+      /* Inside the cooldown the request STAYS ARMED and is looked at again next tick. It
+         used to be cleared before this test, so a list opened within four seconds of the
+         last read of its kind was dropped, not deferred — and with the capture no longer
+         riding on the log's accidental retries, a dropped request was a list never read. */
       if(evLastAt.TryGetValue(tag, out last) && now - last < EV_COOLDOWN_MS) return;
+      evWantTag = "";
       string had;
       if(evLastCap.TryGetValue(tag, out had) && had == cap) return;   // same window, already taken
       evLastAt[tag] = now;
@@ -2354,6 +2358,10 @@ static class TBind {
       if(watchShift != k){
         watchShift = k;
         watchSeen = 0;
+        /* the new shift's file must state what is hooked too: the HOOKS line is written
+           only when the set changes, and a header rewrite is not a change of set — so
+           it is asked for again here, and WatchLoop restates it on its next tick */
+        watchPidsSaid = "?";
         System.IO.File.WriteAllText(p, "rc-tbind watch " + VER + "  shift of " + k
           + "  (cleared at 07:00, nothing is read from protel)\r\n");
       }
@@ -2396,6 +2404,46 @@ static class TBind {
       bool top = false;
       try{ top = (GetAncestor(hwnd, GA_ROOT) == hwnd); }catch(Exception){}
       string what = ev == EVENT_OBJECT_SHOW ? "OPEN " : (ev == EVENT_OBJECT_HIDE ? "CLOSE" : "TITLE");
+      /* A LABEL IS NOT A WINDOW PROTEL OPENED.
+
+         His log, 05/09, 04:48:51 to 04:50:12 — eighty-one seconds of one guest checking
+         out — is hundreds of lines like
+
+           TITLE  child  class="Static"  title="Amount:"
+           TITLE  child  class="Button"  title="Cancel"
+
+         protel restates every Static and Button in an invoice dialog on each repaint, and
+         each one is a DIFFERENT caption, so the lastTitle de-dupe below never catches
+         them. Three or more lines a second, sustained, for as long as he is working at
+         the desk. The log he is meant to read "what protel opened tonight" from is
+         unreadable; four thousand lines of it roll past in about twenty minutes, and on
+         every build before v23 that same rate spent the shift's whole budget inside half
+         an hour and left the watcher deaf until the helper was restarted.
+
+         Only two classes here are windows in the sense the log means: OWL_Window, which
+         is what protel's reports and lists are, and #32770, its dialogs. A caption change
+         on anything else is a control repainting itself.
+
+         THIS GATES THE LOG AND THE DE-DUPE, NEVER THE CAPTURE — and v24 said that while
+         doing the opposite. The de-dupe's `return` sat ABOVE the tag test, so once a
+         report's caption was in lastTitle every restatement of it was dropped before the
+         capture could see it. In v23 the Static/Button churn kept overwriting lastTitle
+         and let those restatements through by accident; v24 stopped the churn touching
+         lastTitle and with it the accidental retry. A list shown before it had rows was
+         read once, found empty, never marked as taken and never asked for again until
+         some OTHER window changed its caption. Found by the pre-merge check of 1.17.38.
+
+         So the capture is written FIRST, before anything here can return. It is one field
+         write; EvServiceReads has its own cooldown and its own "already taken" test, so a
+         restatement of a list already on disk costs a string compare and nothing else. A
+         Static labelled "Amount:" was never going to name one of the four lists — but "it
+         cannot match because the captions happen not to look like that" is the kind of
+         reasoning that has cost him twice, so nothing below decides what is read. */
+      if(ev != EVENT_OBJECT_HIDE){
+        string tg = TagOfCaption(t);
+        if(tg.Length > 0){ evWantCap = t; evWantTag = tg; }
+      }
+      bool windowish = top || cls.ToString() == "OWL_Window" || cls.ToString() == "#32770";
       /* A caption that has not actually changed is not news. protel restates the frame's
          title often; only the changes are worth a line.
 
@@ -2404,7 +2452,7 @@ static class TBind {
          and produced no line, so the log's own length never showed how fast the budget
          was going. Counted after, only the events that actually say something cost
          anything. */
-      if(ev == EVENT_OBJECT_NAMECHANGE){
+      if(ev == EVENT_OBJECT_NAMECHANGE && windowish){
         if(t == lastTitle) return;
         lastTitle = t;
       }
@@ -2423,7 +2471,7 @@ static class TBind {
          The cap's stated purpose is to keep the log readable for one shift. So that is all
          it does now — the capture below is guarded by its own cooldown and its own
          caption check, and goes on working. */
-      if(watchSeen < WATCH_MAX){
+      if(windowish && watchSeen < WATCH_MAX){
         /* Counted only while it is still being spent. Incrementing past the cap for the
            life of the process would leave an int climbing all day for no purpose, and an
            int that wraps starts logging again. */
@@ -2431,12 +2479,9 @@ static class TBind {
         AppendWatch(DateTime.Now.ToString("HH:mm:ss") + "  " + what
           + "  " + (top ? "window" : "child ") + "  class=\"" + cls.ToString() + "\"  title=\"" + t + "\"\r\n");
       }
-      /* One field write, and nothing more: this is the hook thread and the read is a long
-         conversation with protel. WatchLoop picks it up between pumps. */
-      if(ev != EVENT_OBJECT_HIDE){
-        string tg = TagOfCaption(t);
-        if(tg.Length > 0){ evWantCap = t; evWantTag = tg; }
-      }
+      /* The capture request was written above, before the log could return early: this is
+         the hook thread and the read is a long conversation with protel, so WatchLoop
+         picks it up between pumps. */
     }catch(Exception){}
   }
   /* protel's process id, or 0. With no focus= target configured there is no protel to
@@ -2508,15 +2553,28 @@ static class TBind {
            recorded this shift", which is a claim about protel made from no evidence. This
            is the helper stating what it holds: no message is sent anywhere, the pids are
            already in hand, and it is one line only when the set changes. */
-        string pk = PidsKey(want);
-        if(pk != watchPidsSaid){
-          watchPidsSaid = pk;
+        /* WHAT IS HOOKED, not what was wanted. SetWinEventHook can answer null — a pid
+           that exited between the scan and the call, or Windows refusing — and the line
+           used to be built from `want`, so it could name a process on which no hook
+           existed. It names the hooked set now, and the wanted-but-refused set apart. */
+        System.Collections.Generic.List<uint> hookedL = new System.Collections.Generic.List<uint>();
+        foreach(uint have in evHooks.Keys) hookedL.Add(have);
+        uint[] hooked = hookedL.ToArray();
+        System.Collections.Generic.List<uint> missedL = new System.Collections.Generic.List<uint>();
+        for(int i = 0; i < want.Length; i++) if(!evHooks.ContainsKey(want[i])) missedL.Add(want[i]);
+        string pk = PidsKey(hooked), mk = PidsKey(missedL.ToArray());
+        string said = pk + "|" + mk;
+        if(said != watchPidsSaid){
+          watchPidsSaid = said;
           AppendWatch(DateTime.Now.ToString("HH:mm:ss") + "  HOOKS  "
-            + (want.Length == 0
-               ? "watching nothing \u2014 " + (focusNeedle == null || focusNeedle.Length == 0
-                   ? "no protel target is set (PROTEL SHORTCUTS \u2192 point it at protel)"
-                   : "no running process matches \"" + focusNeedle + "\"")
-               : want.Length + " protel process(es): " + pk) + "\r\n");
+            + (hooked.Length == 0
+               ? "watching nothing \u2014 " + (want.Length == 0
+                   ? (focusNeedle == null || focusNeedle.Length == 0
+                      ? "no protel target is set (PROTEL SHORTCUTS \u2192 point it at protel)"
+                      : "no running process matches \"" + focusNeedle + "\"")
+                   : "Windows refused the hook on " + mk)
+               : hooked.Length + " protel process(es): " + pk
+                 + (missedL.Count > 0 ? "  (could not hook: " + mk + ")" : "")) + "\r\n");
         }
         while(PeekMessage(out m, IntPtr.Zero, 0, 0, PM_REMOVE)){
           TranslateMessage(ref m);
@@ -2588,7 +2646,7 @@ static class TBind {
     }catch(Exception){}
   }
 
-  const string VER = "v23";
+  const string VER = "v25";
 
   static int Main(string[] args){
     int parentPid;

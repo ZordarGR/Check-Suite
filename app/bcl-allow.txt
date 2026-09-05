@@ -799,6 +799,7 @@ watchShift
 watchThread
 watchWantPid
 watchWantPids
+windowish
 WH_KEYBOARD_LL
 WH_MOUSE_LL
 what

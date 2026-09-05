@@ -28,6 +28,8 @@ Run the ones that need nothing but node:
 | `stdout.js` | the helper's output reaches RecCheck as bytes. Greek guest names are the first non-ASCII thing to cross that pipe — this splits one mid-character across two chunks and checks it survives |
 | `quiet.js` | the real `main.js` with electron stubbed: the 07:00 reset must not summon the overlay |
 | `inhouse.js` | the live in-house read, his five real rows verbatim, through the shipped `inhouseToRate` and then the shipped `saveMoves`. Also which captions may become data at all: the bare frame caption he actually got on 04/09 must not |
+| `helperline.js` | the DEBUG helper line end to end, through the real `main.js`: the press asks `status`, which LOOKS FOR the resident's window, and the verdict is built on that answer — not on the state written at spawn time, which said "running" for a helper that died 53 ms in. The version is labelled `exe=`, because that is whose it is; a binds file that could not be written is not listed as published; a spawn Windows refuses is a state, not an uncaught exception |
+| `watchlog.js` | which nothing it is: the watch log and the four capture files, read through the real `main.js` handlers — no folder, no file, blank, unreadable, too old and fresh each come back as themselves, so the screen can never turn the tool's own failure into a statement about protel |
 
 ## Browser harnesses
 
@@ -38,9 +40,12 @@ Run the ones that need nothing but node:
 Then `sweep.js` (every dialog at six window widths), `taxsweep.js` (every screen),
 `legacy.js`, `ledger.js`, `live.js`, `alerts.js`, `dbgshot.js`, `optshot.js`.
 
-`live.js` is the one to keep honest: it presses the shipped *Read the in-house list*
-button with a stubbed bridge and requires that a list whose caption does not name it
-writes **nothing** to the ledger.
+`live.js` is the one to keep honest: it drives the shipped capture loop with a stubbed
+bridge and requires that a list whose caption does not name it writes **nothing** to the
+ledger. It also pins the line under the Tax Check: a capture the ingest refused is
+named as *not taken*, a capture file the tool could not read is said as that and not as
+protel having opened nothing, and the movements panel redraws when a capture writes the
+ledger without moving him off the screen he is on.
 
 `h-sweep.html` carries TWO probes: `window.__t` for the app scope and `window.__tx` for the
 tax scope. The two <script> blocks share nothing, so a guard in one cannot be reached from
