@@ -1,11 +1,11 @@
 {
-  "version": "1.17.37",
+  "version": "1.17.38",
   "type": "full",
-  "engine": "1.17.37",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.37/RecCheck-Setup.exe",
-  "setupSha256": "32d97b88da8a1947e9b1f739ba1fff2a9329064389bb7bbb1a845bc3883ca86b",
+  "engine": "1.17.38",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.38/RecCheck-Setup.exe",
+  "setupSha256": "1a74830502bafe9dc578236c036ec158fabccada66ffbbfbc3934a521a1cef1a",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "e895d9e80ef10c2ba7cd72b4f65a2f18e610c8109e860e708be621e7baf856c7",
-  "notes": "The window watcher could go deaf and stay deaf. After four thousand protel windows in one run it stopped logging AND stopped reading lists, for as long as the helper was up — and the 07:00 reset could no longer reach it. Nothing was captured after that, with an empty watch log as the only sign.\n\nThe room panel now redraws when a captured list writes the ledger. It was only ever drawn when a department report was loaded, so a departure report opened in protel afterwards changed nothing on screen.\n\nThe live line says which list it is talking about — the newest capture now has the last word instead of whichever came last in the list — and what actually happened to the rows: how many were read, how many were usable, and how many were new, corrected or already known. \"0 stays recorded\" used to mean both a clean report the ledger already agreed with and a write that failed.\n\nRows that are dropped say why. \"Holding-room rows ignored\" was one count covering three different reasons, only one of which is a holding room.\n\nDEBUG stops claiming the shift was quiet when it does not know that. The helper writes a line naming what it is watching, including when it is watching nothing."
+  "sha256": "ef38276c16c61733aebfebc2a69bd8f847a524098aaf9eb68d07a3d8ff3868df",
+  "notes": "The watch log was drowning. protel restates every label in an invoice dialog on each repaint — three or more lines a second while you work — so \"what protel opened tonight\" was thousands of lines of \"Amount:\" and \"Cancel\", and the whole shift's budget was spent in about twenty minutes. Only real windows are logged now: protel's reports and its dialogs. The test never touches what gets read.\n\nDEBUG says which helper is actually running. That number has been collected since 1.17.11 and shown to nobody, and its absence is why a feed that would not start took three releases to find.\n\nIt also stops telling you the helper is not running when it is. \"Nothing is bound yet\" was printed over a helper RecCheck had just started.\n\nAnd the Tax Check line now says which lists the tool is holding, with the date and time each was taken — so opening a list it already has shows you it is there, instead of showing an unrelated one."
 }
