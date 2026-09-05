@@ -2267,9 +2267,24 @@ static class TBind {
 
      Two guards on top, both about protel rather than about us: the same list is not re-read
      within EV_COOLDOWN_MS however many times protel shows it, and a caption that has not
-     changed since the last successful read is not read again at all. */
+     changed since the last successful read is not read again on a RESTATEMENT.
+
+     A REAL OPEN IS READ AGAIN. His decision, 05/09: "re-read on a real open, keep the 4s
+     cooldown". Until v26 the caption guard covered every event, so the in-house census was
+     whatever the FIRST open of "Guests inhouse: dd/mm/yy" showed, and a moves window opened
+     again with a new row was never read. The guard was written for protel's restatements
+     of an OPEN window's caption (NAMECHANGE), which say nothing new; a SHOW is the window
+     appearing, and the rows behind it may have changed. So a SHOW arms an OPEN request,
+     which the caption guard does not stop; a NAMECHANGE arms a plain one, which it does.
+     The cooldown applies to both, and a request inside it waits. An open that is waiting
+     must not be demoted by a restatement arriving meanwhile — hence the OR below — and it
+     must not be displaced by ANOTHER list restating its caption, which a single slot did:
+     the request is held per list, and the loop serves one whose cooldown has passed. */
   const int EV_COOLDOWN_MS = 4000;
-  static string evWantTag = "", evWantCap = "";
+  static readonly System.Collections.Generic.Dictionary<string,string> evWant =
+    new System.Collections.Generic.Dictionary<string,string>();      // tag -> caption armed
+  static readonly System.Collections.Generic.Dictionary<string,bool> evWantOpen =
+    new System.Collections.Generic.Dictionary<string,bool>();        // tag -> came from a SHOW
   static readonly System.Collections.Generic.Dictionary<string,string> evLastCap =
     new System.Collections.Generic.Dictionary<string,string>();
   static readonly System.Collections.Generic.Dictionary<string,int> evLastAt =
@@ -2305,19 +2320,26 @@ static class TBind {
   }
   /* Runs on the pump thread, never in the callback. */
   static void EvServiceReads(){
-    string tag = evWantTag, cap = evWantCap;
-    if(tag.Length == 0) return;
+    if(evWant.Count == 0) return;
     try{
       int now = Environment.TickCount;
-      int last;
-      /* Inside the cooldown the request STAYS ARMED and is looked at again next tick. It
-         used to be cleared before this test, so a list opened within four seconds of the
-         last read of its kind was dropped, not deferred — and with the capture no longer
-         riding on the log's accidental retries, a dropped request was a list never read. */
-      if(evLastAt.TryGetValue(tag, out last) && now - last < EV_COOLDOWN_MS) return;
-      evWantTag = "";
+      /* One request per list, one read per tick. A request inside its cooldown STAYS ARMED
+         and is looked at again next tick — it used to be cleared before this test, so a
+         list opened within four seconds of the last read of its kind was dropped, not
+         deferred; and it used to share one slot with every other list, so an open waiting
+         here was lost to a restatement of some other window. */
+      string tag = null, cap = null;
+      foreach(System.Collections.Generic.KeyValuePair<string,string> kv in evWant){
+        int last;
+        if(evLastAt.TryGetValue(kv.Key, out last) && now - last < EV_COOLDOWN_MS) continue;
+        tag = kv.Key; cap = kv.Value; break;
+      }
+      if(tag == null) return;                              // every pending request is cooling
+      bool open = evWantOpen.ContainsKey(tag) && evWantOpen[tag];
+      evWant.Remove(tag); evWantOpen.Remove(tag);
       string had;
-      if(evLastCap.TryGetValue(tag, out had) && had == cap) return;   // same window, already taken
+      /* a restatement of the caption already taken says nothing new; an OPEN does */
+      if(!open && evLastCap.TryGetValue(tag, out had) && had == cap) return;
       evLastAt[tag] = now;
       READ = new StringBuilder();
       ReadTagged(tag, 2000);
@@ -2441,7 +2463,13 @@ static class TBind {
          reasoning that has cost him twice, so nothing below decides what is read. */
       if(ev != EVENT_OBJECT_HIDE){
         string tg = TagOfCaption(t);
-        if(tg.Length > 0){ evWantCap = t; evWantTag = tg; }
+        if(tg.Length > 0){
+          bool open = (ev == EVENT_OBJECT_SHOW);
+          string had;
+          bool was = evWantOpen.ContainsKey(tg) && evWantOpen[tg];
+          evWantOpen[tg] = (evWant.TryGetValue(tg, out had) && had == t) ? (was || open) : open;
+          evWant[tg] = t;
+        }
       }
       bool windowish = top || cls.ToString() == "OWL_Window" || cls.ToString() == "#32770";
       /* A caption that has not actually changed is not news. protel restates the frame's
@@ -2646,7 +2674,7 @@ static class TBind {
     }catch(Exception){}
   }
 
-  const string VER = "v25";
+  const string VER = "v26";
 
   static int Main(string[] args){
     int parentPid;
