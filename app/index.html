@@ -1388,7 +1388,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.36";
+const APP_VERSION = "1.17.37";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1484,7 +1484,11 @@ en: {
   "sc.readNone": "Nothing came back. Either protel was not in front, the window holds no list, or protel runs with more rights than RecCheck.",
   "sc.watch": "What protel opened tonight",
   "sc.watchHint": "Zero-touch \u2014 nothing at all is sent to protel. Windows tells RecCheck when a protel window opens or closes, and the caption is the one Windows already holds. Kept for the night only and cleared at 07:00 with the shift.",
-  "sc.watchNone": "Nothing recorded this shift. It only watches once a protel window has been picked as the target (PROTEL SHORTCUTS \u2192 only while protel is in front), and it clears itself at 07:00.",
+  "sc.watchNoFile": "There is no watch log on disk. The helper writes one the moment it has anything to say \u2014 including a line saying it is watching nothing \u2014 so this means it has not run since 07:00, or is not running now.",
+  "sc.watchBlank": "The log is there and empty. Nothing has been written to it this shift.",
+  "sc.watchNoBase": "Windows did not name a local app-data folder, so the log cannot be found. Nothing is known about the shift.",
+  "sc.watchUnread": "The log is there and could not be read.",
+  "sc.noDoor": "This build cannot reach the helper, so nothing can be reported here.",
   "sc.scanHint": "Read-only. It asks each control what it is and what it holds \u2014 nothing is written and protel keeps exactly what it had. It is not free, though: the report ends with how many questions it asked protel and how long that took.",
   "sc.scanWait": "Bring the protel window you want forward\u2026 {n}",
   "sc.scanNone": "Nothing came back \u2014 the helper could not run the scan.",
@@ -1708,7 +1712,11 @@ gr: {
   "sc.readNone": "Δεν ήρθε τίποτα. Είτε το protel δεν ήταν μπροστά, είτε το παράθυρο δεν έχει λίστα, είτε το protel τρέχει με περισσότερα δικαιώματα.",
   "sc.watch": "Τι άνοιξε το protel απόψε",
   "sc.watchHint": "Μηδενική επαφή — τίποτα δεν στέλνεται στο protel. Τα Windows λένε στο RecCheck όταν ανοίγει ή κλείνει παράθυρο του protel, και ο τίτλος είναι αυτός που έχουν ήδη. Κρατιέται μόνο για τη νύχτα και σβήνει στις 07:00 με τη βάρδια.",
-  "sc.watchNone": "Δεν καταγράφηκε τίποτα αυτή τη βάρδια. Παρακολουθεί μόνο αφού οριστεί το παράθυρο του protel ως στόχος, και σβήνει μόνο του στις 07:00.",
+  "sc.watchNoFile": "Δεν υπάρχει αρχείο καταγραφής. Ο βοηθός γράφει ένα μόλις έχει κάτι να πει — ακόμη και γραμμή ότι δεν παρακολουθεί τίποτα — άρα δεν έχει τρέξει από τις 07:00, ή δεν τρέχει τώρα.",
+  "sc.watchBlank": "Το αρχείο υπάρχει και είναι άδειο. Δεν γράφτηκε τίποτα αυτή τη βάρδια.",
+  "sc.watchNoBase": "Τα Windows δεν έδωσαν φάκελο local app-data, οπότε το αρχείο δεν βρίσκεται. Δεν είναι γνωστό τίποτα για τη βάρδια.",
+  "sc.watchUnread": "Το αρχείο υπάρχει και δεν διαβάστηκε.",
+  "sc.noDoor": "Αυτό το build δεν φτάνει τον βοηθό, οπότε δεν μπορεί να αναφερθεί τίποτα εδώ.",
   "sc.scanHint": "Μόνο ανάγνωση. Ρωτάει κάθε στοιχείο τι είναι και τι περιέχει — τίποτα δεν γράφεται και το protel κρατάει ακριβώς ό,τι είχε. Δεν είναι όμως δωρεάν: η αναφορά τελειώνει με το πόσες ερωτήσεις έγιναν στο protel και πόσο κράτησαν.",
   "sc.scanWait": "Φέρε μπροστά το παράθυρο του protel που θέλεις… {n}",
   "sc.scanNone": "Δεν επέστρεψε τίποτα — ο βοηθός δεν μπόρεσε να τρέξει τη σάρωση.",
@@ -2033,6 +2041,23 @@ window.__rcLiveNames = function(rate){
   try{ if(n && MODEL) NAMES_STALE = true; }catch(e){}
   return n;
 };
+/* THE PANEL IS BUILT FROM THE LEDGER AND NOTHING EVER TOLD IT THE LEDGER HAD CHANGED.
+
+   renderMoves ran in exactly two places: inside refresh(), and after the button that
+   clears the ledger. Everything that WRITES the ledger now lives in the other IIFE — the
+   in-house census, the two reports, the moves window — and none of it could reach across.
+   So the pills were whatever the ledger said at the moment he last loaded a department
+   report, and a departure report opened in protel afterwards changed the ledger under a
+   panel that never redrew. His words, 04/09: "i've opened departure report of 4/9 ... but
+   departures do not show."
+
+   This is the narrow door and not the wide one. __rcLiveNames deliberately refuses to
+   redraw because renderAll() calls showScreen("app") and would throw him off the screen
+   he is working on, mid-audit. renderMoves does no such thing: it rewrites #moves, sets
+   the body class and rebuilds LEAVING, all of which refresh() does anyway, and none of
+   which moves him or touches his data. Nothing here decides anything — it draws what is
+   already recorded. */
+window.__rcMovesChanged = function(){ try{ renderMoves(); }catch(e){} };
 /* feed tonight's report into the DB: rooms are the stable keys, guest names the
    changing part — a changed guest resets that room's nickname.
    Two guards keep this honest:
@@ -3334,7 +3359,7 @@ function openDebug(){
      never fails in. This is what the presses actually made did. */
   $("#scLog").onclick = async () => {
     const pre = $("#scDiag"), copy = $("#scCopy");
-    if(!sc) return;
+    if(!sc){ pre.textContent = t("sc.noDoor"); pre.style.display = ""; copy.style.display = "none"; return; }
     const log = await sc.tauLog().catch(() => null);
     pre.textContent = log || t("sc.logNone");
     pre.style.display = "";
@@ -3347,16 +3372,28 @@ function openDebug(){
      The zero-touch half of the live read. Nothing is asked of protel to produce this:
      Windows reports the window opening, and the caption is the one it already holds. So
      unlike the scan there is no cost line, because there is no cost. */
+  /* A DEAD PRESS IS THE ONE ANSWER A DIAGNOSTIC MAY NOT GIVE. This used to return in
+     silence when the door was missing, and to print "Nothing recorded this shift" for
+     every other kind of nothing — including a log it could not read and a watcher that
+     was never installed. Each of them now says which it is. */
+  const WATCH_WHY = {nobase: "sc.watchNoBase", nofile: "sc.watchNoFile",
+                     blank: "sc.watchBlank",   unread: "sc.watchUnread"};
   $("#scWatch").onclick = async () => {
     const pre = $("#scDiag"), copy = $("#scCopy");
-    if(!sc || !sc.watchLog) return;
-    const log = await sc.watchLog().catch(() => null);
-    pre.textContent = log || t("sc.watchNone");
     pre.style.display = "";
-    if(log){
-      copy.style.display = "";
-      copy.onclick = () => { try{ navigator.clipboard.writeText(log); }catch(e){} };
-    }else copy.style.display = "none";
+    copy.style.display = "none";
+    if(!sc || !sc.watchLog){ pre.textContent = t("sc.noDoor"); return; }
+    const r = await sc.watchLog().catch(() => null);
+    const log = r && r.log ? r.log : "";
+    if(!log){
+      pre.textContent = r && WATCH_WHY[r.why]
+        ? t(WATCH_WHY[r.why]) + (r.detail ? " (" + r.detail + ")" : "")
+        : t("sc.noDoor");
+      return;
+    }
+    pre.textContent = log;
+    copy.style.display = "";
+    copy.onclick = () => { try{ navigator.clipboard.writeText(log); }catch(e){} };
   };
   /* ---- reading the list in front ----
      The only thing in DEBUG that costs protel real work, and it is a PROBE: it reports
@@ -3365,7 +3402,8 @@ function openDebug(){
      the container it was written in. */
   $("#scRead").onclick = async () => {
     const pre = $("#scDiag"), copy = $("#scCopy"), b = $("#scRead");
-    if(!sc || !sc.readList || b.dataset.busy) return;
+    if(b.dataset.busy) return;
+    if(!sc || !sc.readList){ pre.textContent = t("sc.noDoor"); pre.style.display = ""; copy.style.display = "none"; return; }
     b.dataset.busy = "1";
     copy.style.display = "none";
     pre.style.display = "";
@@ -5568,9 +5606,13 @@ const I18N={
   live_named:" {0} room(s) took their name from protel, uncut.",
   live_idle:"Nothing from protel yet \u2014 open its in-house list and it is taken as it goes past.",
   al_moveNoX:"Room move {0}\u2192{1} ({2}) has no X in protel \u2014 protel will not show it.",
-  live_arr:"Arrival report {2}: {0} rows, {1} stays recorded.",
-  live_dep:"Departure report {2}: {0} rows, {1} stays recorded.",
+  live_arr:"Arrival report {0}: {1} rows read, {2} usable \u2014 {3} new, {4} corrected, {5} already known.",
+  live_dep:"Departure report {0}: {1} rows read, {2} usable \u2014 {3} new, {4} corrected, {5} already known.",
+  live_same:"protel\u2019s in-house list \u2014 {0} rooms for {1}, unchanged since the last read.",
   live_held:" {0} holding-room row(s) ignored.",
+  live_nodate2:" {0} row(s) had no readable arrival date.",
+  live_partial:" {0} row(s) came back incomplete and were left out.",
+  live_wfail:" THE LEDGER COULD NOT BE WRITTEN \u2014 nothing from this report was kept.",
   live_wrong:"That is not the in-house list \u2014 the window it found says \u201c{0}\u201d. Nothing was recorded.",
   live_nodate:"No date in \u201c{0}\u201d, so there is no night to file these under. Nothing was recorded.",
   slot_rate:"Rate Check", slot_rate_sub:"in-house list · pre-EOD", slot_tax:"Tax Check", slot_tax_sub:"charges history · post-EOD",
@@ -5634,9 +5676,13 @@ const I18N={
   live_named:" {0} δωμάτια πήραν το όνομά τους από το protel, ακέραιο.",
   live_idle:"Τίποτα από το protel ακόμη — άνοιξε τη λίστα παραμονών και θα ληφθεί καθώς περνάει.",
   al_moveNoX:"Η αλλαγή δωματίου {0}→{1} ({2}) δεν έχει X στο protel — το protel δεν θα τη δείξει.",
-  live_arr:"Αφίξεις {2}: {0} γραμμές, {1} διαμονές καταγράφηκαν.",
-  live_dep:"Αναχωρήσεις {2}: {0} γραμμές, {1} διαμονές καταγράφηκαν.",
+  live_arr:"Αφίξεις {0}: {1} γραμμές, {2} αξιοποιήσιμες — {3} νέες, {4} διορθώθηκαν, {5} ήδη γνωστές.",
+  live_dep:"Αναχωρήσεις {0}: {1} γραμμές, {2} αξιοποιήσιμες — {3} νέες, {4} διορθώθηκαν, {5} ήδη γνωστές.",
+  live_same:"Λίστα παραμονών protel — {0} δωμάτια για {1}, χωρίς αλλαγή από την προηγούμενη ανάγνωση.",
   live_held:" {0} γραμμές δωματίου αναμονής αγνοήθηκαν.",
+  live_nodate2:" {0} γραμμές χωρίς αναγνώσιμη ημερομηνία άφιξης.",
+  live_partial:" {0} γραμμές ήρθαν ελλιπείς και δεν καταγράφηκαν.",
+  live_wfail:" ΤΟ ΑΡΧΕΙΟ ΔΕΝ ΓΡΑΦΤΗΚΕ — τίποτα από αυτή την αναφορά δεν κρατήθηκε.",
   live_wrong:"Αυτή δεν είναι η λίστα παραμονών — το παράθυρο που βρέθηκε λέει «{0}». Δεν καταγράφηκε τίποτα.",
   live_nodate:"Δεν υπάρχει ημερομηνία στο «{0}», οπότε δεν υπάρχει νύχτα για να καταχωρηθούν. Δεν καταγράφηκε τίποτα.",
   slot_rate:"Rate Check", slot_rate_sub:"λίστα παραμονών · πριν το EOD", slot_tax:"Tax Check", slot_tax_sub:"ιστορικό χρεώσεων · μετά το EOD",
@@ -6321,13 +6367,31 @@ let LIVE_AT = {};                              // tag -> the capture already tak
 async function autoReadInhouse(){
   if(legacyOn() || !LIVE_OK){ liveStop(); return; }
   if(!window.reccheckShortcuts || !window.reccheckShortcuts.listFile) return;
+  /* COLLECTED FIRST, THEN INGESTED OLDEST CAPTURE FIRST, so the NEWEST one has the last
+     word on the line.
+
+     All four are read on the same tick and each ingest writes the same #liveSay. In tag
+     order that means the departure report — last in LIVE_TAGS — overwrites whatever the
+     in-house read had just put there, and the files live for twenty hours, so the very
+     first tick after the app starts ingests all four at once and leaves a stale departure
+     line on screen. He opened the in-house list, watched the tax screen, and saw a
+     departure report he had opened hours earlier: "when opening tax check there is nothing
+     shown when i open the inhouse list".
+
+     The mtime already says which capture is the news. Sorting by it costs nothing and the
+     line then reports the list he just opened. */
+  const got = [];
   for(const tag of LIVE_TAGS){
     try{
       const f = await window.reccheckShortcuts.listFile(tag).catch(() => null);
       if(!f || !f.text || f.at === LIVE_AT[tag]) continue;
       LIVE_AT[tag] = f.at;
-      await ingestCaptured(tag, f.text);
+      got.push({tag: tag, at: +f.at || 0, text: f.text});
     }catch(e){}
+  }
+  got.sort((a, b) => a.at - b.at);
+  for(const g of got){
+    try{ await ingestCaptured(g.tag, g.text); }catch(e){}
   }
 }
 async function ingestCaptured(tag, txt){
@@ -6388,29 +6452,37 @@ function stayFromRow(r, map, night, arrIsNight){
   if(/reversal|void/i.test(status)) return {cancelled: true};
   const cell = String(r[map.ROOM] || "").trim();
   const room = (cell.split("-")[0] || "").trim();
-  if(!/^\d{2,3}$/.test(room)) return {dropped: true};
+  if(!/^\d{2,3}$/.test(room)) return {dropped: "held"};
   const other = String(r[arrIsNight ? map.DEP : map.ARR] || "").trim();
   const arr = arrIsNight ? night : other;
   const dep = arrIsNight ? other : night;
-  if(!dkey(arr)) return {dropped: true};
+  if(!dkey(arr)) return {dropped: "nodate"};
   /* ReadCell returns "" for every failure it has, so a half-read row looks like a row with
      empty cells. An empty STATUS is not "not cancelled" and an empty NAME is not a guest —
      a row is only a stay when the whole of it arrived. */
   const name = String(r[map.NAME] || "").trim();
-  if(!name || !status) return {dropped: true};
+  if(!name || !status) return {dropped: "partial"};
   return {rec: {room: room, arr: arr, dep: dep, name: name, status: status}};
 }
+/* THE THREE REASONS A ROW IS DROPPED ARE NOT THE SAME REASON, and this used to count them
+   on one counter that the screen then labelled "holding-room row(s) ignored". So a report
+   whose arrival dates came back unreadable, or whose rows arrived half-read, was reported
+   to him as a couple of holding rooms — a wrong answer to the only question the line is
+   there to answer. Room 9000 being skipped is routine; forty rows failing to parse is not,
+   and he cannot act on the difference if the tool prints the same sentence for both. */
 function reportToStays(rows, night, arrIsNight){
   const map = arrIsNight ? AR : DP;
-  const recs = []; let dropped = 0, cancelled = 0;
+  const recs = [], why = {held: 0, nodate: 0, partial: 0};
+  let cancelled = 0;
   for(const r of (rows || [])){
     if(!r) continue;
     const o = stayFromRow(r, map, night, arrIsNight);
     if(o.cancelled){ cancelled++; continue; }
-    if(o.dropped){ dropped++; continue; }
+    if(o.dropped){ why[o.dropped]++; continue; }
     recs.push(o.rec);
   }
-  return {recs: recs, dropped: dropped, cancelled: cancelled};
+  return {recs: recs, held: why.held, nodate: why.nodate, partial: why.partial,
+          dropped: why.held + why.nodate + why.partial, cancelled: cancelled};
 }
 /* Purely additive. A newer report wins; an older one may fill a blank but never overwrite,
    and a move already recorded against a stay is not ours to drop.
@@ -6422,9 +6494,21 @@ function reportToStays(rows, night, arrIsNight){
    The stay would have been frozen with whatever that window said. The report's own date
    goes into the arrival or the departure, where it belongs; `seen` records when we learned
    it, which is now. */
+/* WHAT CAME BACK, NOT JUST HOW MANY CHANGED.
+
+   This used to return one number — the count of ledger entries it altered — which the
+   screen printed as "{n} stays recorded". On the night of 05/09 that line read "41 rows,
+   0 stays recorded" and he took it, correctly on the words used, to mean the departures
+   had not gone in. They had: the ledger already held all forty-one, so nothing needed
+   altering and the honest count of alterations was zero.
+
+   Those are opposite facts wearing the same sentence, and the one thing this line exists
+   for is to tell him which he is looking at. So the three outcomes are counted apart —
+   made, corrected, already known — and a write that THREW is its own answer again rather
+   than an innocent-looking nought. */
 function feedStays(recs, night){
-  if(!recs || !recs.length || !night) return 0;
-  let wrote = 0;
+  const tally = {made: 0, fixed: 0, same: 0, failed: false};
+  if(!recs || !recs.length || !night) return tally;
   try{
     const led = loadLedger();
     for(const r of recs){
@@ -6433,8 +6517,8 @@ function feedStays(recs, night){
       const d = dkey(r.dep) || 0;
       const m = led[r.room] || (led[r.room] = {});
       const cur = m[a];
-      if(!cur){ m[a] = {d: d, n: r.name || "", seen: night}; wrote++; continue; }
-      if(night < (cur.seen || 0)) continue;
+      if(!cur){ m[a] = {d: d, n: r.name || "", seen: night}; tally.made++; continue; }
+      if(night < (cur.seen || 0)){ tally.same++; continue; }
       /* ON A TIE THE CENSUS WINS, AND THE COMMENT ABOVE ONLY SAID SO UNTIL NOW.
 
          `seen` is a business night on both sides: saveMoves stamps it with the in-house
@@ -6459,12 +6543,12 @@ function feedStays(recs, night){
                     seen: night};
       if(cur.from) next.from = cur.from;
       if(cur.mv) next.mv = cur.mv;
-      if(next.d !== (cur.d || 0) || next.n !== (cur.n || "")) wrote++;
+      if(next.d !== (cur.d || 0) || next.n !== (cur.n || "")) tally.fixed++; else tally.same++;
       m[a] = next;
     }
     localStorage.setItem(MOVES_KEY, JSON.stringify(led));
-  }catch(e){ return 0; }
-  return wrote;
+  }catch(e){ return {made: 0, fixed: 0, same: 0, failed: true}; }
+  return tally;
 }
 let RPT_BUSY = {}, RPT_SIG = {};
 async function readReportLive(fn){
@@ -6490,8 +6574,7 @@ function applyReport(p, arrIsNight){
     const sig = p.title + "|" + p.rows.map(r => r.join("~")).join(";");
     if(sig === RPT_SIG[fn]) return;
     const out = reportToStays(p.rows, night, arrIsNight);
-    if(!out.recs.length) return;
-    const wrote = feedStays(out.recs, bnk());
+    const w = feedStays(out.recs, bnk());
     /* THE REPORT NAMES DO NOT GO INTO THE ROOM DATABASE, and the first cut of this had
        them doing exactly that. __rcLiveNames is the CENSUS door: it says "this is who is
        in this room now", and syncRooms then treats a stored name that does not match the
@@ -6501,12 +6584,28 @@ function applyReport(p, arrIsNight){
        every fifteen seconds. The in-house list is the census and already supplies the
        names; these two are not, and have no business writing them. */
     /* remembered only once the write has actually happened — set before it, a failed
-       feedStays would mean this report was never tried again */
-    RPT_SIG[fn] = sig;
+       feedStays would mean this report was never tried again. A THROWN write is exactly
+       that failure, so it is not remembered either and the next capture tries again. */
+    if(!w.failed) RPT_SIG[fn] = sig;
+    /* the ledger moved, so the panel that draws it is out of date until told */
+    try{ if((w.made || w.fixed) && window.__rcMovesChanged) window.__rcMovesChanged(); }catch(e){}
+    /* A report EVERY row of which was dropped used to return before this line, so the one
+       case where he most needs to be told something came back and none of it could be used
+       said nothing at all. It says it now. */
     const say = el('liveSay');
+    /* BOTH NUMBERS. "{0} rows" used to be handed out.recs.length — the records BUILT — so
+       a report whose rows half failed to parse reported the smaller number as though it
+       were everything protel had shown, and the arithmetic on the line could never be
+       made to add up. The rows read is p.rows.length and it is the one that says whether
+       the capture itself was any good. */
     if(say) say.textContent = t(arrIsNight ? 'live_arr' : 'live_dep',
-                                out.recs.length, wrote, night)
-                            + (out.dropped ? t('live_held', out.dropped) : '');
+                                night, p.rows.length, out.recs.length,
+                                w.made, w.fixed, w.same)
+                            + (out.held    ? t('live_held',    out.held)    : '')
+                            + (out.nodate  ? t('live_nodate2', out.nodate)  : '')
+                            + (out.partial ? t('live_partial', out.partial) : '')
+                            + (out.cancelled ? t('live_cancel', out.cancelled) : '')
+                            + (w.failed ? t('live_wfail') : '');
   }catch(e){}
 }
 let MOVES_BUSY = false, MOVES_ROWS = null, MOVES_NIGHT = 0;
@@ -6607,6 +6706,7 @@ function recordMoves(rows, night){
   try{ localStorage.setItem(MOVES_KEY, JSON.stringify(led)); }catch(e){}
   try{ localStorage.setItem(MOVES_DONE_KEY, JSON.stringify(done)); }catch(e){}
   try{ if(wrote) render(); }catch(e){}
+  try{ if(wrote && window.__rcMovesChanged) window.__rcMovesChanged(); }catch(e){}
   return wrote;
 }
 /* The half that turns a parsed list into what the tool holds, kept separate from the half
@@ -6638,7 +6738,11 @@ function applyInhouse(p, auto){
   if(!rate.count){ quiet(t('live_none')); return; }
   /* Nothing has moved in protel since the last tick. Writing the same ledger again and
      redrawing the page under him twenty times a minute is not faithfulness, it is a
-     fault. A read he PRESSED still goes through, because pressing it is a question. */
+     fault. But it used to return in SILENCE, and it is the only refusal in this function
+     that did — every other one says why. With all four lists sharing one line, silence
+     here means the last thing he sees is whatever other list wrote there, which is how
+     opening the in-house list showed him a departure report. So it says so and still
+     writes nothing. */
   /* A READ THE HELPER ITSELF CALLS INCOMPLETE MUST NOT BE WRITTEN.
      ReadTagged abandons the list at READ_BUDGET_MS and says `cut-short`. saveMoves and
      detectMoves both reason from ABSENCE — a room not in tonight's list is a room the
@@ -6648,8 +6752,7 @@ function applyInhouse(p, auto){
      him what he is looking at. */
   if(auto && p.done && p.done.cut){ say.textContent = t('live_idle'); LIVE_SIG = ""; return; }
   const sig = p.title + "\u0000" + p.rows.length + "\u0000" + p.rows.map(r => r.join("\u0001")).join("\u0002");
-  if(auto && sig === LIVE_SIG) return;
-  LIVE_SIG = sig;
+  if(auto && sig === LIVE_SIG){ say.textContent = t('live_same', rate.count, biz || '?'); return; }
   RATE = rate;
   const saved = saveMoves(rate);
   /* A move can only be written onto a stay that exists, and the in-house list is what
@@ -6671,6 +6774,15 @@ function applyInhouse(p, auto){
                   + (d.cut ? t('live_cut') : '')
                   + (rate.cancelled ? t('live_cancel', rate.cancelled) : '')
                   + (named ? t('live_named', named) : '');
+  /* STAMPED LAST, not first. It used to be set before saveMoves, __rcLiveNames and the
+     line itself — none of which is inside a try, and whose caller swallows everything
+     with a bare catch. One throw anywhere in there and the line was never written, the
+     error vanished, and every later capture of the same list hit the guard above and
+     returned: the in-house list could not report again for the rest of the session. The
+     same trap applyReport documents at RPT_SIG and avoids. */
+  LIVE_SIG = sig;
+  /* the census writes the ledger too, so the panel is stale until told */
+  try{ if(window.__rcMovesChanged) window.__rcMovesChanged(); }catch(e){}
   render();
 }
 async function loadRate(file){clearErr();el('fn-rate').textContent=file?file.name:'';el('mv-rate').textContent='';if(!file)return;try{const pages=await readOxps(file);const r=parseRate(pages);if(!r.count){showErr(t('err_norooms'));return;}RATE=r;showMoveSave(saveMoves(r));PAIR_OVERRIDE=null;ADJ_OPEN_OVERRIDE=null;el('slot-rate').classList.add('loaded');render();}catch(e){showErr(e.message==='notxps'?t('err_notxps'):t('err_read')+e.message);}}

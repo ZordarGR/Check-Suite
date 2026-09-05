@@ -2234,6 +2234,11 @@ static class TBind {
   const int WATCH_MAX_PIDS = 8;                  // a needle that matches half the machine hooks nothing silly
   static int watchSeen = 0;
   static string watchShift = "";
+  static string watchCapShift = "";        // the shift the CAP is counting, kept off the log path
+  /* NOT "". The empty string is what PidsKey returns for "watching nothing", which is the
+     one state most worth a line — and with "" as the starting value it compared equal and
+     was the only state that never printed. A sentinel no key can be. */
+  static string watchPidsSaid = "?";       // the hooked set the log last named
   static string lastTitle = "";
   static Thread watchThread;
 
@@ -2383,7 +2388,6 @@ static class TBind {
       if(ev != EVENT_OBJECT_SHOW && ev != EVENT_OBJECT_HIDE && ev != EVENT_OBJECT_NAMECHANGE) return;
       if(idObject != OBJID_WINDOW || idChild != 0) return;   // a part of a control is not a window
       if(hwnd == IntPtr.Zero) return;
-      if(watchSeen >= WATCH_MAX) return;
       StringBuilder cls = new StringBuilder(160), txt = new StringBuilder(320);
       try{ GetClassName(hwnd, cls, cls.Capacity); }catch(Exception){}
       try{ GetWindowText(hwnd, txt, txt.Capacity); }catch(Exception){}
@@ -2391,16 +2395,42 @@ static class TBind {
       if(t.Length == 0) return;                              // no caption, nothing to say
       bool top = false;
       try{ top = (GetAncestor(hwnd, GA_ROOT) == hwnd); }catch(Exception){}
-      watchSeen++;
       string what = ev == EVENT_OBJECT_SHOW ? "OPEN " : (ev == EVENT_OBJECT_HIDE ? "CLOSE" : "TITLE");
       /* A caption that has not actually changed is not news. protel restates the frame's
-         title often; only the changes are worth a line. */
+         title often; only the changes are worth a line.
+
+         THE COUNT USED TO BE TAKEN ABOVE THIS. Every one of those restatements — the ones
+         this very comment says protel makes often — spent a unit of the shift's budget
+         and produced no line, so the log's own length never showed how fast the budget
+         was going. Counted after, only the events that actually say something cost
+         anything. */
       if(ev == EVENT_OBJECT_NAMECHANGE){
         if(t == lastTitle) return;
         lastTitle = t;
       }
-      AppendWatch(DateTime.Now.ToString("HH:mm:ss") + "  " + what
-        + "  " + (top ? "window" : "child ") + "  class=\"" + cls.ToString() + "\"  title=\"" + t + "\"\r\n");
+      /* THE CAP IS ON THE LOG, AND ON NOTHING ELSE.
+
+         It used to sit at the top of this callback, above everything, and its only reset
+         lived inside AppendWatch — which the cap itself made unreachable. So the four
+         thousandth captioned event of the run did not end a shift's logging: it ended the
+         watcher. No more lines, and no more evWantTag either, which is the field the whole
+         automatic feed hangs on. The 07:00 reset could never fire again because the only
+         code that could fire it was behind the return. The helper starts at login and is
+         not restarted, so this was a one-way switch: some hours into a day protel could be
+         opened all night and RecCheck would be told nothing, with an empty watch log as
+         the only sign.
+
+         The cap's stated purpose is to keep the log readable for one shift. So that is all
+         it does now — the capture below is guarded by its own cooldown and its own
+         caption check, and goes on working. */
+      if(watchSeen < WATCH_MAX){
+        /* Counted only while it is still being spent. Incrementing past the cap for the
+           life of the process would leave an int climbing all day for no purpose, and an
+           int that wraps starts logging again. */
+        watchSeen++;
+        AppendWatch(DateTime.Now.ToString("HH:mm:ss") + "  " + what
+          + "  " + (top ? "window" : "child ") + "  class=\"" + cls.ToString() + "\"  title=\"" + t + "\"\r\n");
+      }
       /* One field write, and nothing more: this is the hook thread and the read is a long
          conversation with protel. WatchLoop picks it up between pumps. */
       if(ev != EVENT_OBJECT_HIDE){
@@ -2440,12 +2470,21 @@ static class TBind {
     for(int i = 0; i < a.Length; i++) if(a[i] == v) return true;
     return false;
   }
+  static string PidsKey(uint[] a){
+    StringBuilder b = new StringBuilder();
+    for(int i = 0; i < a.Length; i++){ if(i > 0) b.Append(","); b.Append(a[i]); }
+    return b.ToString();
+  }
   static void WatchLoop(){
     MSG m;
     keepEv = WinEventCallback;                                          // once, and it stays alive
     try{ PeekMessage(out m, IntPtr.Zero, 0, 0, 0); }catch(Exception){}   // force the queue to exist
     for(;;){
       try{
+        /* The shift boundary for the CAP, decided here rather than inside AppendWatch.
+           Where it used to live, the cap it resets could stop it being reached at all. */
+        string sk = ShiftKey();
+        if(watchCapShift != sk){ watchCapShift = sk; watchSeen = 0; }
         uint[] want = watchWantPids;
         /* processes that have gone away, or stopped matching */
         System.Collections.Generic.List<uint> drop = new System.Collections.Generic.List<uint>();
@@ -2461,6 +2500,23 @@ static class TBind {
           IntPtr h = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_NAMECHANGE, IntPtr.Zero, keepEv,
                                      want[i], 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
           if(h != IntPtr.Zero) evHooks[want[i]] = h;
+        }
+        /* WHETHER IT IS WATCHING ANYTHING AT ALL, said out loud.
+
+           The hooks went on and off in silence, so a watcher holding nothing and a protel
+           nobody touched wrote the same empty log — and DEBUG then printed "Nothing
+           recorded this shift", which is a claim about protel made from no evidence. This
+           is the helper stating what it holds: no message is sent anywhere, the pids are
+           already in hand, and it is one line only when the set changes. */
+        string pk = PidsKey(want);
+        if(pk != watchPidsSaid){
+          watchPidsSaid = pk;
+          AppendWatch(DateTime.Now.ToString("HH:mm:ss") + "  HOOKS  "
+            + (want.Length == 0
+               ? "watching nothing \u2014 " + (focusNeedle == null || focusNeedle.Length == 0
+                   ? "no protel target is set (PROTEL SHORTCUTS \u2192 point it at protel)"
+                   : "no running process matches \"" + focusNeedle + "\"")
+               : want.Length + " protel process(es): " + pk) + "\r\n");
         }
         while(PeekMessage(out m, IntPtr.Zero, 0, 0, PM_REMOVE)){
           TranslateMessage(ref m);
@@ -2532,7 +2588,7 @@ static class TBind {
     }catch(Exception){}
   }
 
-  const string VER = "v22";
+  const string VER = "v23";
 
   static int Main(string[] args){
     int parentPid;
@@ -2772,6 +2828,10 @@ static class TBind {
 
     /* The window watcher lives on its own thread so nothing it does can delay a
        low-level hook callback and get the shortcuts torn down by Windows. */
+    /* Answered once here so the watcher's first line names what it really found. The
+       watchdog answers it again every two seconds; without this the first HOOKS line is
+       always "watching nothing", because the watchdog has not run yet. */
+    try{ watchWantPids = ProtelPids(); }catch(Exception){}
     watchThread = new Thread(new ThreadStart(WatchLoop));
     watchThread.IsBackground = true;
     watchThread.Start();

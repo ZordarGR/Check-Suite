@@ -197,10 +197,10 @@ function focusConfig(){
   const needle = typeof f.needle === "string" ? f.needle.trim().slice(0, 64) : "";
   return {on: !!f.on && needle.length > 0, needle: needle};
 }
-function focusSpec(){
-  const f = focusConfig();
-  return f.on ? ["focus=" + f.needle] : [];
-}
+/* ONE of these, not two. It was declared twice, byte for byte, and JavaScript quietly
+   kept the second. Nothing misbehaved — but this is the line that decides whether the
+   helper's window watcher runs at all, and an edit made to the copy that loses would have
+   gone nowhere with no error to show for it. */
 function focusSpec(){
   const f = focusConfig();
   return f.on ? ["focus=" + f.needle] : [];
@@ -964,18 +964,34 @@ ipcMain.handle("sc-taulog", () => {
 /* What protel opened tonight — the zero-touch half of the live read. The helper records
    it from WinEvents with nothing sent to protel at all, and clears it at 07:00 with the
    shift. Read straight off disk; the helper is not disturbed to produce it. */
+/* WHICH NOTHING IT IS.
+
+   This used to return null for four different situations — no local app-data folder, no
+   file, an unreadable file, and a file that is genuinely empty — and the screen turned
+   every one of them into the same sentence: "Nothing recorded this shift. It only watches
+   once a protel window has been picked as the target." That sentence asserts that protel
+   was quiet, which is a fact about protel the tool had not established and could not.
+   Three of the four mean something is wrong with the tool, not with the shift.
+
+   So it says which. The reason is a code, not a sentence: the wording belongs in the two
+   language tables with everything else he reads. */
 ipcMain.handle("sc-watchlog", () => {
   try{
     const fs = require("fs");
     const base = process.env.LOCALAPPDATA;
-    if(!base) return null;
-    const txt = fs.readFileSync(path.join(base, "RecCheck", "rc-tbind-watch.log"), "utf8");
-    if(!txt.trim()) return null;
+    if(!base) return {why: "nobase"};
+    let txt;
+    try{ txt = fs.readFileSync(path.join(base, "RecCheck", "rc-tbind-watch.log"), "utf8"); }
+    catch(e){
+      const code = (e && (e.code || e.message)) || "unknown";
+      return code === "ENOENT" ? {why: "nofile"} : {why: "unread", detail: String(code)};
+    }
+    if(!txt.trim()) return {why: "blank"};
     /* Keep the head — it names the shift — and the most recent tail, which is the part
        worth reading. A whole shift fits well inside this; the cap is for the pathological
        night, so the dialog stays a dialog. */
-    return txt.length > 40000 ? txt.slice(0, 400) + "\n   …\n" + txt.slice(-36000) : txt;
-  }catch(e){ return null; }
+    return {log: txt.length > 40000 ? txt.slice(0, 400) + "\n   …\n" + txt.slice(-36000) : txt};
+  }catch(e){ return {why: "unread", detail: String((e && (e.code || e.message)) || "unknown")}; }
 });
 ipcMain.handle("sc-cancel", () => { try{ if(TAU_DETECT) TAU_DETECT.kill(); }catch(e){} return true; });
 ipcMain.handle("sc-clear", (_e, action) => {

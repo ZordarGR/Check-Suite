@@ -552,6 +552,7 @@ ProcName
 protect
 ProtelPid
 ProtelPids
+PidsKey
 ps
 PS_ENDCAP_ROUND_
 PS_GEOMETRIC
@@ -788,7 +789,9 @@ WaitKeyDrained
 WATCH_MAX
 WATCH_MAX_PIDS
 watchdog
+watchCapShift
 watchHavePid
+watchPidsSaid
 WatchLoop
 WatchPath
 watchSeen
