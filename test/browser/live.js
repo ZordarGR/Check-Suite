@@ -282,6 +282,65 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
      led2["426"][20260829].d === 20260905);
   await p.close();
 
+  /* 13. WHICH CAPTURE THE LINE IS TALKING ABOUT.
+
+         His, 05/09: "when opening tax check there is nothing shown when i open the inhouse
+         list". Nothing was broken about the in-house read — the line was being overwritten.
+         All four files are collected on the same tick and each ingest writes the same
+         #liveSay, so in tag order the departure report always had the last word, and the
+         files live for twenty hours, so the first tick after the app starts replays a
+         report he opened yesterday over the list he opened a second ago.
+
+         The mtime says which one is the news. */
+  p = await b.newPage();
+  await p.addInitScript(bridgeFor(null, false));
+  await p.setViewportSize({width: 1280, height: 620});
+  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
+  await p.evaluate((o) => {
+    window.__files.DP = o.d; window.__at.DP = 5;      // yesterday's, still on disk
+    window.__files.AR = o.a; window.__at.AR = 4;
+    window.__files.IH = o.h; window.__at.IH = 9;      // opened just now
+  }, {
+    d: RPT("DP", "Departure Report for 04/09/26", [
+      ["BURWIECK/GRUBE TAREK/KATHARINA ", "125", "2/0/0/0/0", "28/08/26", "CO"]]),
+    a: RPT("AR", "Arrival Report for the 04/09/26", [
+      ["AMANN ANJA/BERND ", "337", "2/0/0/0/0", "14/09/26", "CI"]]),
+    h: IH("Guests inhouse: 04/09/26", ROWS)
+  });
+  await p.evaluate(() => window.__t.showScreen("tax"));
+  await p.waitForTimeout(7000);
+  const line13 = await p.evaluate(() => document.getElementById("liveSay").textContent);
+  ck("the newest capture has the last word on the line", /rooms/.test(line13));
+  ck("and yesterday's report does not overwrite it",     !/Departure report/i.test(line13));
+  const led13 = await p.evaluate(() => JSON.parse(localStorage.getItem("reccheck_moves_v2") || "{}"));
+  ck("every one of them still reached the ledger",
+     !!(led13["426"] && led13["337"] && led13["125"]));
+  await p.close();
+
+  /* 14. AND WHAT THE LINE SAYS WHEN ROWS ARE DROPPED.
+         "0 stays recorded. 2 holding-room row(s) ignored" was printed for rows that were
+         not holding rooms at all — one counter serving three different reasons. */
+  p = await b.newPage();
+  await p.addInitScript(bridgeFor(null, false));
+  await p.setViewportSize({width: 1280, height: 620});
+  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
+  await p.evaluate((d) => { window.__files.DP = d; window.__at.DP = 2; },
+    RPT("DP", "Departure Report for 04/09/26", [
+      ["HOLDING ROOM ", "9000", "0/0/0/0/0", "28/08/26", "CO"],   // a real holding room
+      ["NO DATE AT ALL ", "301", "2/0/0/0/0", "", "CO"],          // arrival unreadable
+      ["", "302", "2/0/0/0/0", "01/09/26", "CO"],                 // never fully read
+      ["GOOD GUEST ", "303", "2/0/0/0/0", "01/09/26", "CO"]]));
+  await p.evaluate(() => window.__t.showScreen("tax"));
+  await p.waitForTimeout(7000);
+  const line14 = await p.evaluate(() => document.getElementById("liveSay").textContent);
+  ck("the one real stay is reported as new",     /1 rows|1 new/.test(line14));
+  ck("the holding room is named as a holding room", /1 holding-room/.test(line14));
+  ck("the unreadable date is its own sentence",  /no readable arrival date/i.test(line14));
+  ck("and the half-read row is its own too",     /came back incomplete/i.test(line14));
+  ck("nothing is called a holding room but the holding room",
+     (line14.match(/holding-room/g) || []).length === 1);
+  await p.close();
+
   await b.close();
   console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");
   process.exit(bad ? 1 : 0);

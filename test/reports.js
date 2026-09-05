@@ -145,11 +145,78 @@ ck("a recorded move is not dropped by a report", R.led()["148"][20260901].from =
 ck("while the departure still updates",          R.led()["148"][20260901].d === 20260912);
 
 /* rubbish must not take the ledger down */
-ck("no rows writes nothing",                     R.feedStays([], 20260904) === 0);
-ck("no night writes nothing",                    R.feedStays(a.recs, 0) === 0);
+const nil = t => t && t.made === 0 && t.fixed === 0 && t.same === 0 && !t.failed;
+ck("no rows writes nothing",                     nil(R.feedStays([], 20260904)));
+ck("no night writes nothing",                    nil(R.feedStays(a.recs, 0)));
 const keep = JSON.stringify(R.led());
 R.feedStays([{room:"", arr:"", dep:"", name:""}], 20260904);
 ck("an empty row changes nothing",               JSON.stringify(R.led()) === keep);
+
+
+/* ---- WHAT THE LINE ON SCREEN IS ALLOWED TO SAY ----
+
+   05/09, his: "Departure report 05/09/26: 41 rows, 0 stays recorded." He read that as the
+   departures not going in. They had gone in — days earlier, from the in-house census — so
+   the count of things CHANGED was honestly nought while the report was a complete success.
+   Nothing on screen could tell those apart, which is the whole fault. These pin that the
+   three outcomes are now counted separately, so a nought can be read. */
+const T = mk();
+ck("a stay the ledger has never seen is MADE",
+   (() => { const t = T.feedStays([{room:"401", arr:"01/09/26", dep:"05/09/26", name:"NEW"}], 20260905);
+            return t.made === 1 && t.fixed === 0 && t.same === 0; })());
+ck("the very same report again is ALREADY KNOWN, not a failure",
+   (() => { const t = T.feedStays([{room:"401", arr:"01/09/26", dep:"05/09/26", name:"NEW"}], 20260905);
+            return t.made === 0 && t.fixed === 0 && t.same === 1; })());
+ck("a later report that moves the departure is CORRECTED",
+   (() => { const t = T.feedStays([{room:"401", arr:"01/09/26", dep:"09/09/26", name:"NEW"}], 20260907);
+            return t.made === 0 && t.fixed === 1 && t.same === 0; })());
+ck("and the correction really is in the ledger",   T.led()["401"][20260901].d === 20260909);
+ck("a report older than the ledger's word is ALREADY KNOWN, and changes nothing",
+   (() => { const t = T.feedStays([{room:"401", arr:"01/09/26", dep:"02/09/26", name:"NEW"}], 20260903);
+            return t.made === 0 && t.fixed === 0 && t.same === 1
+                   && T.led()["401"][20260901].d === 20260909; })());
+
+/* forty-one rows the census already holds: the exact shape of his line */
+const C = mk();
+const many = [];
+for(let i = 0; i < 41; i++) many.push({room: String(100 + i), arr: "01/09/26", dep: "05/09/26", name: "G" + i});
+ck("forty-one new rows are forty-one MADE",
+   (() => { const t = C.feedStays(many, 20260905); return t.made === 41 && t.same === 0; })());
+ck("the same forty-one again are forty-one ALREADY KNOWN, none lost",
+   (() => { const t = C.feedStays(many, 20260905);
+            return t.made === 0 && t.fixed === 0 && t.same === 41 && !t.failed; })());
+
+/* a write that throws must say so rather than look like agreement */
+const boom = {getItem: k => C_STORE[k] === undefined ? null : C_STORE[k],
+              setItem: () => { throw new Error("quota"); },
+              removeItem: () => {}};
+const C_STORE = {};
+const B = new Function("localStorage","JSON","Object","String","Number","RegExp","console",
+  [ 'const MOVES_KEY = "reccheck_moves_v2";', lift("dkey"), lift("loadLedger"), lift("feedStays"),
+    "return {feedStays};" ].join("\n"))(boom, JSON, Object, String, Number, RegExp, console);
+ck("a ledger write that throws reports FAILED, not zero",
+   (() => { const t = B.feedStays([{room:"401", arr:"01/09/26", dep:"05/09/26", name:"X"}], 20260905);
+            return t.failed === true && t.made === 0; })());
+
+/* ---- THE THREE DROP REASONS ARE THREE REASONS ----
+   They shared one counter, which the screen labelled "holding-room row(s) ignored". A
+   report whose dates came back unreadable was reported to him as a couple of holding
+   rooms — the wrong answer to the only question the line exists to answer. */
+const mixed = R.reportToStays([
+  ["HELD GUEST ",   "9000", "0/0/0/0/0", "04/09/26", "CO"],   // holding room
+  ["NO DATE ",      "301",  "2/0/0/0/0", "",         "CO"],   // arrival unreadable
+  ["",              "302",  "2/0/0/0/0", "01/09/26", "CO"],   // name never arrived
+  ["HALF READ ",    "303",  "2/0/0/0/0", "01/09/26", ""],     // status never arrived
+  ["GOOD GUEST ",   "304",  "2/0/0/0/0", "01/09/26", "CO"]
+], "04/09/26", false);
+ck("the one good row is the only stay",          mixed.recs.length === 1);
+ck("the holding room is counted as a holding room", mixed.held === 1);
+ck("an unreadable arrival date is its own count",   mixed.nodate === 1);
+ck("a half-read row is its own count",              mixed.partial === 2);
+ck("and the old total still adds up",               mixed.dropped === 4);
+ck("a cancelled row is none of those three",
+   (() => { const c = R.reportToStays([["X ", "201", "2/0/0/0/0", "09/09/26", "Reversal/Void"]], "04/09/26", false);
+            return c.cancelled === 1 && c.dropped === 0 && c.recs.length === 0; })());
 
 console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");
 process.exit(bad ? 1 : 0);
