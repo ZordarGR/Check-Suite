@@ -341,6 +341,36 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
      (line14.match(/holding-room/g) || []).length === 1);
   await p.close();
 
+  /* 15. WHAT THE TOOL IS HOLDING, said even when nothing new arrives.
+         His, 05/09: "i see the in house list opened but no refresh in reccheck". The
+         helper does not re-read a caption it has already read, so no new file appears and
+         nothing is ingested — and the screen had no way to say the list was already in. */
+  p = await b.newPage();
+  await p.addInitScript(bridgeFor(null, false));
+  await p.setViewportSize({width: 1280, height: 620});
+  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
+  await p.evaluate(() => window.__t.showScreen("tax"));
+  await p.waitForTimeout(1500);
+  ck("with nothing captured it says so",
+     /nothing captured from protel/i.test(await p.evaluate(() => document.getElementById("liveHeld").textContent)));
+  await p.evaluate((o) => { window.__files.IH = o.h; window.__at.IH = 9;
+                            window.__files.DP = o.d; window.__at.DP = 5; }, {
+    h: IH("Guests inhouse: 04/09/26", ROWS),
+    d: RPT("DP", "Departure Report for 04/09/26", [
+      ["BURWIECK/GRUBE TAREK/KATHARINA ", "125", "2/0/0/0/0", "28/08/26", "CO"]])});
+  await p.waitForTimeout(7000);
+  const held1 = await p.evaluate(() => document.getElementById("liveHeld").textContent);
+  ck("it names the in-house list it holds",   /in-house 04\/09\/26/.test(held1));
+  ck("with the rows it holds for it",         /in-house 04\/09\/26 · \d+ rows/.test(held1));
+  ck("and the departure report beside it",    /departures 04\/09\/26/.test(held1));
+  ck("a list never captured is not claimed",  !/arrivals|moves/.test(held1));
+  /* the same captures again, unchanged: the tool still says it holds them */
+  await p.waitForTimeout(6000);
+  const held2 = await p.evaluate(() => document.getElementById("liveHeld").textContent);
+  ck("and it still says so when nothing new arrives", held2 === held1);
+  ck("a fixture's fake timestamp is not printed as a real clock", !/1970|00:00/.test(held2));
+  await p.close();
+
   await b.close();
   console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");
   process.exit(bad ? 1 : 0);

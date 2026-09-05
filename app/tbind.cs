@@ -2396,6 +2396,32 @@ static class TBind {
       bool top = false;
       try{ top = (GetAncestor(hwnd, GA_ROOT) == hwnd); }catch(Exception){}
       string what = ev == EVENT_OBJECT_SHOW ? "OPEN " : (ev == EVENT_OBJECT_HIDE ? "CLOSE" : "TITLE");
+      /* A LABEL IS NOT A WINDOW PROTEL OPENED.
+
+         His log, 05/09, 04:48:51 to 04:50:12 — eighty-one seconds of one guest checking
+         out — is hundreds of lines like
+
+           TITLE  child  class="Static"  title="Amount:"
+           TITLE  child  class="Button"  title="Cancel"
+
+         protel restates every Static and Button in an invoice dialog on each repaint, and
+         each one is a DIFFERENT caption, so the lastTitle de-dupe below never catches
+         them. Three or more lines a second, sustained, for as long as he is working at
+         the desk. The log he is meant to read "what protel opened tonight" from is
+         unreadable; four thousand lines of it roll past in about twenty minutes, and on
+         every build before v23 that same rate spent the shift's whole budget inside half
+         an hour and left the watcher deaf until the helper was restarted.
+
+         Only two classes here are windows in the sense the log means: OWL_Window, which
+         is what protel's reports and lists are, and #32770, its dialogs. A caption change
+         on anything else is a control repainting itself.
+
+         THIS GATES THE LOG AND THE DE-DUPE, NEVER THE CAPTURE. The tag test below still
+         sees every event exactly as it did. A Static labelled "Amount:" was never going
+         to name one of the four lists — but "it cannot match because the captions happen
+         not to look like that" is the kind of reasoning that has cost him twice, so the
+         filter is not put anywhere it could decide what is read. */
+      bool windowish = top || cls.ToString() == "OWL_Window" || cls.ToString() == "#32770";
       /* A caption that has not actually changed is not news. protel restates the frame's
          title often; only the changes are worth a line.
 
@@ -2404,7 +2430,7 @@ static class TBind {
          and produced no line, so the log's own length never showed how fast the budget
          was going. Counted after, only the events that actually say something cost
          anything. */
-      if(ev == EVENT_OBJECT_NAMECHANGE){
+      if(ev == EVENT_OBJECT_NAMECHANGE && windowish){
         if(t == lastTitle) return;
         lastTitle = t;
       }
@@ -2423,7 +2449,7 @@ static class TBind {
          The cap's stated purpose is to keep the log readable for one shift. So that is all
          it does now — the capture below is guarded by its own cooldown and its own
          caption check, and goes on working. */
-      if(watchSeen < WATCH_MAX){
+      if(windowish && watchSeen < WATCH_MAX){
         /* Counted only while it is still being spent. Incrementing past the cap for the
            life of the process would leave an int climbing all day for no purpose, and an
            int that wraps starts logging again. */
@@ -2588,7 +2614,7 @@ static class TBind {
     }catch(Exception){}
   }
 
-  const string VER = "v23";
+  const string VER = "v24";
 
   static int Main(string[] args){
     int parentPid;

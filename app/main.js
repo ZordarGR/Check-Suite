@@ -298,15 +298,25 @@ function bindsPath(){
   if(!base) return null;
   return path.join(base, "RecCheck", "rc-tbind-binds.txt");
 }
+/* WHAT WENT INTO THE FILE, kept where the diagnostic can find it.
+
+   sc-helper reports `specs: TAUINFO.specs` and nothing in this file ever assigned it —
+   one grep hit in the whole of main.js, the read. So DEBUG's detail line never printed
+   binds= for anybody, and its absence looked like "nothing is bound". It was read as
+   exactly that here on 05/09 and the conclusion drawn from it was wrong. A diagnostic
+   field that is always empty is worse than no field: it reads as a measurement. */
+let LAST_SPECS = [];
 function writeBinds(){
   const f = bindsPath();
   if(!f) return false;
   let binds = {};
   try{ binds = activeBinds(); }catch(e){}
+  const focus = focusSpec();
+  const acts = ACTIONS.filter(a => binds[a])
+      .map(a => binds[a] + "=" + (a === "seq" ? seqSpec() : a === "tau" ? tauSpec() : a));
+  LAST_SPECS = focus.concat(acts);
   const lines = ["# written by RecCheck — edited here has no effect, use the app"]
-    .concat(focusSpec())
-    .concat(ACTIONS.filter(a => binds[a])
-      .map(a => binds[a] + "=" + (a === "seq" ? seqSpec() : a === "tau" ? tauSpec() : a)));
+    .concat(focus).concat(acts);
   try{
     const fs = require("fs");
     fs.mkdirSync(path.dirname(f), {recursive: true});
@@ -349,7 +359,8 @@ function tauStart(){
   const wrote = writeBinds();
   helperVerb("status").then(st => {
     TAUINFO = {state: st.running ? "running" : "stopped", exe: exe, boot: !!st.on,
-               ver: st.ver, binds: wrote ? bindsPath() : "COULD NOT WRITE", err: st.err};
+               ver: st.ver, binds: wrote ? bindsPath() : "COULD NOT WRITE", err: st.err,
+               specs: LAST_SPECS.slice()};
     if(st.available && !st.running){
       try{
         const child = spawn(exe, ["run"], {detached: true, stdio: "ignore", windowsHide: true});

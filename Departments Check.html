@@ -704,6 +704,9 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
 #taxScreen .menu-item:hover{background:var(--panel2);}
 #taxScreen .menu-item.danger{color:#ff9a94;}#taxScreen .menu-item.danger:hover{background:var(--redbg);color:#ffb4b0;}
 #taxScreen #liveRow{display:flex;align-items:center;gap:10px;margin:18px 0 0;flex-wrap:wrap;}
+/* its own line under the last capture, and quieter than it: this is standing state,
+   not news, and it must never compete with the line that reports an arrival */
+#taxScreen #liveHeld{flex-basis:100%;opacity:.7;font-size:12px;margin-top:2px}
 #taxScreen .slots{display:flex;gap:10px;margin:20px 0 6px;flex-wrap:wrap;}
 #taxScreen .slot{flex:1;min-width:240px;border:1.5px dashed var(--line);border-radius:10px;padding:16px;text-align:center;cursor:pointer;transition:.15s;background:var(--panel2);display:block;}
 #taxScreen .slot:hover, #taxScreen .slot.over{border-color:var(--accent);background:#101a26;}
@@ -983,6 +986,7 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
 
   <div id="liveRow" style="display:none">
     <span class="legend" id="liveSay"></span>
+    <span class="legend" id="liveHeld"></span>
   </div>
   <div class="slots">
     <label class="slot" id="slot-rate" for="file-rate">
@@ -1388,7 +1392,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.37";
+const APP_VERSION = "1.17.38";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -3251,7 +3255,13 @@ function helperVerdict(h){
      probe.indexOf("throw:") === 0 || probe.indexOf("no-reply:") === 0)
     return {key: "sc.hBlocked", tone: "bad"};
   if(h.state === "spawn-failed") return {key: "sc.hBlocked", tone: "bad"};
-  if(h.state === "running") return {key: "sc.hOk", tone: "good"};
+  /* "started" is what tauStart writes the moment it has SPAWNED the helper, and this
+     had no case for it — so it fell to the end of the function and came back as
+     sc.hIdle: "Ready. Nothing is bound yet, so it is not running." A running helper,
+     described as not running, with advice to bind something. He read that line on
+     05/09 while his shortcuts were working perfectly, which is exactly what it should
+     never have been able to say. */
+  if(h.state === "running" || h.state === "started") return {key: "sc.hOk", tone: "good"};
   if(h.state === "idle") return {key: "sc.hIdle", tone: "faint"};
   // exit 3 is the helper's own "Windows would not give me the hooks"
   if(h.state === "exited"){
@@ -3267,6 +3277,12 @@ function helperDetail(h){
   const bits = [];
   if(h.probe) bits.push("probe=" + h.probe);
   if(h.state) bits.push("state=" + h.state);
+  /* WHICH HELPER IS ACTUALLY RUNNING — collected since 1.17.11 and never once shown.
+     main.js sets TAUINFO.ver from the status verb's own answer and sc-helper passes it
+     through, and this function listed every other field but that one. It is the single
+     number that says whether the helper an update shipped is the helper in memory, and
+     for three releases of chasing a feed that would not start, nobody could see it. */
+  if(h.ver) bits.push("helper=" + h.ver);
   if(h.code !== null && h.code !== undefined) bits.push("exit=" + h.code);
   if(h.err) bits.push("err=" + h.err);
   if(h.ranMs !== null && h.ranMs !== undefined) bits.push("ran=" + h.ranMs + "ms");
@@ -5609,6 +5625,9 @@ const I18N={
   live_arr:"Arrival report {0}: {1} rows read, {2} usable \u2014 {3} new, {4} corrected, {5} already known.",
   live_dep:"Departure report {0}: {1} rows read, {2} usable \u2014 {3} new, {4} corrected, {5} already known.",
   live_same:"protel\u2019s in-house list \u2014 {0} rooms for {1}, unchanged since the last read.",
+  held_lead:"holding: ", held_rows:"{0} rows",
+  held_IH:"in-house", held_MV:"moves", held_AR:"arrivals", held_DP:"departures",
+  held_none:"nothing captured from protel yet \u2014 open a list in protel and it is taken as it goes past.",
   live_held:" {0} holding-room row(s) ignored.",
   live_nodate2:" {0} row(s) had no readable arrival date.",
   live_partial:" {0} row(s) came back incomplete and were left out.",
@@ -5679,6 +5698,9 @@ const I18N={
   live_arr:"Αφίξεις {0}: {1} γραμμές, {2} αξιοποιήσιμες — {3} νέες, {4} διορθώθηκαν, {5} ήδη γνωστές.",
   live_dep:"Αναχωρήσεις {0}: {1} γραμμές, {2} αξιοποιήσιμες — {3} νέες, {4} διορθώθηκαν, {5} ήδη γνωστές.",
   live_same:"Λίστα παραμονών protel — {0} δωμάτια για {1}, χωρίς αλλαγή από την προηγούμενη ανάγνωση.",
+  held_lead:"έχει: ", held_rows:"{0} γραμμές",
+  held_IH:"παραμονές", held_MV:"μετακινήσεις", held_AR:"αφίξεις", held_DP:"αναχωρήσεις",
+  held_none:"τίποτα από το protel ακόμη — άνοιξε μια λίστα και θα ληφθεί καθώς περνάει.",
   live_held:" {0} γραμμές δωματίου αναμονής αγνοήθηκαν.",
   live_nodate2:" {0} γραμμές χωρίς αναγνώσιμη ημερομηνία άφιξης.",
   live_partial:" {0} γραμμές ήρθαν ελλιπείς και δεν καταγράφηκαν.",
@@ -6323,7 +6345,7 @@ const LIVE_RETRY_MS = 5000;
    looks unchanged and nothing is ever written back — he would empty it and watch it stay
    empty. The reset lives in the other scope, so this is its door. */
 window.__taForget = function(){
-  try{ LIVE_SIG = ""; RPT_SIG = {}; LIVE_AT = {}; }catch(e){}
+  try{ LIVE_SIG = ""; RPT_SIG = {}; LIVE_AT = {}; LIVE_HELD = {}; }catch(e){}
   try{ localStorage.removeItem(MOVES_DONE_KEY); }catch(e){}
 };
 function liveStop(){
@@ -6364,6 +6386,50 @@ function liveEnsure(){
    now. Legacy mode still switches all of it off. */
 const LIVE_TAGS = ["IH", "MV", "AR", "DP"];
 let LIVE_AT = {};                              // tag -> the capture already taken
+/* WHAT THE TOOL IS HOLDING, not just what last arrived.
+
+   His, 05/09, with the in-house list open in protel and a departure report on the line:
+   "i see the in house list opened but no refresh in reccheck". Nothing was broken. The
+   helper does not re-read a caption it has already read — "Guests inhouse: 05/09/26"
+   does not change when the window is re-opened — so no new file appeared, nothing was
+   ingested, and the line went on reporting the last thing that did arrive. The list he
+   was looking at was already in the ledger and the screen had no way to say so.
+
+   So the row carries a second, quieter line naming each list the tool holds and when it
+   was taken. It costs protel NOTHING: the files are already on disk and already read
+   every tick, and this only reads their captions. Recomputed when a capture's timestamp
+   changes and cached otherwise, so a list of 250 rows is not re-scanned every 5 s. */
+let LIVE_HELD = {};                            // tag -> {at, date, rows}
+function heldOf(tag, at, txt){
+  let date = "", rows = 0;
+  for(const line of String(txt || "").split(/\r?\n/)){
+    if(!line) continue;
+    if(line.indexOf(tag + "\t") === 0) rows++;
+    else if(line.indexOf("TITLE\t") === 0) date = inhouseDate(line.slice(6));
+  }
+  return {at: at, date: date, rows: rows};
+}
+function hhmm(at){
+  /* mtimes only. A test fixture numbers its captures 1, 2, 9 — printing 1970 for those
+     would be a wrong answer dressed as a measurement, so they simply carry no time. */
+  if(!(at > 1e12)) return "";
+  try{ const d = new Date(at);
+       return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
+  catch(e){ return ""; }
+}
+function paintHeld(){
+  const box = el('liveHeld');
+  if(!box) return;
+  const bits = [];
+  for(const tag of LIVE_TAGS){
+    const h = LIVE_HELD[tag];
+    if(!h) continue;
+    const when = hhmm(h.at);
+    bits.push(t('held_' + tag) + " " + (h.date || "?")
+              + " \u00b7 " + t('held_rows', h.rows) + (when ? " \u00b7 " + when : ""));
+  }
+  box.textContent = bits.length ? t('held_lead') + bits.join("   ") : t('held_none');
+}
 async function autoReadInhouse(){
   if(legacyOn() || !LIVE_OK){ liveStop(); return; }
   if(!window.reccheckShortcuts || !window.reccheckShortcuts.listFile) return;
@@ -6384,7 +6450,12 @@ async function autoReadInhouse(){
   for(const tag of LIVE_TAGS){
     try{
       const f = await window.reccheckShortcuts.listFile(tag).catch(() => null);
-      if(!f || !f.text || f.at === LIVE_AT[tag]) continue;
+      /* the held summary is kept for EVERY file that is there, new or not — that is the
+         whole point of it — and dropped the moment the file is gone */
+      if(!f || !f.text){ delete LIVE_HELD[tag]; continue; }
+      if(!LIVE_HELD[tag] || LIVE_HELD[tag].at !== f.at)
+        LIVE_HELD[tag] = heldOf(tag, +f.at || 0, f.text);
+      if(f.at === LIVE_AT[tag]) continue;
       LIVE_AT[tag] = f.at;
       got.push({tag: tag, at: +f.at || 0, text: f.text});
     }catch(e){}
@@ -6393,6 +6464,7 @@ async function autoReadInhouse(){
   for(const g of got){
     try{ await ingestCaptured(g.tag, g.text); }catch(e){}
   }
+  try{ paintHeld(); }catch(e){}
 }
 async function ingestCaptured(tag, txt){
   if(tag === "IH") return applyInhouse(parseInhouse(txt), true);
