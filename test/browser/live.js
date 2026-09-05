@@ -559,6 +559,49 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
   ck("with no census held, a report is stamped with the tool's night", seen19b === bnk19);
   await p.close();
 
+  /* 20. THE CARDS ON SCREEN AFTER A CAPTURE (queued 05/09, built 1.17.43 under his go):
+         a departure list captured while a search is on screen marks the departing guest's
+         card red without him retyping — and a capture that changes nothing for the cards
+         leaves the very same DOM nodes in place, so nothing moves under his hands. */
+  p = await b.newPage();
+  await p.addInitScript(bridgeFor(null, false));
+  await p.setViewportSize({width: 1280, height: 720});
+  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
+  await p.waitForTimeout(300);
+  await p.evaluate(() => {
+    const mk = (sn, room, guest) => ({sn, serial: sn, roomMain: room, room: room, guest, dept: "REST", total: 10, cancelled: false, voided: false,
+                                      rates: {"24%": 10, "13%": 0, "6%": 0, "base": 10}, time: "21:14"});
+    window.__t.setModel({reportDate: "4/9/2026", receipts: [mk("12345", "125", "BURWIECK/GRUBE TAREK/KATHARINA"), mk("12346", "125", "NEW GUEST")]});
+    window.__t.setState({receipts: {}, extras: []});
+    window.__t.setStateKey("20260904");
+    window.__t.showScreen("app");
+    const f = document.getElementById("snInput"); f.value = "12345"; f.dispatchEvent(new Event("input"));
+  });
+  await p.waitForTimeout(300);
+  const c20a = await p.evaluate(() => { const c = document.querySelectorAll("#matches .match"); if(c[0]) c[0].dataset.probe = "first-draw"; return {n: c.length, left: c[0] ? c[0].classList.contains("left") : null}; });
+  ck("the search draws the departing guest's card, unmarked — no departure list yet", c20a.n === 1 && c20a.left === false);
+  await p.evaluate((d) => { window.__files.DP = d; window.__at.DP = 1756944060000; },
+    RPT("DP", "Departure Report for 04/09/26", [["BURWIECK/GRUBE TAREK/KATHARINA ", "125", "2/0/0/0/0", "28/08/26", "CI"]]));
+  await p.waitForTimeout(6500);
+  const c20b = await p.evaluate(() => { const c = document.querySelectorAll("#matches .match"); return {n: c.length, left: c[0] ? c[0].classList.contains("left") : null,
+                                          redrawn: c[0] ? c[0].dataset.probe !== "first-draw" : null, tag: c[0] ? c[0].textContent : "", q: document.getElementById("snInput").value,
+                                          app: document.querySelector("main").style.display !== "none"}; });
+  ck("the departure list arriving marks that card red without retyping", c20b.n === 1 && c20b.left === true && c20b.redrawn === true && /LEAVING/i.test(c20b.tag));
+  ck("the query stays and he stays on the screen", c20b.q === "12345" && c20b.app);
+  await p.evaluate(() => { const c = document.querySelector("#matches .match"); c.dataset.probe = "second-draw"; });
+  /* the same list captured again: the store changes (a new capture time), the marks do not */
+  await p.evaluate((d) => { window.__files.DP = d; window.__at.DP = 1756944120000; },
+    RPT("DP", "Departure Report for 04/09/26", [["BURWIECK/GRUBE TAREK/KATHARINA ", "125", "2/0/0/0/0", "28/08/26", "CI"]]));
+  await p.waitForTimeout(6500);
+  const c20c = await p.evaluate(() => { const c = document.querySelector("#matches .match"); return {same: c && c.dataset.probe === "second-draw", left: c && c.classList.contains("left")}; });
+  ck("a capture that changes nothing for the cards leaves the same nodes in place", c20c.same === true && c20c.left === true);
+  /* the new guest's receipt on the same room: never marked, capture or not */
+  await p.evaluate(() => { const f = document.getElementById("snInput"); f.value = "12346"; f.dispatchEvent(new Event("input")); });
+  await p.waitForTimeout(300);
+  const c20d = await p.evaluate(() => { const c = document.querySelectorAll("#matches .match"); return {n: c.length, left: c[0] ? c[0].classList.contains("left") : null}; });
+  ck("the NEW guest's receipt on the departing room is not marked", c20d.n === 1 && c20d.left === false);
+  await p.close();
+
   await b.close();
   console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");
   process.exit(bad ? 1 : 0);

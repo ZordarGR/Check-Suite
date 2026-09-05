@@ -11,7 +11,7 @@ Run the ones that need nothing but node:
 | | what it holds the line on |
 |---|---|
 | `scopecheck.js` | every call in the moves functions resolves to something declared. A silent `ReferenceError` inside a `stage()` looks exactly like "there was nothing to draw" — this is how the movements panel was dark for two versions |
-| `status.js` | the STATUS store, through the shipped writer and marks: each list kept for the day as the union of its captures; an arrival gone from the arrival list is nothing until the in-house list shows the same name and room with CI; a departure gone from the departure list is nothing until a COMPLETE in-house list captured afterwards does not show it — a cut-short one proves nothing; `414` and `414-15` are one room; the pills come from the store and from nothing else, and the dot lands on a departed, turnover or moved pill only under that reservation's own name |
+| `status.js` | the STATUS store, through the shipped writer and marks: each list kept for the day as the union of its captures; an arrival gone from the arrival list is nothing until the in-house list shows the same name and room with CI; a departure gone from the departure list is nothing until a COMPLETE in-house list captured afterwards does not show it — a cut-short one proves nothing; `414` and `414-15` are one room; the pills come from the store and from nothing else, and the dot lands on a departed, turnover or moved pill only under that reservation's own name; with legacy ON the XPS-fed ledger draws them instead, as before 1.17.42 |
 | `movespanel.js` | `renderMoves` over a DOM shim, the night built through `statusIngest`: all four pill kinds, the receipts dot only on a departure whose **name** matches, and a ledger entry alone drawing nothing |
 | `pills0209.js` | the night of 02/09 rebuilt from his DEBUG dump — a name change must never draw a departure; since 1.17.42 the ledger draws nothing at all, and the two real departures come from the departure list |
 | `report.js` | the DEBUG report prints the STATUS store's view of the night first — the pills' source — then the ledger's own, labelled as such, with **every** pill the ledger would draw and the rate list that wrote it, the stale ones flagged |
@@ -29,7 +29,7 @@ Run the ones that need nothing but node:
 | `stdout.js` | the helper's output reaches RecCheck as bytes. Greek guest names are the first non-ASCII thing to cross that pipe — this splits one mid-character across two chunks and checks it survives |
 | `quiet.js` | the real `main.js` with electron stubbed: the 07:00 reset must not summon the overlay |
 | `inhouse.js` | the live in-house read, his five real rows verbatim, through the shipped `inhouseToRate` and then the shipped `saveMoves`. Also which captions may become data at all: the bare frame caption he actually got on 04/09 must not |
-| `helperline.js` | the DEBUG helper line end to end, through the real `main.js`: the press asks `status`, which LOOKS FOR the resident's window, and the verdict is built on that answer — not on the state written at spawn time, which said "running" for a helper that died 53 ms in. The version is labelled `exe=`, because that is whose it is; a binds file that could not be written is not listed as published; a spawn Windows refuses is a state, not an uncaught exception |
+| `helperline.js` | the DEBUG helper line end to end, through the real `main.js`: the press asks `status`, which LOOKS FOR the resident's window, and the verdict is built on that answer — not on the state written at spawn time, which said "running" for a helper that died 53 ms in. The exe's version is labelled `exe=`; since helper v28 `status` prints the RESIDENT's version as a fourth field and the line says `helper=vNN` (or `helper=pre-v28`) only when that field arrived; a binds file that could not be written is not listed as published; a spawn Windows refuses is a state, not an uncaught exception |
 | `evflow.js` | the helper's capture path — `WinEventCallback` and `EvServiceReads` — compiled from the shipped `tbind.cs` with the three user32 calls, the reader, the writer, the log and the clock replaced by recorders, and driven under Mono. A shown-empty report is read again once it restates; an open inside the cooldown waits; a restatement of a taken caption is not re-read; a real open (SHOW) is; a Static never arms anything. Skips itself where there is no mcs |
 | `watchlog.js` | which nothing it is: the watch log and the four capture files, read through the real `main.js` handlers — no folder, no file, blank, unreadable, too old and fresh each come back as themselves, so the screen can never turn the tool's own failure into a statement about protel |
 
@@ -55,7 +55,9 @@ Moves — and case 18 drives each: the sub-lines, the list screen, an arrival ch
 by the in-house list, a departure checked out only by absence from a complete one, a row
 gone from its list said as gone and nothing more, a cut-short read proving nothing, and
 back to the submenus and home. Case 17 pins the department check's panel drawing from a
-capture — the pills' source now — while he is on another screen.
+capture — the pills' source now — while he is on another screen. Case 20 (1.17.43) pins the
+search cards: a departure list captured mid-search marks the departing guest's card red
+without retyping, and a capture that changes nothing for the cards leaves the same nodes.
 
 `h-sweep.html` carries TWO probes: `window.__t` for the app scope and `window.__tx` for the
 tax scope. The two <script> blocks share nothing, so a guard in one cannot be reached from

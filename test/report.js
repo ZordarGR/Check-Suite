@@ -11,11 +11,12 @@ const led = {
   "325": {20260828:{d:20260904,n:"PFUENDL",mv:20260901}},          // vacated, must not show
   "601": {20260830:{d:20260930,n:"STAYS ON",seen:20260901}}        // not tonight
 };
-const store = {reccheck_moves_v2: JSON.stringify(led),
+const store = {reccheck_moves_v2: JSON.stringify(led), reccheck_legacy: "0",
   reccheck_moves_last: JSON.stringify({biz:"1/9/2026",key:20260901,listRooms:227,wrote:227})};
 const localStorage = {getItem:k=>(k in store?store[k]:null), setItem:(k,v)=>store[k]=String(v)};
 const body = [lift("dateNum"), src.match(/^const MOVES_KEY = .*$/m)[0], lift("loadMoves"),
   "const STATUS_KEY = \"reccheck_status_v1\";", lift("loadStatus"), lift("statusRows"), lift("pillRoom"),
+  "const LEGACY_KEY = \"reccheck_legacy\";", lift("legacyOn"),
   lift("roomMoves"), lift("ledgerMoves"), lift("movesReport"), "return movesReport();"].join("\n");
 const fn = new Function("localStorage","MODEL","ROOMS","Number","String","Object","JSON","Math", body);
 const out = fn(localStorage, {reportDate:"2/9/2026", receipts:[]}, {}, Number, String, Object, JSON, Math);

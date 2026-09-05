@@ -27,6 +27,7 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
 /* ---- a store, shared by both halves the way localStorage is ---- */
 const store = {};
 const localStorage = {getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: k => { delete store[k]; }};
+store["reccheck_legacy"] = "0";                 // the automatic read is on; legacy is the case in section 6
 
 /* ---- the tax half: writer and marks ---- */
 const I18N = {en: {}};
@@ -57,6 +58,7 @@ function pillsFor(reportDate, receipts){
     "const effRoom = (r) => { " + line(/^function effRoom\(r\)\{.*$/m).replace(/^function effRoom\(r\)\{/, "").replace(/\}$/, "") + " };",
     lift("checkableList"), lift("sameName"),
     "const STATUS_KEY = \"reccheck_status_v1\";", lift("loadStatus"), lift("statusRows"), lift("pillRoom"),
+    "const LEGACY_KEY = \"reccheck_legacy\";", lift("legacyOn"), line(/^const MOVES_KEY = .*$/m), lift("loadMoves"), lift("ledgerMoves"), 
     lift("leavingIndex"), "let LEAVING = {};", lift("isLeaving"),
     lift("roomMoves"), lift("renderMovesFor"), lift("renderMoves"),
     "renderMoves(); return {classes: [...classes], root: moves, leaving: leavingIndex(), isLeaving: isLeaving, LEAVING: LEAVING};"].join("\n");
@@ -108,7 +110,7 @@ st = TAX.load();
 ck("the same name in another room is not that arrival checked in", /st_markExpected/.test(TAX.mark(st, "AR", amann).text));
 
 console.log("--- 2. departures: gone from the list proves nothing; absent from a complete in-house list does");
-for(const k of Object.keys(store)) delete store[k];
+for(const k of Object.keys(store)) delete store[k]; store["reccheck_legacy"] = "0";
 rpt("DP", RPT("DP", "Departure Report for 04/09/26", [["BURWIECK/GRUBE TAREK/KATHARINA ", "125", "2/0/0/0/0", "28/08/26", "CI"],
                                                       ["MUELLER HANS ", "414", "1/0/0/0/0", "30/08/26", "CI"]]), T(7));
 st = TAX.load(); rows = Object.values(st.DP["20260904"].rows);
@@ -142,7 +144,7 @@ st = TAX.load();
 ck("CO on the in-house list is checked out too", /st_markOutCO\(15:00\)/.test(TAX.mark(st, "DP", mue).text) && TAX.mark(st, "DP", mue).cls === "mOut");
 
 /* a census dated BEFORE the departure's day says nothing about it */
-for(const k of Object.keys(store)) delete store[k];
+for(const k of Object.keys(store)) delete store[k]; store["reccheck_legacy"] = "0";
 rpt("DP", RPT("DP", "Departure Report for 04/09/26", [["LATE ARRIVAL ", "222", "1/0/0/0/0", "03/09/26", "CI"]]), T(7));
 ih(IHTXT("Guests inhouse: 03/09/26", [["SOMEONE ELSE", "300", "1/0/0/0/0", "01/09/26", "05/09/26", "CI"]]), Date.UTC(2026, 8, 3, 20, 0, 0));
 st = TAX.load(); rows = Object.values(st.DP["20260904"].rows);
@@ -155,7 +157,7 @@ ck("a complete census dated the departure's day does — even one captured befor
 ck("and without the day, the marks read as before", /st_markOut\(06:00\)/.test(TAX.mark(st, "DP", rows[0]).text));
 
 console.log("--- 3. what is not a row, and what the store does not keep");
-for(const k of Object.keys(store)) delete store[k];
+for(const k of Object.keys(store)) delete store[k]; store["reccheck_legacy"] = "0";
 rpt("AR", RPT("AR", "Arrival Report for the 04/09/26", [["HALF READ ", "", "", "", ""], ["", "300", "", "", ""], ["WHOLE ", "301", "1/0/0/0/0", "05/09/26", ""]]), T(8));
 st = TAX.load();
 ck("a row without both a name and a room is not a reservation and is not kept", Object.keys(st.AR["20260904"].rows).length === 1);
@@ -167,7 +169,7 @@ st = TAX.load();
 ck("a day older than the week is pruned; today's is kept", !st.AR["20260820"] && !!st.AR["20260904"]);
 
 console.log("--- 4. the pills: from the store, and from nothing else");
-for(const k of Object.keys(store)) delete store[k];
+for(const k of Object.keys(store)) delete store[k]; store["reccheck_legacy"] = "0";
 /* the ledger alone — the old source — draws nothing now */
 store["reccheck_moves_v2"] = JSON.stringify({"110": {20260826: {d: 20260904, n: "LEDGER ONLY"}}, "65": {20260820: {d: 20260910, n: "STAYS ON"}}});
 let P = pillsFor(NIGHT, []);
@@ -213,6 +215,22 @@ ck("a voided receipt does not dot",                                       !P.dot
 ck("a turnover with only the NEW guest's receipt is not dotted",          !P.dot("120"));
 P = pillsFor(NIGHT, [rc("111", "MUELLER HANS")]);
 ck("the departing name on another room does not dot the departure",      !P.dot("110"));
+
+console.log("--- 6. legacy mode: nothing is captured, so the XPS-fed ledger draws, as before 1.17.42");
+for(const k of Object.keys(store)) delete store[k];
+store["reccheck_legacy"] = "1";
+store["reccheck_moves_v2"] = JSON.stringify({"110": {20260826: {d: 20260904, n: "MUELLER HANS"}}, "65": {20260820: {d: 20260910, n: "STAYS ON"}},
+                                              "72": {20260904: {d: 20260906, n: "NEMMEIER"}}});
+rpt("DP", RPT("DP", "Departure Report for 04/09/26", [["FROM THE STORE ", "130", "1/0/0/0/0", "26/08/26", "CI"]]), T(7));
+P = pillsFor(NIGHT, [rc("110", "MUELLER HANS")]);
+ck("legacy on: the ledger's departure tonight is a pill, dotted on the departing name", P.kind("110") === "dep" && P.dot("110"));
+ck("legacy on: the ledger's arrival tonight is a pill",                                P.kind("72") === "arr");
+ck("legacy on: a stay that is not tonight is not",                                     !P.has("65"));
+ck("legacy on: the store — which legacy never fills — is not read",                    !P.has("130"));
+ck("legacy on: the red mark's index is the ledger's",                                  P.leaving["110"] && P.leaving["110"][0] === "MUELLER HANS" && !P.leaving["130"]);
+store["reccheck_legacy"] = "0";
+P = pillsFor(NIGHT, []);
+ck("legacy off again: the store draws and the ledger does not",                        P.kind("130") === "dep" && !P.has("110") && !P.has("72"));
 
 console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");
 process.exit(bad ? 1 : 0);

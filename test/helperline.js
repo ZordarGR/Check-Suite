@@ -19,7 +19,10 @@
    So the press now asks `status`, which LOOKS FOR the resident's window — the one fact
    about the running helper that can be established from outside it — and the verdict is
    built on that answer. The version it prints is labelled for what it is: the exe on
-   disk that answered. Neither verb asks the resident its version.
+   disk that answered. Since helper v28 (1.17.43) `status` also reads the RESIDENT's
+   version off its own window's caption and prints it as a fourth field — so helper=
+   is back, meaning the process in memory, and only when that field arrived. A v27
+   helper prints three fields and the line says nothing about the resident's version.
 
    This drives the REAL main.js with electron and child_process stubbed, booting far
    enough for the config hub to exist, and lifts the two page functions by text, so the
@@ -50,7 +53,7 @@ const electron = {
 /* The helper as a fake process. `status` answers the way rc-tbind.exe does: the login
    entry, whether the RESIDENT's window was found, and the VERSION OF THE EXE ON DISK —
    because that is all the verb knows. `run` is the resident being started. */
-const HELPER = {ver: "v24", on: true, running: true, statusReply: null, runFails: false};
+const HELPER = {ver: "v24", on: true, running: true, statusReply: null, runFails: false, res: ""};   // res: the v28 fourth field, "" = a pre-v28 exe
 const spawned = [];
 const realCP = require("child_process");
 const fakeCP = Object.assign({}, realCP, {
@@ -65,7 +68,7 @@ const fakeCP = Object.assign({}, realCP, {
       }
       if(verb === "status"){
         const line = HELPER.statusReply !== null ? HELPER.statusReply
-          : "RCTBIND " + (HELPER.on ? "on" : "off") + " " + (HELPER.running ? "running" : "stopped") + " " + HELPER.ver + "\n";
+          : "RCTBIND " + (HELPER.on ? "on" : "off") + " " + (HELPER.running ? "running" : "stopped") + " " + HELPER.ver + (HELPER.res ? " " + HELPER.res : "") + "\n";
         if(line) c.stdout.emit("data", Buffer.from(line));
       }
       if(verb === "ping") c.stdout.emit("data", Buffer.from("RCTBIND OK " + HELPER.ver + "\n"));
@@ -122,10 +125,24 @@ async function press(){ spawned.length = 0; const h = await handlers["sc-helper"
   ck("the verdict is running", page.helperVerdict(h).key === "sc.hOk");
   let d = page.helperDetail(h);
   ck("the detail line names the exe's version, as the exe's", d.indexOf("exe=" + HELPER.ver) >= 0);
-  ck("and does not call it the helper in memory, which nothing here has asked",
+  ck("a three-field reply (a pre-v28 exe) says nothing about the helper in memory",
      d.indexOf("helper=") < 0);
   ck("and lists the binds", d.indexOf("binds=focus=PROT") >= 0);
   ck("and says the resident was found", d.indexOf("resident=up") >= 0);
+
+  /* 1b. helper v28: the status verb prints the RESIDENT's version as a fourth field */
+  HELPER.ver = "v28"; HELPER.res = "v28";
+  h = await press(); d = page.helperDetail(h);
+  ck("the fourth field arrives as the resident's version", h.res === "v28");
+  ck("and the line says helper=v28 — the process in memory, asked and answered", d.indexOf("helper=v28") >= 0 && d.indexOf("exe=v28") >= 0);
+  HELPER.res = "?";                                    // a v27 resident under a v28 exe: its caption carries no version
+  h = await press(); d = page.helperDetail(h);
+  ck("a resident older than v28 is said to be that, not given the exe's version", d.indexOf("helper=pre-v28") >= 0 && d.indexOf("helper=v28") < 0);
+  HELPER.res = "-";                                    // no resident window at all
+  h = await press(); d = page.helperDetail(h);
+  ck("no resident: no helper= claim", d.indexOf("helper=") < 0);
+  HELPER.ver = "v24"; HELPER.res = "";
+  await rebind();
 
   /* 2. RecCheck started the helper and it is gone by the time DEBUG is opened — the
         53 ms Split crash, or Windows shutting it down. `state` still says "started". */

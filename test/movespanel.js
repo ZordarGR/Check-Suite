@@ -37,6 +37,7 @@ const $ = sel => (sel === "#moves" ? moves : null);
 // ---- one store for both halves ----
 const store = {};
 const localStorage = { getItem: k => (k in store ? store[k] : null), setItem: (k,v) => store[k]=String(v), removeItem: k => { delete store[k]; } };
+store["reccheck_legacy"] = "0";                        // the automatic read is on
 
 // ---- the ledger, shaped like the real one — and no longer a source of pills ----
 store["reccheck_moves_v2"] = JSON.stringify({
@@ -79,6 +80,7 @@ const body = [elDecl, lift("dateNum"), lift("dShort"), lift("rKey"), lift("rStat
   "const effRoom = " + line(/^function effRoom\(r\)\{.*$/m).replace(/^function effRoom\(r\)/, "(r) =>") .replace(/^\(r\) =>\{/, "(r) => {"),
   lift("checkableList"), lift("sameName"),
   "const STATUS_KEY = \"reccheck_status_v1\";", lift("loadStatus"), lift("statusRows"), lift("pillRoom"),
+  "const LEGACY_KEY = \"reccheck_legacy\";", lift("legacyOn"), line(/^const MOVES_KEY = .*$/m), lift("loadMoves"), lift("ledgerMoves"), 
   lift("leavingIndex"), "let LEAVING = {};", lift("isLeaving"),
   lift("roomMoves"), lift("renderMovesFor"), lift("renderMoves"),
   "renderMoves(); return {classes: [...classes], root: moves};"].join("\n");
