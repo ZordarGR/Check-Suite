@@ -1,11 +1,11 @@
 {
-  "version": "1.17.39",
+  "version": "1.17.40",
   "type": "full",
-  "engine": "1.17.39",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.39/RecCheck-Setup.exe",
-  "setupSha256": "ac6c10b487ce0e2b799e14f0569153b7a722f39e42086d71893965ddac0aed4c",
+  "engine": "1.17.40",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.40/RecCheck-Setup.exe",
+  "setupSha256": "bb51ec0fcff1c3baa3ed4c2b36339b93a03cac312757be65782b2cbafd0a4313",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "ca98333d5457044fc6759cbac085143969095f33948546830b1a84def196411f",
-  "notes": "1.17.38 had been built and published but never merged, so no installed app could see it. This carries it, and what a check of it found.\n\nDEBUG's helper line now says what it can establish: the press asks the helper's status, which looks for the running helper's own window. Found means running; not found means crashed or stopped, and it says which. It used to print “Running — your bindings are live” from the moment the helper was started, whether or not it was still there. The version shown is labelled exe=, because it is the version of the file on disk that answered.\n\nThe line under the Tax Check no longer claims a list the tool refused. A capture that was cut short, or whose caption carried no date, is named as not taken, with the reason; a capture file that could not be read says so instead of saying protel opened nothing.\n\nThe helper (v25) reads a list that was shown before it had rows. In v24 a report opened empty was read once and never asked for again; the request is now placed before anything can discard it.\n\n“Already known” now means the ledger agreed with the report. A row the ledger refused while stating a different departure is counted as kept as the census had it. An empty room cell is a failed read, not a holding room, and every refusal of a report says why.\n\nThe release page on GitHub describes the release it belongs to; it had shown 1.17.14’s text since 1.17.14."
+  "sha256": "cfc4a5d358aa448ea83417a90138bdb2d635ccede8012b71c9fa894fba65efb7",
+  "notes": "A list opened again in protel is read again. Until now the helper read each list once per caption: the in-house list was whatever its first open of the day showed, and a moves window re-opened with a new row was not read. His decision of 05/09: a real open re-reads, the four-second cooldown stays, and a restatement of an open window's caption still does not."
 }
