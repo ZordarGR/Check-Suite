@@ -1,11 +1,11 @@
 {
-  "version": "1.17.35",
+  "version": "1.17.36",
   "type": "full",
-  "engine": "1.17.35",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.35/RecCheck-Setup.exe",
-  "setupSha256": "8a6e96654675810814e3cb3be2ae2140d9860426314f52a0a1fae5e35456ec13",
+  "engine": "1.17.36",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.36/RecCheck-Setup.exe",
+  "setupSha256": "0572c5bc3c352e24f308d6aaaf27d53b43293390c45835c0f70f7ef50dc74c39",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "cc22cfc5608b7cba06ef32731f8ee4eb7d739771cb06ca336b15e770b019da87",
-  "notes": "The tool is told now instead of asking. RecCheck's helper is already running and already watches protel's windows, so the moment you open the in-house list, the move window, the arrival report or the departure report it reads it there and then. Nothing polls protel any more.\n\nThat means a list you open for two seconds still lands — the rows are taken when the window opens, so they survive it closing. And the departure report is read when you open one, which is when it changes, rather than on any schedule.\n\nRoom moves are recorded too, but only the ones protel has put its X against. A move without one raises an alert instead, because protel will not show it either."
+  "sha256": "8631a7a76267f8815805f0e33be742f14e058782854a060651478fa88cfa08e6",
+  "notes": "The installation overlay shows RecCheck's own icon now, not the letter A — that was the Caps Lock glyph, reused by mistake.\n\nThe button that fetched the in-house list is gone. It was the experiment that proved the read worked; the helper now takes every list the moment protel opens it, so there is nothing left to press. The line beside it stays and says what was captured.\n\nAnd when a capture is refused it says which reason, instead of one vague message for all of them."
 }

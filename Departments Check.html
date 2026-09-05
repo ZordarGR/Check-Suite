@@ -982,7 +982,6 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
   </div>
 
   <div id="liveRow" style="display:none">
-    <button class="mini" id="liveRead"></button>
     <span class="legend" id="liveSay"></span>
   </div>
   <div class="slots">
@@ -1389,7 +1388,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.35";
+const APP_VERSION = "1.17.36";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -5563,12 +5562,11 @@ const I18N={
  en:{
   app_brand:"TA Check", app_rest:"— protel occupancy vs postings",
   app_sub:"Load the Rate Check (pre-EOD, who's in-house) and the Tax Check (post-EOD, what posted). The tool cross-references the night and flags what didn't post.",
-  live_read:"Read the in-house list from protel", live_reading:"reading protel\u2026",
   live_none:"Nothing came back. Open protel\u2019s in-house list \u2014 it does not have to be in front \u2014 and try again.",
   live_err:"protel said: ", live_got:"{0} of {1} rows \u2014 {2} rooms, {3} stays recorded for {4}. {5} messages, {6} ms.",
   live_cut:" Stopped early \u2014 protel was answering slowly.", live_cancel:" {0} cancelled row(s) ignored.",
   live_named:" {0} room(s) took their name from protel, uncut.",
-  live_idle:"protel\u2019s in-house list is not open \u2014 press to read it once it is.",
+  live_idle:"Nothing from protel yet \u2014 open its in-house list and it is taken as it goes past.",
   al_moveNoX:"Room move {0}\u2192{1} ({2}) has no X in protel \u2014 protel will not show it.",
   live_arr:"Arrival report {2}: {0} rows, {1} stays recorded.",
   live_dep:"Departure report {2}: {0} rows, {1} stays recorded.",
@@ -5630,12 +5628,11 @@ const I18N={
  el:{
   app_brand:"Έλεγχος ΤΑ", app_rest:"— πληρότητα protel vs καταχωρήσεις",
   app_sub:"Φόρτωσε το Rate Check (πριν το EOD, ποιοι είναι μέσα) και το Tax Check (μετά το EOD, τι καταχωρήθηκε). Το εργαλείο διασταυρώνει τη νύχτα και επισημαίνει ό,τι δεν μπήκε.",
-  live_read:"Διάβασε τη λίστα παραμονών από το protel", live_reading:"διαβάζει το protel…",
   live_none:"Δεν ήρθε τίποτα. Άνοιξε τη λίστα παραμονών του protel — δεν χρειάζεται να είναι μπροστά — και ξαναδοκίμασε.",
   live_err:"το protel είπε: ", live_got:"{0} από {1} γραμμές — {2} δωμάτια, {3} διαμονές για {4}. {5} μηνύματα, {6} ms.",
   live_cut:" Σταμάτησε νωρίς — το protel απαντούσε αργά.", live_cancel:" {0} ακυρωμένες γραμμές αγνοήθηκαν.",
   live_named:" {0} δωμάτια πήραν το όνομά τους από το protel, ακέραιο.",
-  live_idle:"Η λίστα παραμονών του protel δεν είναι ανοιχτή — πάτησε για ανάγνωση μόλις ανοίξει.",
+  live_idle:"Τίποτα από το protel ακόμη — άνοιξε τη λίστα παραμονών και θα ληφθεί καθώς περνάει.",
   al_moveNoX:"Η αλλαγή δωματίου {0}→{1} ({2}) δεν έχει X στο protel — το protel δεν θα τη δείξει.",
   live_arr:"Αφίξεις {2}: {0} γραμμές, {1} διαμονές καταγράφηκαν.",
   live_dep:"Αναχωρήσεις {2}: {0} γραμμές, {1} διαμονές καταγράφηκαν.",
@@ -6202,7 +6199,7 @@ document.addEventListener('keydown',e=>{
 });
 
 /* ============ language ============ */
-function applyStatic(){el('apptitle').innerHTML='<span>'+t('app_brand')+'</span> '+t('app_rest');document.querySelectorAll('[data-i18n]').forEach(e=>{e.textContent=t(e.getAttribute('data-i18n'));});el('memhint').textContent=t('mem_hint');el('foot').textContent=t('foot');try{ if(el('liveRead')) el('liveRead').textContent=t('live_read'); }catch(e){}}
+function applyStatic(){el('apptitle').innerHTML='<span>'+t('app_brand')+'</span> '+t('app_rest');document.querySelectorAll('[data-i18n]').forEach(e=>{e.textContent=t(e.getAttribute('data-i18n'));});el('memhint').textContent=t('mem_hint');el('foot').textContent=t('foot');}
 function setLang(l){LANG=l;try{localStorage.setItem('ta_lang',l);}catch(e){}applyStatic();render();}
 
 /* ============ file loading ============ */
@@ -6612,29 +6609,23 @@ function recordMoves(rows, night){
   try{ if(wrote) render(); }catch(e){}
   return wrote;
 }
-async function readInhouseLive(auto){
-  const btn = el('liveRead'), say = el('liveSay');
-  if(!window.reccheckShortcuts || !window.reccheckShortcuts.inhouse || btn.disabled) return;
-  btn.disabled = true;
-  /* Only a read he PRESSED says "reading protel…". An automatic one that finds the list
-     unchanged returns before any result text is written, which left this word on screen
-     for the rest of the shift. */
-  if(!auto) say.textContent = t('live_reading');
-  const txt = await window.reccheckShortcuts.inhouse(400).catch(() => null);
-  btn.disabled = false;
-  return applyInhouse(txt ? parseInhouse(txt) : null, auto);
-}
 /* The half that turns a parsed list into what the tool holds, kept separate from the half
    that fetched it: the rows now arrive two ways — spawned on demand when he presses the
    button, and captured by the resident helper the moment protel opened the window. Both
    must land in exactly the same place, so there is one of these and not two. */
 function applyInhouse(p, auto){
+  /* Every read is automatic now — the button is gone. `auto` is kept because the same
+     function still serves anything that wants the loud form, and because a silent
+     parameter that is always one value is worse than one that says so. */
   const say = el('liveSay');
-  /* An automatic read that found nothing gets a quiet line, not the full explanation:
-     the in-house list not being open is the NORMAL state when the screen asked on its
-     own. A read he pressed for still says exactly what happened. */
-  const quiet = (m) => { say.textContent = auto ? t('live_idle') : m; LIVE_SIG = ""; };
-  if(!p){ quiet(t('live_none')); return; }
+  /* SAY THE ACTUAL REASON. This used to collapse every failure into one calm line, on the
+     grounds that an unattended read finding nothing is normal and should not shout. That
+     was right about the shouting and wrong about the content: "the list is not open" shown
+     when the real trouble was a caption with no date in it is a wrong answer, and the line
+     is a line — it interrupts nothing. Nothing came back is the only case that is genuinely
+     ordinary, and it is the only one that says so. */
+  const quiet = (m) => { say.textContent = m; LIVE_SIG = ""; };
+  if(!p){ quiet(t('live_idle')); return; }
   if(p.err){ quiet(t('live_err') + p.err); return; }
   if(!p.rows.length){ quiet(t('live_none')); return; }
   if(!isInhouseTitle(p.title)){ quiet(t('live_wrong', p.title || '?')); return; }
@@ -6686,13 +6677,17 @@ async function loadRate(file){clearErr();el('fn-rate').textContent=file?file.nam
 async function loadTax(file){clearErr();el('fn-tax').textContent=file?file.name:'';if(!file)return;try{const pages=await readOxps(file);const tokens=pagesToTokens(pages);const r=parseTax(tokens);if(!r.totalRooms){showErr(t('err_norooms'));return;}TAX=r;PAIR_OVERRIDE=null;ADJ_OPEN_OVERRIDE=null;ingestTax(r);if(r.fileDate)EXPANDED.add(r.fileDate);el('slot-tax').classList.add('loaded');render();}catch(e){showErr(e.message==='notxps'?t('err_notxps'):t('err_read')+e.message);}}
 /* Only where there is a helper to ask. In a browser, or on a machine without it, the row
    is not there at all rather than there and dead. */
+/* The button that used to sit here is gone, on his word: "when im asking for auto-scanning
+   i am thinking of the button which prompts the tool to retrieve the inhouse list to be
+   out since that was an expirimental way of seeing if this would work". It was the
+   experiment that proved the read worked at all; the helper now captures every list the
+   moment protel opens it, so there is nothing left to press.
+
+   The LINE stays, and is the only thing on screen that says the feeding is alive: it
+   reports each capture as it lands. */
 let LIVE_OK = false;
 try{
-  if(window.reccheckShortcuts && window.reccheckShortcuts.inhouse){
-    LIVE_OK = true;
-    el('liveRead').textContent = t('live_read');
-    el('liveRead').addEventListener('click', () => readInhouseLive(false));
-  }
+  if(window.reccheckShortcuts && window.reccheckShortcuts.listFile) LIVE_OK = true;
 }catch(e){}
 el('file-rate').addEventListener('change',e=>loadRate(e.target.files[0]));
 el('file-tax').addEventListener('change',e=>loadTax(e.target.files[0]));

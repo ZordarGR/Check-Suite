@@ -246,6 +246,8 @@ static class TBind {
   const int  SPLASH_STEP_MS = 40;                // one frame
   const int  SPLASH_SWEEP = 70;                  // degrees of arc that travel
   const int  AD_CLOCKWISE = 2;
+  const uint IMAGE_ICON = 1, LR_DEFAULTCOLOR = 0, DI_NORMAL = 3;
+  const int  SPLASH_ICON = 120;                  // fits inside the ring, corner to corner
   const byte CAPS_ALPHA = 89;               // 35% of 255, the spec
   const uint CAPS_KEY   = 0x00FF00FF;       // colour-keyed away; never drawn by the glyph
   const uint CAPS_DARK  = 0x00161210;       // COLORREF is 0x00BBGGRR -> #101216
@@ -332,6 +334,9 @@ static class TBind {
   [DllImport("gdi32.dll")] static extern bool Arc(IntPtr hdc, int l, int t, int r, int b, int xs, int ys, int xe, int ye);
   [DllImport("gdi32.dll")] static extern bool Ellipse(IntPtr hdc, int l, int t, int r, int b);
   [DllImport("gdi32.dll")] static extern int SetArcDirection(IntPtr hdc, int dir);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr LoadImage(IntPtr inst, string name, uint type, int cx, int cy, uint load);
+  [DllImport("user32.dll")] static extern bool DrawIconEx(IntPtr hdc, int x, int y, IntPtr icon, int cx, int cy, uint step, IntPtr brush, uint flags);
+  [DllImport("user32.dll")] static extern bool DestroyIcon(IntPtr icon);
   [DllImport("gdi32.dll")] static extern IntPtr GetStockObject(int i);
   [DllImport("gdi32.dll")] static extern IntPtr ExtCreatePen(uint style, uint width, ref LOGBRUSH lb, uint n, IntPtr a);
   [DllImport("gdi32.dll")] static extern IntPtr SelectObject(IntPtr hdc, IntPtr obj);
@@ -1126,17 +1131,8 @@ static class TBind {
   static bool splashSawGone = false;
   static bool splashBack = false, splashDone = false;
   static int splashBackMs = 0, splashPollMs = 0, splashTotalMs = 0;
+  static IntPtr splashIcon = IntPtr.Zero;      // loaded once, not per frame
   static WndProcD keepSplashProc;
-  static CPOINT[] SplashGlyph(){
-    CPOINT[] g = new CPOINT[GLYPH.Length];
-    for(int i = 0; i < GLYPH.Length; i++){
-      CPOINT p = new CPOINT();
-      p.x = GLYPH[i].x + SPLASH_DX;
-      p.y = GLYPH[i].y + SPLASH_DY;
-      g[i] = p;
-    }
-    return g;
-  }
   static void SplashPaint(){
     PAINTSTRUCT ps;
     IntPtr hdc = BeginPaint(splashWnd, out ps);
@@ -1180,19 +1176,25 @@ static class TBind {
       int ye = SPLASH_CY - (int)(SPLASH_R * Math.Sin(a1));
       Arc(hdc, l, t, r, b, xs, ys, xe, ye);
 
-      /* the icon, the same two passes as the caps window and for the same reason: GDI
-         strokes on top of its fill, which would close the counter of the A. */
-      CPOINT[] g = SplashGlyph();
-      white = CreateSolidBrush(CAPS_WHITE);
-      lb.lbColor = CAPS_WHITE;
-      IntPtr pen = ExtCreatePen(PS_GEOMETRIC | PS_SOLID, 9, ref lb, 0, IntPtr.Zero);
-      SetPolyFillMode(hdc, ALTERNATE);
-      SelectObject(hdc, pen);
-      SelectObject(hdc, white);
-      PolyPolygon(hdc, g, GLYPH_N, 2);
-      SelectObject(hdc, GetStockObject(NULL_PEN));
-      SelectObject(hdc, back);
-      PolyPolygon(hdc, g, GLYPH_N, 2);
+      /* HIS ICON, not a letter.
+
+         The first cut drew the Caps Lock indicator's glyph -- a capital A -- because the
+         comment beside it mentions "the app's icon". That comment is about the DRAWING
+         TECHNIQUE (stroke behind fill, the way the icon's SVG does it), not about the
+         shape, and I read it as licence without looking. RecCheck's icon is a receipt.
+         He saw the A on the first install and asked what it was doing there.
+
+         So the real thing is blitted instead of approximated: the .ico is embedded in this
+         exe at build time, LoadImage picks the size closest to what is wanted out of the
+         group and scales it, and DrawIconEx composites it over the disc already drawn. If
+         it cannot be loaded the ring is drawn alone -- an honest empty middle beats a
+         wrong picture. */
+      if(splashIcon == IntPtr.Zero)
+        try{ splashIcon = LoadImage(GetModuleHandle(null), "#32512", IMAGE_ICON,
+                                    SPLASH_ICON, SPLASH_ICON, LR_DEFAULTCOLOR); }catch(Exception){}
+      if(splashIcon != IntPtr.Zero)
+        try{ DrawIconEx(hdc, SPLASH_CX - SPLASH_ICON / 2, SPLASH_CY - SPLASH_ICON / 2,
+                        splashIcon, SPLASH_ICON, SPLASH_ICON, 0, IntPtr.Zero, DI_NORMAL); }catch(Exception){}
       /* Everything must be OUT of the DC before the finally deletes it. GDI silently
          refuses to delete an object that is still selected, and this paints 25 times a
          second for as long as the install takes -- one leaked brush per frame walks into
@@ -1200,7 +1202,6 @@ static class TBind {
          the overlay quietly falls apart. */
       SelectObject(hdc, GetStockObject(NULL_PEN));
       SelectObject(hdc, GetStockObject(NULL_BRUSH_));
-      if(pen != IntPtr.Zero) DeleteObject(pen);
     }catch(Exception){
     }finally{
       if(track    != IntPtr.Zero) DeleteObject(track);
@@ -2531,7 +2532,7 @@ static class TBind {
     }catch(Exception){}
   }
 
-  const string VER = "v21";
+  const string VER = "v22";
 
   static int Main(string[] args){
     int parentPid;

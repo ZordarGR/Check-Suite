@@ -58,9 +58,11 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
     await p.waitForTimeout(150);
     return p;
   };
-  const press = async (p) => {
-    await p.click("#liveRead");
-    await p.waitForTimeout(300);
+  /* There is no button any more — his word: it "was an expirimental way of seeing if this
+     would work". A capture arriving is what used to be a press, so that is what these
+     drive: the file appears, the page collects it, and the line says what happened. */
+  const settle = async (p) => {
+    await p.waitForTimeout(1200);
     return p.evaluate(() => ({
       say: document.getElementById("liveSay").textContent,
       led: localStorage.getItem("reccheck_moves_v2") || ""
@@ -68,8 +70,16 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
   };
 
   /* 1. no helper at all -- the row is not there, rather than there and dead */
-  let p = await open(null);
-  ck("with no bridge the live row is hidden",
+  let p = await b.newPage();
+  await p.addInitScript(`window.reccheckShortcuts={
+    get:()=>Promise.resolve({profiles:[],active:null,available:true}),
+    helper:()=>Promise.resolve({state:"started"})};
+    try{ localStorage.setItem("reccheck_legacy","0"); }catch(e){}`);
+  await p.setViewportSize({width: 1280, height: 620});
+  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
+  await p.waitForTimeout(400);
+  await p.evaluate(() => window.__t.showScreen("tax"));
+  ck("with nothing to collect from, the live row is hidden",
      await p.evaluate(() => getComputedStyle(document.getElementById("liveRow")).display === "none"));
   await p.close();
 
@@ -87,7 +97,7 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
      await p.evaluate(() => getComputedStyle(document.getElementById("liveRow")).display !== "none"));
   ck("and the Rate Check slot is hidden",
      await p.evaluate(() => getComputedStyle(document.getElementById("slot-rate")).display === "none"));
-  let r = await press(p);
+  let r = await settle(p);
   ck("the in-house list is recorded", /2 rooms|2 δωμ/.test(r.say) || r.led.indexOf("426") >= 0);
   ck("and both rooms reach the ledger",
      r.led.indexOf('"426"') >= 0 && r.led.indexOf('"414"') >= 0);
@@ -105,7 +115,7 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
 
   /* 3. the arrival list, restored -- the caption he actually got that night */
   p = await open(IH("Kernos Hotel, GR-70007 Malia       protel Hotel Management Suite 2024", ROWS));
-  r = await press(p);
+  r = await settle(p);
   ck("the bare frame caption is refused", /not the in-house|δεν είναι η λίστα/i.test(r.say));
   ck("and the ledger is untouched", r.led === "");
   ck("and no name was written either",
@@ -113,14 +123,14 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
   await p.close();
 
   p = await open(IH("Arrival list 04/09/26", ROWS));
-  r = await press(p);
+  r = await settle(p);
   ck("a named arrival list is refused too", /not the in-house|δεν είναι η λίστα/i.test(r.say));
   ck("with the ledger untouched", r.led === "");
   await p.close();
 
   /* 4. the right list with no date in its caption -- no night to file it under */
   p = await open(IH("Guests inhouse", ROWS));
-  r = await press(p);
+  r = await settle(p);
   ck("no date means nothing is recorded", /no date|ημερομηνία/i.test(r.say) && r.led === "");
   await p.close();
 
@@ -199,14 +209,12 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
   await p.waitForTimeout(1500);
   ck("a cut-short capture writes NOTHING",
      await p.evaluate(() => !localStorage.getItem("reccheck_moves_v2")));
-  /* but he can still force one by hand, where the line tells him what he is looking at */
-  await p.evaluate(() => window.__t.showScreen("tax"));
-  await p.click("#liveRead");
-  await p.waitForTimeout(600);
-  ck("a read he PRESSED still goes through",
+  /* and a complete one arriving after it is taken normally */
+  await p.evaluate((txt) => { window.__files.IH = txt; window.__at.IH = 9; },
+                   IH("Guests inhouse: 04/09/26", ROWS));
+  await p.waitForTimeout(7000);
+  ck("a complete capture after it still lands",
      (await p.evaluate(() => localStorage.getItem("reccheck_moves_v2") || "")).indexOf('"426"') >= 0);
-  ck("and warns him it stopped early",
-     /stopped early|σταμάτησε νωρίς/i.test(await p.evaluate(() => document.getElementById("liveSay").textContent)));
   await p.close();
 
   /* 10. collecting must not throw away a decision he made by clicking */
@@ -224,11 +232,6 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
      (await p.evaluate(() => localStorage.getItem("reccheck_moves_v2") || "")).indexOf('"201"') >= 0);
   ck("and his pairing decision survived it",
      await p.evaluate(() => !!(window.__tx.getPair() && window.__tx.getPair().mine)));
-  await p.evaluate(() => window.__t.showScreen("tax"));
-  await p.click("#liveRead");
-  await p.waitForTimeout(600);
-  ck("but pressing the button still clears it",
-     await p.evaluate(() => window.__tx.getPair() === null));
   await p.close();
 
   /* 11. THE ARRIVAL AND DEPARTURE REPORTS, captured the same way.

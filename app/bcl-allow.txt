@@ -171,6 +171,8 @@ CtrlText
 cur
 CurMods
 CurrentUser
+cx
+cy
 D
 DateTime
 DefWindowProc
@@ -180,6 +182,8 @@ DeleteValue
 DepCols
 Depth
 Describe
+DestroyIcon
+DI_NORMAL
 DIAG
 Dictionary`2
 dir
@@ -188,6 +192,7 @@ DirectoryInfo
 DispatchMessage
 Dispose
 down
+DrawIconEx
 dwExtraInfo
 dwFlags
 dx
@@ -347,6 +352,7 @@ hwndMenuOwner
 hwndMoveSize
 i
 IAsyncResult
+icon
 id
 idAttach
 idAttachTo
@@ -366,6 +372,7 @@ IhCols
 ihFound
 ihList
 ihPids
+IMAGE_ICON
 InArray
 IndexOf
 inherit
@@ -429,7 +436,9 @@ ListPick
 ListUnder
 LLKHF_INJECTED
 LLMHF_INJECTED
+load
 LoadBinds
+LoadImage
 LoadKeyboardLayout
 LogBlocked
 LOGBRUSH
@@ -438,6 +447,7 @@ lParam
 lpfnWndProc
 lpszClassName
 lpszMenuName
+LR_DEFAULTCOLOR
 lv
 LVM_GETHEADER
 LVM_GETITEMCOUNT
@@ -653,6 +663,7 @@ SPLASH_CY
 SPLASH_DX
 SPLASH_DY
 SPLASH_H
+SPLASH_ICON
 SPLASH_PEN
 SPLASH_R
 SPLASH_STEP_MS
@@ -663,7 +674,7 @@ splashAngle
 splashBack
 splashBackMs
 splashDone
-SplashGlyph
+splashIcon
 splashLeftMs
 SplashPaint
 SplashPollDue
