@@ -54,6 +54,17 @@ class SplashTest {
       Ck(label + " (ended " + when + ")", at >= seconds * 1000 - 2000 && at <= seconds * 1000 + 500);
     }
   }
+  /* is `need[from..from+len]` anywhere in `hay`? */
+  static bool Contains(byte[] hay, byte[] need, int from, int len){
+    if(from + len > need.Length) len = need.Length - from;
+    if(len <= 0) return false;
+    for(int i = 0; i + len <= hay.Length; i++){
+      int j = 0;
+      while(j < len && hay[i+j] == need[from+j]) j++;
+      if(j == len) return true;
+    }
+    return false;
+  }
   static void Main(string[] a){
     T = Assembly.LoadFrom(a[0]).GetType("TBind");
     int W = C("SPLASH_W"), H = C("SPLASH_H");
@@ -67,37 +78,35 @@ class SplashTest {
     Ck("and does not sit right on the edge",         W/2 - (r + pen/2) >= 4);
     Ck("the ring has room inside it for the icon",   r - pen > 60);
 
-    /* the glyph is authored for the 170px caps window and moved into this bigger one */
-    MethodInfo m = T.GetMethod("SplashGlyph", BindingFlags.NonPublic | BindingFlags.Static);
-    if(m == null){ Console.WriteLine("  FAIL  no SplashGlyph"); bad++; }
-    else {
-      Array g = (Array)m.Invoke(null, new object[0]);
-      Array src = (Array)T.GetField("GLYPH", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
-      Ck("every point is carried over",              g.Length == src.Length);
-      int minx = int.MaxValue, maxx = int.MinValue, miny = int.MaxValue, maxy = int.MinValue;
-      Type P = g.GetValue(0).GetType();
-      FieldInfo fx = P.GetField("x"), fy = P.GetField("y");
-      for(int i = 0; i < g.Length; i++){
-        object p = g.GetValue(i);
-        int x = Convert.ToInt32(fx.GetValue(p)), y = Convert.ToInt32(fy.GetValue(p));
-        if(x < minx) minx = x; if(x > maxx) maxx = x;
-        if(y < miny) miny = y; if(y > maxy) maxy = y;
-      }
-      /* centred to within a pixel: the glyph's own extent is odd on one axis */
-      Ck("the icon is centred left to right",        Math.Abs((minx + maxx)/2 - cx) <= 1);
-      Ck("the icon is centred top to bottom",        Math.Abs((miny + maxy)/2 - cy) <= 1);
-      /* and clears the ring's inner edge, or the A touches the donut */
-      int inner = r - pen/2;
-      int far = 0;
-      for(int i = 0; i < g.Length; i++){
-        object p = g.GetValue(i);
-        int dx = Convert.ToInt32(fx.GetValue(p)) - cx, dy = Convert.ToInt32(fy.GetValue(p)) - cy;
-        int d = (int)Math.Sqrt(dx*dx + dy*dy);
-        if(d > far) far = d;
-      }
-      Ck("the icon clears the ring's inner edge",    far < inner - 4);
-      Ck("and is not lost inside it",                far > inner / 3);
+    /* HIS ICON GOES IN THE MIDDLE, not a letter. The first cut drew the Caps Lock glyph --
+       a capital A -- and he asked what it was doing there. The picture cannot be checked
+       without Windows, but three things about it can: that the exe actually carries an
+       icon to blit, that the size asked for fits inside the ring, and that the old glyph
+       is gone rather than merely unused. */
+    int icon = C("SPLASH_ICON");
+    Ck("the icon is asked for at a real size",        icon >= 64 && icon <= 200);
+    /* the ring's inner edge is r - pen/2; a square inscribed in that circle has side
+       inner * sqrt(2), and the icon must sit inside it corner to corner */
+    double inner = r - pen / 2.0;
+    Ck("and fits inside the ring, corner to corner",  icon <= inner * 1.414);
+    Ck("with room to spare",                          icon < inner * 2 - 8);
+    Ck("the Caps Lock letter is gone, not just unused",
+       T.GetMethod("SplashGlyph", BindingFlags.NonPublic | BindingFlags.Static) == null);
+
+    /* the .ico really is embedded: its largest image must appear verbatim in the exe */
+    byte[] exe = System.IO.File.ReadAllBytes(a[0]);
+    byte[] ico = System.IO.File.ReadAllBytes(System.IO.Path.Combine(
+                   System.IO.Path.GetDirectoryName(a[0]), "reccheck.ico"));
+    int n = ico[4] | (ico[5] << 8), bestW = 0, bestOff = 0, bestSize = 0;
+    for(int i = 0; i < n; i++){
+      int off = 6 + i * 16;
+      int w = ico[off] == 0 ? 256 : ico[off];
+      int size = ico[off+8] | (ico[off+9]<<8) | (ico[off+10]<<16) | (ico[off+11]<<24);
+      int at   = ico[off+12] | (ico[off+13]<<8) | (ico[off+14]<<16) | (ico[off+15]<<24);
+      if(w > bestW){ bestW = w; bestOff = at; bestSize = size; }
     }
+    Ck("the icon file has a large image (" + bestW + "px)", bestW >= 128);
+    Ck("and it is embedded in the helper", Contains(exe, ico, bestOff, 4096));
 
     /* the palette is the update button's, stated as COLORREF 0x00BBGGRR */
     Ck("the disc is #101d33",                        U("SPLASH_BACK")  == 0x00331D10);
