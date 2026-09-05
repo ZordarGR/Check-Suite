@@ -1,11 +1,11 @@
 {
-  "version": "1.17.36",
+  "version": "1.17.37",
   "type": "full",
-  "engine": "1.17.36",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.36/RecCheck-Setup.exe",
-  "setupSha256": "0572c5bc3c352e24f308d6aaaf27d53b43293390c45835c0f70f7ef50dc74c39",
+  "engine": "1.17.37",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.37/RecCheck-Setup.exe",
+  "setupSha256": "32d97b88da8a1947e9b1f739ba1fff2a9329064389bb7bbb1a845bc3883ca86b",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "8631a7a76267f8815805f0e33be742f14e058782854a060651478fa88cfa08e6",
-  "notes": "The installation overlay shows RecCheck's own icon now, not the letter A — that was the Caps Lock glyph, reused by mistake.\n\nThe button that fetched the in-house list is gone. It was the experiment that proved the read worked; the helper now takes every list the moment protel opens it, so there is nothing left to press. The line beside it stays and says what was captured.\n\nAnd when a capture is refused it says which reason, instead of one vague message for all of them."
+  "sha256": "e895d9e80ef10c2ba7cd72b4f65a2f18e610c8109e860e708be621e7baf856c7",
+  "notes": "The window watcher could go deaf and stay deaf. After four thousand protel windows in one run it stopped logging AND stopped reading lists, for as long as the helper was up — and the 07:00 reset could no longer reach it. Nothing was captured after that, with an empty watch log as the only sign.\n\nThe room panel now redraws when a captured list writes the ledger. It was only ever drawn when a department report was loaded, so a departure report opened in protel afterwards changed nothing on screen.\n\nThe live line says which list it is talking about — the newest capture now has the last word instead of whichever came last in the list — and what actually happened to the rows: how many were read, how many were usable, and how many were new, corrected or already known. \"0 stays recorded\" used to mean both a clean report the ledger already agreed with and a write that failed.\n\nRows that are dropped say why. \"Holding-room rows ignored\" was one count covering three different reasons, only one of which is a holding room.\n\nDEBUG stops claiming the shift was quiet when it does not know that. The helper writes a line naming what it is watching, including when it is watching nothing."
 }
