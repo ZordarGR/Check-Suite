@@ -59,7 +59,7 @@ function pillsFor(reportDate, receipts){
     lift("checkableList"), lift("sameName"),
     "const STATUS_KEY = \"reccheck_status_v1\";", lift("loadStatus"), lift("statusRows"), lift("pillRoom"),
     "const LEGACY_KEY = \"reccheck_legacy\";", lift("legacyOn"), line(/^const MOVES_KEY = .*$/m), lift("loadMoves"), lift("ledgerMoves"), 
-    lift("leavingIndex"), "let LEAVING = {};", lift("isLeaving"),
+    lift("dateNum2"), lift("prevNightKey"), "const RECEIPTS_KEY = \"reccheck_receipts_v1\"; const RECEIPTS_KEEP = 60;", lift("loadNightReceipts"), lift("saveNightReceipts"), lift("leavingIndex"), "let LEAVING = {};", lift("isLeaving"),
     lift("roomMoves"), lift("renderMovesFor"), lift("renderMoves"),
     "renderMoves(); return {classes: [...classes], root: moves, leaving: leavingIndex(), isLeaving: isLeaving, LEAVING: LEAVING};"].join("\n");
   const fn = new Function("document", "$", "localStorage", "MODEL", "STATE", "t", "classes", "moves", body);
@@ -215,6 +215,32 @@ ck("a voided receipt does not dot",                                       !P.dot
 ck("a turnover with only the NEW guest's receipt is not dotted",          !P.dot("120"));
 P = pillsFor(NIGHT, [rc("111", "MUELLER HANS")]);
 ck("the departing name on another room does not dot the departure",      !P.dot("110"));
+
+console.log("--- 5b. the dot over the whole stay — his word: \"any of the days of their stay\"");
+/* MUELLER arrived 26/08 (the departure list says so). A report loaded on an earlier night
+   of the stay carried a receipt on 110 under his name; tonight's report carries none. */
+const nights = JSON.parse(store["reccheck_receipts_v1"] || "{}");
+ck("each night's report leaves its room+name pairs behind, keyed by the night", Array.isArray(nights["20260904"]) && nights["20260904"].some(p => p[0] === "111" && p[1] === "MUELLER HANS"));
+ck("and no amounts or serials", nights["20260904"].every(p => p.length === 2));
+nights["20260901"] = [["110", "MUELLER HANS"]];                         // an earlier night of the stay
+nights["20260825"] = [["116", "SCHAFERL"]];                              // the night BEFORE SCHAFERL arrived (26/08)
+nights["20260902"] = [["116", "SOMEONE ELSE"]];                          // another name on 116
+nights["20260903"] = [["505", "VASSILIEV"]];                             // the moved guest, the night he arrived (03/09), on the room he took
+store["reccheck_receipts_v1"] = JSON.stringify(nights);
+P = pillsFor(NIGHT, []);
+ck("a receipt on an earlier night of the stay, under the departing name, dots the departure", P.dot("110"));
+ck("a receipt the night before the stay began does not",                                   !P.dot("116"));
+ck("a receipt under another name during the stay does not",                                !P.dot("116"));
+ck("the moved reservation's receipt on an earlier night dots the move",                   P.dot("505"));
+ck("an arrival is still never dotted",                                                     !P.dot("337"));
+ck("tonight's pairs were rewritten from tonight's report — the old 111 pair is gone",      !(JSON.parse(store["reccheck_receipts_v1"])["20260904"] || []).length);
+/* a night whose report was never loaded is unknown, not empty: only loaded nights are keys */
+ck("nights never loaded here are simply absent",                                           !("20260830" in JSON.parse(store["reccheck_receipts_v1"])));
+/* the memory is bounded */
+const old = JSON.parse(store["reccheck_receipts_v1"]); old["20260601"] = [["1", "X"]]; old["junk"] = 1; store["reccheck_receipts_v1"] = JSON.stringify(old);
+P = pillsFor(NIGHT, []);
+const kept = JSON.parse(store["reccheck_receipts_v1"]);
+ck("a night older than sixty is pruned, and a key that is not a night", !("20260601" in kept) && !("junk" in kept) && ("20260901" in kept));
 
 console.log("--- 6. legacy mode: nothing is captured, so the XPS-fed ledger draws, as before 1.17.42");
 for(const k of Object.keys(store)) delete store[k];

@@ -1431,7 +1431,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.43";
+const APP_VERSION = "1.17.44";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1609,7 +1609,7 @@ en: {
   "mv.title": "ROOM MOVEMENTS",
   "mv.dep": "left today", "mv.arr": "arrived today", "mv.turn": "left and re-let same day",
   "mv.move": "moved in from another room today — not a new arrival",
-  "mv.rec": "has receipts in tonight's report",
+  "mv.rec": "has receipts during this stay (in the reports loaded here)",
   "mv.h.dep": "DEPARTED", "mv.h.arr": "ARRIVED", "mv.h.turn": "TURNOVER", "mv.h.move": "MOVED",
   "mv.guess": "occupant changed — inferred",
   "mv.from": "from the rate list of {d}",
@@ -1844,7 +1844,7 @@ gr: {
   "mv.title": "ΚΙΝΗΣΕΙΣ ΔΩΜΑΤΙΩΝ",
   "mv.dep": "αναχώρησε σήμερα", "mv.arr": "άφιξη σήμερα", "mv.turn": "έφυγε και ξαναδόθηκε την ίδια μέρα",
   "mv.move": "μετακόμισε από άλλο δωμάτιο σήμερα — δεν είναι νέα άφιξη",
-  "mv.rec": "έχει αποδείξεις στην αποψινή αναφορά",
+  "mv.rec": "έχει αποδείξεις στη διάρκεια της διαμονής (στις αναφορές που φορτώθηκαν εδώ)",
   "mv.h.dep": "ΑΝΑΧΩΡΗΣΑΝ", "mv.h.arr": "ΑΦΙΞΕΙΣ", "mv.h.turn": "ΑΛΛΑΓΗ", "mv.h.move": "ΜΕΤΑΚΙΝΗΣΕΙΣ",
   "mv.guess": "άλλαξε ο ένοικος — εκτίμηση",
   "mv.from": "από τη λίστα δωματίων της {d}",
@@ -2123,6 +2123,14 @@ window.__rcMovesChanged = function(){
 function dateNum(d){
   const m = String(d || "").match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   return m ? (+m[3]) * 10000 + (+m[2]) * 100 + (+m[1]) : 0;
+}
+/* protel's list cells print dd/mm/yy; the department report prints dd/mm/yyyy. Both to
+   the same yyyymmdd number, or 0. */
+function dateNum2(d){
+  const m = String(d || "").trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if(!m) return 0;
+  const y = m[3].length === 2 ? 2000 + (+m[3]) : (+m[3]);
+  return y * 10000 + (+m[2]) * 100 + (+m[1]);
 }
 /* the calendar day before, right across month and year ends */
 function prevNightKey(k){
@@ -5039,6 +5047,30 @@ function statusRows(st, tag, night){
   const d = st && st[tag] && st[tag][String(night)];
   return (d && d.rows && typeof d.rows === "object") ? Object.keys(d.rows).map(k => d.rows[k]) : [];
 }
+/* WHO HAD A RECEIPT ON WHICH NIGHT — the room and guest name of every live receipt in each
+   department report loaded here, by the report's night, so the dot can look back over a
+   stay. Written each time the panel draws for a night (replacing that night: a receipt
+   voided or re-roomed later that night is not kept as it was), kept for 60 nights, and
+   it holds no amounts or serials. The dot's memory and nothing else reads it. */
+const RECEIPTS_KEY = "reccheck_receipts_v1";
+const RECEIPTS_KEEP = 60;
+function loadNightReceipts(){
+  try{ const o = JSON.parse(localStorage.getItem(RECEIPTS_KEY) || "{}"); return (o && typeof o === "object" && !Array.isArray(o)) ? o : {}; }
+  catch(e){ return {}; }
+}
+function saveNightReceipts(night, pairs){
+  try{
+    const o = loadNightReceipts();
+    const seen = new Set(), rows = [];
+    for(const p of pairs){ const k = p[0] + "|" + p[1]; if(!seen.has(k)){ seen.add(k); rows.push([p[0], p[1]]); } }
+    let changed = JSON.stringify(o[String(night)] || null) !== JSON.stringify(rows);
+    o[String(night)] = rows;
+    let cut = night;
+    for(let i = 0; i < RECEIPTS_KEEP; i++) cut = prevNightKey(cut);
+    for(const k of Object.keys(o)) if(!/^\d{8}$/.test(k) || +k < cut){ delete o[k]; changed = true; }
+    if(changed) localStorage.setItem(RECEIPTS_KEY, JSON.stringify(o));   // an unchanged night writes nothing
+  }catch(e){}
+}
 function pillRoom(cell){
   const m = String(cell || "").trim().match(/^(\d{2,3})(?!\d)/);   // the lead room of "414-15"; not 9000
   return m ? m[1] : "";
@@ -5052,10 +5084,12 @@ function roomMoves(nightArg){
   if(legacyOn()) return ledgerMoves(night);
   const st = loadStatus();
   const acc = {};
-  const slot = room => (acc[room] = acc[room] || {arr: false, dep: false, move: null, who: [], names: {dep: [], move: []}});
+  const slot = room => (acc[room] = acc[room] || {arr: false, dep: false, move: null, who: [], names: {dep: [], move: []}, since: 0});
+  /* the reservation's own arrival, so the dot can look back over the whole stay */
+  const sinceOf = (o, cell) => { const k = dateNum2(cell); if(k && (!o.since || k < o.since)) o.since = k; };
   for(const r of statusRows(st, "DP", night)){
     const room = pillRoom(r.room); if(!room) continue;
-    const o = slot(room); o.dep = true; o.names.dep.push(r.name || "");
+    const o = slot(room); o.dep = true; o.names.dep.push(r.name || ""); sinceOf(o, r.arr);
     if(r.name) o.who.push("\u2190 " + r.name);
   }
   for(const r of statusRows(st, "AR", night)){
@@ -5066,7 +5100,7 @@ function roomMoves(nightArg){
   for(const r of statusRows(st, "MV", night)){
     if(!String(r.x || "").trim()) continue;                // protel has not marked it — not a move it shows
     const to = pillRoom(r.to), from = pillRoom(r.from); if(!to || !from || to === from) continue;
-    const o = slot(to); o.move = from; o.names.move.push(r.name || "");
+    const o = slot(to); o.move = from; o.names.move.push(r.name || ""); sinceOf(o, r.arr);
     if(r.name) o.who.push("\u21b3 " + r.name + "  (" + from + " \u2192 " + to + ")");
   }
   for(const room of Object.keys(acc)){
@@ -5074,7 +5108,7 @@ function roomMoves(nightArg){
     if(!arrived && !o.dep) continue;
     /* a room that departed and was arrived into again is a turnover — the louder fact */
     const kind = (arrived && o.dep) ? "turn" : (o.arr ? "arr" : (o.move ? "move" : "dep"));
-    out[room] = {kind: kind, who: o.who, sure: true, from: 0, movedFrom: o.move, names: o.names};
+    out[room] = {kind: kind, who: o.who, sure: true, from: 0, movedFrom: o.move, names: o.names, since: o.since};
   }
   return out;
 }
@@ -5085,7 +5119,7 @@ function ledgerMoves(nightArg){
   if(!night) return out;
   const led = loadMoves();
   for(const room of Object.keys(led)){
-    let arr = false, dep = false, from = 0;
+    let arr = false, dep = false, from = 0, since = 0;
     const who = [], names = {dep: [], move: []};   // the dot matches on these, as roomMoves's do
     let moved = null;
     for(const a of Object.keys(led[room])){
@@ -5096,12 +5130,12 @@ function ledgerMoves(nightArg){
       if(r.mv) continue;
       if(A === night){
         arr = true; from = Math.max(from, r.seen || 0);
-        if(r.from){ moved = r.from; names.move.push(r.n || ""); }   // arrived here by moving out of that room
+        if(r.from){ moved = r.from; names.move.push(r.n || ""); if(!since || A < since) since = A; }   // arrived here by moving out of that room
         if(r.n) who.push((r.from ? "\u21b3 " : "\u2192 ") + r.n + (r.from ? "  (" + r.from + " \u2192 " + room + ")" : ""));
       }
       if(D === night){
         dep = true; from = Math.max(from, r.seen || 0);
-        names.dep.push(r.n || "");
+        names.dep.push(r.n || ""); if(!since || A < since) since = A;
         if(r.n) who.push("\u2190 " + r.n);
       }
     }
@@ -5109,7 +5143,7 @@ function ledgerMoves(nightArg){
     /* A move that also departs tonight is still a turnover — the room changed hands
        twice and that is the louder fact. */
     const kind = (arr && dep) ? "turn" : (arr ? (moved ? "move" : "arr") : "dep");
-    out[room] = {kind: kind, who: who, sure: true, from: from, movedFrom: moved, names: names};
+    out[room] = {kind: kind, who: who, sure: true, from: from, movedFrom: moved, names: names, since: since};
   }
   /* There was a second pass here that added a dashed TURNOVER pill for any room whose
      name in the department report differed from the name cached for it — "the report
@@ -5163,19 +5197,42 @@ function renderMovesFor(box, night){
   LEAVING = leavingIndex();
   /* THE DOT, his words 05/09: "if a room that moved and/or departed also had a receipt
      which matches that reservation's name in that day then put a dot on the pill,
-     otherwise leave it as is". Departed: a receipt on that room under the departing
-     reservation's name — a turnover departed too, so it takes the same dot for the same
-     name. Moved: a receipt under the moved reservation's name on either
-     room, the one left or the one taken — its paper can carry either number. Exact name,
-     never the room alone: a room number marks the wrong stay the moment it turns over. */
+     otherwise leave it as is" — and, asked the same night whether that meant any day of
+     the stay: "that's what i want.. there's no point in that functionality if its
+     otherwise". So the dot looks over the WHOLE STAY: tonight's report, live, plus every
+     earlier night's report loaded here since the reservation arrived (the arrival date is
+     on the departure list's row and on the moves row). A night whose report was never
+     loaded into RecCheck is a night the tool knows nothing about, and says nothing.
+     Departed: a receipt on that room under the departing reservation's name — a turnover
+     departed too, so it takes the same dot for the same name. Moved: a receipt under the
+     moved reservation's name on either room, the one left or the one taken — its paper
+     can carry either number. Exact name, never the room alone: a room number marks the
+     wrong stay the moment it turns over. */
   const withRec = new Set();
-  if(MODEL) for(const r of checkableList()){
-    const rm = String(effRoom(r) || "");
-    if(!rm) continue;
+  const hit = (m, room, rm, guest) => {
+    if((m.kind === "dep" || m.kind === "turn") && rm === room && (m.names ? m.names.dep : []).some(n => sameName(n, guest))) return true;
+    if(m.kind === "move" && (rm === room || rm === String(m.movedFrom || "")) && (m.names ? m.names.move : []).some(n => sameName(n, guest))) return true;
+    return false;
+  };
+  if(MODEL){
+    const pairs = [];
+    for(const r of checkableList()){
+      const rm = String(effRoom(r) || "");
+      if(!rm) continue;
+      pairs.push([rm, r.guest || ""]);
+      for(const room of rooms) if(hit(mv[room], room, rm, r.guest)) withRec.add(room);
+    }
+    if(night) saveNightReceipts(night, pairs);
+  }
+  /* the earlier nights of each stay, from what was loaded here on those nights */
+  const past = loadNightReceipts();
+  for(const k of Object.keys(past)){
+    const K = +k;
+    if(!night || K >= night) continue;
     for(const room of rooms){
       const m = mv[room];
-      if((m.kind === "dep" || m.kind === "turn") && rm === room && (m.names ? m.names.dep : []).some(n => sameName(n, r.guest))) withRec.add(room);
-      if(m.kind === "move" && (rm === room || rm === String(m.movedFrom || "")) && (m.names ? m.names.move : []).some(n => sameName(n, r.guest))) withRec.add(room);
+      if(!m.since || K < m.since || withRec.has(room)) continue;
+      for(const pr of past[k]) if(hit(m, room, String(pr[0] || ""), pr[1] || "")){ withRec.add(room); break; }
     }
   }
   for(const kind of ["dep", "turn", "move", "arr"]){

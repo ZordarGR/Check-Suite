@@ -32,7 +32,7 @@ const CASES = [
   ["openExtraModal",       p => p.evaluate(() => window.__t.openExtraModal())],
   ["openWatchChangePrompt",p => p.evaluate(() => window.__t.openWatchChangePrompt(
       [{room:"112", oldGuest:"JAROLIMEK/WIEPURGER", newGuest:"PFUENDL ANNEMARIE"}]))],
-  ["printCorrections",     p => p.evaluate(() => { window.__t.setState({receipts:{"12345|112":{status:"missing",corr:null}}}); window.__t.printCorrections(); })],
+  ["printCorrections",     p => p.evaluate(() => { window.__t.setState({receipts:{"RESTAURANT|12345|112":{status:"missing",corr:null}}, extras:[]}); window.__t.printCorrections(); })],
 ];
 
 (async () => {
