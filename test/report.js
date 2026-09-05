@@ -15,14 +15,19 @@ const store = {reccheck_moves_v2: JSON.stringify(led),
   reccheck_moves_last: JSON.stringify({biz:"1/9/2026",key:20260901,listRooms:227,wrote:227})};
 const localStorage = {getItem:k=>(k in store?store[k]:null), setItem:(k,v)=>store[k]=String(v)};
 const body = [lift("dateNum"), src.match(/^const MOVES_KEY = .*$/m)[0], lift("loadMoves"),
-  lift("roomMoves"), lift("movesReport"), "return movesReport();"].join("\n");
+  "const STATUS_KEY = \"reccheck_status_v1\";", lift("loadStatus"), lift("statusRows"), lift("pillRoom"),
+  lift("roomMoves"), lift("ledgerMoves"), lift("movesReport"), "return movesReport();"].join("\n");
 const fn = new Function("localStorage","MODEL","ROOMS","Number","String","Object","JSON","Math", body);
 const out = fn(localStorage, {reportDate:"2/9/2026", receipts:[]}, {}, Number, String, Object, JSON, Math);
 console.log(out);
 console.log("\n--- checks ---");
 let bad = 0;
 const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok?"ok  ":"FAIL") + "  " + l); };
-ck("every pill is listed with the list that wrote it", /every pill tonight/.test(out));
+ck("the pills' own source comes first, and says nothing was captured for the night",
+   /status store .*NOTHING CAPTURED FOR THIS NIGHT/.test(out) && out.indexOf("status store") < out.indexOf("ledger"));
+ck("so the panel draws nothing, whatever the ledger says", /^tonight +: no pills/m.test(out));
+ck("the ledger's view is labelled as the ledger's, not the pills'", /ledger's own view — not the pills' source/.test(out));
+ck("every pill the ledger would draw is listed with the list that wrote it", /every pill the ledger would draw tonight/.test(out));
 ck("the fresh departures are there", /110/.test(out) && /116/.test(out));
 ck("the stale one is flagged", /244.*OLDER THAN THE NEWEST LIST/.test(out));
 ck("the fresh ones are not flagged", !/110.*OLDER THAN THE NEWEST/.test(out));

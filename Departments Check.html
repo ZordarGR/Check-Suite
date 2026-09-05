@@ -221,20 +221,25 @@ body.onMenu #clList{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
 #alertsBtn,#statusBtn{margin-top:8px}
 /* STATUS: what protel has told the tool. Every rule scoped — the bare-selector leak is a
    landmine here (see the notes). The tables want more room than the menu column. */
-#statusScreen .mNav{max-width:900px}
-#statusScreen .stNote{font-size:12px;color:var(--faint);padding:4px 2px}
-#statusScreen .stNote.warn{color:#fbbf24}
-#statusScreen .stBlock{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--panel)}
-#statusScreen .stHead{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;margin-bottom:6px}
-#statusScreen .stName{font-family:var(--mono);letter-spacing:.12em;font-size:13px;font-weight:600;color:var(--amber)}
-#statusScreen .stMeta{font-size:12px;color:var(--faint)}
-#statusScreen .stState{font-size:12px}
-#statusScreen .stState.good{color:#4ade80}
-#statusScreen .stState.bad{color:#f87171}
-#statusScreen .stWrap{overflow-x:auto;max-height:420px;overflow-y:auto}
-#statusScreen table.st{width:100%;border-collapse:collapse;font-size:12px}
-#statusScreen table.st th,#statusScreen table.st td{text-align:left;padding:3px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
-#statusScreen table.st th{color:var(--faint);font-weight:500;position:sticky;top:0;background:var(--panel)}
+#statusListScreen .mNav{max-width:960px}
+#statusListScreen .stNote{font-size:12px;color:var(--faint);padding:4px 2px}
+#statusListScreen .stNote.warn{color:#fbbf24}
+#statusListScreen .stBlock{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--panel)}
+#statusListScreen .stHead{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;margin-bottom:6px}
+#statusListScreen .stName{font-family:var(--mono);letter-spacing:.12em;font-size:13px;font-weight:600;color:var(--amber)}
+#statusListScreen .stMeta{font-size:12px;color:var(--faint)}
+#statusListScreen .stState{font-size:12px}
+#statusListScreen .stState.good{color:#4ade80}
+#statusListScreen .stState.bad{color:#f87171}
+#statusListScreen .stWrap{overflow-x:auto;max-height:520px;overflow-y:auto}
+#statusListScreen table.st{width:100%;border-collapse:collapse;font-size:12px}
+#statusListScreen table.st th,#statusListScreen table.st td{text-align:left;padding:3px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+#statusListScreen table.st th{color:var(--faint);font-weight:500;position:sticky;top:0;background:var(--panel)}
+#statusListScreen table.st td.mIn{color:#4ade80}
+#statusListScreen table.st td.mOut{color:#f87171}
+#statusListScreen table.st td.mStay{color:#fbbf24}
+#statusListScreen table.st td.mNone{color:var(--faint)}
+#statusListScreen table.st tr.gone td{opacity:.6}
 #auditScreen{margin-top:60px}
 .mNav{display:flex;flex-direction:column;gap:10px;max-width:430px;margin:0 auto}
 .mItem{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;background:var(--panel);
@@ -894,8 +899,18 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
 
   <div id="statusScreen" style="display:none">
     <div class="mNav">
-      <div id="stList"></div>
+      <button class="mItem primary" id="stArr"><span class="mLabel"></span><span class="mSub"></span></button>
+      <button class="mItem primary" id="stDep"><span class="mLabel"></span><span class="mSub"></span></button>
+      <button class="mItem primary" id="stInh"><span class="mLabel"></span><span class="mSub"></span></button>
+      <button class="mItem primary" id="stMov"><span class="mLabel"></span><span class="mSub"></span></button>
       <button class="btn small" id="stBack" style="margin-top:6px"></button>
+    </div>
+  </div>
+
+  <div id="statusListScreen" style="display:none">
+    <div class="mNav">
+      <div id="stList"></div>
+      <button class="btn small" id="stListBack" style="margin-top:6px"></button>
     </div>
   </div>
 
@@ -1416,7 +1431,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.41";
+const APP_VERSION = "1.17.42";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1426,7 +1441,8 @@ const T = {
 en: {
   subTag: "Nightly POS receipt audit — protel checkcharge1 (.oxps)",
   "menu.audit": "AUDIT", "menu.auditSub": "the nightly checks — receipts and accommodation tax",
-  "menu.status": "STATUS", "menu.statusSub": "what protel has told the tool — in-house, arrivals, departures, moves",
+  "menu.status": "STATUS", "menu.statusSub": "what protel has told the tool — arrivals, departures, in-house, moves",
+  "st.arr": "ARRIVALS", "st.dep": "DEPARTURES", "st.inh": "IN-HOUSE", "st.mov": "MOVES", "st.back": "\u2190 STATUS",
   "menu.options": "OPTIONS ▾", "menu.editHome": "EDIT HOME SCREEN ▾",
   "menu.editCl": "EDIT CHECKLIST", "menu.editClSub": "add, edit or remove tasks and their importance",
   "audit.dept": "DEPARTMENT CHECK", "audit.deptSub": "POS receipts vs the checkcharge report",
@@ -1661,7 +1677,8 @@ en: {
 gr: {
   subTag: "Νυχτερινός έλεγχος αποδείξεων POS — protel checkcharge1 (.oxps)",
   "menu.audit": "ΕΛΕΓΧΟΣ", "menu.auditSub": "οι νυχτερινοί έλεγχοι — αποδείξεις και τέλος διαμονής",
-  "menu.status": "ΚΑΤΑΣΤΑΣΗ", "menu.statusSub": "τι έχει πάρει το εργαλείο από το protel — παραμονές, αφίξεις, αναχωρήσεις, μετακινήσεις",
+  "menu.status": "ΚΑΤΑΣΤΑΣΗ", "menu.statusSub": "τι έχει πάρει το εργαλείο από το protel — αφίξεις, αναχωρήσεις, παραμονές, μετακινήσεις",
+  "st.arr": "ΑΦΙΞΕΙΣ", "st.dep": "ΑΝΑΧΩΡΗΣΕΙΣ", "st.inh": "ΠΑΡΑΜΟΝΕΣ", "st.mov": "ΜΕΤΑΚΙΝΗΣΕΙΣ", "st.back": "\u2190 ΚΑΤΑΣΤΑΣΗ",
   "menu.options": "ΕΠΙΛΟΓΕΣ ▾", "menu.editHome": "ΕΠΕΞΕΡΓΑΣΙΑ ΑΡΧΙΚΗΣ ▾",
   "menu.editCl": "ΕΠΕΞΕΡΓΑΣΙΑ ΛΙΣΤΑΣ", "menu.editClSub": "προσθήκη, αλλαγή ή διαγραφή εργασιών και σημαντικότητας",
   "audit.dept": "ΕΛΕΓΧΟΣ ΤΜΗΜΑΤΩΝ", "audit.deptSub": "αποδείξεις POS vs αναφορά checkcharge",
@@ -1934,6 +1951,8 @@ function applyLang(){
   const mim = $("#mImport"); mim.querySelector(".mLabel").textContent = t("land.import"); mim.querySelector(".mSub").textContent = t("land.dataHint");
   mi("#auditBtn", "menu.audit", "menu.auditSub");
   mi("#statusBtn", "menu.status", "menu.statusSub");
+  mi("#stArr", "st.arr", null); mi("#stDep", "st.dep", null); mi("#stInh", "st.inh", null); mi("#stMov", "st.mov", null);
+  $("#stListBack").textContent = t("st.back");
   mi("#aDept", "audit.dept", "audit.deptSub");
   mi("#aTax", "audit.tax", "audit.taxSub");
   $("#aBack").textContent = t("audit.back");
@@ -3785,6 +3804,11 @@ function showScreen(which){
   $("#filesScreen").style.display = which === "files" ? "" : "none";
   $("#alertsScreen").style.display = which === "alerts" ? "" : "none";
   $("#statusScreen").style.display = which === "status" ? "" : "none";
+  $("#statusListScreen").style.display = which === "stlist" ? "" : "none";
+  /* STATUS is drawn by the tax half, which holds the captures: the menu's four lines, and
+     the list he chose. Doors, like __taScreen above. */
+  if(which === "status"){ try{ if(window.__taStatusMenu) window.__taStatusMenu(); }catch(e){} }
+  if(which === "stlist"){ try{ if(window.__taStatus) window.__taStatus(ST_TAG); }catch(e){} }
   if(which === "menu") renderChecklist();
   /* Opening the list is what "read" means — the pulse stops here and nowhere else. */
   if(which === "alerts"){ renderAlerts(); markAlertsRead(); }
@@ -4726,17 +4750,16 @@ function searchInput(){
    receipt red is worse than marking none at all.
 
    Built once per search, not once per card: the ledger comes out of localStorage. */
+/* Who is leaving tonight, by room: the DEPARTURE LIST's rows for the night, from the
+   STATUS store — his word, 05/09, that it is the only source of truth for departures.
+   It used to read the ledger's departure dates, which the census wrote too. */
 function leavingIndex(){
   const out = {};
   const night = MODEL ? dateNum(MODEL.reportDate) : 0;
   if(!night) return out;                       // no night, no claim
-  const led = loadMoves();
-  for(const room of Object.keys(led)){
-    for(const a of Object.keys(led[room])){
-      const e = led[room][a];
-      if((e.d || 0) !== night) continue;        // not on today's departure list
-      (out[room] = out[room] || []).push(e.n || "");
-    }
+  for(const r of statusRows(loadStatus(), "DP", night)){
+    const room = pillRoom(r.room);
+    if(room) (out[room] = out[room] || []).push(r.name || "");
   }
   return out;
 }
@@ -4955,10 +4978,68 @@ function dShort(k){
    The ledger holds reservations, not nights, so this answers for any night inside the
    span of any rate list ever loaded — including nights whose tax check was never run
    because the main courante balanced. */
-function roomMoves(){
+/* THE PILLS COME FROM STATUS — his specification, 05/09, in his words: "The pills in the
+   department check will be populated from status data, i mainly care about moves and
+   departures". And, asked which source: departures ONLY from the departure list, arrivals
+   from the arrival list, moves from the moves window's X rows, turnover a room in both
+   lists that night. The in-house list's departure column and the ledger no longer draw a
+   pill — a planned departure date on the census is not the departure list, and the
+   departure list is the source of truth for departures.
+
+   The STATUS store (written by the tax half, see statusIngest) keeps each list's rows for
+   the day as a UNION of every capture of it, keyed by name and room, so a guest who has
+   left the arrival list because they checked in is still that night's arrival. This
+   reads that store and nothing else. Room 9000 and the like are holding rooms and are
+   not pills, as they were never stays. */
+const STATUS_KEY = "reccheck_status_v1";
+function loadStatus(){
+  try{ const o = JSON.parse(localStorage.getItem(STATUS_KEY) || "{}"); return (o && typeof o === "object" && !Array.isArray(o)) ? o : {}; }
+  catch(e){ return {}; }
+}
+function statusRows(st, tag, night){
+  const d = st && st[tag] && st[tag][String(night)];
+  return (d && d.rows && typeof d.rows === "object") ? Object.keys(d.rows).map(k => d.rows[k]) : [];
+}
+function pillRoom(cell){
+  const m = String(cell || "").trim().match(/^(\d{2,3})(?!\d)/);   // the lead room of "414-15"; not 9000
+  return m ? m[1] : "";
+}
+function roomMoves(nightArg){
   const out = {};
-  if(!MODEL) return out;
-  const night = dateNum(MODEL.reportDate);
+  const night = nightArg || (MODEL ? dateNum(MODEL.reportDate) : 0);
+  if(!night) return out;
+  const st = loadStatus();
+  const acc = {};
+  const slot = room => (acc[room] = acc[room] || {arr: false, dep: false, move: null, who: [], names: {dep: [], move: []}});
+  for(const r of statusRows(st, "DP", night)){
+    const room = pillRoom(r.room); if(!room) continue;
+    const o = slot(room); o.dep = true; o.names.dep.push(r.name || "");
+    if(r.name) o.who.push("\u2190 " + r.name);
+  }
+  for(const r of statusRows(st, "AR", night)){
+    const room = pillRoom(r.room); if(!room) continue;
+    const o = slot(room); o.arr = true;
+    if(r.name) o.who.push("\u2192 " + r.name);
+  }
+  for(const r of statusRows(st, "MV", night)){
+    if(!String(r.x || "").trim()) continue;                // protel has not marked it — not a move it shows
+    const to = pillRoom(r.to), from = pillRoom(r.from); if(!to || !from || to === from) continue;
+    const o = slot(to); o.move = from; o.names.move.push(r.name || "");
+    if(r.name) o.who.push("\u21b3 " + r.name + "  (" + from + " \u2192 " + to + ")");
+  }
+  for(const room of Object.keys(acc)){
+    const o = acc[room], arrived = o.arr || !!o.move;
+    if(!arrived && !o.dep) continue;
+    /* a room that departed and was arrived into again is a turnover — the louder fact */
+    const kind = (arrived && o.dep) ? "turn" : (o.arr ? "arr" : (o.move ? "move" : "dep"));
+    out[room] = {kind: kind, who: o.who, sure: true, from: 0, movedFrom: o.move, names: o.names};
+  }
+  return out;
+}
+/* The ledger's view of the same night, kept for DEBUG's movesReport only. */
+function ledgerMoves(nightArg){
+  const out = {};
+  const night = nightArg || (MODEL ? dateNum(MODEL.reportDate) : 0);
   if(!night) return out;
   const led = loadMoves();
   for(const room of Object.keys(led)){
@@ -5009,11 +5090,17 @@ function roomMoves(){
 function renderMoves(){
   const box = $("#moves");
   if(!box) return;
-  const mv = roomMoves();
+  const n = renderMovesFor(box, MODEL ? dateNum(MODEL.reportDate) : 0);
+  document.body.classList.toggle("hasMoves", n > 0);
+}
+/* The panel for a given night into a given box; how many rooms it drew. The department
+   check's #moves and the STATUS screen both come through here, so there is one drawing of
+   a pill and not two. */
+function renderMovesFor(box, night){
+  const mv = roomMoves(night);
   const rooms = Object.keys(mv).sort((a,b) => (parseInt(a)||0) - (parseInt(b)||0));
-  document.body.classList.toggle("hasMoves", rooms.length > 0);
   box.innerHTML = "";
-  if(!rooms.length) return;
+  if(!rooms.length) return 0;
   box.append(el("div","mvTitle", t("mv.title")));
   /* One colour at a time, under its own heading. Sorted by room number inside each
      group, as it always was — but interleaving the three kinds turned the panel into a
@@ -5031,10 +5118,22 @@ function renderMoves(){
      deliberately the same index behind it — "dont accidentally mark the arrival
      receipts". */
   LEAVING = leavingIndex();
+  /* THE DOT, his words 05/09: "if a room that moved and/or departed also had a receipt
+     which matches that reservation's name in that day then put a dot on the pill,
+     otherwise leave it as is". Departed: a receipt on that room under the departing
+     reservation's name — a turnover departed too, so it takes the same dot for the same
+     name. Moved: a receipt under the moved reservation's name on either
+     room, the one left or the one taken — its paper can carry either number. Exact name,
+     never the room alone: a room number marks the wrong stay the moment it turns over. */
   const withRec = new Set();
   if(MODEL) for(const r of checkableList()){
-    const rm = effRoom(r);
-    if(rm && isLeaving(String(rm), r.guest)) withRec.add(String(rm));
+    const rm = String(effRoom(r) || "");
+    if(!rm) continue;
+    for(const room of rooms){
+      const m = mv[room];
+      if((m.kind === "dep" || m.kind === "turn") && rm === room && (m.names ? m.names.dep : []).some(n => sameName(n, r.guest))) withRec.add(room);
+      if(m.kind === "move" && (rm === room || rm === String(m.movedFrom || "")) && (m.names ? m.names.move : []).some(n => sameName(n, r.guest))) withRec.add(room);
+    }
   }
   for(const kind of ["dep", "turn", "move", "arr"]){
     const of = rooms.filter(r => mv[r].kind === kind);
@@ -5046,7 +5145,7 @@ function renderMoves(){
     const grid = el("div","mvGrid");
     for(const room of of){
       const m = mv[room];
-      const rec = kind === "dep" && withRec.has(String(room));
+      const rec = (kind === "dep" || kind === "turn" || kind === "move") && withRec.has(String(room));
       const pill = el("div","mvPill mv-" + m.kind + (m.sure ? "" : " guess") + (rec ? " rec" : ""), room);
       pill.title = t("mv." + m.kind) + (m.sure ? "" : " · " + t("mv.guess"))
                  + (rec ? " · " + t("mv.rec") : "")
@@ -5057,17 +5156,31 @@ function renderMoves(){
     box.append(grid);
   }
   if(rooms.some(r => !mv[r].sure)) box.append(el("div","mvNote", t("mv.guessNote")));
+  return rooms.length;
 }
-
-/* Why there are no pills tonight. The panel is built from two dates that have to agree —
-   the night on the department report and the arrival/departure dates a rate list wrote
-   into the ledger — and when it shows nothing there is no way to see which of the two
-   is wrong. This prints both, plus what the last rate list actually recorded. */
+/* Why there are no pills tonight. Since 1.17.42 the panel is built from the STATUS store —
+   the departure list, arrival list and moves window protel showed, captured by the helper
+   and kept per night — so the first thing this prints is what that store holds for the
+   report's night, and the pills it yields. The ledger's own view follows, labelled as the
+   ledger's, because a phantom there is still worth seeing even though it draws nothing. */
 function movesReport(){
   const L = [];
   const night = MODEL ? dateNum(MODEL.reportDate) : 0;
   L.push("report night  : " + (MODEL ? MODEL.reportDate : "(no department report loaded)")
          + "  ->  " + (night || "COULD NOT READ THE DATE"));
+  const st = loadStatus();
+  const cnt = tag => statusRows(st, tag, night).length;
+  const held = tag => st[tag] ? Object.keys(st[tag]).sort().join(" ") : "";
+  L.push("status store  : for this night, departure list " + cnt("DP") + " rows, arrival list " + cnt("AR")
+         + " rows, moves window " + cnt("MV") + " rows"
+         + (night && !cnt("DP") && !cnt("AR") && !cnt("MV") ? "  — NOTHING CAPTURED FOR THIS NIGHT" : ""));
+  L.push("  nights held : DP " + (held("DP") || "none") + "  |  AR " + (held("AR") || "none") + "  |  MV " + (held("MV") || "none"));
+  L.push("  in-house    : " + (st.IH ? (st.IH.date || "?") + ", " + (st.IH.rows || []).length + " rows, " + (st.IH.cut ? "CUT SHORT" : "complete") : "no capture"));
+  const pills = roomMoves(), hit = Object.keys(pills);
+  L.push("tonight       : " + (hit.length ? hit.length + " pills — " + hit.join(" ") : "no pills"));
+  L.push("");
+  L.push("the ledger's own view — not the pills' source since 1.17.42:");
+  const roomMoves_ = ledgerMoves;
   let last = null;
   try{ last = JSON.parse(localStorage.getItem("reccheck_moves_last") || "null"); }catch(e){}
   L.push("last rate list: " + (last ? JSON.stringify(last) : "(no rate list has ever been recorded)"));
@@ -5081,9 +5194,9 @@ function movesReport(){
   }
   L.push("ledger        : " + rooms.length + " rooms, " + res + " reservations"
          + (res ? ", " + minA + " .. " + maxD : " — EMPTY"));
-  const mv = roomMoves(), hit = Object.keys(mv);
-  L.push("tonight       : " + (hit.length ? hit.length + " pills — " + hit.join(" ") : "no pills"));
-  /* Every pill, with the stay behind it and the DATE OF THE LIST THAT WROTE IT.
+  const mv = roomMoves_(), lhit = Object.keys(mv);
+  L.push("ledger tonight: " + (lhit.length ? lhit.length + " would be pills — " + lhit.join(" ") : "no pills"));
+  /* Every pill the ledger would draw, with the stay behind it and the DATE OF THE LIST THAT WROTE IT.
      The old report printed "stays near this night" and cut it at 40 rows, which is why
      the first diagnosis of the phantom departures was made on a truncated list and got
      it half right. A pill this panel draws must always appear here — if the panel says
@@ -5111,7 +5224,7 @@ function movesReport(){
       }
     }
     L.push("");
-    L.push("every pill tonight, and the list that wrote it:");
+    L.push("every pill the ledger would draw tonight, and the list that wrote it:");
     L.push(rows.length ? rows.slice(0, 200).join("\n") : "  none");
     if(rows.length > 200) L.push("  … " + (rows.length - 200) + " more not shown");
     if(newest){
@@ -5405,6 +5518,11 @@ $("#alertsBtn").onclick = () => showScreen("alerts");
 $("#alBack").onclick = () => showScreen("menu");
 $("#statusBtn").onclick = () => showScreen("status");
 $("#stBack").onclick = () => showScreen("menu");
+let ST_TAG = "AR";
+const stOpen = tag => () => { ST_TAG = tag; showScreen("stlist"); };
+$("#stArr").onclick = stOpen("AR"); $("#stDep").onclick = stOpen("DP");
+$("#stInh").onclick = stOpen("IH"); $("#stMov").onclick = stOpen("MV");
+$("#stListBack").onclick = () => showScreen("status");
 /* the two strings the alerts screen owns, repainted with the rest on a language change */
 function paintAlertsStatic(){
   try{
@@ -5701,6 +5819,13 @@ const I18N={
   st_none:"no capture in the last 20 hours",
   st_taken:"taken", st_takenAt:"taken at {0}",
   st_room:"Room", st_name:"Name", st_arr:"Arrival", st_dep:"Departure", st_status:"Status", st_from:"From", st_to:"To", st_x:"X",
+  st_arrNote:"Rows leave this list as guests check in and appear in the in-house list. Every arrival captured today is kept here; a row being gone is read as nothing until the in-house list shows the same name and room checked in.",
+  st_depNote:"A row leaving this list proves nothing on its own \u2014 the departure date can be wrong. A departure is checked out only when a complete in-house list captured afterwards does not show that name and room.",
+  st_mark:"Mark", st_gone:"gone from the list since {0}",
+  st_markIn:"checked in \u2014 on the in-house list at {0}", st_markExpected:"expected \u2014 not checked in on the in-house list yet",
+  st_markOut:"checked out \u2014 absent from the in-house list at {0}", st_markOutCO:"checked out \u2014 CO on the in-house list at {0}",
+  st_markStay:"still in house at {0}", st_markNoIH:"no in-house list captured for this day yet", st_markCut:"in-house read at {0} was cut short \u2014 absence proves nothing",
+  st_complete:"complete", st_cutShort:"read cut short", st_legacyShort:"legacy mode is on \u2014 nothing is captured",
   live_kept:" {0} kept as the census had them.",
   live_rnone:"{0} \u201c{1}\u201d: no rows came back.",
   live_rwrong:"That window is not the {0} \u2014 it says \u201c{1}\u201d. Nothing was recorded.",
@@ -5789,6 +5914,13 @@ const I18N={
   st_none:"καμία λήψη τις τελευταίες 20 ώρες",
   st_taken:"καταχωρήθηκε", st_takenAt:"λήψη {0}",
   st_room:"Δωμάτιο", st_name:"Όνομα", st_arr:"Άφιξη", st_dep:"Αναχώρηση", st_status:"Κατάσταση", st_from:"Από", st_to:"Σε", st_x:"X",
+  st_arrNote:"Οι γραμμές φεύγουν από αυτή τη λίστα καθώς οι επισκέπτες κάνουν check-in και εμφανίζονται στις παραμονές. Κάθε άφιξη που λήφθηκε σήμερα κρατιέται εδώ· μια γραμμή που έφυγε δεν σημαίνει τίποτα μέχρι η λίστα παραμονών να δείξει το ίδιο όνομα και δωμάτιο με check-in.",
+  st_depNote:"Μια γραμμή που φεύγει από αυτή τη λίστα δεν αποδεικνύει τίποτα από μόνη της — η ημερομηνία αναχώρησης μπορεί να είναι λάθος. Μια αναχώρηση θεωρείται check-out μόνο όταν μια πλήρης λίστα παραμονών, ληφθείσα αργότερα, δεν δείχνει αυτό το όνομα και δωμάτιο.",
+  st_mark:"Σήμανση", st_gone:"εκτός λίστας από {0}",
+  st_markIn:"check-in — στη λίστα παραμονών στις {0}", st_markExpected:"αναμένεται — δεν έχει check-in στη λίστα παραμονών ακόμη",
+  st_markOut:"check-out — απουσιάζει από τη λίστα παραμονών στις {0}", st_markOutCO:"check-out — CO στη λίστα παραμονών στις {0}",
+  st_markStay:"ακόμη στο ξενοδοχείο στις {0}", st_markNoIH:"δεν έχει ληφθεί ακόμη λίστα παραμονών για αυτή την ημέρα", st_markCut:"η ανάγνωση παραμονών στις {0} κόπηκε νωρίς — η απουσία δεν αποδεικνύει τίποτα",
+  st_complete:"πλήρης", st_cutShort:"ανάγνωση κομμένη νωρίς", st_legacyShort:"η παλαιά λειτουργία είναι ενεργή — δεν λαμβάνεται τίποτα",
   live_kept:" {0} έμειναν όπως τις είχε η λίστα παραμονών.",
   live_rnone:"{0} «{1}»: δεν ήρθαν γραμμές.",
   live_rwrong:"Αυτό το παράθυρο δεν είναι {0} — λέει «{1}». Δεν καταγράφηκε τίποτα.",
@@ -6438,7 +6570,7 @@ const LIVE_RETRY_MS = 5000;
    looks unchanged and nothing is ever written back — he would empty it and watch it stay
    empty. The reset lives in the other scope, so this is its door. */
 window.__taForget = function(){
-  try{ LIVE_SIG = ""; RPT_SIG = {}; LIVE_AT = {}; LIVE_HELD = {}; LIVE_ERR = {}; }catch(e){}
+  try{ LIVE_SIG = ""; RPT_SIG = {}; LIVE_AT = {}; LIVE_HELD = {}; LIVE_ERR = {}; LEDGER_TICK++; }catch(e){}
   try{ localStorage.removeItem(MOVES_DONE_KEY); }catch(e){}
 };
 function liveStop(){
@@ -6495,7 +6627,7 @@ let LIVE_AT = {};                              // tag -> the capture already tak
 let LIVE_HELD = {};                            // tag -> {at, date, rows, total, why}
 let LIVE_ERR = {};                             // tag -> why its capture file could not be read
 let LIVE_ROWS = {};                            // tag -> {p: the parsed capture, at} — what STATUS shows
-let STATUS_SIG = "";                           // what STATUS last drew, so it is not redrawn under him
+let LEDGER_TICK = 0;                           // bumped whenever this half writes the ledger
 function heldOf(tag, at, txt){
   let date = "", rows = 0, total = 0;
   for(const line of String(txt || "").split(/\r?\n/)){
@@ -6550,6 +6682,7 @@ async function autoReadInhouse(){
      The mtime already says which capture is the news. Sorting by it costs nothing and the
      line then reports the list he just opened. */
   const got = [];
+  let stChanged = false;
   for(const tag of LIVE_TAGS){
     try{
       const f = await window.reccheckShortcuts.listFile(tag)
@@ -6564,9 +6697,12 @@ async function autoReadInhouse(){
       delete LIVE_ERR[tag];
       if(!LIVE_HELD[tag] || LIVE_HELD[tag].at !== f.at){
         LIVE_HELD[tag] = heldOf(tag, +f.at || 0, f.text);
-        /* the rows themselves, for STATUS — parsed once per capture, never per tick */
-        try{ LIVE_ROWS[tag] = {p: tag === "IH" ? parseInhouse(f.text) : parseTagged(f.text, tag), at: +f.at || 0}; }
-        catch(e){ delete LIVE_ROWS[tag]; }
+        /* the rows themselves, parsed once per capture, never per tick — and into the
+           STATUS store, which the pills and the STATUS lists read */
+        try{
+          LIVE_ROWS[tag] = {p: tag === "IH" ? parseInhouse(f.text) : parseTagged(f.text, tag), at: +f.at || 0};
+          if(statusIngest(tag, LIVE_ROWS[tag].p, +f.at || 0)) stChanged = true;
+        }catch(e){ delete LIVE_ROWS[tag]; }
       }
       if(f.at === LIVE_AT[tag]) continue;
       LIVE_AT[tag] = f.at;
@@ -6574,6 +6710,8 @@ async function autoReadInhouse(){
     }catch(e){}
   }
   got.sort((a, b) => a.at - b.at);
+  /* the pills draw from the STATUS store now, so a change to it is what redraws them */
+  if(stChanged){ LEDGER_TICK++; try{ if(window.__rcMovesChanged) window.__rcMovesChanged(); }catch(e){} }
   for(const g of got){
     /* WHAT BECAME OF IT. The summary used to be drawn from the file's presence alone, so
        a capture the ingest REFUSED — cut short, wrong caption, no date — was announced as
@@ -6586,60 +6724,212 @@ async function autoReadInhouse(){
     if(h && h.at === g.at) h.why = (r === "ok") ? "" : r;
   }
   try{ paintHeld(); }catch(e){}
-  if(TAX_SCREEN === "status"){ try{ renderStatus(); }catch(e){} }
+  if(TAX_SCREEN === "status"){ try{ window.__taStatusMenu(); }catch(e){} }
+  if(TAX_SCREEN === "stlist"){ try{ renderStatusList(); }catch(e){} }
 }
-/* ---- STATUS: what protel has told the tool ----
+/* ---- STATUS: what protel has told the tool, kept for the day ----
 
-   His idea, 05/09: "a third main menu category 'status' which will hold the data taken
-   from protel regarding arrivals, departures, moves and in house and the tools will take
-   the needed data from that". The four captures had no home — the in-house list was
-   shown on the Tax Check because that is where the code that reads it lives, the moves
-   window nowhere at all, the two reports on one line and then gone. This screen simply
-   SAYS what protel has told the tool: each list as captured, with its date, when it was
-   taken, whether the ingest took it and if not why, and the rows themselves.
+   His specification, 05/09: "After feeding from the lists the tool will populate the
+   below submenus inside STATUS: Arrivals, Departures, In-house, Moves. All lists will be
+   refreshing their data each time a window in protel opens, however if a room is missing
+   from the arrival list it doesnt mean that it has been cancelled, the tool must wait for
+   the next time the in-house list opens so it can read it and if it finds an exact match
+   of reservation name and room number to simply mark that as checked in" — and for
+   departures, after his own correction: the same, "to confirm that a room has actually
+   departed you will have to confirm its absence from the inhouse list as well, unless a
+   filter is applied we dont see checked out reservations in the in-house list".
 
-   READ-ONLY, by design. Nothing here asks protel for anything: the rows are the capture
-   files the helper wrote the moment protel showed each list, already read every tick.
-   Redrawn only when a capture changes — a table of 250 rows redrawn every five seconds
-   would move under his hands. */
-function stEsc(s){ return escHtml(String(s == null ? "" : s)); }
+   So each list's rows are kept for the DAY as the UNION of every capture of it, keyed by
+   name and room: a row that has left the arrival list because the guest checked in is
+   still that night's arrival, and nothing is read into a row being gone. The marks are
+   computed from the latest in-house capture and never stored or written anywhere else:
+   an arrival is CHECKED IN when the in-house list shows the same name and room with CI; a
+   departure is CHECKED OUT when a COMPLETE in-house list, captured later, does not show it
+   (or shows it with CO); still on it with CI, it is STILL IN HOUSE as of that capture. A
+   cut-short in-house read proves nothing about absence and says so.
+
+   The department check's pills read this store (roomMoves) and nothing else. Nothing here
+   asks protel anything: the rows are the capture files, already read every tick. */
+const STATUS_KEY = "reccheck_status_v1";
+const STATUS_KEEP_DAYS = 7;
+let STATUS_TICK = 0;                           // bumped when the store changes
+function statusLoad(){
+  try{ const o = JSON.parse(localStorage.getItem(STATUS_KEY) || "{}"); return (o && typeof o === "object" && !Array.isArray(o)) ? o : {}; }
+  catch(e){ return {}; }
+}
+function statusSave(st){ try{ localStorage.setItem(STATUS_KEY, JSON.stringify(st)); }catch(e){} }
+function stName(x){ return String(x || "").trim().replace(/\s+/g, " ").toUpperCase(); }
+function stRoom(x){ return String(x || "").trim(); }
+function stKey(name, room){ return stName(name) + "|" + stRoom(room); }
+/* an exact match of reservation name and room; "414-15" and "414" are one room */
+function stSameRoom(a, b){ a = stRoom(a); b = stRoom(b); return !!a && (a === b || (leadRoom(a) && leadRoom(a) === leadRoom(b))); }
+function stDayKey(k){ const y = Math.floor(k / 10000), m = Math.floor(k / 100) % 100, d = k % 100; return Date.UTC(y, m - 1, d) / 86400000; }
+function statusPrune(st){
+  const today = stDayKey(bnk());
+  for(const tag of ["AR", "DP", "MV"]){
+    const days = st[tag]; if(!days) continue;
+    for(const k of Object.keys(days)) if(!/^\d{8}$/.test(k) || today - stDayKey(+k) > STATUS_KEEP_DAYS) delete days[k];
+  }
+}
+/* A capture into the store. Returns true when something changed. */
+function statusIngest(tag, p, at){
+  if(!p || !p.rows) return false;
+  const st = statusLoad();
+  let changed = false;
+  if(tag === "IH"){
+    if(!isInhouseTitle(p.title)) return false;
+    const date = inhouseDate(p.title), key = dkey(date);
+    if(!key) return false;
+    const rows = p.rows.map(r => ({name: String(r[IH.NAME] || "").trim(), room: stRoom(r[IH.ROOM]), arr: String(r[IH.ARR] || "").trim(),
+                                   dep: String(r[IH.DEP] || "").trim(), status: String(r[IH.STATUS] || "").trim()}))
+                       .filter(r => r.name || r.room);
+    const cut = !!(p.done && p.done.cut);
+    const cap = {at: at, date: date, key: key, cut: cut, rows: rows};
+    if(!st.IH || st.IH.at !== at){ st.IH = cap; changed = true; }
+    /* absence is argued from a COMPLETE list only, so the last complete one is kept apart */
+    if(!cut && (!st.IHC || st.IHC.at !== at)){ st.IHC = cap; changed = true; }
+  }else{
+    const date = inhouseDate(p.title), key = dkey(date);
+    if(!key) return false;
+    const days = st[tag] = st[tag] || {};
+    const day = days[String(key)] = days[String(key)] || {title: p.title, date: date, at: 0, rows: {}};
+    if(day.at !== at){ day.at = at; day.title = p.title; day.cut = !!(p.done && p.done.cut); changed = true; }
+    for(const c of p.rows){
+      let row;
+      if(tag === "AR") row = {name: String(c[AR.NAME] || "").trim(), room: stRoom(c[AR.ROOM]), dep: String(c[AR.DEP] || "").trim(), status: String(c[AR.STATUS] || "").trim()};
+      else if(tag === "DP") row = {name: String(c[DP.NAME] || "").trim(), room: stRoom(c[DP.ROOM]), arr: String(c[DP.ARR] || "").trim(), status: String(c[DP.STATUS] || "").trim()};
+      else row = {from: stRoom(c[MV.FROM]), to: stRoom(c[MV.TO]), name: String(c[MV.NAME] || "").trim(), x: String(c[MV.X] || "").trim(),
+                  arr: String(c[MV.ARR] || "").trim(), dep: String(c[MV.DEP] || "").trim()};
+      /* a half-read row is not a reservation: both a name and a room, or it is not kept */
+      if(tag === "MV"){ if(!row.name || !row.from || !row.to) continue; }
+      else if(!row.name || !row.room) continue;
+      const k = tag === "MV" ? row.from + "|" + row.to + "|" + stName(row.name) + "|" + row.arr : stKey(row.name, row.room);
+      const had = day.rows[k];
+      if(!had){ row.first = at; row.last = at; day.rows[k] = row; changed = true; }
+      else{ had.last = at; for(const f of Object.keys(row)) if(row[f] !== undefined && had[f] !== row[f]){ had[f] = row[f]; changed = true; } }
+    }
+  }
+  if(changed){ statusPrune(st); statusSave(st); STATUS_TICK++; }
+  return changed;
+}
+/* the in-house row matching a reservation exactly, or null */
+function ihFind(cap, name, room){
+  if(!cap || !cap.rows) return null;
+  const n = stName(name);
+  for(const r of cap.rows) if(stName(r.name) === n && stSameRoom(r.room, room)) return r;
+  return null;
+}
+/* {cls, text} for an arrival or departure row, from the latest in-house captures.
+   dayKey is the day the list is for. An in-house list dated BEFORE that day says nothing
+   about a departure on it: a guest who arrived after that capture and departs today is
+   absent from it without ever having left, and a stale complete census — every later read
+   cut short — would call them checked out. So for departures only a census dated the
+   departure's day or later counts, and the time it prints is one from that day. */
+function statusMark(st, tag, row, dayKey){
+  const fresh = c => (c && (!dayKey || (c.key || 0) >= dayKey)) ? c : null;
+  if(tag === "AR"){
+    const ih = st.IH;
+    const m = ihFind(ih, row.name, row.room);
+    if(m && /^C[IO]\b/i.test(m.status)) return {cls: "mIn", text: t('st_markIn', hhmm(ih.at) || "?")};
+    return {cls: "mNone", text: t('st_markExpected')};
+  }
+  if(tag === "DP"){
+    const ih = fresh(st.IH), ihc = fresh(st.IHC);
+    const m = ihFind(ih, row.name, row.room);
+    if(m && /^CO\b/i.test(m.status)) return {cls: "mOut", text: t('st_markOutCO', hhmm(ih.at) || "?")};
+    if(m) return {cls: "mStay", text: t('st_markStay', hhmm(ih.at) || "?")};
+    if(ihc && !ihFind(ihc, row.name, row.room)) return {cls: "mOut", text: t('st_markOut', hhmm(ihc.at) || "?")};
+    if(ih && ih.cut) return {cls: "mNone", text: t('st_markCut', hhmm(ih.at) || "?")};
+    return {cls: "mNone", text: t('st_markNoIH')};
+  }
+  return null;
+}
+function stEsc(x){ return escHtml(String(x == null ? "" : x)); }
+/* the day a list is shown for: the latest capture's date, else the census's night */
+function statusDay(st, tag){
+  const held = LIVE_HELD[tag];
+  const k = held && held.date ? dkey(held.date) : 0;
+  if(k && st[tag] && st[tag][String(k)]) return k;
+  const days = st[tag] ? Object.keys(st[tag]).map(Number).filter(Boolean).sort((a, b) => b - a) : [];
+  return days.length ? days[0] : 0;
+}
+/* one line per list for the STATUS menu */
+function statusSub(st, tag){
+  if(legacyOn()) return t('st_legacyShort');
+  if(tag === "IH"){
+    const c = st.IH;
+    if(!c) return t('st_none');
+    return (c.date || "?") + " \u00b7 " + t('held_rows', c.rows.length) + (c.cut ? " \u00b7 " + t('st_cutShort') : "") + (hhmm(c.at) ? " \u00b7 " + t('st_takenAt', hhmm(c.at)) : "");
+  }
+  const k = statusDay(st, tag);
+  const day = k && st[tag] ? st[tag][String(k)] : null;
+  if(!day) return t('st_none');
+  const rows = Object.keys(day.rows || {}).length;
+  return (day.date || dfmt(k)) + " \u00b7 " + t('held_rows', rows) + (hhmm(day.at) ? " \u00b7 " + t('st_takenAt', hhmm(day.at)) : "");
+}
+window.__taStatusMenu = function(){
+  try{
+    const st = statusLoad();
+    const ids = {AR: "stArr", DP: "stDep", IH: "stInh", MV: "stMov"};
+    for(const tag of Object.keys(ids)){
+      const b = el(ids[tag]); if(!b) continue;
+      const sub = b.querySelector(".mSub"); if(sub) sub.textContent = statusSub(st, tag);
+    }
+  }catch(e){}
+};
+let ST_TAG_T = "";
+let STATUS_SIG = "";
+window.__taStatus = function(tag){ ST_TAG_T = String(tag || ""); STATUS_SIG = ""; try{ renderStatusList(); }catch(e){} };
 function statusCols(tag){
-  if(tag === "IH") return [["st_room", r => r[IH.ROOM]], ["st_name", r => r[IH.NAME]], ["st_arr", r => r[IH.ARR]], ["st_dep", r => r[IH.DEP]], ["st_status", r => r[IH.STATUS]]];
-  if(tag === "AR") return [["st_room", r => r[AR.ROOM]], ["st_name", r => r[AR.NAME]], ["st_dep", r => r[AR.DEP]], ["st_status", r => r[AR.STATUS]]];
-  if(tag === "DP") return [["st_room", r => r[DP.ROOM]], ["st_name", r => r[DP.NAME]], ["st_arr", r => r[DP.ARR]], ["st_status", r => r[DP.STATUS]]];
-  return [["st_from", r => r[MV.FROM]], ["st_to", r => r[MV.TO]], ["st_name", r => r[MV.NAME]], ["st_x", r => r[MV.X]], ["st_arr", r => r[MV.ARR]], ["st_dep", r => r[MV.DEP]]];
+  if(tag === "IH") return [["st_room", r => r.room], ["st_name", r => r.name], ["st_arr", r => r.arr], ["st_dep", r => r.dep], ["st_status", r => r.status]];
+  if(tag === "AR") return [["st_room", r => r.room], ["st_name", r => r.name], ["st_dep", r => r.dep], ["st_status", r => r.status]];
+  if(tag === "DP") return [["st_room", r => r.room], ["st_name", r => r.name], ["st_arr", r => r.arr], ["st_status", r => r.status]];
+  return [["st_from", r => r.from], ["st_to", r => r.to], ["st_name", r => r.name], ["st_x", r => r.x], ["st_arr", r => r.arr], ["st_dep", r => r.dep]];
 }
-function renderStatus(){
+function renderStatusList(){
   const box = el('stList');
-  if(!box) return;
-  const sig = JSON.stringify([legacyOn(), LANG, LIVE_TAGS.map(tg => [tg, LIVE_HELD[tg] ? [LIVE_HELD[tg].at, LIVE_HELD[tg].why] : null, LIVE_ERR[tg] || ""])]);
+  if(!box || !ST_TAG_T) return;
+  const tag = ST_TAG_T, st = statusLoad();
+  const sig = JSON.stringify([tag, legacyOn(), LANG, STATUS_TICK, LIVE_HELD[tag] ? LIVE_HELD[tag].at : 0, LIVE_ERR[tag] || "", st.IH ? st.IH.at : 0, st.IHC ? st.IHC.at : 0]);
   if(sig === STATUS_SIG) return;
   STATUS_SIG = sig;
   let h = "";
   if(legacyOn()) h += '<div class="stNote warn">' + stEsc(t('st_legacy')) + '</div>';
   h += '<div class="stNote">' + stEsc(t('st_note')) + '</div>';
-  for(const tag of LIVE_TAGS){
-    const held = LIVE_HELD[tag], cap = LIVE_ROWS[tag];
-    h += '<div class="stBlock"><div class="stHead"><span class="stName">' + stEsc(t('rpt_' + tag)) + '</span>';
-    if(!held){
-      h += '<span class="stMeta">' + stEsc(LIVE_ERR[tag] ? t('held_unread', t('held_' + tag), LIVE_ERR[tag]) : t('st_none')) + '</span></div></div>';
-      continue;
-    }
-    const when = hhmm(held.at);
-    const n = (held.total && held.total !== held.rows) ? t('held_rows2', held.rows, held.total) : t('held_rows', held.rows);
-    h += '<span class="stMeta">' + stEsc((held.date || "?") + " \u00b7 " + n + (when ? " \u00b7 " + t('st_takenAt', when) : "")) + '</span>';
-    h += '<span class="stState ' + (held.why ? "bad" : "good") + '">' + stEsc(held.why ? t('held_not') + t('why_' + held.why) : t('st_taken')) + '</span></div>';
-    const p = cap && cap.p;
-    if(p && p.rows && p.rows.length){
-      const cols = statusCols(tag);
-      const key = r => String(cols[0][1](r) || "");
-      const sorted = p.rows.slice().sort((a, b) => key(a).localeCompare(key(b), undefined, {numeric: true}));
-      h += '<div class="stWrap"><table class="st"><thead><tr>' + cols.map(c => '<th>' + stEsc(t(c[0])) + '</th>').join("") + '</tr></thead><tbody>';
-      for(const r of sorted) h += '<tr>' + cols.map(c => '<td>' + stEsc(c[1](r)) + '</td>').join("") + '</tr>';
-      h += '</tbody></table></div>';
-    }
-    h += '</div>';
+  h += '<div class="stBlock"><div class="stHead"><span class="stName">' + stEsc(t('rpt_' + tag)) + '</span>';
+  let rows = [], day = null, k = 0;
+  if(tag === "IH"){
+    const c = st.IH;
+    if(!c){ h += '<span class="stMeta">' + stEsc(LIVE_ERR.IH ? t('held_unread', t('held_IH'), LIVE_ERR.IH) : t('st_none')) + '</span></div></div>'; box.innerHTML = h; return; }
+    rows = c.rows.slice();
+    h += '<span class="stMeta">' + stEsc((c.date || "?") + " \u00b7 " + t('held_rows', rows.length) + (hhmm(c.at) ? " \u00b7 " + t('st_takenAt', hhmm(c.at)) : "")) + '</span>';
+    h += '<span class="stState ' + (c.cut ? "bad" : "good") + '">' + stEsc(c.cut ? t('st_cutShort') : t('st_complete')) + '</span></div>';
+  }else{
+    k = statusDay(st, tag);
+    day = k && st[tag] ? st[tag][String(k)] : null;
+    if(!day){ h += '<span class="stMeta">' + stEsc(LIVE_ERR[tag] ? t('held_unread', t('held_' + tag), LIVE_ERR[tag]) : t('st_none')) + '</span></div></div>'; box.innerHTML = h; return; }
+    rows = Object.keys(day.rows).map(x => day.rows[x]);
+    h += '<span class="stMeta">' + stEsc((day.date || dfmt(k)) + " \u00b7 " + t('held_rows', rows.length) + (hhmm(day.at) ? " \u00b7 " + t('st_takenAt', hhmm(day.at)) : "")) + '</span>';
+    h += '<span class="stState ' + (day.cut ? "bad" : "good") + '">' + stEsc(day.cut ? t('st_cutShort') : t('st_complete')) + '</span></div>';
+    if(tag === "AR") h += '<div class="stNote">' + stEsc(t('st_arrNote')) + '</div>';
+    if(tag === "DP") h += '<div class="stNote">' + stEsc(t('st_depNote')) + '</div>';
   }
+  const cols = statusCols(tag);
+  const key = r => String(cols[0][1](r) || "");
+  rows.sort((a, b) => key(a).localeCompare(key(b), undefined, {numeric: true}));
+  const marks = (tag === "AR" || tag === "DP");
+  h += '<div class="stWrap"><table class="st"><thead><tr>' + cols.map(c => '<th>' + stEsc(t(c[0])) + '</th>').join("")
+     + (marks ? '<th>' + stEsc(t('st_mark')) + '</th>' : "") + '</tr></thead><tbody>';
+  for(const r of rows){
+    const gone = day && r.last && day.at && r.last < day.at;
+    h += '<tr' + (gone ? ' class="gone"' : "") + '>' + cols.map(c => '<td>' + stEsc(c[1](r)) + '</td>').join("");
+    if(marks){
+      const m = statusMark(st, tag, r, k);
+      h += '<td class="' + m.cls + '">' + stEsc(m.text) + (gone ? " \u00b7 " + stEsc(t('st_gone', hhmm(r.last) || "?")) : "") + '</td>';
+    }
+    h += '</tr>';
+  }
+  h += '</tbody></table></div></div>';
   box.innerHTML = h;
 }
 async function ingestCaptured(tag, txt){
@@ -6875,6 +7165,7 @@ function applyReport(p, arrIsNight){
        that failure, so it is not remembered either and the next capture tries again. */
     if(!w.failed) RPT_SIG[fn] = sig;
     /* the ledger moved, so the panel that draws it is out of date until told */
+    if(w.made || w.fixed) LEDGER_TICK++;
     try{ if((w.made || w.fixed) && window.__rcMovesChanged) window.__rcMovesChanged(); }catch(e){}
     /* A report EVERY row of which was dropped used to return before this line, so the one
        case where he most needs to be told something came back and none of it could be used
@@ -6997,6 +7288,7 @@ function recordMoves(rows, night){
   try{ localStorage.setItem(MOVES_KEY, JSON.stringify(led)); }catch(e){}
   try{ localStorage.setItem(MOVES_DONE_KEY, JSON.stringify(done)); }catch(e){}
   try{ if(wrote) render(); }catch(e){}
+  if(wrote) LEDGER_TICK++;
   try{ if(wrote && window.__rcMovesChanged) window.__rcMovesChanged(); }catch(e){}
   return wrote;
 }
@@ -7073,6 +7365,7 @@ function applyInhouse(p, auto){
      same trap applyReport documents at RPT_SIG and avoids. */
   LIVE_SIG = sig;
   /* the census writes the ledger too, so the panel is stale until told */
+  LEDGER_TICK++;
   try{ if(window.__rcMovesChanged) window.__rcMovesChanged(); }catch(e){}
   render();
   return "ok";
@@ -7135,7 +7428,6 @@ let TAX_SCREEN = "";
 window.__taScreen = function(which){
   TAX_SCREEN = String(which || "");
   try{ liveEnsure(); }catch(e){}
-  if(TAX_SCREEN === "status"){ STATUS_SIG = ""; try{ renderStatus(); }catch(e){} }
 };
 
 /* time safeguard: warn when a loaded report is for a past working night. Separate scope

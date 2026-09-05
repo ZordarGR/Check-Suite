@@ -1,11 +1,11 @@
 {
-  "version": "1.17.41",
-  "type": "full",
+  "version": "1.17.42",
+  "type": "html",
   "engine": "1.17.41",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.41/RecCheck-Setup.exe",
   "setupSha256": "9b9e2a4a4ab2f9855637f072bf06b2fc6d0578d9b8455afcfaea8d218afef230",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "20cec67c97b09ede8d7801249ae9de82bf1d39d3ec1d10da3c3c4f00a5128d2e",
-  "notes": "STATUS, a third entry on the home screen: what protel has told the tool — the in-house list, the arrival and departure reports and the moves window, each as captured, with its date, when it was taken, whether it was taken in and if not why, and the rows themselves. It asks protel nothing.\n\nThe automatic read no longer depends on a shortcut setting. The window watcher took its target from “Only while protel is in front”, so unticking that option silently switched the whole feed off. The target is its own line now, written whenever protel has been picked.\n\nA report is stamped with protel's own date when the in-house list has been captured, the same clock the census uses, instead of the tool's night. The two agreed only while protel's date and the clock on the wall did."
+  "sha256": "80a9002632d0bfc89447377433e8097ac86b3f360b0e9e8137683309ba273940",
+  "notes": "STATUS is four lists now — Arrivals, Departures, In-house, Moves — each kept for the day from every capture the helper took, so a row that left protel's list is still there, marked as gone since when.\n\nAn arrival is marked checked in only when the in-house list shows the same name and room with CI. A departure is marked checked out only when a complete in-house list for that day does not show that name and room, or shows it with CO; a cut-short in-house read proves nothing and says so. A row leaving either list proves nothing on its own — the departure date can be wrong.\n\nThe pills in the department check come from these lists and not from the rate list's ledger or an XPS: the departure list draws DEPARTED, the arrival list ARRIVED, both TURNOVER, a moves row with protel's X MOVED. A dot on a departed, turnover or moved pill means a receipt in tonight's report carries that reservation's own name."
 }
