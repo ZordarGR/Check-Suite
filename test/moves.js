@@ -24,6 +24,7 @@ const localStorage = {getItem:k=>(k in store?store[k]:null), setItem:(k,v)=>stor
 const R = new Function("localStorage","JSON","Object","String","RegExp","console",
   [ 'const MOVES_KEY = "reccheck_moves_v2";',
     src.match(/^const MOVES_DONE_KEY = .*$/m)[0],
+    "let LEDGER_TICK = 0;",                       // the STATUS redraw counter recordMoves bumps
     src.match(/^const MV = .*$/m)[0],
     "function render(){}",
     lift("dkey"), lift("loadLedger"), lift("movesApplied"), lift("recordMoves"),

@@ -449,44 +449,82 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
   ck("and he was not moved off the screen he was on", after17.tax !== "none");
   await p.close();
 
-  /* 18. STATUS: what protel has told the tool, on its own screen. His idea, built 1.17.41:
-         each list as captured, with its date, when it was taken, whether the ingest took
-         it, and the rows themselves — read-only, and redrawn only when a capture changes. */
+  /* 18. STATUS: four submenus — Arrivals, Departures, In-house, Moves — his specification
+         of 05/09. Each list is kept for the day as the union of its captures; an arrival is
+         checked in only when the in-house list shows the same name and room with CI; a
+         departure is checked out only when a complete in-house list captured afterwards
+         does not show it. Read-only, and it asks protel nothing. */
   p = await b.newPage();
   await p.addInitScript(bridgeFor(null, false));
   await p.setViewportSize({width: 1280, height: 720});
   await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
   await p.evaluate(() => window.__t.showScreen("status"));
   await p.waitForTimeout(400);
-  const st0 = await p.evaluate(() => document.getElementById("stList").textContent);
-  ck("with nothing captured every list says so", (st0.match(/no capture in the last 20 hours/g) || []).length === 4);
-  ck("and the screen says it asks protel nothing", /asks protel for anything/.test(st0));
-  await p.evaluate((o) => { window.__files.IH = o.h; window.__at.IH = 11;
-                            window.__files.DP = o.d; window.__at.DP = 12;
-                            window.__files.MV = o.m; window.__at.MV = 13; }, {
+  const menu0 = await p.evaluate(() => ({
+    shown: document.getElementById("statusScreen").style.display !== "none" && document.getElementById("statusListScreen").style.display === "none",
+    labels: ["stArr", "stDep", "stInh", "stMov"].map(id => document.getElementById(id).querySelector(".mLabel").textContent),
+    subs: ["stArr", "stDep", "stInh", "stMov"].map(id => document.getElementById(id).querySelector(".mSub").textContent)}));
+  ck("STATUS opens on the four submenus, not on a list", menu0.shown);
+  ck("named Arrivals, Departures, In-house, Moves", /arrivals/i.test(menu0.labels[0]) && /departures/i.test(menu0.labels[1]) && /in-house/i.test(menu0.labels[2]) && /moves/i.test(menu0.labels[3]));
+  ck("with nothing captured every one says so", menu0.subs.every(x => /no capture in the last 20 hours/.test(x)));
+  await p.evaluate((o) => { window.__files.IH = o.h; window.__at.IH = 1756944000000;      /* real clocks, so the marks print a time */
+                            window.__files.DP = o.d; window.__at.DP = 1756944060000;
+                            window.__files.MV = o.m; window.__at.MV = 1756944120000;
+                            window.__files.AR = o.a; window.__at.AR = 1756944180000; }, {
     h: IH("Guests inhouse: 04/09/26", ROWS),
-    d: RPT("DP", "Departure Report for 04/09/26", [["BURWIECK/GRUBE TAREK/KATHARINA ", "125", "2/0/0/0/0", "28/08/26", "CO"]]),
+    d: RPT("DP", "Departure Report for 04/09/26", [["BURWIECK/GRUBE TAREK/KATHARINA ", "125", "2/0/0/0/0", "28/08/26", "CO"],
+                                                    ["ARKINSTALL PHILIP/CAROL ", "414", "2/0/0/0/0", "02/09/26", "CI"]]),
+    a: RPT("AR", "Arrival Report for the 04/09/26", [["AMANN ANJA/BERND ", "337", "2/0/0/0/0", "14/09/26", "CI"],
+                                                      ["ABBUSHI MIRIAM/OLIVER/NAHLA/HELENA ", "426", "2/0/0/2/0", "05/09/26", "CI"]]),
     m: "TITLE\tPerform Move for Date 04/09/26\nMV\t525\tBSF\t505\tBSF\tVASSILIEV\tX\t03/09/26\t17/09/26\nDONE\t1\t1\t9\t5\tunicode\tcomplete\n"});
   await p.waitForTimeout(6500);
-  const st1 = await p.evaluate(() => document.getElementById("stList").textContent);
-  ck("the in-house list is there with its date and its rows",
-     /In-house list.*04\/09\/26/.test(st1) && /ABBUSHI MIRIAM\/OLIVER\/NAHLA\/HELENA/.test(st1) && /414-15/.test(st1));
-  ck("a departure report with the name protel printed", /Departure report.*04\/09\/26/.test(st1) && /BURWIECK\/GRUBE/.test(st1));
-  ck("the moves window with both rooms and the mark", /Moves window/.test(st1) && /525/.test(st1) && /505/.test(st1) && /VASSILIEV/.test(st1));
-  ck("a list never captured still says so", /Arrival report.*no capture/.test(st1));
-  ck("what the ingest took is marked taken", (st1.match(/taken at|taken/g) || []).length >= 3 && !/not taken/.test(st1));
-  ck("and he is on the status screen, not moved", await p.evaluate(() => document.getElementById("statusScreen").style.display !== "none"));
-  /* a capture the ingest refused says so here too */
-  await p.evaluate((c) => { window.__files.IH = c; window.__at.IH = 14; },
-    ["TITLE\tGuests inhouse: 04/09/26", ...ROWS.map(r => "IH\t" + r.join("\t")), "DONE\t2\t250\t83\t47\tunicode\tcut-short"].join("\n"));
-  await p.waitForTimeout(5500);
-  const st2 = await p.evaluate(() => document.getElementById("stList").textContent);
-  ck("a refused capture is shown with its reason and the list's real size",
-     /2 of 250 rows/.test(st2) && /not taken: the read was cut short/.test(st2));
-  /* the home screen has the third button */
-  await p.evaluate(() => window.__t.showScreen("menu"));
-  const btn = await p.evaluate(() => { const b = document.getElementById("statusBtn"); return b && getComputedStyle(b).display !== "none" ? b.textContent : ""; });
-  ck("the home screen offers STATUS", /STATUS/.test(btn));
+  const menu1 = await p.evaluate(() => ["stArr", "stDep", "stInh", "stMov"].map(id => document.getElementById(id).querySelector(".mSub").textContent));
+  ck("each submenu carries its list's date, its rows and when it was taken",
+     menu1.every(x => /04\/09\/26 · \d+ rows · taken at \d\d:\d\d/.test(x)) && /2 rows/.test(menu1[0]) && /2 rows/.test(menu1[1]) && /2 rows/.test(menu1[2]) && /1 rows/.test(menu1[3]));
+  ck("and the screen was not moved from under him", await p.evaluate(() => document.getElementById("statusScreen").style.display !== "none"));
+  /* Arrivals */
+  await p.click("#stArr");
+  await p.waitForTimeout(300);
+  const ar = await p.evaluate(() => ({shown: document.getElementById("statusListScreen").style.display !== "none", txt: document.getElementById("stList").textContent}));
+  ck("Arrivals opens the list screen", ar.shown && /Arrival report/.test(ar.txt) && /04\/09\/26/.test(ar.txt) && /complete/.test(ar.txt));
+  ck("it says it asks protel nothing", /asks protel for anything/.test(ar.txt));
+  ck("and carries the note about rows leaving it as guests check in", /Rows leave this list as guests check in/.test(ar.txt));
+  ck("an arrival the in-house list shows with CI is checked in", /ABBUSHI[^]*?checked in — on the in-house list at \d\d:\d\d/.test(ar.txt));
+  ck("one it does not show yet is expected", /AMANN[^]*?expected — not checked in/.test(ar.txt));
+  /* Departures */
+  await p.click("#stListBack");
+  await p.waitForTimeout(200);
+  ck("back goes to the four submenus", await p.evaluate(() => document.getElementById("statusScreen").style.display !== "none" && document.getElementById("statusListScreen").style.display === "none"));
+  await p.click("#stDep");
+  await p.waitForTimeout(300);
+  const dp = await p.evaluate(() => document.getElementById("stList").textContent);
+  ck("Departures: the report, with its note that a row leaving proves nothing", /Departure report/.test(dp) && /departure date can be wrong/.test(dp));
+  ck("a departure absent from the complete in-house list is checked out", /BURWIECK[^]*?checked out — absent from the in-house list at \d\d:\d\d/.test(dp));
+  ck("one still on it with CI — as 414-15 for 414 — is still in house", /ARKINSTALL[^]*?still in house at \d\d:\d\d/.test(dp));
+  /* In-house and Moves */
+  await p.click("#stListBack"); await p.waitForTimeout(200); await p.click("#stInh"); await p.waitForTimeout(300);
+  const ihl = await p.evaluate(() => document.getElementById("stList").textContent);
+  ck("In-house: the list with its date, its rows and that it was complete", /In-house list.*04\/09\/26/.test(ihl) && /ABBUSHI MIRIAM\/OLIVER\/NAHLA\/HELENA/.test(ihl) && /414-15/.test(ihl) && /complete/.test(ihl));
+  await p.click("#stListBack"); await p.waitForTimeout(200); await p.click("#stMov"); await p.waitForTimeout(300);
+  const mvl = await p.evaluate(() => document.getElementById("stList").textContent);
+  ck("Moves: both rooms, the name and the mark", /Moves window/.test(mvl) && /525/.test(mvl) && /505/.test(mvl) && /VASSILIEV/.test(mvl) && /X/.test(mvl));
+  /* the departure leaves the departure list; a cut-short in-house read follows */
+  await p.click("#stListBack"); await p.waitForTimeout(200); await p.click("#stDep"); await p.waitForTimeout(300);
+  await p.evaluate((o) => { window.__files.DP = o.d; window.__at.DP = 1756947600000; window.__files.IH = o.c; window.__at.IH = 1756947660000; }, {
+    d: RPT("DP", "Departure Report for 04/09/26", [["ARKINSTALL PHILIP/CAROL ", "414", "2/0/0/0/0", "02/09/26", "CI"]]),
+    c: ["TITLE\tGuests inhouse: 04/09/26", "IH\t" + ROWS[0].join("\t"), "DONE\t1\t250\t83\t47\tunicode\tcut-short"].join("\n")});
+  await p.waitForTimeout(6500);
+  const dp2 = await p.evaluate(() => ({txt: document.getElementById("stList").textContent, shown: document.getElementById("statusListScreen").style.display !== "none"}));
+  ck("a departure gone from the list is still on it, said to be gone, and still checked out by the earlier complete census",
+     dp2.shown && /BURWIECK[^]*?checked out — absent from the in-house list at \d\d:\d\d · gone from the list since \d\d:\d\d/.test(dp2.txt));
+  ck("the one the cut-short read does not show is not called out by it", /ARKINSTALL[^]*?was cut short — absence proves nothing/.test(dp2.txt));
+  await p.click("#stListBack"); await p.waitForTimeout(300);
+  const inhSub = await p.evaluate(() => document.getElementById("stInh").querySelector(".mSub").textContent);
+  ck("the In-house submenu says the latest read was cut short", /read cut short/.test(inhSub));
+  /* the home screen has the third button, and back from the submenus goes home */
+  await p.click("#stBack"); await p.waitForTimeout(200);
+  const btn = await p.evaluate(() => { const b = document.getElementById("statusBtn"); return document.getElementById("menuScreen").style.display !== "none" && b && getComputedStyle(b).display !== "none" ? b.textContent : ""; });
+  ck("back goes home, and the home screen offers STATUS", /STATUS/.test(btn));
   await p.close();
 
   /* 19. WHICH CLOCK STAMPS A REPORT (7a, decided 1.17.41): the census's date when a census

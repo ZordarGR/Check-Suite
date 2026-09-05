@@ -11,9 +11,10 @@ Run the ones that need nothing but node:
 | | what it holds the line on |
 |---|---|
 | `scopecheck.js` | every call in the moves functions resolves to something declared. A silent `ReferenceError` inside a `stage()` looks exactly like "there was nothing to draw" — this is how the movements panel was dark for two versions |
-| `movespanel.js` | `renderMoves` over a DOM shim: all four pill kinds, and the receipts dot only on a departure whose **name** matches |
-| `pills0209.js` | the night of 02/09 rebuilt from his DEBUG dump — a name change must never draw a departure |
-| `report.js` | the DEBUG report lists **every** pill with the rate list that wrote it, and flags the stale ones |
+| `status.js` | the STATUS store, through the shipped writer and marks: each list kept for the day as the union of its captures; an arrival gone from the arrival list is nothing until the in-house list shows the same name and room with CI; a departure gone from the departure list is nothing until a COMPLETE in-house list captured afterwards does not show it — a cut-short one proves nothing; `414` and `414-15` are one room; the pills come from the store and from nothing else, and the dot lands on a departed, turnover or moved pill only under that reservation's own name |
+| `movespanel.js` | `renderMoves` over a DOM shim, the night built through `statusIngest`: all four pill kinds, the receipts dot only on a departure whose **name** matches, and a ledger entry alone drawing nothing |
+| `pills0209.js` | the night of 02/09 rebuilt from his DEBUG dump — a name change must never draw a departure; since 1.17.42 the ledger draws nothing at all, and the two real departures come from the departure list |
+| `report.js` | the DEBUG report prints the STATUS store's view of the night first — the pills' source — then the ledger's own, labelled as such, with **every** pill the ledger would draw and the rate list that wrote it, the stale ones flagged |
 | `poison.js` | one reservation printed `31/12/99` must not delete the ledger |
 | `names.js` | a charge takes its room's name; a nickname still overrides; the printed name survives on the tooltip |
 | `nighttest.js` | the working night turns at 03:30, the shift at 07:00, and the upgrade never wipes a tick mid-shift |
@@ -49,7 +50,12 @@ protel having opened nothing, and the movements panel redraws when a capture wri
 ledger without moving him off the screen he is on. Since 1.17.41 it drives the STATUS
 screen too — every list as captured, a refused one with its reason, the third home button
 — and pins which clock stamps a report: the census's date when one is held, the tool's
-night before that.
+night before that. Since 1.17.42 STATUS is four submenus — Arrivals, Departures, In-house,
+Moves — and case 18 drives each: the sub-lines, the list screen, an arrival checked in only
+by the in-house list, a departure checked out only by absence from a complete one, a row
+gone from its list said as gone and nothing more, a cut-short read proving nothing, and
+back to the submenus and home. Case 17 pins the department check's panel drawing from a
+capture — the pills' source now — while he is on another screen.
 
 `h-sweep.html` carries TWO probes: `window.__t` for the app scope and `window.__tx` for the
 tax scope. The two <script> blocks share nothing, so a guard in one cannot be reached from

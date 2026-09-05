@@ -37,11 +37,15 @@ jobs:
       # and refuses to publish if the manifest and this file name different versions.
       - name: Refuse to release with the manifest and the workflow naming different versions
         run: |
-          mv="v$(jq -r .version update/latest.json)"
+          mv="v$(jq -r 'if .type == "full" then .version else .engine end' update/latest.json)"
           [ "$mv" = "$VERSION" ] || { echo "update/latest.json says $mv, this workflow says $VERSION" >&2; exit 1; }
+      # An html-only release moves the manifest's version past the installer's: the page
+      # updates itself on first run, so the installer page says so and carries its notes.
       - name: Write the release notes from the manifest
         run: |
+          t=$(jq -r .type update/latest.json); v=$(jq -r .version update/latest.json)
           { printf '## RecCheck %s — Windows\n\n' "${VERSION#v}"
+            [ "$t" = html ] && printf 'The page updates itself to %s on first run.\n\n' "$v"
             jq -r .notes update/latest.json
             printf '\n'
             cat .github/release-notes.md; } > release-notes.md

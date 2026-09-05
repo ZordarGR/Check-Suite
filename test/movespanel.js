@@ -1,5 +1,10 @@
 /* Drives the SHIPPED renderMoves — the function that was actually broken — over a
-   minimal DOM, and reads back what it drew. */
+   minimal DOM, and reads back what it drew.
+
+   Since 1.17.42 the pills come from the STATUS store, which the helper's captures feed,
+   and not from the ledger. So the night is built here the way it is built in the app:
+   the captured lists go through the shipped statusIngest, and roomMoves reads what it
+   wrote. The ledger is still filled in below, and must count for nothing. */
 const fs = require("fs");
 const src = fs.readFileSync("app/index.html", "utf8");
 
@@ -12,7 +17,8 @@ function lift(name){
     else if (src[j] === "}") { d--; if (!d) return src.slice(at + 1, j + 1); }
   }
 }
-const elDecl = src.match(/^const el = \(tag, cls, txt\) =>.*$/m)[0];
+const line = re => { const m = src.match(re); if(!m) throw new Error("missing " + re); return m[0]; };
+const elDecl = line(/^const el = \(tag, cls, txt\) =>.*$/m);
 
 // ---- minimal DOM ----
 function Node(tag){ this.tag = tag; this.className = ""; this.textContent = ""; this.title = "";
@@ -28,19 +34,35 @@ const document = {
 };
 const $ = sel => (sel === "#moves" ? moves : null);
 
-// ---- his data, shaped like the real ledger ----
+// ---- one store for both halves ----
 const store = {};
-const localStorage = { getItem: k => (k in store ? store[k] : null), setItem: (k,v) => store[k]=String(v) };
-const led = {
+const localStorage = { getItem: k => (k in store ? store[k] : null), setItem: (k,v) => store[k]=String(v), removeItem: k => { delete store[k]; } };
+
+// ---- the ledger, shaped like the real one — and no longer a source of pills ----
+store["reccheck_moves_v2"] = JSON.stringify({
   "53":  {20260825: {d: 20260901, n: "BERKMANN"}},
-  "67":  {20260827: {d: 20260901, n: "MILAS"}},
-  "72":  {20260901: {d: 20260906, n: "NEMMEIER"}},
-  "112": {20260825: {d: 20260901, n: "JAROLIMEK/WIEPURGER"}, 20260901: {d: 20260912, n: "JABLOVSKI"}},
-  "148": {20260901: {d: 20260904, n: "PFUENDL", from: "325"}},
-  "325": {20260828: {d: 20260904, n: "PFUENDL", mv: true}},
-  "601": {20260830: {d: 20260930, n: "STAYS PUT"}}
-};
-store["reccheck_moves_v2"] = JSON.stringify(led);
+  "601": {20260830: {d: 20260930, n: "STAYS PUT"}},
+  "777": {20260825: {d: 20260901, n: "LEDGER ONLY"}}      // departs tonight by the ledger; on no list
+});
+
+// ---- the night as protel showed it, through the shipped writer ----
+const TAX = new Function("localStorage", "t", "I18N", [
+  line(/^const IH = \{NAME: 0.*$/m), line(/^const AR = \{NAME: 0.*$/m), line(/^const DP = \{NAME: 0.*$/m), line(/^const MV = \{FROM: 0.*$/m),
+  "const STATUS_KEY = \"reccheck_status_v1\"; const STATUS_KEEP_DAYS = 7; let STATUS_TICK = 0;",
+  lift("dkey"), lift("leadRoom"), lift("bnk"), lift("isInhouseTitle"), lift("inhouseDate"), lift("parseTagged"),
+  lift("statusLoad"), lift("statusSave"), lift("stName"), lift("stRoom"), lift("stKey"), lift("stSameRoom"), lift("stDayKey"),
+  lift("statusPrune"), lift("statusIngest"),
+  "return (tag, txt, at) => statusIngest(tag, parseTagged(txt, tag), at);"].join("\n"))(localStorage, k => k, {en: {}});
+const RPT = (tag, title, rows) => ["TITLE\t" + title, ...rows.map(r => tag + "\t" + r.join("\t")),
+  "DONE\t" + rows.length + "\t" + rows.length + "\t9\t5\tunicode\tcomplete"].join("\n");
+TAX("DP", RPT("DP", "Departure Report for 01/09/26", [
+  ["BERKMANN ", "53", "2/0/0/0/0", "25/08/26", "CI"],
+  ["MILAS ", "67", "1/0/0/0/0", "27/08/26", "CI"],
+  ["JAROLIMEK/WIEPURGER ", "112", "2/0/0/0/0", "25/08/26", "CI"]]), 1);
+TAX("AR", RPT("AR", "Arrival Report for the 01/09/26", [
+  ["NEMMEIER ", "72", "2/0/0/0/0", "06/09/26", ""],
+  ["JABLOVSKI ", "112", "2/0/0/0/0", "12/09/26", ""]]), 2);
+TAX("MV", "TITLE\tPerform Move for Date 01/09/26\nMV\t325\tBSF\t148\tBSF\tPFUENDL\tX\t28/08/26\t04/09/26\nDONE\t1\t1\t9\t5\tunicode\tcomplete\n", 3);
 
 const MODEL = {
   reportDate: "1/9/2026",
@@ -51,25 +73,38 @@ const MODEL = {
   ]
 };
 const ROOMS = {}, STATE = {receipts: {}};
-const I18N = JSON.parse('{"en":{}}');
 const t = (k, v) => k + (v ? "(" + JSON.stringify(v) + ")" : "");
 
 const body = [elDecl, lift("dateNum"), lift("dShort"), lift("rKey"), lift("rState"),
-  "const effRoom = " + src.match(/^function effRoom\(r\)\{.*$/m)[0].replace(/^function effRoom\(r\)/, "(r) =>") .replace(/^\(r\) =>\{/, "(r) => {"),
-  lift("checkableList"), lift("sameName"), src.match(/^const MOVES_KEY = .*$/m)[0], lift("loadMoves"),
+  "const effRoom = " + line(/^function effRoom\(r\)\{.*$/m).replace(/^function effRoom\(r\)/, "(r) =>") .replace(/^\(r\) =>\{/, "(r) => {"),
+  lift("checkableList"), lift("sameName"),
+  "const STATUS_KEY = \"reccheck_status_v1\";", lift("loadStatus"), lift("statusRows"), lift("pillRoom"),
   lift("leavingIndex"), "let LEAVING = {};", lift("isLeaving"),
-  lift("roomMoves"), lift("renderMoves"),
+  lift("roomMoves"), lift("renderMovesFor"), lift("renderMoves"),
   "renderMoves(); return {classes: [...classes], root: moves};"].join("\n");
 
-const run = new Function("document","$","localStorage","MODEL","ROOMS","STATE","t","classes","moves","Number","String","Object","Set","parseInt","Math","JSON", body);
-const out = run(document, $, localStorage, MODEL, ROOMS, STATE, t, classes, moves, Number, String, Object, Set, parseInt, Math, JSON);
+const run = new Function("document","$","localStorage","MODEL","ROOMS","STATE","t","classes","moves", body);
+const out = run(document, $, localStorage, MODEL, ROOMS, STATE, t, classes, moves);
 
 console.log("body classes :", out.classes.join(" ") || "(none)");
-let heading = null, n = 0;
+let heading = null, n = 0; const drawn = {};
 for (const c of out.root.children){
   if (c.className && c.className.startsWith("mvGroup")) heading = c.children[0].textContent;
   else if (c.className === "mvGrid")
-    for (const p of c.children){ n++; console.log("  " + heading.padEnd(12) + p.textContent.padEnd(5) + p.className); }
+    for (const p of c.children){ n++; drawn[p.textContent] = p.className; console.log("  " + heading.padEnd(12) + p.textContent.padEnd(5) + p.className); }
   else if (c.className === "mvTitle") console.log("title        :", c.textContent);
 }
 console.log(n + " pills drawn");
+let bad = 0;
+const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL") + "  " + l); };
+console.log();
+ck("53  departs, with the departing guest's receipt -> dep, dotted", /mv-dep\b/.test(drawn["53"] || "") && /\brec\b/.test(drawn["53"]));
+ck("67  departs, no receipt -> dep, no dot",                         /mv-dep\b/.test(drawn["67"] || "") && !/\brec\b/.test(drawn["67"]));
+ck("72  arrives -> arr",                                             /mv-arr\b/.test(drawn["72"] || ""));
+ck("112 departs and is arrived into -> turnover",                    /mv-turn\b/.test(drawn["112"] || ""));
+ck("148 taken by a move -> move; 325, left, is no pill",             /mv-move\b/.test(drawn["148"] || "") && !("325" in drawn));
+ck("777, tonight's departure by the ledger alone -> no pill",        !("777" in drawn));
+ck("601 stays put -> no pill",                                       !("601" in drawn));
+ck("exactly those five",                                             n === 5);
+console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");
+process.exit(bad ? 1 : 0);
