@@ -176,6 +176,17 @@ async function press(){ spawned.length = 0; const h = await handlers["sc-helper"
   h = await press();
   ck("and once written they are listed again", page.helperDetail(h).indexOf("binds=focus=PROT") >= 0);
 
+  /* 4b. the watcher's target is its own line: unticking "only while protel is in front"
+         must not switch the automatic feed off (7a of the notes, built 1.17.41) */
+  spawned.length = 0; await handlers["sc-focus-set"](null, false, "PROT"); await tick(); await tick();
+  const bindsOff = fs.readFileSync(BINDS, "utf8");
+  ck("with the gate unticked no focus= line is written", !/^focus=/m.test(bindsOff));
+  ck("but the watcher's target still is",              /^watch=PROT$/m.test(bindsOff));
+  h = await press();
+  ck("and the detail line lists it",                   page.helperDetail(h).indexOf("watch=PROT") >= 0);
+  await rebind();
+  ck("ticked on, both lines are written",              /^focus=PROT$/m.test(fs.readFileSync(BINDS, "utf8")) && /^watch=PROT$/m.test(fs.readFileSync(BINDS, "utf8")));
+
   /* 5. the exe on disk does not answer at all */
   HELPER.statusReply = "";
   h = await press();

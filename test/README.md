@@ -46,7 +46,10 @@ bridge and requires that a list whose caption does not name it writes **nothing*
 ledger. It also pins the line under the Tax Check: a capture the ingest refused is
 named as *not taken*, a capture file the tool could not read is said as that and not as
 protel having opened nothing, and the movements panel redraws when a capture writes the
-ledger without moving him off the screen he is on.
+ledger without moving him off the screen he is on. Since 1.17.41 it drives the STATUS
+screen too — every list as captured, a refused one with its reason, the third home button
+— and pins which clock stamps a report: the census's date when one is held, the tool's
+night before that.
 
 `h-sweep.html` carries TWO probes: `window.__t` for the app scope and `window.__tx` for the
 tax scope. The two <script> blocks share nothing, so a guard in one cannot be reached from

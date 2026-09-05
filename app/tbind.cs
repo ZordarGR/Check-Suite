@@ -492,6 +492,14 @@ static class TBind {
      press is allowed. A gate that cannot see must never be the reason a shortcut stops
      working. */
   static string focusNeedle = null;                 // null = no gate at all
+  /* THE WATCHER'S TARGET IS ITS OWN LINE. Until v27 the window watcher took its target
+     from the shortcut gate's needle, which RecCheck wrote only while "Only while protel
+     is in front" was BOTH pointed at something AND ticked on — so unticking a keyboard-
+     shortcut option silently ended the whole automatic feed. RecCheck writes `watch=`
+     whenever a target has been picked, whatever the tick says; `focus=` still gates the
+     shortcuts and nothing else. An old binds file with only `focus=` still works. */
+  static string watchNeedle = null;
+  static string WatchTarget(){ return watchNeedle != null ? watchNeedle : focusNeedle; }
   static IntPtr fgWnd = IntPtr.Zero;                // last window we decided about …
   static bool fgOk = true;                          // … and what we decided
   static string fgWhat = "";
@@ -1611,6 +1619,7 @@ static class TBind {
       binds.Clear();
       bindList.Clear();
       focusNeedle = null;
+      watchNeedle = null;
       if(f == null || !System.IO.File.Exists(f)) return;
       foreach(string raw in System.IO.File.ReadAllLines(f)){
         string line = (raw ?? "").Trim();
@@ -1618,6 +1627,11 @@ static class TBind {
         if(line.StartsWith("focus=")){
           string needle = line.Substring(6).Trim();
           focusNeedle = needle.Length > 0 ? needle.ToUpperInvariant() : null;
+          continue;
+        }
+        if(line.StartsWith("watch=")){
+          string needle = line.Substring(6).Trim();
+          watchNeedle = needle.Length > 0 ? needle.ToUpperInvariant() : null;
           continue;
         }
         ParseBind(line);
@@ -2518,7 +2532,7 @@ static class TBind {
      configured there is no protel to identify, and the watcher stays off rather than
      logging the whole desktop. */
   static uint[] ProtelPids(){
-    string needle = focusNeedle;
+    string needle = WatchTarget();
     if(needle == null || needle.Length == 0) return new uint[0];
     System.Collections.Generic.List<uint> found = new System.Collections.Generic.List<uint>();
     try{
@@ -2597,9 +2611,9 @@ static class TBind {
           AppendWatch(DateTime.Now.ToString("HH:mm:ss") + "  HOOKS  "
             + (hooked.Length == 0
                ? "watching nothing \u2014 " + (want.Length == 0
-                   ? (focusNeedle == null || focusNeedle.Length == 0
+                   ? (WatchTarget() == null || WatchTarget().Length == 0
                       ? "no protel target is set (PROTEL SHORTCUTS \u2192 point it at protel)"
-                      : "no running process matches \"" + focusNeedle + "\"")
+                      : "no running process matches \"" + WatchTarget() + "\"")
                    : "Windows refused the hook on " + mk)
                : hooked.Length + " protel process(es): " + pk
                  + (missedL.Count > 0 ? "  (could not hook: " + mk + ")" : "")) + "\r\n");
@@ -2674,7 +2688,7 @@ static class TBind {
     }catch(Exception){}
   }
 
-  const string VER = "v26";
+  const string VER = "v27";
 
   static int Main(string[] args){
     int parentPid;

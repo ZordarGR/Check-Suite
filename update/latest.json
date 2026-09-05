@@ -1,11 +1,11 @@
 {
-  "version": "1.17.40",
+  "version": "1.17.41",
   "type": "full",
-  "engine": "1.17.40",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.40/RecCheck-Setup.exe",
-  "setupSha256": "bb51ec0fcff1c3baa3ed4c2b36339b93a03cac312757be65782b2cbafd0a4313",
+  "engine": "1.17.41",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.41/RecCheck-Setup.exe",
+  "setupSha256": "9b9e2a4a4ab2f9855637f072bf06b2fc6d0578d9b8455afcfaea8d218afef230",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "cfc4a5d358aa448ea83417a90138bdb2d635ccede8012b71c9fa894fba65efb7",
-  "notes": "A list opened again in protel is read again. Until now the helper read each list once per caption: the in-house list was whatever its first open of the day showed, and a moves window re-opened with a new row was not read. His decision of 05/09: a real open re-reads, the four-second cooldown stays, and a restatement of an open window's caption still does not."
+  "sha256": "20cec67c97b09ede8d7801249ae9de82bf1d39d3ec1d10da3c3c4f00a5128d2e",
+  "notes": "STATUS, a third entry on the home screen: what protel has told the tool — the in-house list, the arrival and departure reports and the moves window, each as captured, with its date, when it was taken, whether it was taken in and if not why, and the rows themselves. It asks protel nothing.\n\nThe automatic read no longer depends on a shortcut setting. The window watcher took its target from “Only while protel is in front”, so unticking that option silently switched the whole feed off. The target is its own line now, written whenever protel has been picked.\n\nA report is stamped with protel's own date when the in-house list has been captured, the same clock the census uses, instead of the tool's night. The two agreed only while protel's date and the clock on the wall did."
 }

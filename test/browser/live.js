@@ -449,6 +449,78 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
   ck("and he was not moved off the screen he was on", after17.tax !== "none");
   await p.close();
 
+  /* 18. STATUS: what protel has told the tool, on its own screen. His idea, built 1.17.41:
+         each list as captured, with its date, when it was taken, whether the ingest took
+         it, and the rows themselves — read-only, and redrawn only when a capture changes. */
+  p = await b.newPage();
+  await p.addInitScript(bridgeFor(null, false));
+  await p.setViewportSize({width: 1280, height: 720});
+  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
+  await p.evaluate(() => window.__t.showScreen("status"));
+  await p.waitForTimeout(400);
+  const st0 = await p.evaluate(() => document.getElementById("stList").textContent);
+  ck("with nothing captured every list says so", (st0.match(/no capture in the last 20 hours/g) || []).length === 4);
+  ck("and the screen says it asks protel nothing", /asks protel for anything/.test(st0));
+  await p.evaluate((o) => { window.__files.IH = o.h; window.__at.IH = 11;
+                            window.__files.DP = o.d; window.__at.DP = 12;
+                            window.__files.MV = o.m; window.__at.MV = 13; }, {
+    h: IH("Guests inhouse: 04/09/26", ROWS),
+    d: RPT("DP", "Departure Report for 04/09/26", [["BURWIECK/GRUBE TAREK/KATHARINA ", "125", "2/0/0/0/0", "28/08/26", "CO"]]),
+    m: "TITLE\tPerform Move for Date 04/09/26\nMV\t525\tBSF\t505\tBSF\tVASSILIEV\tX\t03/09/26\t17/09/26\nDONE\t1\t1\t9\t5\tunicode\tcomplete\n"});
+  await p.waitForTimeout(6500);
+  const st1 = await p.evaluate(() => document.getElementById("stList").textContent);
+  ck("the in-house list is there with its date and its rows",
+     /In-house list.*04\/09\/26/.test(st1) && /ABBUSHI MIRIAM\/OLIVER\/NAHLA\/HELENA/.test(st1) && /414-15/.test(st1));
+  ck("a departure report with the name protel printed", /Departure report.*04\/09\/26/.test(st1) && /BURWIECK\/GRUBE/.test(st1));
+  ck("the moves window with both rooms and the mark", /Moves window/.test(st1) && /525/.test(st1) && /505/.test(st1) && /VASSILIEV/.test(st1));
+  ck("a list never captured still says so", /Arrival report.*no capture/.test(st1));
+  ck("what the ingest took is marked taken", (st1.match(/taken at|taken/g) || []).length >= 3 && !/not taken/.test(st1));
+  ck("and he is on the status screen, not moved", await p.evaluate(() => document.getElementById("statusScreen").style.display !== "none"));
+  /* a capture the ingest refused says so here too */
+  await p.evaluate((c) => { window.__files.IH = c; window.__at.IH = 14; },
+    ["TITLE\tGuests inhouse: 04/09/26", ...ROWS.map(r => "IH\t" + r.join("\t")), "DONE\t2\t250\t83\t47\tunicode\tcut-short"].join("\n"));
+  await p.waitForTimeout(5500);
+  const st2 = await p.evaluate(() => document.getElementById("stList").textContent);
+  ck("a refused capture is shown with its reason and the list's real size",
+     /2 of 250 rows/.test(st2) && /not taken: the read was cut short/.test(st2));
+  /* the home screen has the third button */
+  await p.evaluate(() => window.__t.showScreen("menu"));
+  const btn = await p.evaluate(() => { const b = document.getElementById("statusBtn"); return b && getComputedStyle(b).display !== "none" ? b.textContent : ""; });
+  ck("the home screen offers STATUS", /STATUS/.test(btn));
+  await p.close();
+
+  /* 19. WHICH CLOCK STAMPS A REPORT (7a, decided 1.17.41): the census's date when a census
+         is held, the tool's night before one is. The fixtures are dated 04/09/26, which is
+         not tonight in this container, so the two are told apart. */
+  p = await b.newPage();
+  await p.addInitScript(bridgeFor(null, false));
+  await p.setViewportSize({width: 1280, height: 620});
+  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
+  await p.evaluate(() => window.__t.showScreen("tax"));
+  await p.waitForTimeout(400);
+  await p.evaluate((o) => { window.__files.IH = o.h; window.__at.IH = 21; window.__files.DP = o.d; window.__at.DP = 22; }, {
+    h: IH("Guests inhouse: 04/09/26", ROWS),
+    d: RPT("DP", "Departure Report for 04/09/26", [["BURWIECK/GRUBE TAREK/KATHARINA ", "125", "2/0/0/0/0", "28/08/26", "CO"]])});
+  await p.waitForTimeout(6500);
+  const seen19 = await p.evaluate(() => { const l = JSON.parse(localStorage.getItem("reccheck_moves_v2") || "{}"); return l["125"] && l["125"]["20260828"] && l["125"]["20260828"].seen; });
+  const clocks = await p.evaluate(() => ({c: window.__tx.censusNight(), b: window.__tx.bnk()}));
+  ck("with a census held, a report is stamped with the census's date", seen19 === 20260904 && clocks.c === 20260904);
+  ck("which is not the tool's night here", clocks.b !== 20260904);
+  await p.close();
+  p = await b.newPage();
+  await p.addInitScript(bridgeFor(null, false));
+  await p.setViewportSize({width: 1280, height: 620});
+  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
+  await p.evaluate(() => window.__t.showScreen("tax"));
+  await p.waitForTimeout(400);
+  await p.evaluate((d) => { window.__files.DP = d; window.__at.DP = 23; },
+    RPT("DP", "Departure Report for 04/09/26", [["BURWIECK/GRUBE TAREK/KATHARINA ", "125", "2/0/0/0/0", "28/08/26", "CO"]]));
+  await p.waitForTimeout(6500);
+  const seen19b = await p.evaluate(() => { const l = JSON.parse(localStorage.getItem("reccheck_moves_v2") || "{}"); return l["125"] && l["125"]["20260828"] && l["125"]["20260828"].seen; });
+  const bnk19 = await p.evaluate(() => window.__tx.bnk());
+  ck("with no census held, a report is stamped with the tool's night", seen19b === bnk19);
+  await p.close();
+
   await b.close();
   console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");
   process.exit(bad ? 1 : 0);

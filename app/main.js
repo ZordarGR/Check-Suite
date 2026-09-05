@@ -201,9 +201,16 @@ function focusConfig(){
    kept the second. Nothing misbehaved — but this is the line that decides whether the
    helper's window watcher runs at all, and an edit made to the copy that loses would have
    gone nowhere with no error to show for it. */
+/* Two lines from one picker. `focus=` gates the shortcuts and is written only while the
+   option is ticked; `watch=` is the window watcher's target and is written whenever a
+   target has been picked at all. They used to be one line, so unticking "Only while protel
+   is in front" silently switched the whole automatic feed off (7a of the notes). */
 function focusSpec(){
   const f = focusConfig();
-  return f.on ? ["focus=" + f.needle] : [];
+  const out = [];
+  if(f.on) out.push("focus=" + f.needle);
+  if(f.needle) out.push("watch=" + f.needle);
+  return out;
 }
 function seqSpec(){
   const q = seqConfig();
