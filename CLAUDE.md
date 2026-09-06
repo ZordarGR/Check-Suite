@@ -74,6 +74,37 @@ Said the same day, and it governs the tone of everything after it: *"from this m
 onward we are working with delicate functions and if something were to go wrong it would
 cost us"*. Nothing merges on "it should be fine".
 
+**7. Do not compact. At ~70% of the context, write a handoff and let a new session take
+over.**
+His instruction, 06/09: *"do not compact, ever, when nearing 70% context write a handoff
+for a new session to pick up"*.
+
+**Say plainly what this rule can and cannot get.** Automatic compaction is the harness's,
+not mine — I cannot refuse it from inside a turn. He turns it off himself in `/config`
+("Auto-compact"). What is mine is the other half, and it is the half that matters:
+**never let the context reach the point where a summary is the only thing left.** So:
+
+* At roughly 70%, stop taking new work. Finish or park what is in hand, write the handoff,
+  say it is written, and let him open a fresh session.
+* **The handoff goes in `.reccheck-notes.md` and is committed and pushed** — a summary
+  that lives only in a dead session's context is worth nothing. That file already exists
+  to be read cold; the handoff is its front section, not a separate document.
+* It must carry: the release the repo is on and whether it is merged and published; what
+  was built this session and what it was checked against; **every open question put to him
+  and not yet answered, in his words**; anything half-built, named and by file; and what
+  is known NOT to have been verified.
+* Never a narrative of the session. A new session needs the state, not the story.
+
+The rule exists because a compaction drops exactly what these notes were written to
+preserve: the reasons a guard exists, the numbers behind a decision, and which of his
+words settled what. A session that has lost those starts filling the gaps with
+assumptions, which is rule 1 broken by default.
+
+**And do not reach for this rule to explain a mistake.** His data was corrupted by
+guessing — mine, twice — not by a lost context. When something is wrong, the answer is
+that I guessed instead of asking. His words, 06/09: *"it is your own fault and guessing,
+dont troll me, next time ask me"*.
+
 ## The hard constraint
 
 **protel is not his.** It is vendor-managed software on the hotel's PC, which is also not
