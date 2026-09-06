@@ -1,11 +1,11 @@
 {
-  "version": "1.17.50",
-  "type": "full",
+  "version": "1.17.51",
+  "type": "html",
   "engine": "1.17.50",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.50/RecCheck-Setup.exe",
   "setupSha256": "a24a9e5ae8225de3f127ef4e4a01f0727fb037561866be79bf6d79006d01a598",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "90ab357b87c84bfbb249bb3daa298593f748af20519b7e7fc192f89e9e29cad3",
-  "notes": "A new REPORTS section on the home screen. Print protel's Departure List by Time to the Microsoft XPS Document Writer, save it into the reports folder, and it appears here: preview it with the guest names withheld — everything else exactly as protel printed it, departure times and board included — print it from inside the tool, or delete it to the Recycle Bin. Nothing is sent to protel.\n\nAlso in this build: the room movements panel is ARRIVALS, DEPARTURES, MOVES with cyan move pills; the dot and the LEFT TODAY mark take a receipt whose name opens the departing guest's; each receipt is named after its own guest; names refresh in place when the in-house list is captured."
+  "sha256": "45ac8ee814426c29b4e449e6f53ad6b1fe8088b6eeb68ca645c9d15819b2f15c",
+  "notes": "The REPORTS button on the home screen spanned the whole window instead of sitting in the column with AUDIT, ALERTS and STATUS. The home buttons are now sized by being on the home screen rather than by a list that had to be updated by hand, so this cannot happen again to a button added later."
 }
