@@ -14,7 +14,9 @@ try{ window.__t = { openModal:openModal, closeModal:closeModal,
   setModel:function(m){MODEL=m;}, setState:function(x){STATE=x;},
   setWatch:function(w){WATCH=w;}, FB:function(){return FB;},
   buildPrintSheet:function(){return buildPrintSheet();},
-  setStateKey:function(k){stateKey=k;}, rKey:function(r){return rKey(r);} }; }catch(e){}
+  setStateKey:function(k){stateKey=k;}, rKey:function(r){return rKey(r);},
+  openDepPreview:openDepPreview, repGo:repGo,
+  armedPrint:function(){return PRINT_JOB;} }; }catch(e){}
 `;
 /* The tax half is its own <script> and shares nothing with the app half, so a probe in
    one cannot reach the other. This second one exposes the few tax-scope values a harness

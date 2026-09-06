@@ -1548,7 +1548,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.52";
+const APP_VERSION = "1.17.53";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -4134,10 +4134,11 @@ const FB = {tool: "dept",
                      rel: (function(){ try{ return localStorage.getItem("reccheck_fbrel_dept") || localStorage.getItem("reccheck_fbrel") || ""; }catch(e){ return ""; } })()},
               tax:  {dir: null, open: null, stale: false,
                      rel: (function(){ try{ return localStorage.getItem("reccheck_fbrel_tax") || ""; }catch(e){ return ""; } })()},
-              /* REPORTS' own folder (1.17.52). It has no file-browser screen — REPORTS
-                 lists it itself — so only `dir` is ever used here; the entry exists so
-                 the picker and the OPTIONS line have somewhere to keep it. */
-              rep:  {dir: null, open: null, stale: false, rel: ""}
+              /* REPORTS' own folder (1.17.52). It has no file-browser SCREEN — REPORTS
+                 draws its own list — but since 1.17.53 it walks sub-folders like the
+                 other two, so `rel` is live here and is remembered the same way. */
+              rep:  {dir: null, open: null, stale: false,
+                     rel: (function(){ try{ return localStorage.getItem("reccheck_fbrel_rep") || ""; }catch(e){ return ""; } })()}
             }};
 function fbCur(){ return FB.p[FB.tool]; }
 function fbGo(rel){
@@ -4169,6 +4170,11 @@ function paintHelp(){
   }
 }
 function showScreen(which){
+  /* FIRST, above every early return in here. An armed REPORTS print must not survive a
+     screen change — otherwise a preview he armed and then walked away from would send a
+     later Ctrl+P to the departures sheet. Put below the "app" return at first, which is
+     the screen he is likeliest to leave to; test/browser/reports.js caught it. */
+  clearPrintJob();
   /* Cleared BEFORE renderAll, which calls back in here — otherwise this recurses. */
   if(which === "app" && NAMES_STALE && MODEL){
     NAMES_STALE = false;
@@ -4388,6 +4394,9 @@ async function fbPickDir(tool){
   const dir = await window.reccheckFiles.pickDir(tool);
   if(!dir) return;
   FB.p[tool].dir = dir;
+  /* a path inside the OLD folder means nothing in the new one, for any of the three */
+  FB.p[tool].rel = "";
+  try{ localStorage.setItem("reccheck_fbrel_" + tool, ""); }catch(e){}
   paintDirSub();
   if(SCREEN === "files" && FB.tool === tool) fbRefresh();
   if(SCREEN === "reports" && tool === "rep") renderReports();
@@ -6244,21 +6253,69 @@ function buildDepSheet(p, fname){
   sheet.innerHTML = h;
   return h;
 }
+/* WHOSE sheet #printSheet holds when the browser prints. Declared here, beside the only
+   thing that ever arms it, and read by the beforeprint listener further down. */
+let PRINT_JOB = null;          // {kind:"dep", p, fname} — armed only by REPORTS' Print button
+function clearPrintJob(){ PRINT_JOB = null; }
+let REP_RUN = 0;               // only the newest render may paint — see renderReports
+/* REPORTS walks sub-folders the way the Department Check's and the Tax Check's browsers
+   do — his ask, 06/09: "i want to be able to see subfolders also, like dep and tax
+   check". files.js has returned `dirs` and honoured `rel` since long before REPORTS
+   existed; this screen was the one caller that asked for the root and threw the folders
+   away. Its `rel` is remembered per tool exactly like theirs (`reccheck_fbrel_rep`). */
+function repGo(rel){
+  FB.p.rep.rel = String(rel || "");
+  try{ localStorage.setItem("reccheck_fbrel_rep", FB.p.rep.rel); }catch(e){}
+  renderReports();
+}
+function repUpRel(){
+  const parts = String(FB.p.rep.rel || "").split(/[\\/]/).filter(Boolean);
+  parts.pop();
+  return parts.join("/");
+}
 async function renderReports(){
+  /* Two renders can be in flight at once — a capture landing on the watcher's door while
+     a file is still unzipping, or a folder pressed mid-parse. They share the one #repList,
+     so both would append into it and the screen would show two folders at once. The old
+     guard compared $("#repList") against the node it started from; #repList is a fixed
+     element in the page, so that comparison could never be true and guarded nothing.
+     A run counter can. Walking sub-folders is what makes this easy to hit. */
+  const run = ++REP_RUN;
   const box = $("#repList");
   if(!box) return;
   box.innerHTML = "";
   const note = (k, v) => { const d = el("div", "stNote", t(k, v)); box.append(d); };
   if(!window.reccheckFiles){ note("rep.noBridge"); return; }
   let res;
-  try{ res = await window.reccheckFiles.list("rep", ""); }catch(e){ note("rep.noDir"); return; }
+  try{ res = await window.reccheckFiles.list("rep", FB.p.rep.rel || ""); }catch(e){ note("rep.noDir"); return; }
+  if(run !== REP_RUN) return;
   if(!res || !res.dir){ note("rep.noDir"); return; }
+  if(res.error && FB.p.rep.rel){ repGo(""); return; }             // the sub-folder is gone — back to the root
+  if(typeof res.rel === "string") FB.p.rep.rel = res.rel.split("\\").join("/");
+  const here = FB.p.rep.rel;
+  const dirs = res.dirs || [];                                    // an old engine sends none
+  const where = el("div", "stNote", res.dir + (here ? " / " + here : ""));
+  where.title = where.textContent;
+  box.append(where);
+  if(here){
+    const up = el("button", "mItem");
+    up.append(el("span", "mLabel", "\u21B0 " + t("fb.up")));
+    up.onclick = () => repGo(repUpRel());
+    box.append(up);
+  }
+  for(const d of dirs){
+    const b = el("button", "mItem");
+    b.append(el("span", "mLabel", "\u25A3 " + d.name));
+    b.append(el("span", "mSub", t("fb.folder")));
+    b.onclick = () => repGo(String(d.rel).split("\\").join("/"));
+    box.append(b);
+  }
   const files = (res.files || []).filter(f => /\.(oxps|xps)$/i.test(f.name));
   let shown = 0;
   for(const f of files){
     const r = await repParse(f);
     if(!r.ok) continue;
-    if(SCREEN !== "reports" || $("#repList") !== box) return;      // he left while a file was unzipping
+    if(SCREEN !== "reports" || run !== REP_RUN) return;            // he left, or a newer render started
     const p = r.parsed;
     const b = el("button", "mItem primary");
     b.append(el("span", "mLabel", t("rep.item", {d: p.listDate || "?"})));
@@ -6267,7 +6324,7 @@ async function renderReports(){
     box.append(b);
     shown++;
   }
-  if(!shown) note("rep.none", {dir: res.dir});
+  if(!shown && !dirs.length) note("rep.none", {dir: res.dir + (here ? " / " + here : "")});
 }
 function openDepPreview(f, p){
   buildDepSheet(p, f.name);
@@ -6280,9 +6337,12 @@ function openDepPreview(f, p){
       <button class="btn amber" id="pvGo">${esc(t("pv.print"))}</button>
     </div>`);
   $("#modal").classList.add("wide");
-  $("#pvCancel").onclick = closeModal;
-  $("#pvGo").onclick = () => { closeModal(); setTimeout(() => window.print(), 80); };
+  $("#pvCancel").onclick = () => { clearPrintJob(); closeModal(); };
+  /* ARM the departures sheet for this one print. beforeprint rebuilds it from the job —
+     see the listener below for why it is not enough to have written #printSheet already. */
+  $("#pvGo").onclick = () => { PRINT_JOB = {kind: "dep", p: p, fname: f.name}; closeModal(); setTimeout(() => window.print(), 80); };
   $("#repDel").onclick = async () => {
+    clearPrintJob();
     if(!confirm(t("rep.deleteQ", {f: f.name}))) return;
     try{
       const ok = window.reccheckFiles.trash ? await window.reccheckFiles.trash("rep", f.path) : false;
@@ -6308,7 +6368,30 @@ function printCorrections(){
   $("#pvGo").onclick = () => { closeModal(); setTimeout(() => window.print(), 80); };
 }
 $("#printBtn").onclick = printCorrections;
-window.addEventListener("beforeprint", () => { if(MODEL && !document.body.classList.contains("taxPrint")) buildPrintSheet(true); });
+/* HE CAUGHT THIS, 06/09: "i click to print the xps for departures and i print the
+   corrections from dep check". #printSheet is shared by the corrections and by REPORTS'
+   redacted departures list — deliberately, since 1.17.50 uses the same sheet and the same
+   @media print — and this listener rebuilt the CORRECTIONS into it on EVERY print while a
+   department report was loaded. buildDepSheet had already written the departures sheet;
+   beforeprint overwrote it a moment before the page was painted. The Tax Check was exempt
+   because it had been given a body class; REPORTS was born in 1.17.50 outside that
+   exemption. The same stale-enumeration shape as the home buttons (7l) and norm()'s
+   two-way switch (7m): an exception list does not cover what is added after it.
+   So the INTENT is named instead. A print job says which sheet to build; no job means the
+   corrections, which is every other print in the app.
+   THE JOB IS NOT CONSUMED HERE. Chromium re-renders its print preview when the paper size
+   or the margins are changed, and a second `beforeprint` finding the job already spent
+   would print the corrections — his bug again, at the moment paper is coming out. It is
+   disarmed instead by `afterprint`, which this app has relied on since the Tax Check
+   shipped (it is what drops the taxPrint class), and by showScreen, and by Cancel and
+   Delete. So a stale job can only ever mean the departures sheet while he is standing on
+   the REPORTS screen, which is the harmless direction of the two. */
+window.addEventListener("beforeprint", () => {
+  if(document.body.classList.contains("taxPrint")) return;    // the tax half prints its own mount
+  if(PRINT_JOB && PRINT_JOB.kind === "dep"){ buildDepSheet(PRINT_JOB.p, PRINT_JOB.fname); return; }
+  if(MODEL) buildPrintSheet(true);
+});
+window.addEventListener("afterprint", clearPrintJob);
 document.addEventListener("keydown", e => {
   if((e.ctrlKey || e.metaKey) && (e.key === "p" || e.key === "P")){
     e.preventDefault();
