@@ -59,7 +59,8 @@ function pillsFor(reportDate, receipts, rooms){
     lift("checkableList"), lift("sameName"), lift("isCutOf"), lift("receiptName"),
     "const STATUS_KEY = \"reccheck_status_v1\";", lift("loadStatus"), lift("statusRows"), lift("pillRoom"),
     "const LEGACY_KEY = \"reccheck_legacy\";", lift("legacyOn"), line(/^const MOVES_KEY = .*$/m), lift("loadMoves"), lift("ledgerMoves"), 
-    lift("dateNum2"), lift("prevNightKey"), "const RECEIPTS_KEY = \"reccheck_receipts_v1\"; const RECEIPTS_KEEP = 60;", lift("loadNightReceipts"), lift("saveNightReceipts"), lift("leavingIndex"), "let LEAVING = {};", lift("isLeaving"),
+    lift("dateNum2"), lift("prevNightKey"), "const RECEIPTS_KEY = \"reccheck_receipts_v1\"; const RECEIPTS_KEEP = 60;", lift("loadNightReceipts"), lift("saveNightReceipts"),
+    "let ARRIVING = {};", lift("leavingIndex"), "let LEAVING = {};", lift("nameHit"), lift("censusNameOf"), lift("roomNames"), lift("isLeaving"),
     lift("roomMoves"), lift("renderMovesFor"), lift("renderMoves"),
     "renderMoves(); return {classes: [...classes], root: moves, leaving: leavingIndex(), isLeaving: isLeaving, LEAVING: LEAVING, receiptName: receiptName};"].join("\n");
   const fn = new Function("document", "$", "localStorage", "MODEL", "STATE", "ROOMS", "t", "classes", "moves", body);
@@ -68,11 +69,13 @@ function pillsFor(reportDate, receipts, rooms){
   for(const c of out.root.children){
     if(c.className && c.className.startsWith("mvGroup")) head = c.children[0].textContent.replace("mv.h.", "");
     else if(c.className === "mvGrid") for(const p of c.children)
-      pills.push({room: p.textContent, kind: head, dot: /\brec\b/.test(p.className), title: p.title});
+      pills.push({room: p.textContent.split("→").pop().trim(), text: p.textContent, kind: head, dot: /\brec\b/.test(p.className), title: p.title});
   }
   return {pills, has: r => pills.some(p => p.room === r), kind: r => (pills.find(p => p.room === r) || {}).kind,
+          kinds: r => pills.filter(p => p.room === r).map(p => p.kind).sort().join("+"),
+          text: r => (pills.find(p => p.room === r) || {}).text,
           dot: r => pills.some(p => p.room === r && p.dot), hasMoves: out.classes.indexOf("hasMoves") >= 0, leaving: out.leaving,
-          name: r => out.receiptName(r)};
+          name: r => out.receiptName(r), isLeaving: (room, name) => out.isLeaving(room, name)};
 }
 
 /* ---- fixtures: the helper's own line shapes ---- */
@@ -185,8 +188,8 @@ rpt("MV", "TITLE\tPerform Move for Date 04/09/26\nMV\t525\tBSF\t505\tBSF\tVASSIL
 P = pillsFor(NIGHT, []);
 ck("a departure-list row is a departure pill",                 P.kind("110") === "dep" && P.kind("116") === "dep");
 ck("an arrival-list row is an arrival pill",                   P.kind("337") === "arr");
-ck("departed and arrived into again is a turnover",            P.kind("120") === "turn");
-ck("a moves row with the X is a move pill on the room taken",  P.kind("505") === "move" && !P.has("525"));
+ck("departed and arrived into again is a departure pill AND an arrival pill — no turnover", P.kinds("120") === "arr+dep");
+ck("a moves row with the X is a move pill on the room taken, reading old → new", P.kind("505") === "move" && !P.has("525") && P.text("505") === "525 → 505");
 ck("a moves row without the X is not a move protel shows",     !P.has("210") && !P.has("211"));
 ck("a move to the same room is not a move",                    !P.has("300"));
 ck("a holding room is not a pill",                             !P.has("9000"));
@@ -254,8 +257,17 @@ store["reccheck_receipts_v1"] = "{}";
 rpt("DP", RPT("DP", "Departure Report for 04/09/26", [["MUELLER HANS-JOACHIM/ANNELIESE ", "110", "2/0/0/0/0", "26/08/26", "CI"]]), T(11));
 const CUTN = "MUELLER HANS-JOACHIM/ANN", WHOLEN = "MUELLER HANS-JOACHIM/ANNELIESE";
 P = pillsFor(NIGHT, [rc("110", CUTN)]);
-ck("without the census a cut name does not dot — exact, as before",                     !P.dot("110"));
-ck("and the receipt keeps its own name",                                                 P.name(rc("110", CUTN)) === CUTN);
+ck("a cut name that opens the departing name dots — his word: the departing name has a receipt", P.dot("110"));
+ck("and the receipt keeps its own name, uncompleted, with no census",                    P.name(rc("110", CUTN)) === CUTN);
+ck("a receipt that opens no departing name does not dot",                                !pillsFor(NIGHT, [rc("110", "MUELLER HANS-JOACHIN")]).dot("110"));
+/* the one case the opening cannot settle: an arrival on the same room whose name the
+   receipt opens too — then nothing is marked, the arriving guest's paper above all */
+rpt("AR", RPT("AR", "Arrival Report for the 04/09/26", [["MUELLER HANS-JOACHIM/ANNA ", "110", "2/0/0/0/0", "10/09/26", "CI"]]), T(12));
+P = pillsFor(NIGHT, [rc("110", CUTN)]);
+ck("a cut name that opens BOTH the departing and the arriving name marks nothing",      !P.dot("110") && P.kinds("110") === "arr+dep");
+ck("a receipt that IS the arriving name marks nothing either, though it opens the departing one", !pillsFor(NIGHT, [rc("110", "MUELLER HANS-JOACHIM/ANNA")]).dot("110"));
+ck("a longer cut that opens only the departing name still dots",                         pillsFor(NIGHT, [rc("110", "MUELLER HANS-JOACHIM/ANNEL")]).dot("110"));
+ck("the red mark follows the same rule",                                                 !pillsFor(NIGHT, [rc("110", CUTN)]).isLeaving("110", CUTN) && pillsFor(NIGHT, []).isLeaving("110", "MUELLER HANS-JOACHIM/ANNEL"));
 P = pillsFor(NIGHT, [rc("110", CUTN)], {"110": {guest: WHOLEN, liveKey: 20260905}});
 ck("with the census holding the whole name, the receipt's truncation is completed",     P.name(rc("110", CUTN)) === WHOLEN);
 ck("and the dot lands on the departure",                                                 P.dot("110"));

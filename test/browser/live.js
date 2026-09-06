@@ -602,6 +602,42 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
   ck("the NEW guest's receipt on the departing room is not marked", c20d.n === 1 && c20d.left === false);
   await p.close();
 
+  /* 21. THE NAMES REFRESH IN PLACE — his word, 05/09: "yes they should be refreshed even
+         when on the screen". A report is open on the department check with the cut name
+         on its row and on a search card; the in-house list is captured; both show the
+         whole name without him leaving the screen or retyping, and the screen stays. */
+  p = await b.newPage();
+  await p.addInitScript(bridgeFor(null, false));
+  await p.setViewportSize({width: 1280, height: 720});
+  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
+  await p.waitForTimeout(300);
+  await p.evaluate(() => {
+    const mk = (sn, room, guest) => ({sn, serial: sn, roomMain: room, room: room, guest, dept: "RESTAURANT", total: 10, cancelled: false, voided: false,
+                                      rates: {"24%": 10, "13%": 0, "6%": 0, "base": 10}, time: "21:14"});
+    const recs = [mk("12345", "426", "ABBUSHI MIRIAM/OLIVER/NA")];
+    const depts = {}; for(const d of ["RESTAURANT","CAFETERIA","TAVERNAKI","KAFENIO","BAR"]) depts[d] = {list: d === "RESTAURANT" ? recs : [], other: []};
+    window.__t.setModel({reportDate: "4/9/2026", receipts: recs, depts});
+    window.__t.setState({receipts: {}, extras: []});
+    window.__t.setStateKey("20260904");
+    window.__t.showScreen("app");
+    window.__t.renderAccordions();
+    const f = document.getElementById("snInput"); f.value = "12345"; f.dispatchEvent(new Event("input"));
+  });
+  await p.waitForTimeout(300);
+  const c21a = await p.evaluate(() => ({row: (document.querySelector("#accordions .rrow .name") || {}).textContent || "",
+                                        card: (document.querySelector("#matches .match .name") || {}).textContent || ""}));
+  ck("before the capture the row and the card carry the cut name", /OLIVER\/NA$/.test(c21a.row) && /OLIVER\/NA$/.test(c21a.card));
+  await p.evaluate((txt) => { window.__files.IH = txt; window.__at.IH = 1756944060000; },
+    IH("Guests inhouse: 04/09/26", [["ABBUSHI MIRIAM/OLIVER/NAHLA/HELENA", "426", "2/0/0/2/0", "29/08/26", "05/09/26", "CI"]]));
+  await p.waitForTimeout(6500);
+  const c21b = await p.evaluate(() => ({row: (document.querySelector("#accordions .rrow .name") || {}).textContent || "",
+                                        card: (document.querySelector("#matches .match .name") || {}).textContent || "",
+                                        q: document.getElementById("snInput").value,
+                                        app: document.querySelector("main").style.display !== "none"}));
+  ck("the capture lands and the row shows the whole name, on the screen he is on", c21b.row === "ABBUSHI MIRIAM/OLIVER/NAHLA/HELENA" && c21b.app);
+  ck("and the search card too, with the query still typed",                     c21b.card === "ABBUSHI MIRIAM/OLIVER/NAHLA/HELENA" && c21b.q === "12345");
+  await p.close();
+
   await b.close();
   console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");
   process.exit(bad ? 1 : 0);
