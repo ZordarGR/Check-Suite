@@ -121,8 +121,14 @@ body.onMenu #clList.moreBelow{
 /* the card's padding shrinks on a short window, so the button parked in the gutter
    follows it rather than drifting off the row it belongs to */
 body.onMenu #userBtn{top:clamp(10px,1.6vh,16px)}
-/* the one button that starts the night never gives up its place */
-body.onMenu #auditBtn,body.onMenu #alertsBtn,body.onMenu #statusBtn{flex:0 0 auto}
+/* THE HOME BUTTONS ARE NAMED BY WHERE THEY ARE, NOT ONE BY ONE.
+   Three rules used to list #auditBtn, #alertsBtn and #statusBtn by id, so a button added
+   to the home screen was born outside the column: no flex:0 0 auto, no --homeW cap, no
+   640px cap, no gap above it. ALERTS hit exactly that once (1.17.33) and was fixed by
+   adding its id to all three; REPORTS hit it again the same way in 1.17.50 and spanned
+   the whole window. #menuScreen holds nothing else with this class, so the next button
+   is sized by being there. */
+body.onMenu #menuScreen > .mItem{flex:0 0 auto}   /* never gives up its place */
 
 /* ---------- and it uses the width it has ----------
    Fitting the window is not the same as showing everything at once: a 640px strip down
@@ -135,7 +141,7 @@ body.onMenu #auditBtn,body.onMenu #alertsBtn,body.onMenu #statusBtn{flex:0 0 aut
    the CSS only says what to do with them. */
 body.onMenu{--homeW:640px}
 body.onMenu #landing{max-width:min(1560px,96vw)}
-body.onMenu #homeBar,body.onMenu #checklist,body.onMenu #auditBtn,body.onMenu #alertsBtn,body.onMenu #statusBtn{max-width:var(--homeW)}
+body.onMenu #homeBar,body.onMenu #checklist,body.onMenu #menuScreen > .mItem{max-width:var(--homeW)}
 body.onMenu #clList{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
   grid-template-rows:repeat(var(--clRows,999),auto);column-gap:22px;align-content:start}
 .mcat{position:relative}
@@ -217,8 +223,8 @@ body.onMenu #clList{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
 .clRow .clBtns button.clMove{padding:2px 7px;font-size:10px;line-height:1.5}
 .clRow .clBtns button.clMove:disabled{opacity:.28;cursor:default;border-color:var(--line);color:var(--dim)}
 .clEmpty{color:var(--faint);font-size:13px;font-family:var(--mono);padding:14px 4px}
-#auditBtn,#alertsBtn,#statusBtn{max-width:640px;margin:0 auto;width:100%}
-#alertsBtn,#statusBtn{margin-top:8px}
+#menuScreen > .mItem{max-width:640px;margin:0 auto;width:100%}
+#menuScreen > .mItem + .mItem{margin-top:8px}   /* every one after the first, however many there are */
 /* STATUS: what protel has told the tool. Every rule scoped — the bare-selector leak is a
    landmine here (see the notes). The tables want more room than the menu column. */
 #statusListScreen .mNav{max-width:960px}
@@ -1535,7 +1541,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.50";
+const APP_VERSION = "1.17.51";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -2840,6 +2846,13 @@ function layoutChecklist(){
   const rowH = list.children[0].getBoundingClientRect().height || 42;
   const cs = getComputedStyle(card);
   const chrome = parseFloat(cs.paddingBottom) + parseFloat(cs.marginBottom);
+  /* A SEED, NOT AN ACCOUNTING — deliberately generous, and it must stay that way. Only
+     one button's height is taken off, though four sit below the list, so `avail` comes
+     out too large, `perCol` too large and the first guess too FEW columns; the loop at
+     the end then measures and adds columns until the list fits. Starting low and growing
+     by measurement lands on the fewest columns that fit. Subtract all four heights here
+     and the first guess overshoots — the loop only ever adds — so the list would split
+     into three columns where two had room. */
   const avail = ms.getBoundingClientRect().bottom - list.getBoundingClientRect().top
               - chrome - btn.getBoundingClientRect().height;
   const perCol = Math.max(1, Math.floor(avail / rowH));
