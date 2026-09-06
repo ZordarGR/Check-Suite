@@ -1431,7 +1431,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.47";
+const APP_VERSION = "1.17.48";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1626,8 +1626,8 @@ en: {
   "extra.inReport": "That serial IS in tonight's report — close this and search for it.",
   "search.hint": "Type the receipt's full serial number · Enter confirms the match",
   "search.many": " matches — pick one with its checkbox", "search.reversed": "REVERSED at the POS — nothing to check",
-  "tag.leaving": "LEAVING TODAY",
-  "tag.leavingTitle": "This room is on today's departure list and the receipt is under the same name — the charge was made before check-out. Settle it before they leave.",
+  "tag.leaving": "LEFT TODAY",
+  "tag.leavingTitle": "This guest is on the departure list for the report's day and the receipt is under the same name — the charge was made before check-out and settled with it. Once confirmed, this paper is no longer needed.",
   "search.void": "VOID — consolidated by {by}, not counted",
   "room.ph": "room…", "room.hint": "room № · Enter = OK · ↑↓ rows · ←→ OK/⚠ · Esc",
   "acc.extra": " · incl. {n} added by hand", "acc.void": " · {n} void",
@@ -1869,8 +1869,8 @@ gr: {
   "extra.inReport": "Αυτός ο σειριακός ΥΠΑΡΧΕΙ στην αποψινή αναφορά — κλείσε και αναζήτησέ τον.",
   "search.hint": "Πληκτρολογήστε ολόκληρο τον σειριακό αριθμό · Enter επιβεβαιώνει το ταίριασμα",
   "search.many": " ταιριάσματα — επιλέξτε ένα με το κουτάκι του", "search.reversed": "ΑΚΥΡΩΜΕΝΗ στο POS — δεν χρειάζεται έλεγχο",
-  "tag.leaving": "ΦΕΥΓΕΙ ΣΗΜΕΡΑ",
-  "tag.leavingTitle": "Το δωμάτιο είναι στη σημερινή λίστα αναχωρήσεων και η απόδειξη είναι στο ίδιο όνομα — η χρέωση έγινε πριν το check-out. Τακτοποιήστε την πριν φύγουν.",
+  "tag.leaving": "ΕΦΥΓΕ ΣΗΜΕΡΑ",
+  "tag.leavingTitle": "Ο ένοικος είναι στη λίστα αναχωρήσεων της ημέρας της αναφοράς και η απόδειξη είναι στο ίδιο όνομα — η χρέωση έγινε πριν το check-out και τακτοποιήθηκε μαζί του. Μετά την επιβεβαίωση, το χαρτί δεν χρειάζεται πια.",
   "search.void": "ΑΚΥΡΗ — ενοποιήθηκε από {by}, δεν μετράει",
   "room.ph": "δωμ…", "room.hint": "№ δωματίου · Enter = OK · ↑↓ γραμμές · ←→ OK/⚠ · Esc",
   "acc.extra": " · μαζί με {n} χειροκίνητες", "acc.void": " · {n} άκυρες",
@@ -5090,7 +5090,10 @@ function matchCard(r){
   }
   if(leaving){
     /* Right where the eye already goes to tick the box. aria-hidden because the pill
-       above already says LEAVING TODAY in words — a reader would hear it twice. */
+       above already says LEFT TODAY in words — a reader would hear it twice. (It said
+       LEAVING TODAY until 1.17.48; his word, 06/09: "in my shift its either left today
+       or leaving tomorrow" — the mark comes from the report day's departure list, and
+       that guest has gone by the time he audits.) */
     const ar = el("span","leftArrow","\u2192");
     ar.setAttribute("aria-hidden","true");
     ar.title = t("tag.leavingTitle");
