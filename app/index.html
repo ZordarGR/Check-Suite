@@ -1431,7 +1431,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.44";
+const APP_VERSION = "1.17.45";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1534,6 +1534,14 @@ en: {
   "sc.watchFail": "The request to read the log failed",
   "sc.watchNoBase": "Windows did not name a local app-data folder, so the log cannot be found. Nothing is known about the shift.",
   "sc.watchUnread": "The log is there and could not be read.",
+  "sc.spool": "Catch the next print (10 min)",
+  "sc.spoolShow": "What was caught",
+  "sc.spoolClear": "Delete the caught prints",
+  "sc.spoolHint": "Stage 1 of the redacted print. For ten minutes after the press, every job Windows spools on this PC is copied into RecCheck's own folder as it grows — the raw job, names included — and listed here with its format and the text it could pull. Outside those ten minutes nothing is watched or copied. Nothing is sent to protel or to the printer; it feeds nothing and prints nothing.",
+  "sc.spoolArmed": "Armed until {t}. Print the report now.",
+  "sc.spoolOff": "Not armed.",
+  "sc.spoolCleared": "The caught prints are deleted ({n} file(s)).",
+  "sc.spoolFail": "The request failed",
   "sc.noDoor": "This build cannot reach the helper, so nothing can be reported here.",
   "sc.scanHint": "Read-only. It asks each control what it is and what it holds \u2014 nothing is written and protel keeps exactly what it had. It is not free, though: the report ends with how many questions it asked protel and how long that took.",
   "sc.scanWait": "Bring the protel window you want forward\u2026 {n}",
@@ -1765,6 +1773,14 @@ gr: {
   "sc.watchFail": "Το αίτημα ανάγνωσης του αρχείου απέτυχε",
   "sc.watchNoBase": "Τα Windows δεν έδωσαν φάκελο local app-data, οπότε το αρχείο δεν βρίσκεται. Δεν είναι γνωστό τίποτα για τη βάρδια.",
   "sc.watchUnread": "Το αρχείο υπάρχει και δεν διαβάστηκε.",
+  "sc.spool": "Πιάσε την επόμενη εκτύπωση (10 λεπτά)",
+  "sc.spoolShow": "Τι πιάστηκε",
+  "sc.spoolClear": "Σβήσε τις εκτυπώσεις που πιάστηκαν",
+  "sc.spoolHint": "Στάδιο 1 της εκτύπωσης χωρίς ονόματα. Για δέκα λεπτά μετά το πάτημα, κάθε εργασία που στέλνουν τα Windows στον spooler αυτού του υπολογιστή αντιγράφεται στον φάκελο του RecCheck όσο μεγαλώνει — η ακατέργαστη εργασία, με τα ονόματα — και εμφανίζεται εδώ με τη μορφή της και το κείμενο που βγήκε από αυτήν. Έξω από τα δέκα λεπτά τίποτα δεν παρακολουθείται ούτε αντιγράφεται. Τίποτα δεν στέλνεται στο protel ή στον εκτυπωτή· δεν τροφοδοτεί τίποτα και δεν τυπώνει τίποτα.",
+  "sc.spoolArmed": "Ενεργό μέχρι {t}. Τύπωσε την αναφορά τώρα.",
+  "sc.spoolOff": "Ανενεργό.",
+  "sc.spoolCleared": "Οι εκτυπώσεις που πιάστηκαν σβήστηκαν ({n} αρχεία).",
+  "sc.spoolFail": "Το αίτημα απέτυχε",
   "sc.noDoor": "Αυτό το build δεν φτάνει τον βοηθό, οπότε δεν μπορεί να αναφερθεί τίποτα εδώ.",
   "sc.scanHint": "Μόνο ανάγνωση. Ρωτάει κάθε στοιχείο τι είναι και τι περιέχει — τίποτα δεν γράφεται και το protel κρατάει ακριβώς ό,τι είχε. Δεν είναι όμως δωρεάν: η αναφορά τελειώνει με το πόσες ερωτήσεις έγιναν στο protel και πόσο κράτησαν.",
   "sc.scanWait": "Φέρε μπροστά το παράθυρο του protel που θέλεις… {n}",
@@ -2064,11 +2080,26 @@ async function mergeRoomsFromDisk(){
 
    `liveKey` is what lets guestFor prefer this over the receipt's truncated name, and only
    for the night it belongs to. */
+/* THE ROOM'S NAME IS THE CHECKED-IN GUEST'S. protel's list can show more than one row
+   for a room — the departing CO beside the arriving CI on a changeover, a Confirmed
+   due-in beside the guest still there — and inhouseToRate keeps the LAST row per room.
+   This door's contract is "who is in this room now", and a guest not yet arrived or
+   already gone is not; named after them, the next .oxps load reads the real guest's
+   receipt as a turnover and deletes the nickname. So a CI row wins, then CO, then the
+   rest — last among equals, as before. */
+function liveNameOf(rate, room){
+  const rows = (rate.all && rate.all[room]) || [];
+  if(rows.length < 2) return String(rate.rooms[room].name || "").trim();
+  const rank = s => /^CI\b/i.test(s) ? 0 : /^CO\b/i.test(s) ? 1 : 2;
+  let best = null;
+  for(const r of rows) if(!best || rank(String(r.status || "")) <= rank(String(best.status || ""))) best = r;
+  return String((best && best.name) || "").trim();
+}
 function ingestLiveNames(rate){
   if(!rate || !rate.rooms || !rate.dateKey) return 0;
   let wrote = 0;
   for(const room of Object.keys(rate.rooms)){
-    const name = String(rate.rooms[room].name || "").trim();
+    const name = liveNameOf(rate, room);
     if(!name) continue;
     const e = ROOMS[room];
     if(!e){ ROOMS[room] = {guest: name, seen: null, liveKey: rate.dateKey}; wrote++; continue; }
@@ -2311,6 +2342,18 @@ function isCutOf(short, full){
   const n = x => String(x || "").trim().replace(/\s+/g, " ").toUpperCase();
   const a = n(short), b = n(full);
   return a.length >= 4 && b.length > a.length && b.indexOf(a) === 0;
+}
+/* THE RECEIPT'S OWN NAME, whole where protel's census holds the whole of it. Only a
+   truncation of THIS receipt's name is completed — never another guest's name for the
+   same room, which is what guestFor(room) can answer on a changeover night. The red
+   LEAVING mark and the receipts dot are built on this, and marking the arriving guest's
+   paper is the one thing they must not do: his words, "dont accidentally mark the arrival
+   receipts (i rip those and throw them, so please, careful)". */
+function receiptName(r){
+  const own = String((r && r.guest) || "").trim();
+  const live = ROOMS[String(effRoom(r))];
+  if(own && live && live.guest && live.liveKey && isCutOf(own, live.guest)) return live.guest;
+  return own;
 }
 function guestFor(room){
   /* A name read live from protel BEATS the one on the receipt. It is the same guest —
@@ -3348,6 +3391,59 @@ function helperVerdict(h){
   }
   return {key: "sc.hIdle", tone: "faint"};
 }
+/* ---- stage 1 of the redacted print: what the spool watcher caught ----
+   The dump is written for pasting into the chat where the parser will be read off it,
+   so its labels are English on purpose, like the window scan's. Every number in it is a
+   measurement main.js made: sizes seen per look, when the file appeared and when the
+   spooler took it away, reads refused and with what code. Nothing is inferred. */
+let SPOOL_IV = null, SPOOL_TEXTS = {};
+function spoolClock(ms){
+  if(!ms) return "-";
+  const d = new Date(ms), p = n => String(n).padStart(2, "0");
+  return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds()) + "." + Math.floor(d.getMilliseconds() / 100);
+}
+function spoolDump(st, texts){
+  const L = [], q = s => JSON.stringify(s), n1 = v => Math.round(v * 10) / 10;
+  L.push("spool folder: " + st.dir);
+  L.push((st.armed ? "ARMED until " + spoolClock(st.until) : "not armed")
+       + " — listed " + st.ticks + " time(s)" + (st.lastTick ? ", last " + spoolClock(st.lastTick) : "")
+       + (st.listErr ? " — COULD NOT LIST THE FOLDER: " + st.listErr : ""));
+  L.push("copies: " + st.capDir);
+  if(!st.files || !st.files.length){ L.push("nothing caught"); return L.join("\n"); }
+  L.push("caught " + st.files.length + " file(s):");
+  for(const f of st.files){
+    const sizes = f.sizes && f.sizes.length ? f.sizes.join(" → ") : "-";
+    const last = f.sizes && f.sizes.length ? f.sizes[f.sizes.length - 1] : 0;
+    const reads = f.readFails ? f.readFails + " read(s) refused (" + f.readErr + ")" + (f.copied ? ", then ok" : "") : "reads ok";
+    L.push("  " + f.name + "  " + (f.copied || last) + " bytes  sizes " + sizes
+         + "  first " + spoolClock(f.first)
+         + (f.gone ? "  gone " + spoolClock(f.gone) + " (lived " + (f.gone - f.first) + " ms)"
+                   : (f.earlier ? "  (from an earlier run)" : "  still there"))
+         + "  " + reads
+         + (f.copyErr ? "  COPY FAILED (" + f.copyErr + ")" : "")
+         + (f.tooBig ? "  TOO BIG, not copied" : ""));
+    const tx = texts && texts[f.name];
+    if(!tx) continue;
+    if(tx.why){ L.push("     " + (tx.why === "unread" ? "the copy could not be read (" + tx.detail + ")" : tx.why)); continue; }
+    if(tx.format === "shd"){ L.push("     strings: " + (tx.strings || []).map(q).join(" ")); continue; }
+    L.push("     format: " + tx.format + (tx.head ? "  head " + tx.head : "")
+         + (tx.pages ? "  pages " + tx.pages.length : "")
+         + (tx.entries !== undefined ? "  zip entries " + tx.entries : "")
+         + (tx.emfPlus ? "  EMF+ comment records " + tx.emfPlus + " (GDI+ text lives there and is not pulled yet)" : "")
+         + (tx.textErr ? "  TEXT FAILED (" + tx.textErr + ")" : ""));
+    if(tx.types){
+      const top = Object.keys(tx.types).sort((a, b) => tx.types[b] - tx.types[a]).slice(0, 12);
+      L.push("     record types: " + top.map(k => k + "×" + tx.types[k]).join(" "));
+    }
+    for(const pg of (tx.pages || [])){
+      L.push("     page " + pg.n + "  (" + (pg.records ? pg.records + " records, " : "") + pg.texts.length + " text)");
+      for(const tt of pg.texts.slice(0, 400)) L.push("       (" + n1(tt.x) + ", " + n1(tt.y) + ")  " + tt.s);
+      if(pg.texts.length > 400) L.push("       … " + (pg.texts.length - 400) + " more");
+    }
+    if(tx.strings) L.push("     strings: " + tx.strings.map(q).join(" "));
+  }
+  return L.join("\n");
+}
 function helperDetail(h){
   if(!h) return "";
   const bits = [];
@@ -3435,6 +3531,12 @@ function openDebug(){
     '<div class="err" style="color:var(--faint)">' + t("sc.watchHint") + '</div>' +
     '<div class="err" style="color:var(--faint)">' + t("sc.readHint") + '</div>' +
     '<div class="err" style="color:var(--faint)">' + t("sc.testHint") + '</div>' +
+    '<div class="dbgGrid" style="margin-top:8px">' +
+      '<button class="btn" id="scSpool">' + t("sc.spool") + '</button>' +
+      '<button class="btn" id="scSpoolShow">' + t("sc.spoolShow") + '</button>' +
+      '<button class="btn" id="scSpoolClear">' + t("sc.spoolClear") + '</button>' +
+    '</div>' +
+    '<div class="err" style="color:var(--faint)">' + t("sc.spoolHint") + '</div>' +
     '<pre id="scDiag" style="display:none"></pre>' +
     '<div class="actions">' +
       '<button class="btn" id="dbgLock">' + t("dbg.lock") + '</button>' +
@@ -3504,6 +3606,54 @@ function openDebug(){
     pre.textContent = log;
     copy.style.display = "";
     copy.onclick = () => { try{ navigator.clipboard.writeText(log); }catch(e){} };
+  };
+  /* ---- stage 1 of the redacted print ----
+     Armed from here for ten minutes. While armed and the dialog is open the state is
+     re-read every second, and a file's text is pulled once it has stopped changing —
+     once per name and size, never per tick. The interval lives at the IIFE level so a
+     dialog opened twice does not run two of them, and it stops itself when there is no
+     #scDiag to write into. */
+  const spoolStop = () => { if(SPOOL_IV){ clearInterval(SPOOL_IV); SPOOL_IV = null; } };
+  /* closeModal() hides the modal and leaves its DOM in place, so "#scDiag exists" is not
+     "the dialog is open" — the interval has to ask the backdrop */
+  const dbgOpen = () => !!$("#scDiag") && !!$("#scCopy") && $("#modalBg").classList.contains("open");
+  const spoolShow = async (arm) => {
+    const pre = $("#scDiag"), copy = $("#scCopy");
+    if(!dbgOpen()){ spoolStop(); return; }
+    pre.style.display = "";
+    if(!sc || !sc.spoolState){ pre.textContent = t("sc.noDoor"); copy.style.display = "none"; spoolStop(); return; }
+    let st;
+    try{ st = arm ? await sc.spoolArm() : await sc.spoolState(); }
+    catch(e){ pre.textContent = t("sc.spoolFail") + " (" + ((e && e.message) || e || "?") + ")"; spoolStop(); return; }
+    if(!st || !st.files){ pre.textContent = t("sc.spoolFail"); spoolStop(); return; }
+    for(const f of st.files){
+      const settled = f.gone || f.earlier || (st.now - f.last > 1500);
+      const key = f.name + ":" + (f.copied || 0);
+      if(!settled || (SPOOL_TEXTS[f.name] && SPOOL_TEXTS[f.name].key === key)) continue;
+      try{ const tx = await sc.spoolText(f.name); if(tx) SPOOL_TEXTS[f.name] = Object.assign({key: key}, tx); }catch(e){}
+    }
+    const dump = (st.armed ? t("sc.spoolArmed", {t: spoolClock(st.until)}) : t("sc.spoolOff")) + "\n\n" + spoolDump(st, SPOOL_TEXTS);
+    if(!dbgOpen()){ spoolStop(); return; }        // closed while we were asking
+    pre.textContent = dump;
+    copy.style.display = "";
+    copy.onclick = () => { try{ navigator.clipboard.writeText(dump); }catch(e){} };
+    if(!st.armed && SPOOL_IV && st.now - st.until > 3000) spoolStop();   // one last draw after the window ends, then quiet
+  };
+  $("#scSpool").onclick = () => {
+    spoolShow(true);
+    if(!SPOOL_IV) SPOOL_IV = setInterval(() => { spoolShow(false); }, 1000);
+  };
+  $("#scSpoolShow").onclick = () => { spoolShow(false); };
+  $("#scSpoolClear").onclick = async () => {
+    const pre = $("#scDiag"), copy = $("#scCopy");
+    spoolStop();
+    pre.style.display = ""; copy.style.display = "none";
+    if(!sc || !sc.spoolClear){ pre.textContent = t("sc.noDoor"); return; }
+    let r = null;
+    try{ r = await sc.spoolClear(); }
+    catch(e){ pre.textContent = t("sc.spoolFail") + " (" + ((e && e.message) || e || "?") + ")"; return; }
+    SPOOL_TEXTS = {};
+    pre.textContent = t("sc.spoolCleared", {n: (r && r.removed) || 0}) + (r && r.err ? " (" + r.err + ")" : "");
   };
   /* ---- reading the list in front ----
      The only thing in DEBUG that costs protel real work, and it is a PROBE: it reports
@@ -4822,18 +4972,21 @@ function matchCard(r){
   c.append(el("span","dept", r.dept));
   c.append(el("span","room", effRoom(r) + (r.roomMain !== r.room && !(rState(r).corr && rState(r).corr.room) ? " ⧉" : "")));
   c.append(el("span","msn", effSN(r)));
-  const stc = rState(r);
-  const roomFixed = !!(stc.corr && stc.corr.room);
-  const gname = roomFixed ? (guestFor(effRoom(r)) || r.guest || "") : (r.guest || "");
+  /* THE SAME RESOLUTION AS THE ACCORDION ROW. 1.17.23 made every charge take its room's
+     name in receiptRow and left this card on the older rule — the room's name only when
+     the room had been corrected by hand — so the search cards and the tick toast kept
+     printing the receipt's cut name while the rows above them showed the whole one from
+     protel. Found 05/09 by the hunt for "still cut with legacy off". */
+  const gname = guestFor(effRoom(r)) || r.guest || "";
   const nick = nickFor(effRoom(r));
   const nm = el("span","name" + (nick ? " nick" : ""), nick || gname);
   nm.title = (nick ? gname + t("n.nickedTitle") : gname) +
-             (roomFixed && r.guest && gname !== r.guest ? "  ·  ⌫ " + r.guest : "");
+             (r.guest && gname !== r.guest ? "  ·  ⌫ " + r.guest : "");
   c.append(nm);
   c.append(el("span","split", rateSplitStr(r.voided ? r.posRates : effRates(r))));
   c.append(el("span","amt", numToMoney(r.voided ? r.posTotal : effTotal(r))));
 
-  const leaving = isLeaving(effRoom(r), gname);
+  const leaving = isLeaving(effRoom(r), receiptName(r));   // the receipt's own guest, never the room's
   if(leaving){
     c.classList.add("left");
     const lt = el("span","state missing", t("tag.leaving"));
@@ -5219,8 +5372,12 @@ function renderMovesFor(box, night){
     for(const r of checkableList()){
       const rm = String(effRoom(r) || "");
       if(!rm) continue;
-      pairs.push([rm, r.guest || ""]);
-      for(const room of rooms) if(hit(mv[room], room, rm, r.guest)) withRec.add(room);
+      /* the receipt's own name, completed from the census where it was cut — the .oxps
+         truncates at the column and protel's lists do not, so an exact test on the raw
+         receipt could never dot a long name; the completion is only ever of THIS name */
+      const gn = receiptName(r);
+      pairs.push([rm, gn]);
+      for(const room of rooms) if(hit(mv[room], room, rm, gn)) withRec.add(room);
     }
     if(night) saveNightReceipts(night, pairs);
   }
@@ -5812,6 +5969,13 @@ $("#resetDay").onclick = () => {
 };
 /* ---------- auto-update (active only inside the desktop app) ---------- */
 (async function(){
+  /* BEFORE THE FIRST AWAIT. The tax half boots beside this one and its first capture
+     lands after its own round trips to main; ingestLiveNames then writes ROOMS and
+     saveRooms() writes localStorage. With ROOMS still {} that would save a census-only
+     room database over the real one — every nickname gone, the 30/08 shape. It held only
+     because this IIFE had one round trip fewer than that path; reading localStorage is
+     synchronous and needs nothing below, so it is done first and the race is gone. */
+  loadRooms();
   if(window.reccheckFiles){
     try{ FB.p.dept.dir = await window.reccheckFiles.getDir("dept"); }catch(e){}
     try{ FB.p.tax.dir = await window.reccheckFiles.getDir("tax"); }catch(e){}
@@ -5829,8 +5993,8 @@ $("#resetDay").onclick = () => {
   /* The room database the app's own folder is holding, pulled in at start so the nickname
      panel and the names are complete before any report is opened. NOT awaited: nothing on
      this screen needs it yet, and a boot that waits on an IPC round-trip is a boot that
-     can hang on one. Opening a report does await it, which is where it has to be right. */
-  loadRooms();
+     can hang on one. Opening a report does await it, which is where it has to be right.
+     (loadRooms() itself ran at the top of this function, before the first await.) */
   mergeRoomsFromDisk();
   loadAlerts();
   paintAlertsBtn();

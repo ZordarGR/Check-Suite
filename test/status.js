@@ -47,7 +47,7 @@ const TAX = new Function("localStorage", "t", "I18N", taxBody)(localStorage, tT,
 function Node(tag){ this.tag = tag; this.className = ""; this.textContent = ""; this.title = ""; this.children = []; this.style = {}; }
 Node.prototype.append = function(...k){ for(const c of k) this.children.push(c); };
 Object.defineProperty(Node.prototype, "innerHTML", {set(v){ if(v === "") this.children = []; }});
-function pillsFor(reportDate, receipts){
+function pillsFor(reportDate, receipts, rooms){
   const moves = new Node("aside"); const classes = new Set();
   const document = {createElement: t => new Node(t), body: {classList: {toggle: (c, on) => { on ? classes.add(c) : classes.delete(c); }}}, querySelectorAll: () => []};
   const $ = sel => (sel === "#moves" ? moves : null);
@@ -56,14 +56,14 @@ function pillsFor(reportDate, receipts){
   const t = k => k;
   const body = [line(/^const el = \(tag, cls, txt\) =>.*$/m), lift("dateNum"), lift("dShort"), lift("rKey"), lift("rState"),
     "const effRoom = (r) => { " + line(/^function effRoom\(r\)\{.*$/m).replace(/^function effRoom\(r\)\{/, "").replace(/\}$/, "") + " };",
-    lift("checkableList"), lift("sameName"),
+    lift("checkableList"), lift("sameName"), lift("isCutOf"), lift("receiptName"),
     "const STATUS_KEY = \"reccheck_status_v1\";", lift("loadStatus"), lift("statusRows"), lift("pillRoom"),
     "const LEGACY_KEY = \"reccheck_legacy\";", lift("legacyOn"), line(/^const MOVES_KEY = .*$/m), lift("loadMoves"), lift("ledgerMoves"), 
     lift("dateNum2"), lift("prevNightKey"), "const RECEIPTS_KEY = \"reccheck_receipts_v1\"; const RECEIPTS_KEEP = 60;", lift("loadNightReceipts"), lift("saveNightReceipts"), lift("leavingIndex"), "let LEAVING = {};", lift("isLeaving"),
     lift("roomMoves"), lift("renderMovesFor"), lift("renderMoves"),
-    "renderMoves(); return {classes: [...classes], root: moves, leaving: leavingIndex(), isLeaving: isLeaving, LEAVING: LEAVING};"].join("\n");
-  const fn = new Function("document", "$", "localStorage", "MODEL", "STATE", "t", "classes", "moves", body);
-  const out = fn(document, $, localStorage, MODEL, STATE, t, classes, moves);
+    "renderMoves(); return {classes: [...classes], root: moves, leaving: leavingIndex(), isLeaving: isLeaving, LEAVING: LEAVING, receiptName: receiptName};"].join("\n");
+  const fn = new Function("document", "$", "localStorage", "MODEL", "STATE", "ROOMS", "t", "classes", "moves", body);
+  const out = fn(document, $, localStorage, MODEL, STATE, rooms || {}, t, classes, moves);
   const pills = []; let head = null;
   for(const c of out.root.children){
     if(c.className && c.className.startsWith("mvGroup")) head = c.children[0].textContent.replace("mv.h.", "");
@@ -71,7 +71,8 @@ function pillsFor(reportDate, receipts){
       pills.push({room: p.textContent, kind: head, dot: /\brec\b/.test(p.className), title: p.title});
   }
   return {pills, has: r => pills.some(p => p.room === r), kind: r => (pills.find(p => p.room === r) || {}).kind,
-          dot: r => pills.some(p => p.room === r && p.dot), hasMoves: out.classes.indexOf("hasMoves") >= 0, leaving: out.leaving};
+          dot: r => pills.some(p => p.room === r && p.dot), hasMoves: out.classes.indexOf("hasMoves") >= 0, leaving: out.leaving,
+          name: r => out.receiptName(r)};
 }
 
 /* ---- fixtures: the helper's own line shapes ---- */
@@ -241,6 +242,33 @@ const old = JSON.parse(store["reccheck_receipts_v1"]); old["20260601"] = [["1", 
 P = pillsFor(NIGHT, []);
 const kept = JSON.parse(store["reccheck_receipts_v1"]);
 ck("a night older than sixty is pruned, and a key that is not a night", !("20260601" in kept) && !("junk" in kept) && ("20260901" in kept));
+
+console.log("--- 5c. a cut receipt name — the .oxps truncates at the column, protel's list does not");
+/* Room 110's departing guest is MUELLER HANS-JOACHIM/ANNELIESE on the departure list; the
+   checkcharge receipt prints MUELLER HANS-JOACHIM/ANN. With the census holding the whole
+   name, the receipt's own truncation is completed and the dot lands; without it an exact
+   test could never dot a long name. The arriving guest's receipt on the same room is never
+   completed to the departing name — his safety condition — and the census naming the NEW
+   guest completes nothing for the old guest's receipt. */
+store["reccheck_receipts_v1"] = "{}";
+rpt("DP", RPT("DP", "Departure Report for 04/09/26", [["MUELLER HANS-JOACHIM/ANNELIESE ", "110", "2/0/0/0/0", "26/08/26", "CI"]]), T(11));
+const CUTN = "MUELLER HANS-JOACHIM/ANN", WHOLEN = "MUELLER HANS-JOACHIM/ANNELIESE";
+P = pillsFor(NIGHT, [rc("110", CUTN)]);
+ck("without the census a cut name does not dot — exact, as before",                     !P.dot("110"));
+ck("and the receipt keeps its own name",                                                 P.name(rc("110", CUTN)) === CUTN);
+P = pillsFor(NIGHT, [rc("110", CUTN)], {"110": {guest: WHOLEN, liveKey: 20260905}});
+ck("with the census holding the whole name, the receipt's truncation is completed",     P.name(rc("110", CUTN)) === WHOLEN);
+ck("and the dot lands on the departure",                                                 P.dot("110"));
+ck("an arriving guest's receipt on the same room keeps its own name",                    P.name(rc("110", "NEUMANN PETRA")) === "NEUMANN PETRA");
+ck("three letters never complete",                                                       P.name(rc("110", "MUE")) === "MUE");
+P = pillsFor(NIGHT, [rc("110", "NEUMANN PETRA")], {"110": {guest: WHOLEN, liveKey: 20260905}});
+ck("... and it does not dot the departure",                                              !P.dot("110"));
+P = pillsFor(NIGHT, [rc("110", CUTN)], {"110": {guest: "NEUMANN PETRA/KLAUS", liveKey: 20260905}});
+ck("a census naming the NEW guest completes nothing for the old guest's receipt",        P.name(rc("110", CUTN)) === CUTN && !P.dot("110"));
+ck("a stored name with no liveKey — the .oxps's own — completes nothing either",         pillsFor(NIGHT, [rc("110", CUTN)], {"110": {guest: WHOLEN}}).name(rc("110", CUTN)) === CUTN);
+ck("the completed name is what the night's index remembers",                             (JSON.parse(store["reccheck_receipts_v1"])["20260904"] || []).some(p => p[0] === "110" && p[1] === CUTN));
+P = pillsFor(NIGHT, [rc("110", CUTN)], {"110": {guest: WHOLEN, liveKey: 20260905}});
+ck("... whole when the census had it",                                                   (JSON.parse(store["reccheck_receipts_v1"])["20260904"] || []).some(p => p[0] === "110" && p[1] === WHOLEN));
 
 console.log("--- 6. legacy mode: nothing is captured, so the XPS-fed ledger draws, as before 1.17.42");
 for(const k of Object.keys(store)) delete store[k];

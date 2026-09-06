@@ -78,7 +78,7 @@ const t = (k, v) => k + (v ? "(" + JSON.stringify(v) + ")" : "");
 
 const body = [elDecl, lift("dateNum"), lift("dShort"), lift("rKey"), lift("rState"),
   "const effRoom = " + line(/^function effRoom\(r\)\{.*$/m).replace(/^function effRoom\(r\)/, "(r) =>") .replace(/^\(r\) =>\{/, "(r) => {"),
-  lift("checkableList"), lift("sameName"),
+  lift("checkableList"), lift("sameName"), lift("isCutOf"), lift("receiptName"),
   "const STATUS_KEY = \"reccheck_status_v1\";", lift("loadStatus"), lift("statusRows"), lift("pillRoom"),
   "const LEGACY_KEY = \"reccheck_legacy\";", lift("legacyOn"), line(/^const MOVES_KEY = .*$/m), lift("loadMoves"), lift("ledgerMoves"), 
   lift("dateNum2"), lift("prevNightKey"), "const RECEIPTS_KEY = \"reccheck_receipts_v1\"; const RECEIPTS_KEEP = 60;", lift("loadNightReceipts"), lift("saveNightReceipts"), lift("leavingIndex"), "let LEAVING = {};", lift("isLeaving"),

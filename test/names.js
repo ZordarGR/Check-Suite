@@ -7,9 +7,15 @@ const lift = n => { const at = src.indexOf("\nfunction " + n + "("); if(at<0) th
 const nickForLine = src.match(/^function nickFor\(room\)\{.*$/m)[0];
 const effRoomLine = src.match(/^function effRoom\(r\)\{.*$/m)[0];
 
-/* the exact expressions matchCard now uses */
+/* THE CALLER'S OWN LINE, lifted — not retyped. This harness used to carry a copy of the
+   expression and said it was matchCard's; it was receiptRow's, and matchCard had kept an
+   older rule (the room's name only when the room was corrected by hand) since 1.17.3, so
+   the search cards showed the cut name for as long as the whole names had existed while
+   this passed. A test that lifts a function proves that function, not its caller. */
+const gnameOf = fn => { const m = lift(fn).match(/^\s*const gname = .*$/m); if(!m) throw new Error(fn + ": no gname line"); return m[0].trim(); };
+const MATCH_LINE = gnameOf("matchCard"), ROW_LINE = gnameOf("receiptRow");
 const NAME = `
-  const gname = guestFor(effRoom(r)) || r.guest || "";
+  ${MATCH_LINE}
   const nick = nickFor(effRoom(r));
   return {shown: nick || gname, isNick: !!nick,
           tip: (nick ? gname + " (nick)" : gname) + (r.guest && gname !== r.guest ? "  ·  back: " + r.guest : "")};
@@ -17,7 +23,7 @@ const NAME = `
 function resolve(receipts, rooms, r, state){
   const MODEL = {reportDate:"3/9/2026", receipts};
   const STATE = state || {receipts:{}};
-  const body = [lift("rKey"), lift("rState"), nickForLine, lift("guestFor"),
+  const body = [lift("rKey"), lift("rState"), nickForLine, lift("dateNum"), lift("isCutOf"), lift("guestFor"),
     "const effRoom = (r) => { " + effRoomLine.replace(/^function effRoom\(r\)\{/,"").replace(/\}$/,"") + " };",
     NAME].join("\n");
   const fn = new Function("MODEL","ROOMS","STATE","r","Object","String", body);
@@ -27,6 +33,16 @@ function resolve(receipts, rooms, r, state){
 const R = (sn, room, guest) => ({sn, roomMain: room, guest, dept:"BAR", cancelled:false, voided:false});
 let bad = 0;
 const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok?"ok  ":"FAIL") + "  " + l); };
+
+// 0. the search card and the accordion row resolve the name by the same line
+ck("matchCard's name line is receiptRow's", MATCH_LINE === ROW_LINE);
+ck("and it goes through the room first", /^const gname = guestFor\(effRoom\(r\)\)/.test(MATCH_LINE));
+
+// 0b. the case the hunt found: a live whole name, an ordinary (uncorrected) receipt
+let recs0 = [R("3","426","ABBUSHI MIRIAM/OLIVER/NA")];
+let z = resolve(recs0, {"426":{guest:"ABBUSHI MIRIAM/OLIVER/NAHLA/HELENA", liveKey:20260905}}, recs0[0]);
+ck("a search card shows the WHOLE name protel gave, with no room correction", z.shown === "ABBUSHI MIRIAM/OLIVER/NAHLA/HELENA");
+ck("and keeps the cut one on the tooltip", /back: ABBUSHI MIRIAM\/OLIVER\/NA$/.test(z.tip));
 
 // 1. an ordinary charge, room known from the report
 let recs = [R("1","112","JAROLIMEK"), R("2","112","J.")];
