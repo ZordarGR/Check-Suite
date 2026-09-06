@@ -1,11 +1,11 @@
 {
-  "version": "1.17.44",
-  "type": "html",
-  "engine": "1.17.43",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.43/RecCheck-Setup.exe",
-  "setupSha256": "3e6834cfbc407b98876eea09a86e932abdddab5ca2c7e50932405e4592b46ea5",
+  "version": "1.17.45",
+  "type": "full",
+  "engine": "1.17.45",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.45/RecCheck-Setup.exe",
+  "setupSha256": "df104b76bb2fe8e8450828d1fef580bf972f004f627003772016578172a80c3a",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "25c509c05f522d3ed4abe2c54bd0cb74d23cb290f0ee2f28a8fec2b27f899dcf",
-  "notes": "The dot on a departed, turnover or moved room now looks over the whole stay, not tonight's report alone: if any department report loaded here since that reservation arrived carried a receipt under its name on its room, the pill is dotted.\n\nEach loaded report leaves behind only the room and guest name of its live receipts, by night, for sixty nights — no amounts, no serials. A night whose report was never loaded into RecCheck is unknown to it, and the dot says nothing about that night."
+  "sha256": "dc6e96b5088e3e02176b84924d38f9b554209a09506904e2bc56578785d2978c",
+  "notes": "Stage 1 of the redacted print: for ten minutes after a press in DEBUG, RecCheck copies what Windows spools to the printer and shows what the job is made of, so the departures report can be read on its way to the printer. Nothing is sent to protel or to the printer, and nothing is watched outside those ten minutes.\n\nThe receipt cards under the serial-number search now show the whole guest name from protel's in-house list, like the rows above them. The red LEAVING TODAY mark and the receipts dot are built on the receipt's own name — completed from protel's list where the report cut it, never the room's name — so the arriving guest's paper is never marked. A room is named after its checked-in guest when protel lists more than one row for it."
 }

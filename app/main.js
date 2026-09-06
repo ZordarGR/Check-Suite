@@ -1056,6 +1056,329 @@ ipcMain.handle("sc-watchlog", () => {
     return {log: txt.length > 40000 ? txt.slice(0, 400) + "\n   …\n" + txt.slice(-36000) : txt};
   }catch(e){ return {why: "unread", detail: String((e && (e.code || e.message)) || "unknown")}; }
 });
+/* ---- stage 1 of the redacted print: catching what Windows spools ----
+
+   His ask, 05/09: a report he prints, with the names taken out and everything else kept,
+   printed from inside the tool. His route: read what Windows prints. Before a line of
+   parser is written, the three things only his machine can answer have to be seen on it:
+   whether his account can READ a job file (it can LIST the folder — his `dir` of 05/09),
+   how long a job lives before the spooler deletes it, and what his printer's driver
+   spools (NT EMF from a GDI driver, XPS from a v4 driver, PCL or PostScript from an app
+   printing RAW). This is the capture that answers them, and nothing more: it feeds
+   nothing, redacts nothing, prints nothing.
+
+   ARMED, NOT ALWAYS ON. A watcher on the spool folder sees every document anyone prints
+   on that PC. So it runs only inside a window he opens from DEBUG — ten minutes — and
+   outside it nothing is listed, read or copied. Inside it, every job file that appears is
+   copied into RecCheck's own folder each time it has grown, so the race with the
+   spooler's delete is recorded rather than guessed at. The copy is the raw job, names
+   included, kept for him to read and removed by the button beside it or by the bound.
+
+   Polling, not fs.watch: a job can be written and deleted inside a second, and a readdir
+   on an empty folder twenty times a second costs nothing measurable. Nothing here is
+   sent to protel or to the spooler — directory listings and file reads, as his own user. */
+const SPOOL_WINDOW_MS = 10 * 60e3;
+const SPOOL_POLL_MS = 50;
+const SPOOL_KEEP = 8;                       // jobs kept on disk, oldest dropped first
+const SPOOL_MAX_FILE = 30 * 1024 * 1024;    // a job bigger than this is noted, not copied
+const SPOOL = {until: 0, timer: null, ticks: 0, lastTick: 0, listErr: null, seen: {}};
+function spoolDir(){
+  return path.join(process.env.SystemRoot || "C:\\Windows", "System32", "spool", "PRINTERS");
+}
+function spoolCapDir(){ return path.join(app.getPath("userData"), "spool-cap"); }
+function spoolJobId(name){ return String(name).toUpperCase().replace(/\.(SPL|SHD)$/, ""); }
+function errCode(e){ return String((e && (e.code || e.message)) || "unknown"); }
+function spoolDisarm(){
+  if(SPOOL.timer){ clearInterval(SPOOL.timer); SPOOL.timer = null; }
+  SPOOL.until = 0;
+}
+/* The bound is on DISK, not in memory: a restart empties `seen` and the copies stay, so
+   counting only what this run saw would let every run add eight more. */
+function spoolPrune(){
+  const fs = require("fs");
+  let names;
+  try{ names = fs.readdirSync(spoolCapDir()); }catch(e){ return; }
+  const jobs = {};
+  for(const n of names){
+    if(!/\.(spl|shd)$/i.test(n)) continue;
+    let t = 0;
+    try{ t = fs.statSync(path.join(spoolCapDir(), n)).mtimeMs; }catch(e){}
+    const id = spoolJobId(n);
+    if(!jobs[id] || t < jobs[id]) jobs[id] = t;
+  }
+  /* by time first; on a tie by job id, which the spooler hands out in order */
+  const ids = Object.keys(jobs).sort((a, b) => (jobs[a] - jobs[b]) || (a < b ? -1 : a > b ? 1 : 0));
+  while(ids.length > SPOOL_KEEP){
+    const id = ids.shift();
+    for(const n of names){
+      if(spoolJobId(n) !== id) continue;
+      try{ fs.unlinkSync(path.join(spoolCapDir(), n)); }catch(e){}
+      delete SPOOL.seen[n.toUpperCase()];
+    }
+  }
+}
+/* a throw inside a setInterval callback is an uncaught exception in the main process;
+   every call below is guarded, and this is the guard for the guard */
+function spoolTick(){
+  try{ spoolTickBody(); }
+  catch(e){ SPOOL.listErr = errCode(e); spoolDisarm(); }
+}
+function spoolTickBody(){
+  const fs = require("fs");
+  const now = Date.now();
+  if(now >= SPOOL.until){ spoolDisarm(); return; }
+  SPOOL.ticks++; SPOOL.lastTick = now;
+  let names;
+  try{ names = fs.readdirSync(spoolDir()); }
+  catch(e){
+    /* a folder that cannot be listed will not become listable by asking twenty times a
+       second; the refusal IS the finding, so it is kept and the window ends */
+    SPOOL.listErr = errCode(e);
+    spoolDisarm();
+    return;
+  }
+  SPOOL.listErr = null;
+  const present = {};
+  for(const n of names){
+    if(!/\.(spl|shd)$/i.test(n)) continue;
+    const key = n.toUpperCase();
+    present[key] = true;
+    let rec = SPOOL.seen[key];
+    if(!rec){
+      rec = SPOOL.seen[key] = {name: n, first: now, last: now, sizes: [], gone: 0,
+                               readErr: null, readFails: 0, copied: 0, copyErr: null, tooBig: false};
+    }
+    rec.last = now;
+    /* stat first: a file that has not grown since the last look and is already copied is
+       not read again — twenty reads a second of a job that is only waiting to print is
+       work on his machine for nothing — and a file over the cap is never read at all */
+    const noteSize = s => { if(rec.sizes.length && rec.sizes[rec.sizes.length - 1] === s) return;
+                            if(rec.sizes.length < 60) rec.sizes.push(s); else rec.sizes[59] = s; };
+    let st;
+    try{ st = fs.statSync(path.join(spoolDir(), n)); }
+    catch(e){ rec.readFails++; if(!rec.readErr) rec.readErr = errCode(e); continue; }
+    const seenSize = rec.sizes.length ? rec.sizes[rec.sizes.length - 1] : -1;
+    noteSize(st.size);
+    if(st.size > SPOOL_MAX_FILE){ rec.tooBig = true; continue; }
+    if(st.size === seenSize && rec.copied === st.size) continue;
+    let buf;
+    try{ buf = fs.readFileSync(path.join(spoolDir(), n)); }
+    catch(e){
+      /* the spooler may hold the file without sharing while it writes; a read refused now
+         can succeed on a later tick, so the first refusal is kept, counted, and the file
+         is asked for again */
+      rec.readFails++;
+      if(!rec.readErr) rec.readErr = errCode(e);
+      continue;
+    }
+    noteSize(buf.length);                       // it may have grown between the stat and the read
+    if(buf.length > SPOOL_MAX_FILE){ rec.tooBig = true; continue; }
+    try{
+      fs.mkdirSync(spoolCapDir(), {recursive: true});
+      fs.writeFileSync(path.join(spoolCapDir(), n), buf);
+      rec.copied = buf.length;
+      rec.copyErr = null;
+      /* the bound is checked once per job, when its first copy lands, not on every growth */
+      if(!rec.pruned){ rec.pruned = true; spoolPrune(); }
+    }catch(e){ rec.copyErr = errCode(e); }
+  }
+  for(const k of Object.keys(SPOOL.seen)){
+    const r = SPOOL.seen[k];
+    if(!present[k] && !r.gone) r.gone = now;
+  }
+}
+function spoolState(){
+  const fs = require("fs");
+  const files = [];
+  const have = {};
+  for(const k of Object.keys(SPOOL.seen)){ files.push(Object.assign({}, SPOOL.seen[k])); have[k] = true; }
+  /* copies left by an earlier run are still his to read */
+  try{
+    for(const n of fs.readdirSync(spoolCapDir())){
+      if(!/\.(spl|shd)$/i.test(n) || have[n.toUpperCase()]) continue;
+      let st = null;
+      try{ st = fs.statSync(path.join(spoolCapDir(), n)); }catch(e){}
+      files.push({name: n, first: st ? st.mtimeMs : 0, last: 0, sizes: st ? [st.size] : [], gone: 0,
+                  readErr: null, readFails: 0, copied: st ? st.size : 0, copyErr: null, tooBig: false, earlier: true});
+    }
+  }catch(e){}
+  files.sort((a, b) => a.first - b.first || (a.name < b.name ? -1 : 1));
+  return {dir: spoolDir(), capDir: spoolCapDir(), now: Date.now(), until: SPOOL.until, armed: SPOOL.until > Date.now(),
+          ticks: SPOOL.ticks, lastTick: SPOOL.lastTick, listErr: SPOOL.listErr, files};
+}
+/* ---- what a caught job is made of ---- */
+function spoolFormat(buf){
+  if(buf.length >= 4 && buf[0] === 0x50 && buf[1] === 0x4b && buf[2] === 3 && buf[3] === 4) return "xps";
+  if(buf.length >= 4 && buf.readUInt32LE(0) === 0x00010008) return "emfspool";   // EMFSPOOL header, NT EMF 1.008
+  if(buf.indexOf(" EMF", 0, "latin1") >= 0) return "emf";
+  if(buf.length >= 4 && buf.toString("latin1", 0, 4) === "%!PS") return "postscript";
+  if(buf.length >= 1 && buf[0] === 0x1b) return "pcl";
+  return "unknown";
+}
+/* Every embedded metafile is a page: an EMR_HEADER carries " EMF" at offset 40, and from
+   it the records walk by (type, size) to EMR_EOF. Text is EMR_EXTTEXTOUTW (84),
+   EMR_EXTTEXTOUTA (83) and EMR_SMALLTEXTOUT (108); GDI+ text hides in EMR_COMMENT (70)
+   records signed "EMF+" and is counted so its absence from the dump is explained. */
+function emfTexts(buf){
+  const pages = [], types = {};
+  let emfPlus = 0, pos = 0;
+  while(pos < buf.length){
+    const sig = buf.indexOf(" EMF", pos, "latin1");
+    if(sig < 0) break;
+    pos = sig + 4;
+    const start = sig - 40;
+    if(start < 0 || buf.readUInt32LE(start) !== 1) continue;
+    const page = {n: pages.length + 1, records: 0, texts: []};
+    let p = start;
+    while(p + 8 <= buf.length){
+      const type = buf.readUInt32LE(p), size = buf.readUInt32LE(p + 4);
+      if(size < 8 || (size & 3) || p + size > buf.length) break;
+      page.records++;
+      types[type] = (types[type] || 0) + 1;
+      if(type === 14) { p += size; break; }
+      try{
+        if((type === 84 || type === 83) && size >= 76){
+          const x = buf.readInt32LE(p + 36), y = buf.readInt32LE(p + 40);
+          const n = buf.readUInt32LE(p + 44), off = buf.readUInt32LE(p + 48);
+          const bytes = type === 84 ? n * 2 : n;
+          if(n && off && off + bytes <= size){
+            page.texts.push({x, y, s: type === 84 ? buf.toString("utf16le", p + off, p + off + bytes)
+                                                : buf.toString("latin1", p + off, p + off + bytes)});
+          }
+        }else if(type === 108 && size >= 36){
+          const x = buf.readInt32LE(p + 8), y = buf.readInt32LE(p + 12);
+          const n = buf.readUInt32LE(p + 16), opt = buf.readUInt32LE(p + 20);
+          const at = 36 + ((opt & 0x100) ? 0 : 16), small = !!(opt & 0x200);
+          const bytes = small ? n : n * 2;
+          if(n && at + bytes <= size){
+            page.texts.push({x, y, s: small ? buf.toString("latin1", p + at, p + at + bytes)
+                                            : buf.toString("utf16le", p + at, p + at + bytes)});
+          }
+        }else if(type === 70 && size >= 16 && buf.toString("latin1", p + 12, p + 16) === "EMF+"){
+          emfPlus++;
+        }
+      }catch(e){}
+      p += size;
+    }
+    if(p > pos) pos = p;
+    pages.push(page);
+  }
+  return {pages, types, emfPlus};
+}
+/* A zip reader for one purpose: an XPS job is a zip and its pages are XML. Central
+   directory only — the sizes there are right even when a local header deferred them. */
+function zipEntries(buf){
+  let eocd = -1;
+  for(let i = buf.length - 22; i >= 0 && i >= buf.length - 66000; i--){
+    if(buf.readUInt32LE(i) === 0x06054b50){ eocd = i; break; }
+  }
+  if(eocd < 0) throw new Error("no zip directory");
+  const count = buf.readUInt16LE(eocd + 10);
+  let p = buf.readUInt32LE(eocd + 16);
+  const out = {};
+  for(let i = 0; i < count && p + 46 <= buf.length; i++){
+    if(buf.readUInt32LE(p) !== 0x02014b50) break;
+    const method = buf.readUInt16LE(p + 10), csize = buf.readUInt32LE(p + 20);
+    const nlen = buf.readUInt16LE(p + 28), elen = buf.readUInt16LE(p + 30), clen = buf.readUInt16LE(p + 32);
+    const lho = buf.readUInt32LE(p + 42);
+    out[buf.toString("utf8", p + 46, p + 46 + nlen)] = {method, csize, lho};
+    p += 46 + nlen + elen + clen;
+  }
+  return out;
+}
+function zipRead(buf, e){
+  const nlen = buf.readUInt16LE(e.lho + 26), elen = buf.readUInt16LE(e.lho + 28);
+  const start = e.lho + 30 + nlen + elen;
+  const data = buf.slice(start, start + e.csize);
+  if(e.method === 0) return data;
+  if(e.method === 8) return require("zlib").inflateRawSync(data);
+  throw new Error("zip method " + e.method);
+}
+function xmlUnescape(s){
+  return String(s).replace(/&(amp|lt|gt|quot|apos|#x[0-9a-fA-F]+|#\d+);/g, (m, e) => {
+    if(e === "amp") return "&"; if(e === "lt") return "<"; if(e === "gt") return ">";
+    if(e === "quot") return '"'; if(e === "apos") return "'";
+    try{ return String.fromCodePoint(e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10)); }
+    catch(x){ return m; }
+  });
+}
+function xpsTexts(buf){
+  const entries = zipEntries(buf);
+  const names = Object.keys(entries).filter(n => /\.fpage$/i.test(n))
+    .sort((a, b) => (parseInt((a.match(/(\d+)\.fpage$/i) || [])[1] || 0) - parseInt((b.match(/(\d+)\.fpage$/i) || [])[1] || 0)) || (a < b ? -1 : 1));
+  const pages = [];
+  for(const n of names){
+    const xml = zipRead(buf, entries[n]).toString("utf8");
+    const page = {n: pages.length + 1, name: n, texts: []};
+    const re = /<Glyphs\b[^>]*?\/?>/g;
+    let m;
+    while((m = re.exec(xml))){
+      const tag = m[0];
+      const attr = a => { const mm = tag.match(new RegExp(a + '="([^"]*)"')); return mm ? mm[1] : null; };
+      const us = attr("UnicodeString");
+      if(us === null) continue;
+      page.texts.push({x: parseFloat(attr("OriginX") || 0), y: parseFloat(attr("OriginY") || 0), s: xmlUnescape(us)});
+    }
+    pages.push(page);
+  }
+  return {pages, entries: Object.keys(entries).length};
+}
+/* The job-info file is an undocumented struct; the strings in it (document, printer,
+   user, datatype, driver) are UTF-16 and are simply picked out, at both alignments. */
+function utf16Strings(buf){
+  const out = [], seen = {};
+  for(const off of [0, 1]){
+    const s = buf.slice(off, off + ((buf.length - off) & ~1)).toString("utf16le");
+    const re = /[\u0020-\u007e\u00a0-\u00ff\u0370-\u03ff]{4,}/g;
+    let m;
+    while((m = re.exec(s))){
+      const v = m[0].trim();
+      if(v.length >= 4 && !seen[v]){ seen[v] = true; out.push(v); }
+      if(out.length >= 60) return out;
+    }
+  }
+  return out;
+}
+function spoolText(name){
+  const fs = require("fs");
+  const n = String(name || "");
+  if(!/^[^\\/]+\.(spl|shd)$/i.test(n)) return {name: n, why: "badname"};
+  let buf;
+  try{ buf = fs.readFileSync(path.join(spoolCapDir(), n)); }
+  catch(e){ return {name: n, why: "unread", detail: errCode(e)}; }
+  const out = {name: n, size: buf.length};
+  try{
+    if(/\.shd$/i.test(n)){ out.format = "shd"; out.strings = utf16Strings(buf); return out; }
+    out.format = spoolFormat(buf);
+    out.head = buf.slice(0, 16).toString("hex");
+    if(out.format === "xps"){ Object.assign(out, xpsTexts(buf)); }
+    else if(out.format === "emfspool" || out.format === "emf"){ Object.assign(out, emfTexts(buf)); }
+    else out.strings = utf16Strings(buf);
+  }catch(e){ out.textErr = errCode(e); }
+  return out;
+}
+ipcMain.handle("sc-spoolarm", (_e, ms) => {
+  const w = Math.max(1000, Math.min(SPOOL_WINDOW_MS, +ms || SPOOL_WINDOW_MS));
+  SPOOL.until = Date.now() + w;
+  SPOOL.listErr = null;
+  if(!SPOOL.timer) SPOOL.timer = setInterval(spoolTick, SPOOL_POLL_MS);
+  return spoolState();
+});
+ipcMain.handle("sc-spoolstate", () => spoolState());
+ipcMain.handle("sc-spooltext", (_e, name) => spoolText(name));
+ipcMain.handle("sc-spoolclear", () => {
+  const fs = require("fs");
+  spoolDisarm();
+  let removed = 0, err = null;
+  try{
+    for(const n of fs.readdirSync(spoolCapDir())){
+      if(!/\.(spl|shd)$/i.test(n)) continue;
+      try{ fs.unlinkSync(path.join(spoolCapDir(), n)); removed++; }catch(e){ err = errCode(e); }
+    }
+  }catch(e){ if(e && e.code !== "ENOENT") err = errCode(e); }
+  SPOOL.seen = {};
+  return {removed, err};
+});
 ipcMain.handle("sc-cancel", () => { try{ if(TAU_DETECT) TAU_DETECT.kill(); }catch(e){} return true; });
 ipcMain.handle("sc-clear", (_e, action) => {
   try{

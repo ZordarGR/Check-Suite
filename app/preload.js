@@ -48,6 +48,13 @@ contextBridge.exposeInMainWorld("reccheckShortcuts", {
   /* what the resident helper captured when protel opened the list: a file read, no process
      and no contact with protel at all */
   listFile: (tag) => ipcRenderer.invoke("sc-listfile", tag),
+  /* stage 1 of the redacted print: a ten-minute watch on the spool folder, from DEBUG.
+     Directory listings and file reads as his own user; nothing sent to protel or the
+     printer, nothing fed anywhere. */
+  spoolArm: () => ipcRenderer.invoke("sc-spoolarm"),
+  spoolState: () => ipcRenderer.invoke("sc-spoolstate"),
+  spoolText: (name) => ipcRenderer.invoke("sc-spooltext", name),
+  spoolClear: () => ipcRenderer.invoke("sc-spoolclear"),
   tauEnterSet: (on, delay) => ipcRenderer.invoke("sc-tauenter-set", on, delay),
   bootSet: (on) => ipcRenderer.invoke("sc-boot-set", on),
   focusSet: (on, needle) => ipcRenderer.invoke("sc-focus-set", on, needle),

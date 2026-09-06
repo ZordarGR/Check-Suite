@@ -105,5 +105,28 @@ out = runSync(plain, [{roomMain: "301", guest: "NEW GUEST"}], "4/9/2026", []);
 ck("an ordinary changed name still drops the nickname", !out.rooms["301"].nick);
 ck("and still marks the room",                  !!out.rooms["301"].movedOn);
 
+/* 6. the census names a room after its CHECKED-IN guest when protel lists several rows
+   for it — a Confirmed due-in or a departed CO beside the guest who is there. Found
+   05/09: the last row won; named after a due-in guest, the next .oxps load would have
+   read the real guest's receipt as a turnover and deleted the nickname. */
+{
+  const body = [lift("liveNameOf"), lift("ingestLiveNames"), "return ingestLiveNames(rate);"].join("\n");
+  const run = (rate, rooms) => { new Function("ROOMS","rate","saveRooms","Object","String", body)(rooms, rate, () => {}, Object, String); return rooms; };
+  const row = (name, status) => ({name, status});
+  const mk = all => { const rooms = {}; for(const r of Object.keys(all)) rooms[r] = all[r][all[r].length - 1]; return {rooms, all, dateKey: 20260905}; };
+  const R1 = run(mk({"426": [row("IN HOUSE GUEST", "CI"), row("DUE IN GUEST", "Confirmed")]}), {});
+  ck("a Confirmed row listed after the CI one does not name the room", R1["426"].guest === "IN HOUSE GUEST");
+  const R2 = run(mk({"426": [row("ARRIVED TODAY", "CI"), row("LEFT TODAY", "CO")]}), {});
+  ck("on a changeover the CI guest names the room, whatever the order", R2["426"].guest === "ARRIVED TODAY");
+  const R3 = run(mk({"426": [row("LEFT TODAY", "CO"), row("DUE IN", "Confirmed")]}), {});
+  ck("with no CI row, CO beats Confirmed",              R3["426"].guest === "LEFT TODAY");
+  const R4 = run(mk({"426": [row("FIRST CI", "CI"), row("SECOND CI", "CI")]}), {});
+  ck("among equals the last row still wins, as before", R4["426"].guest === "SECOND CI");
+  const R5 = run(mk({"426": [row("ONLY ROW", "Confirmed")]}), {});
+  ck("a single row names the room as it always did",   R5["426"].guest === "ONLY ROW");
+  const R6 = run({rooms: {"426": row("NO ALL", "CI")}, dateKey: 20260905}, {});
+  ck("a rate without per-room rows still works",       R6["426"].guest === "NO ALL");
+}
+
 console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");
 process.exit(bad ? 1 : 0);
