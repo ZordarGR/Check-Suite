@@ -1,11 +1,11 @@
 {
-  "version": "1.17.46",
+  "version": "1.17.47",
   "type": "html",
   "engine": "1.17.45",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.45/RecCheck-Setup.exe",
   "setupSha256": "df104b76bb2fe8e8450828d1fef580bf972f004f627003772016578172a80c3a",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "3d283c593a21668bfa664f694da45b6cf3af12a8e3a26c6b277255a40e697b8e",
-  "notes": "The room movements panel is now three lists — ARRIVALS, DEPARTURES, MOVES — with no turnover group: a room that departed and was arrived into is on both. A move reads old room → new room, in cyan.\n\nThe dot on a departure or move, and the red LEAVING TODAY mark, now take a receipt whose name is the opening of the departing guest's name — the report cuts names at the column, protel does not — unless another name protel shows for that room opens the same way, in which case nothing is marked. The arriving guest's paper is never marked.\n\nWhen protel's in-house list is captured while the department check is open, the names on the rows and the search cards refresh in place. The cards and rows show the whole name, wrapped, never cut with an ellipsis."
+  "sha256": "ec71e9dc1b36222b99761d61bca88565d5bc4796f0e940495f9dcf89e5eca501",
+  "notes": "Each receipt is named after its own guest. On a changeover day a room has two guests, and a receipt under the new one no longer borrows the name of the room's first receipt; a name the report cut is still completed from protel's in-house list, and only a receipt with too little of a name to say whose it is takes the room's.\n\nWith 1.17.46: the panel is ARRIVALS, DEPARTURES, MOVES with no turnover group; the dot and the LEAVING TODAY mark take a receipt whose name opens the departing guest's; names refresh in place when the in-house list is captured; the cards and rows show the whole name."
 }

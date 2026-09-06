@@ -23,7 +23,7 @@ const NAME = `
 function resolve(receipts, rooms, r, state){
   const MODEL = {reportDate:"3/9/2026", receipts};
   const STATE = state || {receipts:{}};
-  const body = [lift("rKey"), lift("rState"), nickForLine, lift("dateNum"), lift("isCutOf"), lift("guestFor"),
+  const body = [lift("rKey"), lift("rState"), nickForLine, lift("dateNum"), lift("sameName"), lift("isCutOf"), lift("guestFor"),
     "const effRoom = (r) => { " + effRoomLine.replace(/^function effRoom\(r\)\{/,"").replace(/\}$/,"") + " };",
     NAME].join("\n");
   const fn = new Function("MODEL","ROOMS","STATE","r","Object","String", body);
@@ -36,13 +36,24 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok?"ok  ":"FAIL") + "
 
 // 0. the search card and the accordion row resolve the name by the same line
 ck("matchCard's name line is receiptRow's", MATCH_LINE === ROW_LINE);
-ck("and it goes through the room first", /^const gname = guestFor\(effRoom\(r\)\)/.test(MATCH_LINE));
+ck("and it asks by room AND by receipt", /^const gname = guestFor\(effRoom\(r\), r\)/.test(MATCH_LINE));
 
 // 0b. the case the hunt found: a live whole name, an ordinary (uncorrected) receipt
 let recs0 = [R("3","426","ABBUSHI MIRIAM/OLIVER/NA")];
 let z = resolve(recs0, {"426":{guest:"ABBUSHI MIRIAM/OLIVER/NAHLA/HELENA", liveKey:20260905}}, recs0[0]);
 ck("a search card shows the WHOLE name protel gave, with no room correction", z.shown === "ABBUSHI MIRIAM/OLIVER/NAHLA/HELENA");
 ck("and keeps the cut one on the tooltip", /back: ABBUSHI MIRIAM\/OLIVER\/NA$/.test(z.tip));
+
+// 0c. a changeover day — his example, 06/09: dimitris leaves on the 10th, filippis takes
+//     the room; each receipt is named after ITS guest, not after the room's first receipt
+let recsX = [R("11","110","DIMITRIS"), R("12","110","FILIPPIS")];
+ck("the first guest's receipt carries his name",           resolve(recsX, {}, recsX[0]).shown === "DIMITRIS");
+ck("the next guest's receipt carries HIS, not the room's first", resolve(recsX, {}, recsX[1]).shown === "FILIPPIS");
+let live = {"110": {guest: "FILIPPIS DIMITRIS/ANNA", liveKey: 20260910}};
+ck("with the census naming the new guest, his receipt is completed",  resolve(recsX, live, recsX[1]).shown === "FILIPPIS DIMITRIS/ANNA");
+ck("and the departed guest's receipt keeps his own name",             resolve(recsX, live, recsX[0]).shown === "DIMITRIS");
+let recsY = [R("13","110","DIMITRIS PAPADOPOULOS/M"), R("14","110","DIMITRIS PAP")];
+ck("a shorter cut of the same guest still takes the room's fuller name", resolve(recsY, {}, recsY[1]).shown === "DIMITRIS PAPADOPOULOS/M");
 
 // 1. an ordinary charge, room known from the report
 let recs = [R("1","112","JAROLIMEK"), R("2","112","J.")];
