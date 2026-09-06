@@ -652,6 +652,13 @@ ipcMain.handle("files-pick-dir", async (_e, profile) => {
 ipcMain.handle("files-list", (_e, profile, rel) => hub ? hub.list(profile, rel) : {dir: null, rel: "", dirs: [], files: []});
 ipcMain.handle("files-read", (_e, profile, p) => hub.read(profile, p));
 ipcMain.handle("files-stat", (_e, profile, p) => hub ? hub.stat(profile, p) : null);
+/* REPORTS → delete: a report file he printed to XPS, to the Recycle Bin — reversible, and
+   only a report file inside the reports folder (files.js decides what is removable). */
+ipcMain.handle("files-trash", async (_e, profile, p) => {
+  const full = hub ? hub.trashable(profile, p) : null;
+  if(!full) return false;
+  try{ await shell.trashItem(full); return true; }catch(e){ return false; }
+});
 ipcMain.handle("open-help", () => { shell.openExternal(ISSUES_URL); return true; });
 
 ipcMain.handle("overlay-toggle", () => {

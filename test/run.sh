@@ -3,7 +3,7 @@
 set -e
 cd "$(dirname "$0")/.."
 fail=0
-for t in scopecheck status movespanel pills0209 report poison names nighttest dst quiet stdout inhouse livenames roomsfile alerts reports moves helperline watchlog spoolcap evflow; do
+for t in scopecheck status movespanel pills0209 report poison names nighttest dst quiet stdout inhouse livenames roomsfile alerts reports moves helperline watchlog spoolcap xpsdump reports evflow; do
   printf '\n=== %s ===\n' "$t"
   if [ "$t" = dst ]; then TZ=Europe/Athens node "test/$t.js" || fail=1;
   else node "test/$t.js" || fail=1; fi

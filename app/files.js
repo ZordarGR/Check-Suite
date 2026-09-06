@@ -77,6 +77,15 @@ class FileHub {
     if(!REPORT_RE.test(full)) throw new Error("not a report file");
     return fs.readFileSync(full);
   }
+  /* the path of a report file he asked to delete, or null: only inside the folder, only
+     a report file. The deletion itself is the caller's (shell.trashItem — the Recycle
+     Bin, never unlink), so what is removable is decided here and what removal means there. */
+  trashable(profile, p){
+    const full = this.contained(profile, p);
+    if(!full || !REPORT_RE.test(full)) return null;
+    try{ if(!fs.statSync(full).isFile()) return null; }catch(e){ return null; }
+    return full;
+  }
   stat(profile, p){
     const full = this.contained(profile, p);
     if(!full) return null;

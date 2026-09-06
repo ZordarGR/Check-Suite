@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld("reccheckFiles", {
   list: (profile, rel) => ipcRenderer.invoke("files-list", profile, rel),
   read: (profile, p) => ipcRenderer.invoke("files-read", profile, p),
   stat: (profile, p) => ipcRenderer.invoke("files-stat", profile, p),
+  trash: (profile, p) => ipcRenderer.invoke("files-trash", profile, p),
   perTool: true,
   onDirEvent: (cb) => ipcRenderer.on("reccheck-dir-event", (_e, profile) => cb(profile))
 });

@@ -1,239 +1,108 @@
-/* The arrival and departure reports feeding the ledger, through the SHIPPED functions.
-
-   The constraint these exist to protect: an arrival report names thirty rooms out of two
-   hundred, and both saveMoves and detectMoves reason from ABSENCE — a room the list does
-   not mention is a room the guest has left. Putting a report through that path would read
-   as a hundred and seventy people leaving at once. So feedStays states only what its rows
-   state, and these pin that it adds and corrects and never infers.
-
-   The rows are his, verbatim from the 04/09 23:17 reads, cut to the five cells the helper
-   sends. */
+/* The redacted departures print — the Departure List by Time parser and the sheet,
+   through the SHIPPED functions, over a page laid out exactly like his 06/09/26 file
+   (every position from it; the names replaced, since a fixture is not the place for
+   them). What it holds the line on: the columns come from the file's own heading line;
+   the room type printed beside the number is read apart; the groups carry their time,
+   the first one none; a note under a room is kept and the fragment protel prints in the
+   guest column beside it is not; the totals are read; the sheet carries no guest name
+   and no fragment, and everything else; a checkcharge page is not a departure list. */
 const fs = require("fs");
 const src = fs.readFileSync("app/index.html", "utf8");
 const lift = n => { const at = src.indexOf("\nfunction " + n + "("); if(at<0) throw new Error(n);
   let d=0,i=src.indexOf("{",at);
   for(let j=i;j<src.length;j++){ if(src[j]==="{")d++; else if(src[j]==="}"){d--; if(!d) return src.slice(at+1,j+1);} } };
+const line = re => { const m = src.match(re); if(!m) throw new Error(String(re)); return m[0]; };
+const PARSE = [line(/^const SPLIT_GAP = .*$/m), line(/^const DEFAULT_ADV = .*$/m), line(/^const DEPLIST_HEAD = [\s\S]*?\];$/m),
+  lift("xmlDecode"), lift("parseIndices"), lift("pageTokens"), lift("parseDepList"), lift("isDepList")].join("\n");
+const parse = xmls => new Function("xmls", PARSE + "\nreturn {p: parseDepList(xmls), is: isDepList(parseDepList(xmls))};")(xmls);
 
 let bad = 0;
 const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok?"ok  ":"FAIL") + "  " + l); };
 
-const store = {};
-const localStorage = {getItem:k=>(k in store?store[k]:null), setItem:(k,v)=>store[k]=String(v),
-                      removeItem:k=>{delete store[k];}};
+/* ---- the page, token by token, at his file's positions ---- */
+const G = (x, y, s) => `<Glyphs OriginX="${x}" OriginY="${y}" FontRenderingEmSize="10" UnicodeString="${s.replace(/&/g, "&amp;").replace(/"/g, "&quot;")}" />`;
+const row = (y, room, type, name, arr, rate, board, price, req) =>
+  [G(room.length > 2 ? 66 : 72, y, room), G(88, y, type), req ? G(176, y, req) : "", G(232, y, name), G(624, y, rate), G(808, y, board),
+   G(146, y + 1, "1"), G(445, y + 1, arr), G(522, y + 1, "2"), G(551, y + 1, "0"), G(578, y + 1, "0"), G(602, y + 1, "0"), G(860, y + 1, price)].join("");
+const note = (y, d, s) => G(200, y, s) + G(152, y + 1, d);
+const PAGE = "<FixedPage>" + [
+  G(256, 41, " Ημερομηνία Εκτύπωσης"), G(800, 49, "Σελίδα :"), G(866, 50, "1"), G(424, 52, "Kernos Hotel, GR-70007 Malia"),
+  G(384, 64, "07:06"), G(232, 66, "Κυριακή, 6 Σεπτέμβριος 2026"),
+  G(784, 89, "departroom1time 2"), G(523, 95, "Departure List by Time"), G(240, 97, "PROTEL HMS"), G(352, 98, "6/9/2026"), G(784, 105, "Station 219691"),
+  G(312, 140, "  Ημερομηνία Αναχώρησης :"), G(512, 140, "06/09/26"),
+  G(64, 161, "Δωμάτιο"), G(136, 161, "Ποσ"), G(168, 161, "Ζήτηση"), G(224, 161, "Πελάτης"), G(448, 161, "Άφιξη"), G(511, 161, "ΑΤ."), G(543, 161, "Eb"),
+  G(560, 161, "Chil"), G(599, 161, "Bc"), G(624, 161, "Τιμοκατάλογος"), G(801, 161, "Όροι"), G(848, 161, "Συμφωνία"), G(936, 161, "Vip Code"),
+  G(136, 173, "."), G(560, 173, "d."),
+  G(72, 185, "ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ"), G(201, 185, "  :"),
+  row(199, "201", "SPMV", "ALPHA/BETA", "01/09/26", "SNAR", "HB", "218,00"),
+  row(215, "207", "SPMV", "GAMMA", "31/08/26", "SNAR", "HB", "0,00"),
+  row(231, "251", "SPMV", "DELTA EPSILON", "31/08/26", "rack", "HB", "200,00"),
+  note(246, "31/08/26", "FULLY PREPAID!!!"), note(261, "31/08/26", "TANGO ESCAPE / asked to extend 1 night at the same daily rate"),
+  row(367, "73", "SGV", "ZETA", "28/08/26", "SNAR", "HB", "250,80", "BGV"),
+  G(72, 385, "ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ"), G(201, 385, "16:35"),
+  row(399, "245", "SPMV", "ETA/THETA", "29/08/26", "SNAR", "FB", "230,35"),
+  G(232, 412, "TA"), G(200, 414, "FB RATE OK!!"), G(152, 415, "29/08/26"),
+  G(72, 432, "ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ"), G(201, 432, "16:55"),
+  row(446, "102", "SV", "IOTA/KAPPA", "30/08/26", "SNAR", "HB", "0,00"),
+  G(512, 505, " Σύνολο Ατόμων :"), G(792, 505, " Σύνολο Child  :"), G(702, 505, "18"), G(969, 505, "0"),
+  G(224, 521, " Σύνολο Δωματίων :"), G(420, 521, "9"),
+  G(512, 529, " Σύνολο Extra Bed  :"), G(792, 529, " Σύνολο Baby Cot :"), G(709, 529, "0"), G(973, 529, "0"),
+].join("") + "</FixedPage>";
 
-const mk = (extra) => new Function("localStorage","JSON","Object","String","Number","RegExp","console",
-  [ 'const MOVES_KEY = "reccheck_moves_v2";',
-    src.match(/^const AR = .*$/m)[0], src.match(/^const DP = .*$/m)[0],
-    lift("dkey"), lift("loadLedger"), lift("stayFromRow"), lift("reportToStays"), lift("feedStays"),
-    extra || "",
-    "return {reportToStays, feedStays, led: () => loadLedger()};" ].join("\n"))(
-  localStorage, JSON, Object, String, Number, RegExp, console);
-const R = mk();
+const {p, is} = parse([PAGE]);
+ck("it is a departure list",                                  is === true);
+ck("the report id, the title, the list date and the station", p.id === "departroom1time" && p.title === "Departure List by Time" && p.listDate === "06/09/26" && p.station === "219691");
+ck("the print date and time, as printed",                     p.printed === "Κυριακή, 6 Σεπτέμβριος 2026 07:06");
+ck("the columns come from the heading line, thirteen of them", p.columns && p.columns.length === 13 && p.columns.map(c => c.key).join(",") === "room,qty,req,guest,arr,adults,eb,child,bc,rate,board,price,vip");
+ck("three groups: no time, 16:35, 16:55",                     p.groups.length === 3 && p.groups.map(g => g.time).join("|") === "|16:35|16:55");
+ck("four rooms in the first group, one in each of the others", p.groups.map(g => g.rows.length).join(",") === "4,1,1" && p.guests === 6);
+const r201 = p.groups[0].rows[0], r251 = p.groups[0].rows[2], r73 = p.groups[0].rows[3], r245 = p.groups[1].rows[0];
+ck("a room row: number, type beside it, the guest, the dates and the cells", r201.room === "201" && r201.type === "SPMV" && r201.guest === "ALPHA/BETA" && r201.arr === "01/09/26" && r201.qty === "1" && r201.adults === "2" && r201.eb === "0" && r201.child === "0" && r201.bc === "0" && r201.rate === "SNAR" && r201.board === "HB" && r201.price === "218,00");
+ck("a two-digit room, right-aligned, still lands in the room column, with its request", r73.room === "73" && r73.type === "SGV" && r73.req === "BGV" && r73.guest === "ZETA");
+ck("the notes under a room, with their dates",                r251.notes.length === 2 && r251.notes[0].date === "31/08/26" && r251.notes[0].text === "FULLY PREPAID!!!" && /asked to extend/.test(r251.notes[1].text));
+ck("a fragment in the guest column beside a note is withheld with the name, not kept in the note", r245.guestExtra === "TA" && r245.notes.length === 1 && r245.notes[0].text === "FB RATE OK!!" && r245.board === "FB");
+ck("the totals, as printed",                                  p.totals.map(x => x.label + "=" + x.value).join(" ") === "Ατόμων=18 Child=0 Δωματίων=9 Extra Bed=0 Baby Cot=0");
 
-/* name, room, occupancy, the ONE date the report carries, status */
-const ARRIVALS = [
-  ["AMANN ANJA/BERND ",           "337", "2/0/0/0/0", "14/09/26", "CI"],
-  ["BOHNE BENEDIKT/IVANA/DAVID ", "525", "2/0/0/0/0", "10/09/26", "CI"],
-  ["CATANICI CRISTIAN ",          "339", "2/0/0/0/0", "11/09/26", "CI"]
-];
-const DEPARTURES = [
-  ["BAUMGARTNER ROLF PAUL/FRANCOISE ", "534",  "2/0/0/0/0", "26/08/26", "CO"],
-  ["BRUEMMER FRED/GUDRUN ",            "9000", "0/0/0/0/0", "04/09/26", "CO"],
-  ["BURWIECK/GRUBE TAREK/KATHARINA ",  "125",  "2/0/0/0/0", "28/08/26", "CO"],
-  ["ENGEL CLAUDIA/FRANK ",             "9000", "0/0/0/0/0", "04/09/26", "CO"]
-];
+/* a checkcharge-like page: a heading with no Πελάτης column and no title */
+const OTHER = "<FixedPage>" + G(100, 40, "ΕΛΕΓΧΟΣ ΤΜΗΜΑΤΩΝ BY ROOM") + G(64, 80, "Δωμάτιο") + G(300, 80, "Ποσό") + G(66, 100, "201") + "</FixedPage>";
+ck("a page that is not a departure list is refused",          parse([OTHER]).is === false);
 
-/* --- the arrival report: its own date IS the arrival --- */
-let a = R.reportToStays(ARRIVALS, "04/09/26", true);
-ck("every arrival row becomes a stay",          a.recs.length === 3);
-ck("the report's date is the ARRIVAL",          a.recs[0].arr === "04/09/26");
-ck("and the row's date is the departure",       a.recs[0].dep === "14/09/26");
-ck("the name comes through whole",              a.recs[0].name === "AMANN ANJA/BERND");
-ck("the room is the room",                      a.recs[0].room === "337");
+/* ---- the sheet: names out, everything else in ---- */
+const SHEET = [lift("esc"), lift("buildDepSheet")].join("\n");
+const T = {"rep.withheld": "Guest names withheld", "rep.printedAt": "printed {p}", "rep.noTime": "no departure time"};
+const t = (k, v) => { let s = T[k] || k; if(v) for(const x of Object.keys(v)) s = s.split("{" + x + "}").join(String(v[x])); return s; };
+const sheetEl = {innerHTML: ""};
+const html = new Function("p", "fname", "$", "t", SHEET + "\nreturn buildDepSheet(p, fname);")(p, "dep.oxps", () => sheetEl, t);
+ck("the sheet is written into the print sheet",               sheetEl.innerHTML === html && html.length > 500);
+ck("no guest name anywhere on it",                            !/ALPHA|BETA|GAMMA|DELTA|EPSILON|ZETA|ETA\/THETA|IOTA|KAPPA/.test(html));
+ck("nor the fragment protel printed in the name's place",     !/>TA</.test(html) && !/\bTA\b/.test(html.replace(/<[^>]+>/g, " ")));
+ck("no Πελάτης heading",                                      !/Πελάτης/.test(html) && /Δωμάτιο/.test(html) && /Άφιξη/.test(html) && /Όροι/.test(html));
+ck("the title carries the list date, the meta says names are withheld and when it was printed", /Departure List by Time — 06\/09\/26/.test(html) && /Guest names withheld/.test(html) && /printed Κυριακή, 6 Σεπτέμβριος 2026 07:06/.test(html));
+ck("the groups carry their time, the first one says it has none", /ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ — no departure time/.test(html) && /ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ 16:35/.test(html) && /ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ 16:55/.test(html));
+ck("every room, its type, arrival, board and rate",           /201/.test(html) && /SPMV/.test(html) && /01\/09\/26/.test(html) && />HB</.test(html) && />FB</.test(html) && /218,00/.test(html) && /250,80/.test(html) && />73 /.test(html) && /BGV/.test(html));
+ck("the notes under their rooms",                             /FULLY PREPAID!!!/.test(html) && /asked to extend 1 night/.test(html) && /FB RATE OK!!/.test(html));
+ck("the totals",                                              /Ατόμων: <b>18<\/b>/.test(html) && /Δωματίων: <b>9<\/b>/.test(html));
+ck("and it is escaped",                                       !/<script/i.test(html) && /&amp;/.test(new Function("p","fname","$","t", SHEET + "\nreturn buildDepSheet(p, fname);")(Object.assign({}, p, {station: "a&b"}), "x", () => ({}), t)));
 
-/* --- the departure report: the other way round --- */
-let d = R.reportToStays(DEPARTURES, "04/09/26", false);
-ck("the report's date is the DEPARTURE",        d.recs[0].dep === "04/09/26");
-ck("and the row's date is the arrival",         d.recs[0].arr === "26/08/26");
-/* his word: 9000 is a holding room, ignore it */
-ck("room 9000 is dropped, not recorded",        d.recs.length === 2);
-ck("and it is counted rather than silently lost", d.dropped === 2);
-ck("no holding room reaches the records",       !d.recs.some(r => r.room === "9000"));
-
-/* --- a half-read row is not a stay: ReadCell returns "" for every failure it has --- */
-const half = R.reportToStays([
-  ["", "201", "2/0/0/0/0", "09/09/26", "CI"],            // no name
-  ["SOMEONE ", "202", "2/0/0/0/0", "09/09/26", ""]       // no status
-], "04/09/26", true);
-ck("a row missing its name or status is dropped", half.recs.length === 0 && half.dropped === 2);
-/* But an arrival row with no DEPARTURE is a real thing, not a failed read: protel prints
-   an open-ended stay that way, and the ledger already treats an absent departure as one
-   protel has not stated rather than one that has passed. It is recorded with no departure,
-   and must not clear a departure something else already knew. */
-const open = R.reportToStays([["OPEN ENDED ", "204", "2/0/0/0/0", "", "CI"]], "04/09/26", true);
-ck("an arrival with no departure is still a stay", open.recs.length === 1 && open.recs[0].dep === "");
-store["reccheck_moves_v2"] = JSON.stringify({"204": {"20260904": {d: 20260915, n: "OPEN ENDED", seen: 20260903}}});
-R.feedStays(open.recs, 20260905);
-ck("and does not wipe a departure already known", R.led()["204"][20260904].d === 20260915);
-store["reccheck_moves_v2"] = "";
-
-/* --- a cancelled row is not a stay --- */
-const cx = R.reportToStays([["X ", "201", "2/0/0/0/0", "09/09/26", "Reversal/Void"]], "04/09/26", true);
-ck("Reversal/Void is not a stay",               cx.recs.length === 0 && cx.cancelled === 1);
-
-/* --- the writer: additive, and it corrects --- */
-R.feedStays(a.recs, 20260904);
-let led = R.led();
-ck("the arrivals reach the ledger",             Object.keys(led).length === 3);
-ck("keyed on the arrival",                      !!led["337"][20260904]);
-ck("with the departure protel printed",         led["337"][20260904].d === 20260914);
-ck("and the whole name",                        led["337"][20260904].n === "AMANN ANJA/BERND");
-
-/* a later report shortening a stay is DATA, not a deduction — protel says so.
-   The night passed here is the night the READ happened, never the date on the window: a
-   report he opened for a future day would otherwise stamp entries in the future and freeze
-   them against every later correction. */
-R.feedStays([{room:"337", arr:"04/09/26", dep:"07/09/26", name:"AMANN ANJA/BERND"}], 20260906);
-ck("a later read may correct the departure",    R.led()["337"][20260904].d === 20260907);
-/* an older one may not */
-R.feedStays([{room:"337", arr:"04/09/26", dep:"20/09/26", name:"AMANN ANJA/BERND"}], 20260901);
-ck("an older read may not overwrite it",        R.led()["337"][20260904].d === 20260907);
-
-/* ON A TIE THE CENSUS WINS — and this is the one the audit caught.
-   `seen` is a business night on both sides, so through a whole shift the in-house census
-   and a report stamp the SAME number and the recency guard is a tie. A report window is a
-   snapshot from whenever it was printed; the in-house list is re-read every five seconds.
-   Letting the snapshot win would push a stale departure back over an extension the census
-   had already picked up — and roomMoves puts a pill on a departure equal to tonight. */
-store["reccheck_moves_v2"] = JSON.stringify({
-  "210": {"20260901": {d: 20260907, n: "EXTENDED GUEST", seen: 20260904}}});
-R.feedStays([{room:"210", arr:"01/09/26", dep:"04/09/26", name:"EXTENDED GUEST"}], 20260904);
-ck("a same-night report may NOT undo the census", R.led()["210"][20260901].d === 20260907);
-/* but it may still fill a blank the census has not answered */
-store["reccheck_moves_v2"] = JSON.stringify({
-  "211": {"20260901": {d: 0, n: "OPEN", seen: 20260904}}});
-R.feedStays([{room:"211", arr:"01/09/26", dep:"04/09/26", name:"OPEN"}], 20260904);
-ck("and it may still fill a blank departure",    R.led()["211"][20260901].d === 20260904);
-/* and on a strictly later night it is the newer word */
-store["reccheck_moves_v2"] = JSON.stringify({
-  "212": {"20260901": {d: 20260907, n: "X", seen: 20260904}}});
-R.feedStays([{room:"212", arr:"01/09/26", dep:"05/09/26", name:"X"}], 20260905);
-ck("a later night's report does correct it",     R.led()["212"][20260901].d === 20260905);
-/* a census name is not replaced by a report name on the same night either */
-store["reccheck_moves_v2"] = JSON.stringify({
-  "213": {"20260901": {d: 20260907, n: "CENSUS NAME", seen: 20260904}}});
-R.feedStays([{room:"213", arr:"01/09/26", dep:"07/09/26", name:"REPORT NAME"}], 20260904);
-ck("nor is the census name replaced on a tie",   R.led()["213"][20260901].n === "CENSUS NAME");
-/* put the ledger back to what the next section expects */
-store["reccheck_moves_v2"] = "";
-R.feedStays(a.recs, 20260904);
-R.feedStays([{room:"337", arr:"04/09/26", dep:"07/09/26", name:"AMANN ANJA/BERND"}], 20260906);
-
-/* IT MUST NEVER TOUCH A ROOM ITS ROWS DO NOT NAME. This is the whole point. */
-const before = Object.keys(R.led()).length;
-R.feedStays(d.recs, 20260904);
-led = R.led();
-ck("the departures add their own rooms",        Object.keys(led).length === before + 2);
-ck("and every earlier room is still there",     !!led["337"] && !!led["525"] && !!led["339"]);
-ck("none of them was marked as leaving",        !led["525"][20260904].mv && !led["339"][20260904].mv);
-ck("nor given a departure it never had",        led["525"][20260904].d === 20260910);
-
-/* a recorded move must survive a later report over the same stay */
-store["reccheck_moves_v2"] = JSON.stringify({"148": {"20260901": {d: 20260910, n: "X", seen: 20260901, from: "325", mv: 0}}});
-R.feedStays([{room:"148", arr:"01/09/26", dep:"12/09/26", name:"X"}], 20260904);
-ck("a recorded move is not dropped by a report", R.led()["148"][20260901].from === "325");
-ck("while the departure still updates",          R.led()["148"][20260901].d === 20260912);
-
-/* rubbish must not take the ledger down */
-const nil = t => t && t.made === 0 && t.fixed === 0 && t.same === 0 && t.kept === 0 && !t.failed;
-ck("no rows writes nothing",                     nil(R.feedStays([], 20260904)));
-ck("no night writes nothing",                    nil(R.feedStays(a.recs, 0)));
-const keep = JSON.stringify(R.led());
-R.feedStays([{room:"", arr:"", dep:"", name:""}], 20260904);
-ck("an empty row changes nothing",               JSON.stringify(R.led()) === keep);
-
-
-/* ---- WHAT THE LINE ON SCREEN IS ALLOWED TO SAY ----
-
-   05/09, his: "Departure report 05/09/26: 41 rows, 0 stays recorded." He read that as the
-   departures not going in. They had gone in — days earlier, from the in-house census — so
-   the count of things CHANGED was honestly nought while the report was a complete success.
-   Nothing on screen could tell those apart, which is the whole fault. These pin that the
-   three outcomes are now counted separately, so a nought can be read. */
-const T = mk();
-ck("a stay the ledger has never seen is MADE",
-   (() => { const t = T.feedStays([{room:"401", arr:"01/09/26", dep:"05/09/26", name:"NEW"}], 20260905);
-            return t.made === 1 && t.fixed === 0 && t.same === 0; })());
-ck("the very same report again is ALREADY KNOWN, not a failure",
-   (() => { const t = T.feedStays([{room:"401", arr:"01/09/26", dep:"05/09/26", name:"NEW"}], 20260905);
-            return t.made === 0 && t.fixed === 0 && t.same === 1; })());
-ck("a later report that moves the departure is CORRECTED",
-   (() => { const t = T.feedStays([{room:"401", arr:"01/09/26", dep:"09/09/26", name:"NEW"}], 20260907);
-            return t.made === 0 && t.fixed === 1 && t.same === 0; })());
-ck("and the correction really is in the ledger",   T.led()["401"][20260901].d === 20260909);
-/* "ALREADY KNOWN" IS AGREEMENT. A row the ledger refused while it said something
-   DIFFERENT used to be counted as already known — the report said the 2nd, the ledger
-   held the 9th, and the line asserted agreement it had never checked. The ledger is right
-   to keep its word; the line has to say that it did. */
-ck("a report older than the ledger's word, saying otherwise, is KEPT as the ledger had it — and changes nothing",
-   (() => { const t = T.feedStays([{room:"401", arr:"01/09/26", dep:"02/09/26", name:"NEW"}], 20260903);
-            return t.made === 0 && t.fixed === 0 && t.same === 0 && t.kept === 1
-                   && T.led()["401"][20260901].d === 20260909; })());
-ck("a same-night report that loses the tie with a different departure is KEPT, not already known",
-   (() => { const t = T.feedStays([{room:"401", arr:"01/09/26", dep:"05/09/26", name:"NEW"}], 20260907);
-            return t.kept === 1 && t.same === 0 && t.fixed === 0 && T.led()["401"][20260901].d === 20260909; })());
-ck("a same-night report that says nothing about the departure agrees with whatever is held",
-   (() => { const t = T.feedStays([{room:"401", arr:"01/09/26", dep:"", name:"NEW"}], 20260907);
-            return t.same === 1 && t.kept === 0 && T.led()["401"][20260901].d === 20260909; })());
-ck("and one that says the same thing is already known",
-   (() => { const t = T.feedStays([{room:"401", arr:"01/09/26", dep:"09/09/26", name:"NEW"}], 20260907);
-            return t.same === 1 && t.kept === 0; })());
-
-/* forty-one rows the census already holds: the exact shape of his line */
-const C = mk();
-const many = [];
-for(let i = 0; i < 41; i++) many.push({room: String(100 + i), arr: "01/09/26", dep: "05/09/26", name: "G" + i});
-ck("forty-one new rows are forty-one MADE",
-   (() => { const t = C.feedStays(many, 20260905); return t.made === 41 && t.same === 0; })());
-ck("the same forty-one again are forty-one ALREADY KNOWN, none lost",
-   (() => { const t = C.feedStays(many, 20260905);
-            return t.made === 0 && t.fixed === 0 && t.same === 41 && !t.failed; })());
-
-/* a write that throws must say so rather than look like agreement */
-const boom = {getItem: k => C_STORE[k] === undefined ? null : C_STORE[k],
-              setItem: () => { throw new Error("quota"); },
-              removeItem: () => {}};
-const C_STORE = {};
-const B = new Function("localStorage","JSON","Object","String","Number","RegExp","console",
-  [ 'const MOVES_KEY = "reccheck_moves_v2";', lift("dkey"), lift("loadLedger"), lift("feedStays"),
-    "return {feedStays};" ].join("\n"))(boom, JSON, Object, String, Number, RegExp, console);
-ck("a ledger write that throws reports FAILED, not zero",
-   (() => { const t = B.feedStays([{room:"401", arr:"01/09/26", dep:"05/09/26", name:"X"}], 20260905);
-            return t.failed === true && t.made === 0; })());
-
-/* ---- THE THREE DROP REASONS ARE THREE REASONS ----
-   They shared one counter, which the screen labelled "holding-room row(s) ignored". A
-   report whose dates came back unreadable was reported to him as a couple of holding
-   rooms — the wrong answer to the only question the line exists to answer. */
-const mixed = R.reportToStays([
-  ["HELD GUEST ",   "9000", "0/0/0/0/0", "04/09/26", "CO"],   // holding room
-  ["NO DATE ",      "301",  "2/0/0/0/0", "",         "CO"],   // arrival unreadable
-  ["",              "302",  "2/0/0/0/0", "01/09/26", "CO"],   // name never arrived
-  ["HALF READ ",    "303",  "2/0/0/0/0", "01/09/26", ""],     // status never arrived
-  ["NO ROOM CELL ", "",     "2/0/0/0/0", "01/09/26", "CO"],   // the ROOM never arrived
-  ["GOOD GUEST ",   "304",  "2/0/0/0/0", "01/09/26", "CO"]
-], "04/09/26", false);
-ck("the one good row is the only stay",          mixed.recs.length === 1);
-ck("the holding room is counted as a holding room", mixed.held === 1);
-ck("an unreadable arrival date is its own count",   mixed.nodate === 1);
-/* an EMPTY room cell is ReadCell's answer for a failed read — it was counted as a
-   holding room, the exact mislabel the split of these counters was made to end */
-ck("a half-read row is its own count, whichever cell failed", mixed.partial === 3);
-ck("and nothing but the holding room is called one",  mixed.held === 1 && mixed.partial === 3);
-ck("and the old total still adds up",               mixed.dropped === 5);
-ck("a cancelled row is none of those three",
-   (() => { const c = R.reportToStays([["X ", "201", "2/0/0/0/0", "09/09/26", "Reversal/Void"]], "04/09/26", false);
-            return c.cancelled === 1 && c.dropped === 0 && c.recs.length === 0; })());
+/* ---- the delete door: only a report file inside the reports folder ---- */
+const path = require("path"), os = require("os");
+const {FileHub} = require(path.resolve("app/files.js"));
+const DIR = fs.mkdtempSync(path.join(os.tmpdir(), "rcrep-"));
+const REPORTS = path.join(DIR, "reports"); fs.mkdirSync(REPORTS);
+fs.writeFileSync(path.join(REPORTS, "dep.oxps"), "x");
+fs.writeFileSync(path.join(REPORTS, "notes.txt"), "x");
+fs.mkdirSync(path.join(REPORTS, "folder.oxps"));
+fs.writeFileSync(path.join(DIR, "outside.oxps"), "x");
+const hub = new FileHub({configPath: path.join(DIR, "config.json"), onDirEvent(){}});
+hub.setDir("dept", REPORTS);
+ck("a report file inside the folder is removable, by its full path", hub.trashable("dept", path.join(REPORTS, "dep.oxps")) === path.resolve(REPORTS, "dep.oxps"));
+ck("a file outside the folder is not",                              hub.trashable("dept", path.join(DIR, "outside.oxps")) === null);
+ck("a path that climbs out of the folder is not",                   hub.trashable("dept", path.join(REPORTS, "..", "outside.oxps")) === null);
+ck("a file that is not a report is not",                            hub.trashable("dept", path.join(REPORTS, "notes.txt")) === null);
+ck("a folder named like a report is not",                           hub.trashable("dept", path.join(REPORTS, "folder.oxps")) === null);
+ck("a file that is not there is not",                               hub.trashable("dept", path.join(REPORTS, "gone.oxps")) === null);
+ck("nothing was removed by asking",                                 fs.existsSync(path.join(REPORTS, "dep.oxps")));
+hub.stopWatch();
 
 console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");
 process.exit(bad ? 1 : 0);

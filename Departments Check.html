@@ -222,6 +222,9 @@ body.onMenu #clList{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
 /* STATUS: what protel has told the tool. Every rule scoped — the bare-selector leak is a
    landmine here (see the notes). The tables want more room than the menu column. */
 #statusListScreen .mNav{max-width:960px}
+#reportsScreen .stNote{font-size:12px;color:var(--faint);padding:4px 2px}
+#printSheet .type,#pvPaper .type{font-size:10px;color:#444;margin-left:4px}
+#printSheet tr.note td,#pvPaper tr.note td{border-top:0;padding-top:0;font-size:10.5px;color:#333}
 #statusListScreen .stNote{font-size:12px;color:var(--faint);padding:4px 2px}
 #statusListScreen .stNote.warn{color:#fbbf24}
 #statusListScreen .stBlock{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--panel)}
@@ -888,6 +891,14 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
     <button class="mItem primary" id="auditBtn"><span class="mLabel"></span><span class="mSub"></span></button>
     <button class="mItem primary" id="alertsBtn"><span class="mLabel"></span><span class="mSub"></span></button>
     <button class="mItem primary" id="statusBtn"><span class="mLabel"></span><span class="mSub"></span></button>
+    <button class="mItem primary" id="reportsBtn"><span class="mLabel"></span><span class="mSub"></span></button>
+  </div>
+
+  <div id="reportsScreen" style="display:none">
+    <div class="mNav">
+      <div id="repList"></div>
+      <button class="btn small" id="repBack" style="margin-top:6px"></button>
+    </div>
   </div>
 
   <div id="alertsScreen" style="display:none">
@@ -1233,6 +1244,99 @@ function baseDept(section){ return section.replace(/\s+\d+%$/, "").trim(); }
 function rateOf(section){ const m = section.match(/(\d+)%$/); return m ? m[1] + "%" : "base"; }
 function mainRoom(raw){ const m = raw.match(/^(\d+)-\d*/); return m ? m[1] : raw; }
 
+/* ---- the Departure List by Time — protel report `departroom1time` ----
+   Read off his 06/09/26 file (one page): a header block (print date and time, the hotel,
+   the title, "Ημερομηνία Αναχώρησης : dd/mm/yy", the station); one heading line —
+   Δωμάτιο · Ποσ. · Ζήτηση · Πελάτης · Άφιξη · ΑΤ. · Eb · Child · Bc · Τιμοκατάλογος ·
+   Όροι · Συμφωνία · Vip Code — with the room TYPE printed under Δωμάτιο beside the number
+   and no heading of its own; groups headed "ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ <hh:mm>", the first group's
+   time empty; one line per room; note lines under a room (a date at x≈152, free text at
+   x≈200); a name fragment protel sometimes prints on its own line in the guest column;
+   the totals. The column bands come from the heading line of the file itself — a cell
+   belongs to the last heading that starts at or left of it (right-aligned numbers start
+   a few units before their heading, hence the 6) — so only the heading words are
+   assumed, not the positions. */
+const DEPLIST_HEAD = [["room","Δωμάτιο"],["qty","Ποσ"],["req","Ζήτηση"],["guest","Πελάτης"],["arr","Άφιξη"],["adults","ΑΤ."],
+                      ["eb","Eb"],["child","Chil"],["bc","Bc"],["rate","Τιμοκατάλογος"],["board","Όροι"],["price","Συμφωνία"],["vip","Vip"]];
+function parseDepList(xmls){
+  const out = {kind: "deplist", id: "", title: "", listDate: "", printed: "", station: "", pages: xmls.length,
+               columns: null, groups: [], totals: [], guests: 0};
+  let group = null, lastRow = null, printNext = false;
+  const bandOf = x => { let k = null; for(const c of out.columns) if(c.x <= x + 6) k = c; return k; };
+  for(const xml of xmls){
+    const toks = pageTokens(xml).sort((a, b) => a.y - b.y || a.x - b.x);
+    const lines = [];
+    for(const tk of toks){
+      const L = lines[lines.length - 1];
+      if(L && Math.abs(L.y - tk.y) <= 4) L.toks.push(tk); else lines.push({y: tk.y, toks: [tk]});
+    }
+    for(const L of lines){
+      L.toks.sort((a, b) => a.x - b.x);
+      const words = L.toks.map(t => t.t.trim());
+      const text = words.join(" ");
+      if(/Departure List by Time/i.test(text)) out.title = "Departure List by Time";
+      const idm = text.match(/\b(departroom\S*)/); if(idm && !out.id) out.id = idm[1];
+      const dm = text.match(/Ημερομηνία Αναχώρησης\s*:?\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/); if(dm){ out.listDate = dm[1]; continue; }
+      const sm = text.match(/Station\s+(\S+)/); if(sm) out.station = sm[1];
+      if(/Ημερομηνία Εκτύπωσης/.test(text)){ printNext = true; continue; }
+      if(printNext && /\d{1,2}:\d{2}/.test(text)){ out.printed = text; printNext = false; continue; }
+      if(!out.columns){
+        if(words.indexOf("Δωμάτιο") >= 0 && words.indexOf("Πελάτης") >= 0){
+          const cols = [];
+          for(const [key, word] of DEPLIST_HEAD){ const tk = L.toks.find(t => t.t.trim().indexOf(word) === 0); if(tk) cols.push({key, x: tk.x, head: tk.t.trim()}); }
+          cols.sort((a, b) => a.x - b.x);
+          out.columns = cols;
+        }
+        continue;
+      }
+      if(/ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ/.test(text)){
+        const tm = text.match(/(\d{1,2}:\d{2})/);
+        group = {time: tm ? tm[1] : "", rows: []}; out.groups.push(group); lastRow = null;
+        continue;
+      }
+      if(/Σύνολο/.test(text)){
+        for(let i = 0; i < words.length; i++){
+          const m = words[i].match(/^Σύνολο\s+(.+?)\s*:?$/);
+          if(!m) continue;
+          const v = words.slice(i + 1).find(w => /^\d+$/.test(w));
+          out.totals.push({label: m[1].trim(), value: v === undefined ? "" : v});
+        }
+        continue;
+      }
+      /* cells: every token into the band of the last heading at or left of it */
+      const cell = {};
+      for(const tk of L.toks){
+        const c = bandOf(tk.x); const k = c ? c.key : "left";
+        (cell[k] = cell[k] || []).push(tk.t.trim());
+      }
+      const roomToks = cell.room || [];
+      const roomNo = roomToks.find(w => /^\d{1,4}$/.test(w));
+      if(roomNo && (cell.guest || cell.arr)){
+        const row = {room: roomNo, type: roomToks.filter(w => w !== roomNo).join(" "),
+                     qty: (cell.qty || []).join(" "), req: (cell.req || []).join(" "),
+                     guest: (cell.guest || []).join(" "), arr: (cell.arr || []).join(" "),
+                     adults: (cell.adults || []).join(" "), eb: (cell.eb || []).join(" "), child: (cell.child || []).join(" "),
+                     bc: (cell.bc || []).join(" "), rate: (cell.rate || []).join(" "), board: (cell.board || []).join(" "),
+                     price: (cell.price || []).join(" "), vip: (cell.vip || []).join(" "), notes: [], guestExtra: ""};
+        if(!group){ group = {time: "", rows: []}; out.groups.push(group); }
+        group.rows.push(row); lastRow = row; out.guests++;
+        continue;
+      }
+      if(!lastRow) continue;
+      /* a note under the room: a date then free text, both LEFT of the guest column.
+         Whatever else sits on that line from the guest column on (his file prints "TA"
+         there, beside a note) is kept out of the note and withheld with the name — a
+         fragment in the name's place is treated as the name's. */
+      const gx = (out.columns.find(c => c.key === "guest") || {x: Infinity}).x;
+      const left = L.toks.filter(t => t.x < gx - 6), right = L.toks.filter(t => t.x >= gx - 6);
+      const dateTok = left.map(t => t.t.trim()).find(w => /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(w));
+      if(right.length) lastRow.guestExtra += (lastRow.guestExtra ? " " : "") + right.map(t => t.t.trim()).join(" ");
+      if(dateTok) lastRow.notes.push({date: dateTok, text: left.map(t => t.t.trim()).filter(w => w !== dateTok).join(" ")});
+    }
+  }
+  return out;
+}
+function isDepList(p){ return !!(p && p.columns && (p.title || /^departroom/.test(p.id || ""))); }
 function parseReport(xmls){
   let section = null;
   const sections = {};          // name -> {rows:[], reported:null, group:null}
@@ -1431,7 +1535,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.48";
+const APP_VERSION = "1.17.50";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1542,6 +1646,24 @@ en: {
   "sc.spoolOff": "Not armed.",
   "sc.spoolCleared": "The caught prints are deleted ({n} file(s)).",
   "sc.spoolFail": "The request failed",
+  "sc.xps": "Dump the newest XPS in the reports folder",
+  "sc.xpsHint": "For the redacted print. Print the departures report to the Microsoft XPS Document Writer, save it into the reports folder, then press this: it prints that file's text with positions, page by page, so the columns can be read off it. It reads a file the tool already browses; nothing is sent anywhere.",
+  "sc.xpsNone": "No .oxps or .xps file in the reports folder ({dir}).",
+  "land.reports": "REPORTS",
+  "land.reportsSub": "departure lists printed to XPS — names withheld, print or delete",
+  "rep.noBridge": "Only inside the desktop app.",
+  "rep.noDir": "Pick the reports folder first (OPTIONS).",
+  "rep.none": "No departure list in the reports folder ({dir}). In protel, print the Departure List by Time to the Microsoft XPS Document Writer and save it there.",
+  "rep.item": "Departure List by Time — {d}",
+  "rep.itemSub": "{n} room(s) · printed {p} · {f}",
+  "rep.pvTitle": "Departure list — names withheld",
+  "rep.withheld": "Guest names withheld",
+  "rep.printedAt": "printed {p}",
+  "rep.noTime": "no departure time",
+  "rep.delete": "Delete the file",
+  "rep.deleteQ": "Delete {f}? It goes to the Recycle Bin.",
+  "rep.deleted": "{f} sent to the Recycle Bin.",
+  "rep.deleteFail": "{f} could not be deleted.",
   "sc.noDoor": "This build cannot reach the helper, so nothing can be reported here.",
   "sc.scanHint": "Read-only. It asks each control what it is and what it holds \u2014 nothing is written and protel keeps exactly what it had. It is not free, though: the report ends with how many questions it asked protel and how long that took.",
   "sc.scanWait": "Bring the protel window you want forward\u2026 {n}",
@@ -1781,6 +1903,24 @@ gr: {
   "sc.spoolOff": "Ανενεργό.",
   "sc.spoolCleared": "Οι εκτυπώσεις που πιάστηκαν σβήστηκαν ({n} αρχεία).",
   "sc.spoolFail": "Το αίτημα απέτυχε",
+  "sc.xps": "Εμφάνισε το νεότερο XPS του φακέλου αναφορών",
+  "sc.xpsHint": "Για την εκτύπωση χωρίς ονόματα. Τύπωσε την αναφορά αναχωρήσεων στον Microsoft XPS Document Writer, αποθήκευσέ την στον φάκελο αναφορών και πάτα εδώ: εμφανίζει το κείμενο του αρχείου με θέσεις, σελίδα-σελίδα, ώστε να διαβαστούν οι στήλες από αυτό. Διαβάζει αρχείο που το εργαλείο ήδη βλέπει· τίποτα δεν στέλνεται πουθενά.",
+  "sc.xpsNone": "Δεν υπάρχει αρχείο .oxps ή .xps στον φάκελο αναφορών ({dir}).",
+  "land.reports": "ΑΝΑΦΟΡΕΣ",
+  "land.reportsSub": "λίστες αναχωρήσεων τυπωμένες σε XPS — χωρίς ονόματα, εκτύπωση ή διαγραφή",
+  "rep.noBridge": "Μόνο μέσα στην εφαρμογή.",
+  "rep.noDir": "Όρισε πρώτα τον φάκελο αναφορών (ΕΠΙΛΟΓΕΣ).",
+  "rep.none": "Καμία λίστα αναχωρήσεων στον φάκελο αναφορών ({dir}). Στο protel, τύπωσε το Departure List by Time στον Microsoft XPS Document Writer και αποθήκευσέ το εκεί.",
+  "rep.item": "Λίστα αναχωρήσεων — {d}",
+  "rep.itemSub": "{n} δωμάτια · τυπώθηκε {p} · {f}",
+  "rep.pvTitle": "Λίστα αναχωρήσεων — χωρίς ονόματα",
+  "rep.withheld": "Χωρίς ονόματα πελατών",
+  "rep.printedAt": "τυπώθηκε {p}",
+  "rep.noTime": "χωρίς ώρα αναχώρησης",
+  "rep.delete": "Διαγραφή του αρχείου",
+  "rep.deleteQ": "Διαγραφή του {f}; Πάει στον Κάδο Ανακύκλωσης.",
+  "rep.deleted": "Το {f} πήγε στον Κάδο Ανακύκλωσης.",
+  "rep.deleteFail": "Το {f} δεν διαγράφηκε.",
   "sc.noDoor": "Αυτό το build δεν φτάνει τον βοηθό, οπότε δεν μπορεί να αναφερθεί τίποτα εδώ.",
   "sc.scanHint": "Μόνο ανάγνωση. Ρωτάει κάθε στοιχείο τι είναι και τι περιέχει — τίποτα δεν γράφεται και το protel κρατάει ακριβώς ό,τι είχε. Δεν είναι όμως δωρεάν: η αναφορά τελειώνει με το πόσες ερωτήσεις έγιναν στο protel και πόσο κράτησαν.",
   "sc.scanWait": "Φέρε μπροστά το παράθυρο του protel που θέλεις… {n}",
@@ -1969,6 +2109,8 @@ function applyLang(){
   mi("#statusBtn", "menu.status", "menu.statusSub");
   mi("#stArr", "st.arr", null); mi("#stDep", "st.dep", null); mi("#stInh", "st.inh", null); mi("#stMov", "st.mov", null);
   $("#stListBack").textContent = t("st.back");
+  mi("#reportsBtn", "land.reports", "land.reportsSub");
+  $("#repBack").textContent = t("st.back");
   mi("#aDept", "audit.dept", "audit.deptSub");
   mi("#aTax", "audit.tax", "audit.taxSub");
   $("#aBack").textContent = t("audit.back");
@@ -3471,6 +3613,22 @@ function spoolDump(st, texts){
   }
   return L.join("\n");
 }
+/* ---- the redacted print, route A: the first file ----
+   He prints the departures report to the XPS Document Writer into the reports folder;
+   this is that file's text with positions, every token of every page, so the column map
+   is read off his data and never guessed (the 04/09 rule). English on purpose — it is
+   for pasting. It reads a file the tool already browses; nothing is sent anywhere. */
+function xpsDump(f, xmls){
+  const L = [];
+  L.push("file: " + f.name + "  " + (f.size || 0) + " bytes  " + (f.mtimeMs ? new Date(f.mtimeMs).toISOString() : ""));
+  L.push("pages: " + xmls.length);
+  xmls.forEach((xml, i) => {
+    const toks = pageTokens(xml).sort((a, b) => a.y - b.y || a.x - b.x);
+    L.push("page " + (i + 1) + "  (" + toks.length + " tokens)");
+    for(const tk of toks) L.push("  (" + Math.round(tk.x) + ", " + Math.round(tk.y) + ")  " + tk.t);
+  });
+  return L.join("\n");
+}
 function helperDetail(h){
   if(!h) return "";
   const bits = [];
@@ -3562,8 +3720,10 @@ function openDebug(){
       '<button class="btn" id="scSpool">' + t("sc.spool") + '</button>' +
       '<button class="btn" id="scSpoolShow">' + t("sc.spoolShow") + '</button>' +
       '<button class="btn" id="scSpoolClear">' + t("sc.spoolClear") + '</button>' +
+      '<button class="btn" id="scXps">' + t("sc.xps") + '</button>' +
     '</div>' +
     '<div class="err" style="color:var(--faint)">' + t("sc.spoolHint") + '</div>' +
+    '<div class="err" style="color:var(--faint)">' + t("sc.xpsHint") + '</div>' +
     '<pre id="scDiag" style="display:none"></pre>' +
     '<div class="actions">' +
       '<button class="btn" id="dbgLock">' + t("dbg.lock") + '</button>' +
@@ -3681,6 +3841,28 @@ function openDebug(){
     catch(e){ pre.textContent = t("sc.spoolFail") + " (" + ((e && e.message) || e || "?") + ")"; return; }
     SPOOL_TEXTS = {};
     pre.textContent = t("sc.spoolCleared", {n: (r && r.removed) || 0}) + (r && r.err ? " (" + r.err + ")" : "");
+  };
+  /* ---- the newest XPS in the reports folder, as text with positions ---- */
+  $("#scXps").onclick = async () => {
+    const pre = $("#scDiag"), copy = $("#scCopy"), b = $("#scXps");
+    if(b.dataset.busy) return;
+    pre.style.display = ""; copy.style.display = "none";
+    if(!window.reccheckFiles){ pre.textContent = t("sc.noDoor"); return; }
+    b.dataset.busy = "1";
+    try{
+      const res = await window.reccheckFiles.list("dept", "");
+      const files = ((res && res.files) || []).filter(f => /\.(oxps|xps)$/i.test(f.name));
+      if(!files.length){ pre.textContent = t("sc.xpsNone", {dir: (res && res.dir) || "?"}); return; }
+      const f = files[0];                                   // list() sorts newest first
+      const raw = await window.reccheckFiles.read("dept", f.path);
+      const u8 = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
+      const xmls = await unzipFpages(u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength));
+      const dump = xpsDump(f, xmls);
+      pre.textContent = dump;
+      copy.style.display = "";
+      copy.onclick = () => { try{ navigator.clipboard.writeText(dump); }catch(e){} };
+    }catch(e){ pre.textContent = t("sc.spoolFail") + " (" + ((e && e.message) || e || "?") + ")"; }
+    finally{ delete b.dataset.busy; }
   };
   /* ---- reading the list in front ----
      The only thing in DEBUG that costs protel real work, and it is a PROBE: it reports
@@ -3998,6 +4180,8 @@ function showScreen(which){
   $("#alertsScreen").style.display = which === "alerts" ? "" : "none";
   $("#statusScreen").style.display = which === "status" ? "" : "none";
   $("#statusListScreen").style.display = which === "stlist" ? "" : "none";
+  $("#reportsScreen").style.display = which === "reports" ? "" : "none";
+  if(which === "reports") renderReports();
   /* STATUS is drawn by the tax half, which holds the captures: the menu's four lines, and
      the list he chose. Doors, like __taScreen above. */
   if(which === "status"){ try{ if(window.__taStatusMenu) window.__taStatusMenu(); }catch(e){} }
@@ -5859,6 +6043,8 @@ $("#aBack").onclick = () => showScreen("menu");
 $("#alertsBtn").onclick = () => showScreen("alerts");
 $("#alBack").onclick = () => showScreen("menu");
 $("#statusBtn").onclick = () => showScreen("status");
+$("#reportsBtn").onclick = () => showScreen("reports");
+$("#repBack").onclick = () => showScreen("menu");
 $("#stBack").onclick = () => showScreen("menu");
 let ST_TAG = "AR";
 const stOpen = tag => () => { ST_TAG = tag; showScreen("stlist"); };
@@ -5949,6 +6135,7 @@ if(window.reccheckFiles){
   window.reccheckFiles.onDirEvent(profile => {
     if(SCREEN === "files" && (!profile || FB.tool === profile)) fbRefresh();
     if(!profile || profile === "dept") checkOpenByStat();
+    if(SCREEN === "reports" && (!profile || profile === "dept")) renderReports();   // a list just printed to XPS appears
   });
 }
 $("#fileInput").onchange = e => { if(e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ""; };
@@ -5958,6 +6145,112 @@ $("#drop").ondrop = e => {
   e.preventDefault(); $("#drop").classList.remove("over");
   if(e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
 };
+/* ---- REPORTS: the departure lists he printed to XPS, names withheld ----
+   His ask, 05/09: "to comply with gdpr and personal data privacy i need a way for a
+   report i print to be redacted using the tool (we dont want names showing, everything
+   else is acceptable) and print it from inside the tool ... a "reports" section ... a
+   list of them, i will then be able to preview them and then either print or delete
+   them". Route A, his word 06/09: he prints protel's Departure List by Time to the
+   Microsoft XPS Document Writer into the reports folder the tool already watches. This
+   lists every such file there, previews it with the guest column and the stray name
+   fragments left out — everything else exactly as protel printed it — prints it through
+   the same sheet the corrections use, and deletes the file to the Recycle Bin. Nothing
+   here touches protel; nothing is installed. */
+let REP_CACHE = {};          // path + mtime -> {ok, parsed} — a file is unzipped once per session
+const REP_KEY = f => f.path + "@" + Math.round(f.mtimeMs || 0);
+async function repParse(f){
+  const k = REP_KEY(f);
+  if(REP_CACHE[k]) return REP_CACHE[k];
+  let res;
+  try{
+    const raw = await window.reccheckFiles.read("dept", f.path);
+    const u8 = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
+    const xmls = await unzipFpages(u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength));
+    const p = parseDepList(xmls);
+    res = isDepList(p) ? {ok: true, parsed: p} : {ok: false};
+  }catch(e){ res = {ok: false, err: String((e && e.message) || e || "?")}; }
+  REP_CACHE[k] = res;
+  return res;
+}
+/* a plain string escaper for the sheet — no DOM, so the harness can drive it and a
+   print path never depends on a scratch element */
+function esc(s){
+  return String(s === undefined || s === null ? "" : s).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"})[c]);
+}
+/* the sheet: protel's own headings, minus Πελάτης; the room type beside the number as
+   protel prints it; a note under its room; the totals as printed */
+function buildDepSheet(p, fname){
+  const sheet = $("#printSheet");
+  const cols = (p.columns || []).filter(c => c.key !== "guest");
+  /* protel breaks two headings over two lines ("Ποσ" / ".", "Chil" / "d."); the second
+     line is not part of the heading token, so those two are completed here */
+  const headOf = c => c.head === "Chil" ? "Child" : c.head === "Ποσ" ? "Ποσ." : c.head;
+  const head = cols.map(c => "<th" + (/^(qty|adults|eb|child|bc|price)$/.test(c.key) ? ' class="num"' : "") + ">" + esc(headOf(c)) + "</th>").join("");
+  const cellOf = (r, c) => c.key === "room" ? esc(r.room) + (r.type ? ' <span class="type">' + esc(r.type) + "</span>" : "") : esc(r[c.key] || "");
+  let h = "<h1>" + esc(p.title || "Departure List by Time") + (p.listDate ? " — " + esc(p.listDate) : "") + "</h1>";
+  h += '<div class="meta">' + esc(t("rep.withheld")) + (p.printed ? " · " + esc(t("rep.printedAt", {p: p.printed})) : "") + (p.station ? " · " + esc(p.station) : "") + (fname ? " · " + esc(fname) : "") + "</div>";
+  for(const g of p.groups){
+    h += "<h2>ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ " + (g.time ? esc(g.time) : "— " + esc(t("rep.noTime"))) + "</h2>";
+    h += "<table><thead><tr>" + head + "</tr></thead><tbody>";
+    for(const r of g.rows){
+      h += "<tr>" + cols.map(c => "<td" + (/^(qty|adults|eb|child|bc|price)$/.test(c.key) ? ' class="num"' : "") + ">" + cellOf(r, c) + "</td>").join("") + "</tr>";
+      for(const n of r.notes) h += '<tr class="note"><td></td><td colspan="' + (cols.length - 1) + '"><i>' + esc(n.date) + " — " + esc(n.text) + "</i></td></tr>";
+    }
+    h += "</tbody></table>";
+  }
+  if(p.totals.length) h += '<div class="meta" style="margin-top:12px">' + p.totals.map(x => esc(x.label) + ": <b>" + esc(x.value) + "</b>").join(" · ") + "</div>";
+  sheet.innerHTML = h;
+  return h;
+}
+async function renderReports(){
+  const box = $("#repList");
+  if(!box) return;
+  box.innerHTML = "";
+  const note = (k, v) => { const d = el("div", "stNote", t(k, v)); box.append(d); };
+  if(!window.reccheckFiles){ note("rep.noBridge"); return; }
+  let res;
+  try{ res = await window.reccheckFiles.list("dept", ""); }catch(e){ note("rep.noDir"); return; }
+  if(!res || !res.dir){ note("rep.noDir"); return; }
+  const files = (res.files || []).filter(f => /\.(oxps|xps)$/i.test(f.name));
+  let shown = 0;
+  for(const f of files){
+    const r = await repParse(f);
+    if(!r.ok) continue;
+    if(SCREEN !== "reports" || $("#repList") !== box) return;      // he left while a file was unzipping
+    const p = r.parsed;
+    const b = el("button", "mItem primary");
+    b.append(el("span", "mLabel", t("rep.item", {d: p.listDate || "?"})));
+    b.append(el("span", "mSub", t("rep.itemSub", {n: p.guests, p: p.printed || "?", f: f.name})));
+    b.onclick = () => openDepPreview(f, p);
+    box.append(b);
+    shown++;
+  }
+  if(!shown) note("rep.none", {dir: res.dir});
+}
+function openDepPreview(f, p){
+  buildDepSheet(p, f.name);
+  openModal(`
+    <h3>${esc(t("rep.pvTitle"))}</h3>
+    <div id="pvPaper">${$("#printSheet").innerHTML}</div>
+    <div class="actions">
+      <button class="btn" id="pvCancel">${esc(t("pv.cancel"))}</button>
+      <button class="btn" id="repDel">${esc(t("rep.delete"))}</button>
+      <button class="btn amber" id="pvGo">${esc(t("pv.print"))}</button>
+    </div>`);
+  $("#modal").classList.add("wide");
+  $("#pvCancel").onclick = closeModal;
+  $("#pvGo").onclick = () => { closeModal(); setTimeout(() => window.print(), 80); };
+  $("#repDel").onclick = async () => {
+    if(!confirm(t("rep.deleteQ", {f: f.name}))) return;
+    try{
+      const ok = window.reccheckFiles.trash ? await window.reccheckFiles.trash("dept", f.path) : false;
+      closeModal();
+      toast(ok ? t("rep.deleted", {f: f.name}) : t("rep.deleteFail", {f: f.name}), !ok);
+      delete REP_CACHE[REP_KEY(f)];
+      renderReports();
+    }catch(e){ toast(t("rep.deleteFail", {f: f.name}) + " (" + ((e && e.message) || e) + ")", true); }
+  };
+}
 function printCorrections(){
   if(!MODEL) return;
   if(!buildPrintSheet()){ toast("Καμία διόρθωση για εκτύπωση", true); return; }

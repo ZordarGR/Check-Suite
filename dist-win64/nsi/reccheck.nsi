@@ -22,7 +22,7 @@
 ; UTF-8 by default; on Windows add -INPUTCHARSET UTF8.
 
 !ifndef VERSION
-  !define VERSION "1.17.45"                 ; DisplayVersion -- bump per release
+  !define VERSION "1.17.50"                 ; DisplayVersion -- bump per release
 !endif
 !ifndef STAGE
   !error "pass -DSTAGE=<payload dir>"
