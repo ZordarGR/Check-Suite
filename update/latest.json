@@ -1,11 +1,11 @@
 {
-  "version": "1.17.48",
-  "type": "html",
-  "engine": "1.17.45",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.45/RecCheck-Setup.exe",
-  "setupSha256": "df104b76bb2fe8e8450828d1fef580bf972f004f627003772016578172a80c3a",
+  "version": "1.17.50",
+  "type": "full",
+  "engine": "1.17.50",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.50/RecCheck-Setup.exe",
+  "setupSha256": "a24a9e5ae8225de3f127ef4e4a01f0727fb037561866be79bf6d79006d01a598",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "bdc420c5b82dd9206cc75ecf6b6917df8b760519b08e2243c716da25d00a1968",
-  "notes": "The red mark on a receipt now reads LEFT TODAY instead of LEAVING TODAY: it comes from the departure list for the report's day, and by the time the report is audited that guest has gone. The charge was made before check-out and settled with it, so once confirmed the paper is no longer needed.\n\nWith 1.17.46 and 1.17.47: the panel is ARRIVALS, DEPARTURES, MOVES; the dot and the mark take a receipt whose name opens the departing guest's; names refresh in place when the in-house list is captured; each receipt is named after its own guest; the cards and rows show the whole name."
+  "sha256": "90ab357b87c84bfbb249bb3daa298593f748af20519b7e7fc192f89e9e29cad3",
+  "notes": "A new REPORTS section on the home screen. Print protel's Departure List by Time to the Microsoft XPS Document Writer, save it into the reports folder, and it appears here: preview it with the guest names withheld — everything else exactly as protel printed it, departure times and board included — print it from inside the tool, or delete it to the Recycle Bin. Nothing is sent to protel.\n\nAlso in this build: the room movements panel is ARRIVALS, DEPARTURES, MOVES with cyan move pills; the dot and the LEFT TODAY mark take a receipt whose name opens the departing guest's; each receipt is named after its own guest; names refresh in place when the in-house list is captured."
 }

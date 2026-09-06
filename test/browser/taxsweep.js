@@ -4,7 +4,7 @@ const path = require("path");
 const bridge = `window.reccheckShortcuts={get:()=>Promise.resolve({profiles:[],active:null,available:true}),helper:()=>Promise.resolve({state:"started"})};`;
 (async () => {
   const b = await chromium.launch({executablePath:"/opt/pw-browsers/chromium-1194/chrome-linux/chrome", args:["--no-sandbox"]});
-  for (const screen of ["menu","audit","tax","files","app"]) {
+  for (const screen of ["menu","audit","tax","files","app","reports"]) {
     for (const W of [420, 760, 909, 1600]) {
       const p = await b.newPage();
       await p.addInitScript(bridge);
