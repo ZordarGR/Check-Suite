@@ -4,7 +4,11 @@
 "use strict";
 const fs = require("fs"), path = require("path");
 const REPORT_RE = /\.(oxps|xps)$/i;
-const PROFILES = ["dept", "tax"];
+/* "rep" is REPORTS' own folder (1.17.52): the departure lists he prints to XPS. It is
+   separate from "dept" on his word — sharing the Department Check's folder put the
+   departure lists in that tool's file browser, and this tool's list one level deep in
+   among his checkcharge reports. */
+const PROFILES = ["dept", "tax", "rep"];
 
 class FileHub {
   constructor(opts){            // {configPath, onDirEvent(profile)}
@@ -12,7 +16,16 @@ class FileHub {
     this.watchers = {};         // profile -> fs.FSWatcher
     this.debounce = {};         // profile -> timer
   }
-  norm(profile){ return profile === "tax" ? "tax" : "dept"; }
+  /* A NAME THIS DOES NOT KNOW IS REFUSED, NOT QUIETLY TURNED INTO "dept".
+     This used to read `profile === "tax" ? "tax" : "dept"` — a two-way switch, so the
+     moment a third profile existed anywhere else in the app, every call for it would have
+     read and WRITTEN the Department Check's folder with nothing on screen to say so. The
+     same stale-enumeration shape as the home buttons. Callers already treat null as "no
+     folder": list() comes back empty, read() and the pickers refuse. */
+  norm(profile){
+    const p = String(profile == null ? "dept" : profile);
+    return PROFILES.indexOf(p) >= 0 ? p : null;
+  }
   readConfig(){ try{ return JSON.parse(fs.readFileSync(this.o.configPath, "utf8")); }catch(e){ return {}; } }
   writeConfig(c){
     try{
@@ -22,6 +35,7 @@ class FileHub {
   }
   getDir(profile){
     const p = this.norm(profile);
+    if(!p) return null;
     const c = this.readConfig();
     let d = (c.reportsDirs || {})[p];
     if(!d && p === "dept") d = c.reportsDir;      // pre-1.8 config had a single shared folder
@@ -29,6 +43,7 @@ class FileHub {
   }
   setDir(profile, dir){
     const p = this.norm(profile);
+    if(!p) return null;
     const c = this.readConfig();
     c.reportsDirs = c.reportsDirs || {};
     c.reportsDirs[p] = dir;

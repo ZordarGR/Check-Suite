@@ -56,7 +56,7 @@ function run(localStorage, ROOMS, receipts, reportDate){
   const pills = []; let head = null;
   for (const c of out.root.children){
     if (c.className && c.className.startsWith("mvGroup")) head = c.children[0].textContent.replace("mv.h.","");
-    else if (c.className === "mvGrid") for (const p of c.children)
+    else if (/\bmvGrid\b/.test(c.className || ""))   /* mvGrid, or mvGrid mvWide for the moves */ for (const p of c.children)
       pills.push({room: p.textContent, kind: head, dot: /\brec\b/.test(p.className), guess: /\bguess\b/.test(p.className)});
   }
   return pills;

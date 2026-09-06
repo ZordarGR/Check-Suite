@@ -635,13 +635,16 @@ ipcMain.handle("reccheck-get-version", () => updater ? updater.effective().versi
 
 const PICK_TITLES = {
   en: {dept: "Choose the folder with the Department Check reports (ΕΛΕΓΧΟΣ ΤΜΗΜΑΤΩΝ BY ROOM)",
-       tax:  "Choose the folder with the Tax Check reports"},
+       tax:  "Choose the folder with the Tax Check reports",
+       rep:  "Choose the folder you print the departure lists into (Microsoft XPS Document Writer)"},
   gr: {dept: "Επιλέξτε τον φάκελο με τις αναφορές του Ελέγχου Τμημάτων (ΕΛΕΓΧΟΣ ΤΜΗΜΑΤΩΝ BY ROOM)",
-       tax:  "Επιλέξτε τον φάκελο με τις αναφορές του Ελέγχου ΤΑ"}
+       tax:  "Επιλέξτε τον φάκελο με τις αναφορές του Ελέγχου ΤΑ",
+       rep:  "Επιλέξτε τον φάκελο όπου τυπώνετε τις λίστες αναχωρήσεων (Microsoft XPS Document Writer)"}
 };
 ipcMain.handle("files-get-dir", (_e, profile) => hub ? hub.getDir(profile) : null);
 ipcMain.handle("files-pick-dir", async (_e, profile) => {
   const p = hub.norm(profile);
+  if(!p) return null;                       // a profile files.js does not know: no dialog
   const r = await dialog.showOpenDialog(win, {
     properties: ["openDirectory"],
     title: (PICK_TITLES[TRAYLANG] || PICK_TITLES.en)[p]
