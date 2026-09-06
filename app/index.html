@@ -361,7 +361,13 @@ body.hasMoves #moves{display:block}
 body.hasMoves main{max-width:1330px}
 .mvTitle{font-size:11px;letter-spacing:.09em;color:var(--faint);font-family:var(--mono);margin-bottom:9px}
 .mvGrid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
-.mvPill{font-family:var(--mono);font-size:12.5px;font-weight:700;text-align:center;
+/* A MOVE PILL CARRIES TWO ROOMS AND AN ARROW, so it does not fit a cell cut for one room
+   number. Five to a line in a 250px panel is a 38px cell; "525 → 505" wrapped inside it
+   into a two-line pill 40px tall beside 26px departures — measured, not guessed. Two to
+   a line gives it ~109px. `nowrap` on every pill so a label that outgrows its cell shows
+   as an overflow to be fixed and never again quietly wraps into a mess. */
+.mvGrid.mvWide{grid-template-columns:repeat(2,1fr)}
+.mvPill{font-family:var(--mono);font-size:12.5px;font-weight:700;text-align:center;white-space:nowrap;
   padding:5px 0;border-radius:7px;border:1px solid transparent;cursor:default;user-select:none}
 .mvPill.mv-dep{background:rgba(248,113,113,.14);border-color:var(--red-dim);color:var(--red)}
 .mvPill.mv-arr{background:rgba(74,222,128,.13);border-color:#1f6b3d;color:var(--green)}
@@ -855,6 +861,7 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
           <button class="msubItem" id="mLang"><span class="mLabel"></span><span class="mSub"></span></button>
           <button class="msubItem" id="mDirDept"><span class="mLabel"></span><span class="mSub" id="mDirDeptSub"></span></button>
           <button class="msubItem" id="mDirTax"><span class="mLabel"></span><span class="mSub" id="mDirTaxSub"></span></button>
+          <button class="msubItem" id="mDirRep"><span class="mLabel"></span><span class="mSub" id="mDirRepSub"></span></button>
           <button class="msubItem" id="mLegacy"><span class="mLabel"></span><span class="mSub"></span></button>
           <button class="msubItem" id="mLedger"><span class="mLabel"></span><span class="mSub"></span></button>
           <button class="msubItem" id="mHelp"><span class="mLabel"></span><span class="mSub"></span></button>
@@ -1541,7 +1548,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.51";
+const APP_VERSION = "1.17.52";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1658,8 +1665,8 @@ en: {
   "land.reports": "REPORTS",
   "land.reportsSub": "departure lists printed to XPS — names withheld, print or delete",
   "rep.noBridge": "Only inside the desktop app.",
-  "rep.noDir": "Pick the reports folder first (OPTIONS).",
-  "rep.none": "No departure list in the reports folder ({dir}). In protel, print the Departure List by Time to the Microsoft XPS Document Writer and save it there.",
+  "rep.noDir": "Pick this section's folder first: OPTIONS → DIRECTORY — REPORTS. It is its own folder, not the Department Check's — print the departure lists into it.",
+  "rep.none": "No departure list in {dir}. In protel, print the Departure List by Time to the Microsoft XPS Document Writer and save it there.",
   "rep.item": "Departure List by Time — {d}",
   "rep.itemSub": "{n} room(s) · printed {p} · {f}",
   "rep.pvTitle": "Departure list — names withheld",
@@ -1705,6 +1712,7 @@ en: {
   "menu.compare": "COMPARE", "menu.compareSub": "open tonight's reports and check the receipts",
   "menu.lang": "LANGUAGE — ENGLISH", "menu.langSub": "αλλαγή σε ΕΛΛΗΝΙΚΑ",
   "menu.dirDept": "DIRECTORY — DEPARTMENT CHECK", "menu.dirTax": "DIRECTORY — TAX CHECK",
+  "menu.dirRep": "DIRECTORY — REPORTS",
   "menu.dirNone": "no reports folder chosen yet",
   "menu.ledger": "ROOM MOVEMENTS MEMORY \u2014 START IT AGAIN",
   "al.title": "ALERTS", "al.none": "nothing to look at",
@@ -1915,8 +1923,8 @@ gr: {
   "land.reports": "ΑΝΑΦΟΡΕΣ",
   "land.reportsSub": "λίστες αναχωρήσεων τυπωμένες σε XPS — χωρίς ονόματα, εκτύπωση ή διαγραφή",
   "rep.noBridge": "Μόνο μέσα στην εφαρμογή.",
-  "rep.noDir": "Όρισε πρώτα τον φάκελο αναφορών (ΕΠΙΛΟΓΕΣ).",
-  "rep.none": "Καμία λίστα αναχωρήσεων στον φάκελο αναφορών ({dir}). Στο protel, τύπωσε το Departure List by Time στον Microsoft XPS Document Writer και αποθήκευσέ το εκεί.",
+  "rep.noDir": "Όρισε πρώτα τον φάκελο αυτής της ενότητας: ΕΠΙΛΟΓΕΣ → ΦΑΚΕΛΟΣ — ΑΝΑΦΟΡΕΣ. Είναι δικός της φάκελος, όχι του Ελέγχου Τμημάτων — εκεί τυπώνεις τις λίστες αναχωρήσεων.",
+  "rep.none": "Καμία λίστα αναχωρήσεων στο {dir}. Στο protel, τύπωσε το Departure List by Time στον Microsoft XPS Document Writer και αποθήκευσέ το εκεί.",
   "rep.item": "Λίστα αναχωρήσεων — {d}",
   "rep.itemSub": "{n} δωμάτια · τυπώθηκε {p} · {f}",
   "rep.pvTitle": "Λίστα αναχωρήσεων — χωρίς ονόματα",
@@ -1966,6 +1974,7 @@ gr: {
   "menu.compare": "ΣΥΓΚΡΙΣΗ", "menu.compareSub": "άνοιγμα των αναφορών της βραδιάς και έλεγχος αποδείξεων",
   "menu.lang": "ΓΛΩΣΣΑ — ΕΛΛΗΝΙΚΑ", "menu.langSub": "switch to ENGLISH",
   "menu.dirDept": "ΦΑΚΕΛΟΣ — ΕΛΕΓΧΟΣ ΤΜΗΜΑΤΩΝ", "menu.dirTax": "ΦΑΚΕΛΟΣ — ΕΛΕΓΧΟΣ ΤΑ",
+  "menu.dirRep": "ΦΑΚΕΛΟΣ — ΑΝΑΦΟΡΕΣ",
   "menu.dirNone": "δεν έχει οριστεί φάκελος αναφορών",
   "menu.ledger": "ΜΝΗΜΗ ΚΙΝΗΣΕΩΝ — ΞΕΚΙΝΑ ΑΠΟ ΤΗΝ ΑΡΧΗ",
   "al.title": "ΕΙΔΟΠΟΙΗΣΕΙΣ", "al.none": "τίποτα για έλεγχο",
@@ -2094,6 +2103,7 @@ function applyLang(){
   mi("#mLang", "menu.lang", "menu.langSub");
   mi("#mDirDept", "menu.dirDept", null);
   mi("#mDirTax", "menu.dirTax", null);
+  mi("#mDirRep", "menu.dirRep", null);
   paintLegacy();
   paintLedger();
   paintAlertsStatic();
@@ -4123,7 +4133,11 @@ const FB = {tool: "dept",
               dept: {dir: null, open: null, stale: false,
                      rel: (function(){ try{ return localStorage.getItem("reccheck_fbrel_dept") || localStorage.getItem("reccheck_fbrel") || ""; }catch(e){ return ""; } })()},
               tax:  {dir: null, open: null, stale: false,
-                     rel: (function(){ try{ return localStorage.getItem("reccheck_fbrel_tax") || ""; }catch(e){ return ""; } })()}
+                     rel: (function(){ try{ return localStorage.getItem("reccheck_fbrel_tax") || ""; }catch(e){ return ""; } })()},
+              /* REPORTS' own folder (1.17.52). It has no file-browser screen — REPORTS
+                 lists it itself — so only `dir` is ever used here; the entry exists so
+                 the picker and the OPTIONS line have somewhere to keep it. */
+              rep:  {dir: null, open: null, stale: false, rel: ""}
             }};
 function fbCur(){ return FB.p[FB.tool]; }
 function fbGo(rel){
@@ -4224,9 +4238,17 @@ window.rcPickReport = function(cb){
   return true;
 };
 function paintDirSub(){
-  if(!window.reccheckFiles){ $("#mDirDept").style.display = "none"; $("#mDirTax").style.display = "none"; return; }
-  $("#mDirDeptSub").textContent = FB.p.dept.dir || t("menu.dirNone");
-  $("#mDirTaxSub").textContent = FB.p.tax.dir || t("menu.dirNone");
+  /* every folder line, by the profiles that exist — not one statement per folder, which
+     is how a new one gets left out (see the home buttons) */
+  const rows = [["dept", "#mDirDept"], ["tax", "#mDirTax"], ["rep", "#mDirRep"]];
+  for(const [p, sel] of rows){
+    const b = $(sel);
+    if(!b) continue;
+    if(!window.reccheckFiles){ b.style.display = "none"; continue; }
+    b.style.display = "";
+    const sub = $(sel + "Sub");
+    if(sub) sub.textContent = (FB.p[p] && FB.p[p].dir) || t("menu.dirNone");
+  }
 }
 function escapeHtml(x){ const d = document.createElement("div"); d.textContent = x; return d.innerHTML; }
 function fmtWhen(ms){
@@ -4360,9 +4382,15 @@ function showLivePrompt(cur){
 }
 async function fbPickDir(tool){
   if(!window.reccheckFiles) return;
-  tool = tool === "tax" ? "tax" : "dept";
+  /* the same refusal as files.js norm(): a name this does not know is not quietly turned
+     into "dept" — it would pick the wrong folder and say nothing */
+  if(!FB.p[tool]) return;
   const dir = await window.reccheckFiles.pickDir(tool);
-  if(dir){ FB.p[tool].dir = dir; paintDirSub(); if(SCREEN === "files" && FB.tool === tool) fbRefresh(); }
+  if(!dir) return;
+  FB.p[tool].dir = dir;
+  paintDirSub();
+  if(SCREEN === "files" && FB.tool === tool) fbRefresh();
+  if(SCREEN === "reports" && tool === "rep") renderReports();
 }
 
 /* ---------- file load ---------- */
@@ -5677,7 +5705,7 @@ function renderMovesFor(box, night){
     head.append(el("span","mvGroupName", t("mv.h." + kind)));
     head.append(el("span","mvGroupN", String(of.length)));
     box.append(head);
-    const grid = el("div","mvGrid");
+    const grid = el("div","mvGrid" + (kind === "move" ? " mvWide" : ""));   // two to a line: the label is "old → new"
     for(const room of of){
       const m = mv[room];
       const rec = kind === "dep" ? depRec.has(room) : kind === "move" ? moveRec.has(room) : false;
@@ -6085,6 +6113,7 @@ $("#mLegacy").onclick = () => { setLegacy(!legacyOn()); paintLegacy(); };
 $("#mLedger").onclick = ledgerClick;
 $("#mDirDept").onclick = () => fbPickDir("dept");
 $("#mDirTax").onclick = () => fbPickDir("tax");
+$("#mDirRep").onclick = () => fbPickDir("rep");
 $("#mEditChecklist").onclick = () => { CLEDIT = true; renderChecklist(); document.querySelectorAll(".mcat").forEach(c => c.classList.remove("open")); setTimeout(() => $("#clText").focus(), 60); };
 $("#mCustomOverlay").onclick = () => { document.querySelectorAll(".mcat").forEach(c => c.classList.remove("open")); openOverlaySettings(); };
 $("#clDone").onclick = () => { CLEDIT = false; CLEDITID = null; $("#clText").value = ""; renderChecklist(); applyLang(); };
@@ -6148,7 +6177,7 @@ if(window.reccheckFiles){
   window.reccheckFiles.onDirEvent(profile => {
     if(SCREEN === "files" && (!profile || FB.tool === profile)) fbRefresh();
     if(!profile || profile === "dept") checkOpenByStat();
-    if(SCREEN === "reports" && (!profile || profile === "dept")) renderReports();   // a list just printed to XPS appears
+    if(SCREEN === "reports" && (!profile || profile === "rep")) renderReports();   // a list just printed to XPS appears
   });
 }
 $("#fileInput").onchange = e => { if(e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ""; };
@@ -6176,7 +6205,7 @@ async function repParse(f){
   if(REP_CACHE[k]) return REP_CACHE[k];
   let res;
   try{
-    const raw = await window.reccheckFiles.read("dept", f.path);
+    const raw = await window.reccheckFiles.read("rep", f.path);
     const u8 = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
     const xmls = await unzipFpages(u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength));
     const p = parseDepList(xmls);
@@ -6222,7 +6251,7 @@ async function renderReports(){
   const note = (k, v) => { const d = el("div", "stNote", t(k, v)); box.append(d); };
   if(!window.reccheckFiles){ note("rep.noBridge"); return; }
   let res;
-  try{ res = await window.reccheckFiles.list("dept", ""); }catch(e){ note("rep.noDir"); return; }
+  try{ res = await window.reccheckFiles.list("rep", ""); }catch(e){ note("rep.noDir"); return; }
   if(!res || !res.dir){ note("rep.noDir"); return; }
   const files = (res.files || []).filter(f => /\.(oxps|xps)$/i.test(f.name));
   let shown = 0;
@@ -6256,7 +6285,7 @@ function openDepPreview(f, p){
   $("#repDel").onclick = async () => {
     if(!confirm(t("rep.deleteQ", {f: f.name}))) return;
     try{
-      const ok = window.reccheckFiles.trash ? await window.reccheckFiles.trash("dept", f.path) : false;
+      const ok = window.reccheckFiles.trash ? await window.reccheckFiles.trash("rep", f.path) : false;
       closeModal();
       toast(ok ? t("rep.deleted", {f: f.name}) : t("rep.deleteFail", {f: f.name}), !ok);
       delete REP_CACHE[REP_KEY(f)];
@@ -6370,6 +6399,7 @@ $("#resetDay").onclick = () => {
   if(window.reccheckFiles){
     try{ FB.p.dept.dir = await window.reccheckFiles.getDir("dept"); }catch(e){}
     try{ FB.p.tax.dir = await window.reccheckFiles.getDir("tax"); }catch(e){}
+    try{ FB.p.rep.dir = await window.reccheckFiles.getDir("rep"); }catch(e){}
   }
   if(window.reccheckOverlay){
     try{ OVON = await window.reccheckOverlay.state(); }catch(e){}

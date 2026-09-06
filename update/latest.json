@@ -1,11 +1,11 @@
 {
-  "version": "1.17.51",
-  "type": "html",
-  "engine": "1.17.50",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.50/RecCheck-Setup.exe",
-  "setupSha256": "a24a9e5ae8225de3f127ef4e4a01f0727fb037561866be79bf6d79006d01a598",
+  "version": "1.17.52",
+  "type": "full",
+  "engine": "1.17.52",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.52/RecCheck-Setup.exe",
+  "setupSha256": "83861ea3c98c4ca4064766b709f72a6963adf9b3ce305dc7e06ac1454bbcbab5",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "45ac8ee814426c29b4e449e6f53ad6b1fe8088b6eeb68ca645c9d15819b2f15c",
-  "notes": "The REPORTS button on the home screen spanned the whole window instead of sitting in the column with AUDIT, ALERTS and STATUS. The home buttons are now sized by being on the home screen rather than by a list that had to be updated by hand, so this cannot happen again to a button added later."
+  "sha256": "9243103c34e9bd5abd03ed444259e644b253dc0ba36f1ba01e665cdde175ebd4",
+  "notes": "REPORTS now has its own folder. OPTIONS → DIRECTORY — REPORTS: point it at the folder you print the departure lists into, separate from the Department Check's, so neither tool's list is cluttered with the other's files.\n\nAnd the move pills in the department check are readable: a move reads old room → new room, and the panel gives that label the room it needs instead of wrapping it into a two-line pill."
 }

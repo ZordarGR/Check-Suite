@@ -93,15 +93,32 @@ fs.writeFileSync(path.join(REPORTS, "dep.oxps"), "x");
 fs.writeFileSync(path.join(REPORTS, "notes.txt"), "x");
 fs.mkdirSync(path.join(REPORTS, "folder.oxps"));
 fs.writeFileSync(path.join(DIR, "outside.oxps"), "x");
+const DEPT = path.join(DIR, "dept"); fs.mkdirSync(DEPT);
+fs.writeFileSync(path.join(DEPT, "checkcharge.oxps"), "x");
 const hub = new FileHub({configPath: path.join(DIR, "config.json"), onDirEvent(){}});
-hub.setDir("dept", REPORTS);
-ck("a report file inside the folder is removable, by its full path", hub.trashable("dept", path.join(REPORTS, "dep.oxps")) === path.resolve(REPORTS, "dep.oxps"));
-ck("a file outside the folder is not",                              hub.trashable("dept", path.join(DIR, "outside.oxps")) === null);
-ck("a path that climbs out of the folder is not",                   hub.trashable("dept", path.join(REPORTS, "..", "outside.oxps")) === null);
-ck("a file that is not a report is not",                            hub.trashable("dept", path.join(REPORTS, "notes.txt")) === null);
-ck("a folder named like a report is not",                           hub.trashable("dept", path.join(REPORTS, "folder.oxps")) === null);
-ck("a file that is not there is not",                               hub.trashable("dept", path.join(REPORTS, "gone.oxps")) === null);
+hub.setDir("rep", REPORTS);
+hub.setDir("dept", DEPT);
+ck("a report file inside the folder is removable, by its full path", hub.trashable("rep", path.join(REPORTS, "dep.oxps")) === path.resolve(REPORTS, "dep.oxps"));
+ck("a file outside the folder is not",                              hub.trashable("rep", path.join(DIR, "outside.oxps")) === null);
+ck("a path that climbs out of the folder is not",                   hub.trashable("rep", path.join(REPORTS, "..", "outside.oxps")) === null);
+ck("a file that is not a report is not",                            hub.trashable("rep", path.join(REPORTS, "notes.txt")) === null);
+ck("a folder named like a report is not",                           hub.trashable("rep", path.join(REPORTS, "folder.oxps")) === null);
+ck("a file that is not there is not",                               hub.trashable("rep", path.join(REPORTS, "gone.oxps")) === null);
 ck("nothing was removed by asking",                                 fs.existsSync(path.join(REPORTS, "dep.oxps")));
+
+/* ---- REPORTS has its OWN folder, and an unknown name is refused, not turned into dept ----
+   His word, 06/09, choosing between the three: "the most reasonable solution". norm() was
+   `profile === "tax" ? "tax" : "dept"`, so a third profile anywhere in the app would have
+   read and WRITTEN the Department Check's folder with nothing on screen to say so. */
+ck("the two folders are separate",                                  hub.getDir("rep") === REPORTS && hub.getDir("dept") === DEPT && REPORTS !== DEPT);
+ck("REPORTS lists its own folder, not the Department Check's",      hub.list("rep", "").files.map(f => f.name).join() === "dep.oxps");
+ck("and the Department Check still lists its own",                  hub.list("dept", "").files.map(f => f.name).join() === "checkcharge.oxps");
+ck("a name files.js does not know is refused, not read as dept",    hub.norm("reports") === null && hub.getDir("reports") === null);
+ck("... and cannot be written either",                              hub.setDir("reports", DIR) === null && hub.getDir("dept") === DEPT);
+ck("... nor can it delete through the wrong folder",                hub.trashable("reports", path.join(REPORTS, "dep.oxps")) === null);
+ck("a report of one profile is not removable through another",      hub.trashable("dept", path.join(REPORTS, "dep.oxps")) === null);
+ck("the three profiles files.js knows are dept, tax and rep",       hub.norm("dept") === "dept" && hub.norm("tax") === "tax" && hub.norm("rep") === "rep");
+ck("no profile at all still means the Department Check",            hub.norm(undefined) === "dept" && hub.norm(null) === "dept");
 hub.stopWatch();
 
 console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");

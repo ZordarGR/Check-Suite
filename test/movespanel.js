@@ -92,7 +92,7 @@ console.log("body classes :", out.classes.join(" ") || "(none)");
 let heading = null, n = 0; const drawn = {};
 for (const c of out.root.children){
   if (c.className && c.className.startsWith("mvGroup")) heading = c.children[0].textContent;
-  else if (c.className === "mvGrid")
+  else if (/\bmvGrid\b/.test(c.className || ""))   /* mvGrid, or mvGrid mvWide for the moves */
     for (const p of c.children){ n++; const room = p.textContent.split("→").pop().trim(); drawn[room] = ((drawn[room] || "") + " " + p.className).trim(); console.log("  " + heading.padEnd(12) + p.textContent.padEnd(10) + p.className); }
   else if (c.className === "mvTitle") console.log("title        :", c.textContent);
 }
