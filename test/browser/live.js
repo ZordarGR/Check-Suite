@@ -586,7 +586,7 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
   const c20b = await p.evaluate(() => { const c = document.querySelectorAll("#matches .match"); return {n: c.length, left: c[0] ? c[0].classList.contains("left") : null,
                                           redrawn: c[0] ? c[0].dataset.probe !== "first-draw" : null, tag: c[0] ? c[0].textContent : "", q: document.getElementById("snInput").value,
                                           app: document.querySelector("main").style.display !== "none"}; });
-  ck("the departure list arriving marks that card red without retyping", c20b.n === 1 && c20b.left === true && c20b.redrawn === true && /LEAVING/i.test(c20b.tag));
+  ck("the departure list arriving marks that card red without retyping", c20b.n === 1 && c20b.left === true && c20b.redrawn === true && /LEFT TODAY/i.test(c20b.tag));
   ck("the query stays and he stays on the screen", c20b.q === "12345" && c20b.app);
   await p.evaluate(() => { const c = document.querySelector("#matches .match"); c.dataset.probe = "second-draw"; });
   /* the same list captured again: the store changes (a new capture time), the marks do not */
