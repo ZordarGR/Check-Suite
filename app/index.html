@@ -1431,7 +1431,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.46";
+const APP_VERSION = "1.17.47";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -2366,7 +2366,7 @@ function receiptName(r){
   if(own && live && live.guest && live.liveKey && isCutOf(own, live.guest)) return live.guest;
   return own;
 }
-function guestFor(room){
+function guestFor(room, r){
   /* A name read live from protel BEATS the one on the receipt. It is the same guest —
      the .oxps simply truncates it, and that truncation is the entire reason this exists.
 
@@ -2391,6 +2391,22 @@ function guestFor(room){
     }
     return MODEL._gm[String(room)] || null;
   })();
+  /* THE RECEIPT'S OWN NAME FIRST, where it is enough to name a guest. The room's memo
+     above is its FIRST receipt's guest, and on a changeover day a room has two: his
+     example, 06/09 — dimitris leaves on the 10th and filippis takes the room; a receipt
+     under filippis is filippis's, whatever the room's first receipt said. So a receipt
+     whose own name the census completes takes that; one whose own name is a different
+     guest's — four characters at least, and neither the opening of the room's name nor
+     opened by it — keeps its own. A charge printed with too little of a name to say
+     whose it is ("J.") still takes the room's, as since 1.17.23. */
+  /* Not for a receipt whose ROOM he corrected by hand: it was printed under the wrong
+     room, so its printed name is the wrong room's guest, and the corrected room's name
+     is the one that is true of it. */
+  if(r && !(rState(r).corr && rState(r).corr.room)){
+    const own = String(r.guest || "").trim();
+    if(own && live && live.guest && live.liveKey && isCutOf(own, live.guest)) return live.guest;
+    if(own.length >= 4 && onReceipt && !sameName(own, onReceipt) && !isCutOf(own, onReceipt) && !isCutOf(onReceipt, own)) return own;
+  }
   if(live && live.guest && live.liveKey){
     if(!onReceipt) return live.guest;                          // nothing to disagree with
     if(isCutOf(onReceipt, live.guest)) return live.guest;      // the same guest, in full
@@ -4454,7 +4470,7 @@ function receiptRow(r){
      The receipt's OWN name is never lost. Wherever the name shown differs from the one
      printed on the charge, the printed one is on the tooltip — which matters most on a
      turnover, where the room's name tonight is not the name that made the charge. */
-  const gname = guestFor(effRoom(r)) || r.guest || "";
+  const gname = guestFor(effRoom(r), r) || r.guest || "";
   const nick = nickFor(effRoom(r));
   const nm = el("div","name" + (nick ? " nick" : ""), nick || gname);
   nm.title = (nick ? gname + t("n.nickedTitle") : gname) +
@@ -5033,7 +5049,7 @@ function matchCard(r){
      the room had been corrected by hand — so the search cards and the tick toast kept
      printing the receipt's cut name while the rows above them showed the whole one from
      protel. Found 05/09 by the hunt for "still cut with legacy off". */
-  const gname = guestFor(effRoom(r)) || r.guest || "";
+  const gname = guestFor(effRoom(r), r) || r.guest || "";
   const nick = nickFor(effRoom(r));
   const nm = el("span","name" + (nick ? " nick" : ""), nick || gname);
   nm.title = (nick ? gname + t("n.nickedTitle") : gname) +
