@@ -90,6 +90,25 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
   ck("each is marked a folder",                             root.subs[0] === "folder" && root.subs[1] === "folder");
   ck("there is no up row at the root",                      !root.items.some(x => /up one level/.test(x)));
 
+  /* LINE UP WITH THE COLUMN, not merely stay inside the window — 7l's lesson. The rows
+     were 145px of shrink-to-fit inside a 430px column, touching each other, because
+     `.mItem` is sized by `#menuScreen > .mItem` and these are not on the home screen. */
+  for(const W of [909, 1280, 1600]){
+    await p.setViewportSize({width: W, height: 800});
+    await p.waitForTimeout(120);
+    const fit = await p.evaluate(() => {
+      const back = document.querySelector("#repBack").getBoundingClientRect();
+      const rows = [...document.querySelectorAll("#repList > *")].map(e => e.getBoundingClientRect());
+      const off = rows.filter(r => Math.abs(r.x - back.x) > 1 || Math.abs(r.width - back.width) > 1).length;
+      let touching = 0;
+      for(let i = 1; i < rows.length; i++) if(rows[i].top - rows[i - 1].bottom < 2) touching++;
+      return {off, touching, n: rows.length};
+    });
+    ck("window " + W + ": every row shares the column's edges and none touch", fit.n >= 3 && fit.off === 0 && fit.touching === 0);
+  }
+  await p.setViewportSize({width: 1280, height: 800});
+  await p.waitForTimeout(120);
+
   await p.evaluate(() => [...document.querySelectorAll("#repList button.mItem")].find(b => /2026-09/.test(b.textContent)).click());
   await p.waitForTimeout(250);
   const into = await p.evaluate(() => {
@@ -112,7 +131,7 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
   await p.waitForTimeout(250);
   const back = await p.evaluate(() => ({rel: window.__t.FB().p.rep.rel, saved: localStorage.getItem("reccheck_fbrel_rep"),
                                         items: [...document.querySelectorAll("#repList button.mItem")].length}));
-  ck("up one level returns to the root",                    back.rel === "" && back.saved === "" && back.items === 2);
+  ck("up one level returns to the root",                    back.rel === "" && back.saved === null && back.items === 2);
 
   /* a folder that has gone since it was remembered drops back to the root rather than
      leaving him on a screen that cannot list anything */
@@ -132,6 +151,32 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
                                        items: document.querySelectorAll("#repList button.mItem").length,
                                        calls: window.__repCalls.length}));
   ck("two overlapping renders paint once, not twice",       dup.calls === 2 && dup.paths === 1 && dup.items === 2);
+
+  /* A STALE RENDER MUST NOT APPEND ITS NOTE EITHER. Rows were covered by the run counter,
+     but the guard sat BELOW `if(!r.ok) continue;`, so a superseded render whose files all
+     fail to parse ran its loop to the end and appended "no departure list" — naming the
+     folder he had just left — into the list the newer render had already drawn. */
+  await p.evaluate(() => {
+    const real = window.reccheckFiles.list;
+    window.reccheckFiles.list = (prof, rel) => Promise.resolve(String(rel || "") === ""
+      ? {dir: "D:\\reports", rel: "", dirs: [], files: [{name: "bad.oxps", path: "D:\\reports\\bad.oxps", size: 9, mtimeMs: 5}]}
+      : {dir: "D:\\reports", rel: String(rel), dirs: [{name: "inner", rel: String(rel) + "/inner"}], files: []});
+    window.reccheckFiles.read = () => new Promise((_, rej) => setTimeout(() => rej(new Error("slow EBUSY")), 300));
+    window.__restoreList = () => { window.reccheckFiles.list = real; };
+  });
+  await p.evaluate(() => window.__t.repGo(""));
+  await p.waitForTimeout(60);
+  await p.evaluate(() => window.__t.repGo("2026-09"));
+  await p.waitForTimeout(700);
+  const stale = await p.evaluate(() => ({
+    notes: [...document.querySelectorAll("#repList .stNote")].map(n => n.textContent),
+    items: [...document.querySelectorAll("#repList button.mItem")].map(b => b.querySelector(".mLabel").textContent)
+  }));
+  ck("a superseded render appends no note into the newer list",
+     stale.notes.length === 1 && /2026-09/.test(stale.notes[0]) && !stale.notes.some(n => /No departure list/i.test(n)));
+  await p.evaluate(() => { window.__restoreList(); window.reccheckFiles.read = () => Promise.reject(new Error("no file in this fixture")); });
+  await p.evaluate(() => window.__t.repGo(""));
+  await p.waitForTimeout(200);
 
   /* ---------- 2. the print ---------- */
   await p.evaluate(() => {
@@ -172,21 +217,45 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
   ck("... and not the corrections",                          !/ΔΙΟΡΘΩΣ/i.test(sheet.html) && !/12345/.test(sheet.html));
   ck("... still with no guest name on it",                   !/ALPHA/.test(sheet.html) && !/Πελάτης/.test(sheet.html));
 
-  /* afterprint disarms it, so the NEXT print is the corrections again */
-  await p.evaluate(() => { document.querySelector("#printSheet").innerHTML = "<i>untouched</i>"; window.print(); });
-  await p.waitForTimeout(150);
-  const again = await p.evaluate(() => document.querySelector("#printSheet").innerHTML);
-  ck("the next print is the corrections again, not a stale departures sheet", again !== "<i>untouched</i>" && !/Departure List by Time/.test(again));
-
-  /* and a preview re-rendered mid-print — paper size or margins changed — fires
-     beforeprint a SECOND time for the same job. Both firings must give the departures. */
+  /* THE SHEET MUST NOT DEPEND ON THE ENGINE'S EVENT PAIRING. A preview re-rendered
+     mid-print (paper size or margins changed) can fire beforeprint, afterprint and
+     beforeprint again for ONE job. Disarming on afterprint made the second firing print
+     the corrections — his bug, with paper already moving. Nothing disarms on afterprint
+     now, so the job survives the whole cycle. */
   await p.evaluate(dep => window.__t.openDepPreview({name: "dep.oxps", path: "D:\\reports\\dep.oxps", mtimeMs: Date.now()}, dep), DEP);
   await p.waitForTimeout(80);
   await p.evaluate(() => { window.__realP = window.print; window.print = window.__printTwice; });
   await p.click("#pvGo");
   await p.waitForTimeout(300);
   const twice = await p.evaluate(() => { const h = document.querySelector("#printSheet").innerHTML; window.print = window.__realP; return h; });
-  ck("a preview re-rendered mid-print still prints the departures", /Departure List by Time/.test(twice) && !/12345/.test(twice));
+  ck("beforeprint/afterprint/beforeprint for one job still prints the departures", /Departure List by Time/.test(twice) && !/12345/.test(twice));
+
+  /* printCorrections IS the no-job print, so it disarms rather than being one more entry
+     point the rule has to remember. Without this, a job that outlived its print showed the
+     CORRECTIONS preview and put the DEPARTURES on paper. */
+  ck("the job outlives a completed print on the REPORTS screen", await p.evaluate(() => !!window.__t.armedPrint()));
+  await p.evaluate(() => { window.__t.printCorrections(); });
+  await p.waitForTimeout(120);
+  ck("printCorrections disarms it",                          await p.evaluate(() => !window.__t.armedPrint()));
+  await p.evaluate(() => { document.querySelector("#printSheet").innerHTML = "<i>untouched</i>"; window.print(); });
+  await p.waitForTimeout(200);
+  const cpaper = await p.evaluate(() => document.querySelector("#printSheet").innerHTML);
+  ck("...so what prints after it is the corrections, not the departures",
+     cpaper !== "<i>untouched</i>" && !/Departure List by Time/.test(cpaper));
+
+  /* Ctrl+P must never swap a dialog he is already looking at: it used to replace the
+     departures preview with the corrections one, same amber button in the same place. */
+  /* the fixture must have something to correct, or printCorrections returns before it
+     opens anything and the swap this guards against could never happen */
+  await p.evaluate(() => window.__t.setState({receipts: {}, extras: [
+    {dept: "BAR", room: "305", guest: "SOMEONE", sn: "77777", v24: 12.5, v13: 0}]}));
+  await p.evaluate(dep => window.__t.openDepPreview({name: "dep.oxps", path: "D:\\reports\\dep.oxps", mtimeMs: Date.now()}, dep), DEP);
+  await p.waitForTimeout(80);
+  await p.keyboard.press("Control+p");
+  await p.waitForTimeout(150);
+  const stillDep = await p.evaluate(() => (document.querySelector("#pvPaper") || {}).innerHTML || "");
+  ck("Ctrl+P leaves the open departures preview alone",      /Departure List by Time/.test(stillDep));
+  await p.evaluate(() => window.__t.closeModal());
 
   /* An armed job must not survive leaving the screen: he arms one, the OS print dialog is
      cancelled so `beforeprint` never fires, he walks off to the department check, and a
@@ -204,6 +273,92 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
   await p.waitForTimeout(150);
   const left = await p.evaluate(() => document.querySelector("#printSheet").innerHTML);
   ck("... so a later print is the corrections",              left !== "<i>untouched</i>" && !/Departure List by Time/.test(left));
+
+  /* ---------- 3. what is VISIBLE on paper, not merely what is in the DOM ---------- */
+  /* The tax half's #print-mount was hidden only by an @media SCREEN rule, so under print
+     it reverted to display:block and printed on top of the audit half's sheet — and the
+     tax report carries GUEST NAMES, on the one sheet whose purpose is that it does not. */
+  await p.evaluate(dep => {
+    document.querySelector("#print-mount").innerHTML = "<h1>TAX REPORT</h1><p>418 LEFTOVER GUEST NAME</p>";
+    document.body.classList.remove("taxPrint");
+    window.__t.openDepPreview({name: "dep.oxps", path: "D:\\reports\\dep.oxps", mtimeMs: Date.now()}, dep);
+  }, DEP);
+  await p.waitForTimeout(80);
+  await p.click("#pvGo");
+  await p.waitForTimeout(250);
+  await p.emulateMedia({media: "print"});
+  const paper = await p.evaluate(() => {
+    const vis = e => { if(!e) return false; const st = getComputedStyle(e);
+      return st.display !== "none" && st.visibility !== "hidden" && e.getBoundingClientRect().height > 0; };
+    return {mount: vis(document.querySelector("#print-mount")), sheet: vis(document.querySelector("#printSheet")),
+            text: document.body.innerText.replace(/\s+/g, " ").trim()};
+  });
+  await p.emulateMedia({media: "screen"});
+  ck("on paper the audit sheet is visible and the tax mount is not", paper.sheet === true && paper.mount === false);
+  ck("no leftover tax report on the page that prints",       !/LEFTOVER GUEST NAME/.test(paper.text) && !/TAX REPORT/.test(paper.text));
+  ck("what is visible on paper is the departures sheet",     /Departure List by Time/.test(paper.text) && !/12345/.test(paper.text));
+
+  /* ---------- 4. what the audit found in the list itself ---------- */
+  /* a folder he cannot READ is not a folder with no lists in it */
+  await p.evaluate(() => { window.__repErr = true; });
+  await p.evaluate(() => {
+    const real = window.reccheckFiles.list;
+    window.reccheckFiles.list = () => Promise.resolve({dir: "D:\\reports", rel: "", dirs: [], files: [], error: "EPERM: operation not permitted"});
+    window.__restoreList = () => { window.reccheckFiles.list = real; };
+  });
+  await p.evaluate(() => { window.__t.showScreen("reports"); });
+  await p.waitForTimeout(250);
+  const errNote = await p.evaluate(() => [...document.querySelectorAll("#repList .stNote")].map(n => n.textContent).join(" | "));
+  ck("a folder that cannot be read says so, not \"no departure list\"", /EPERM/.test(errNote) && !/No departure list/i.test(errNote));
+  await p.evaluate(() => window.__restoreList());
+
+  /* a parse that failed must be retried, not remembered as bad for the session */
+  await p.evaluate(() => {
+    window.__reads = 0;
+    window.reccheckFiles.read = () => { window.__reads++; return Promise.reject(new Error("EBUSY")); };
+    const real = window.reccheckFiles.list;
+    window.reccheckFiles.list = (prof, rel) => Promise.resolve({dir: "D:\\reports", rel: String(rel || ""), dirs: [],
+      files: [{name: "new.oxps", path: "D:\\reports\\new.oxps", size: 10, mtimeMs: 1000}]});
+    window.__restoreList = () => { window.reccheckFiles.list = real; };
+  });
+  await p.evaluate(() => window.__t.repGo(""));
+  await p.waitForTimeout(250);
+  const firstReads = await p.evaluate(() => window.__reads);
+  await p.evaluate(() => window.__t.repGo(""));
+  await p.waitForTimeout(250);
+  const secondReads = await p.evaluate(() => window.__reads);
+  ck("a file whose parse failed is read again, not skipped for the session", firstReads === 1 && secondReads === 2);
+  await p.evaluate(() => window.__restoreList());
+
+  /* ---------- 5. the remembered folder ---------- */
+  const relKeys = await p.evaluate(() => {
+    const FB = window.__t.FB();
+    // cancelling the picker: main.js answers with the folder he already had
+    FB.p.rep.dir = "D:\\reports"; FB.p.rep.rel = "2026-09";
+    localStorage.setItem("reccheck_fbrel_rep", "2026-09");
+    window.reccheckFiles.pickDir = () => Promise.resolve("D:\\reports");   // same folder = a cancel
+    return window.__t.fbPickDir ? "has" : "none";
+  });
+  await p.evaluate(() => window.__t.fbPickDir && window.__t.fbPickDir("rep"));
+  await p.waitForTimeout(200);
+  if(relKeys === "has"){
+    const kept = await p.evaluate(() => ({rel: window.__t.FB().p.rep.rel, saved: localStorage.getItem("reccheck_fbrel_rep")}));
+    ck("cancelling the folder picker keeps where he was",     kept.rel === "2026-09" && kept.saved === "2026-09");
+    await p.evaluate(() => { window.reccheckFiles.pickDir = () => Promise.resolve("D:\\other"); });
+    await p.evaluate(() => window.__t.fbPickDir("rep"));
+    await p.waitForTimeout(200);
+    const moved = await p.evaluate(() => ({rel: window.__t.FB().p.rep.rel, saved: localStorage.getItem("reccheck_fbrel_rep")}));
+    ck("actually choosing a new folder does clear it",        moved.rel === "" && moved.saved === null);
+  }
+
+  /* an empty rel REMOVES the key — "" is falsy and dept falls back to the pre-1.8 shared one */
+  const legacy = await p.evaluate(() => {
+    localStorage.setItem("reccheck_fbrel", "OLD/SHARED/PATH");
+    window.__t.saveRel("dept", "");
+    return {own: localStorage.getItem("reccheck_fbrel_dept"), shared: localStorage.getItem("reccheck_fbrel"),
+            boot: localStorage.getItem("reccheck_fbrel_dept") || localStorage.getItem("reccheck_fbrel") || ""};
+  });
+  ck("clearing dept's path does not resurrect the pre-1.8 shared one", legacy.boot === "" && legacy.shared === null);
 
   await b.close();
   console.log(bad ? "\n" + bad + " FAILED" : "\nall pass");

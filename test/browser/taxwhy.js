@@ -1,3 +1,7 @@
+/* A DIAGNOSTIC, not a harness: it asserts nothing, it prints numbers. It still refuses to
+   run against a stale copy — printing measurements of a page that no longer exists is the
+   "passed three times in one night while proving nothing" fault in its quietest form. */
+require("./fresh.js")();
 const {chromium} = require("playwright-core");
 const path = require("path");
 (async () => {

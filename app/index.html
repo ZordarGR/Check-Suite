@@ -228,7 +228,19 @@ body.onMenu #clList{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
 /* STATUS: what protel has told the tool. Every rule scoped — the bare-selector leak is a
    landmine here (see the notes). The tables want more room than the menu column. */
 #statusListScreen .mNav{max-width:960px}
-#reportsScreen .stNote{font-size:12px;color:var(--faint);padding:4px 2px}
+#reportsScreen .stNote{font-size:12px;color:var(--faint);padding:4px 2px;overflow-wrap:anywhere}
+/* REPORTS' rows take the column they are in, like the path line and the Back button above
+   and below them. `.mItem` is sized by `#menuScreen > .mItem` — scoped to the HOME screen
+   since 1.17.51 — so a row here was as wide as its own text (145px in a 430px column) and
+   the rows shared borders with no gap between them. Named by the PLACE, so a row added
+   later is sized by being here (7l). */
+#repList{display:flex;flex-direction:column;gap:10px;width:100%}
+#repList > .mItem{width:100%;margin:0}
+/* and a folder name protel or he can make arbitrarily long must not push the row past the
+   column. `.mSub` was already capped; `.mLabel` never was, so an unbroken 44-character
+   name side-scrolled the whole PAGE at 640px wide — inside the window at 909 and above,
+   which is the "out of bounds is not only off-screen" case (7l). It wraps now. */
+#repList .mItem .mLabel{max-width:100%;overflow-wrap:anywhere}
 #printSheet .type,#pvPaper .type{font-size:10px;color:#444;margin-left:4px}
 #printSheet tr.note td,#pvPaper tr.note td{border-top:0;padding-top:0;font-size:10.5px;color:#333}
 #statusListScreen .stNote{font-size:12px;color:var(--faint);padding:4px 2px}
@@ -679,6 +691,14 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
   body{background:#fff !important;margin:0;padding:0}
   @page{margin:12mm}
   header,main,#landing,#modalBg,#toast,#updateBtn,#updBox,#rail,#drawer,#taxScreen,#helpPanel,#helpTab{display:none !important}
+  /* THERE ARE EXACTLY TWO PRINT ROOTS AND EACH HIDES THE OTHER. #print-mount is the tax
+     half's sheet; it was hidden only by `@media screen{#print-mount{display:none}}`, a
+     SCREEN rule, so under print it fell back to display:block and printed on top of
+     whatever the audit half was printing — the tax report carries GUEST NAMES, on the
+     sheet whose whole purpose is that it does not. It is outside #taxScreen, so the hide
+     list above never covered it. The tax half's `body.taxPrint #print-mount{display:block
+     !important}` is more specific and still wins when the tax half is the one printing. */
+  #print-mount{display:none !important}
   #printSheet{display:block !important;color:#000;font-family:"Segoe UI",Arial,sans-serif;padding:0;font-size:12px}
   #printSheet h1{font-size:16px;letter-spacing:.06em;margin:0 0 2px;font-weight:700}
   #printSheet .meta{font-size:11px;margin-bottom:14px;color:#000}
@@ -1667,6 +1687,7 @@ en: {
   "rep.noBridge": "Only inside the desktop app.",
   "rep.noDir": "Pick this section's folder first: OPTIONS → DIRECTORY — REPORTS. It is its own folder, not the Department Check's — print the departure lists into it.",
   "rep.none": "No departure list in {dir}. In protel, print the Departure List by Time to the Microsoft XPS Document Writer and save it there.",
+  "rep.err": "Could not read {dir} — {e}",
   "rep.item": "Departure List by Time — {d}",
   "rep.itemSub": "{n} room(s) · printed {p} · {f}",
   "rep.pvTitle": "Departure list — names withheld",
@@ -1925,6 +1946,7 @@ gr: {
   "rep.noBridge": "Μόνο μέσα στην εφαρμογή.",
   "rep.noDir": "Όρισε πρώτα τον φάκελο αυτής της ενότητας: ΕΠΙΛΟΓΕΣ → ΦΑΚΕΛΟΣ — ΑΝΑΦΟΡΕΣ. Είναι δικός της φάκελος, όχι του Ελέγχου Τμημάτων — εκεί τυπώνεις τις λίστες αναχωρήσεων.",
   "rep.none": "Καμία λίστα αναχωρήσεων στο {dir}. Στο protel, τύπωσε το Departure List by Time στον Microsoft XPS Document Writer και αποθήκευσέ το εκεί.",
+  "rep.err": "Δεν ήταν δυνατή η ανάγνωση του {dir} — {e}",
   "rep.item": "Λίστα αναχωρήσεων — {d}",
   "rep.itemSub": "{n} δωμάτια · τυπώθηκε {p} · {f}",
   "rep.pvTitle": "Λίστα αναχωρήσεων — χωρίς ονόματα",
@@ -2126,7 +2148,10 @@ function applyLang(){
   mi("#stArr", "st.arr", null); mi("#stDep", "st.dep", null); mi("#stInh", "st.inh", null); mi("#stMov", "st.mov", null);
   $("#stListBack").textContent = t("st.back");
   mi("#reportsBtn", "land.reports", "land.reportsSub");
-  $("#repBack").textContent = t("st.back");
+  /* REPORTS is reached from the home screen and goes back to it, so it takes HOME's label.
+     It borrowed the STATUS list's — "← STATUS", and in Greek "← ΚΑΤΑΣΤΑΣΗ", word for word
+     the name of a DIFFERENT home button. #alBack and #stBack already use al.back. */
+  $("#repBack").textContent = t("al.back");
   mi("#aDept", "audit.dept", "audit.deptSub");
   mi("#aTax", "audit.tax", "audit.taxSub");
   $("#aBack").textContent = t("audit.back");
@@ -3873,11 +3898,15 @@ function openDebug(){
     if(!window.reccheckFiles){ pre.textContent = t("sc.noDoor"); return; }
     b.dataset.busy = "1";
     try{
-      const res = await window.reccheckFiles.list("dept", "");
+      /* the REPORTS folder — what every string on this button says. It read "dept" from
+         1.17.50, when there was only one folder; 1.17.52 gave REPORTS its own and this was
+         left behind, so the one diagnostic built for the redacted print dumped the newest
+         checkcharge report instead. Found by the 1.17.53 audit. */
+      const res = await window.reccheckFiles.list("rep", "");
       const files = ((res && res.files) || []).filter(f => /\.(oxps|xps)$/i.test(f.name));
       if(!files.length){ pre.textContent = t("sc.xpsNone", {dir: (res && res.dir) || "?"}); return; }
       const f = files[0];                                   // list() sorts newest first
-      const raw = await window.reccheckFiles.read("dept", f.path);
+      const raw = await window.reccheckFiles.read("rep", f.path);
       const u8 = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
       const xmls = await unzipFpages(u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength));
       const dump = xpsDump(f, xmls);
@@ -4141,9 +4170,22 @@ const FB = {tool: "dept",
                      rel: (function(){ try{ return localStorage.getItem("reccheck_fbrel_rep") || ""; }catch(e){ return ""; } })()}
             }};
 function fbCur(){ return FB.p[FB.tool]; }
+/* AN EMPTY REL REMOVES THE KEY, it does not store "". `dept` is read back as
+   `getItem("reccheck_fbrel_dept") || getItem("reccheck_fbrel") || ""` — the pre-1.8 shared
+   key is the fallback — and "" is falsy, so storing it hands the old shared path back at
+   the next boot. Going to the root would not survive a restart. Found by the 1.17.53 audit. */
+function saveRel(tool, rel){
+  try{
+    if(rel) localStorage.setItem("reccheck_fbrel_" + tool, rel);
+    else{
+      localStorage.removeItem("reccheck_fbrel_" + tool);
+      if(tool === "dept") localStorage.removeItem("reccheck_fbrel");
+    }
+  }catch(e){}
+}
 function fbGo(rel){
   fbCur().rel = rel || "";
-  try{ localStorage.setItem("reccheck_fbrel_" + FB.tool, fbCur().rel); }catch(e){}
+  saveRel(FB.tool, fbCur().rel);
   fbRefresh();
 }
 function fbUpRel(){
@@ -4391,12 +4433,15 @@ async function fbPickDir(tool){
   /* the same refusal as files.js norm(): a name this does not know is not quietly turned
      into "dept" — it would pick the wrong folder and say nothing */
   if(!FB.p[tool]) return;
+  const prev = FB.p[tool].dir;
   const dir = await window.reccheckFiles.pickDir(tool);
   if(!dir) return;
   FB.p[tool].dir = dir;
-  /* a path inside the OLD folder means nothing in the new one, for any of the three */
-  FB.p[tool].rel = "";
-  try{ localStorage.setItem("reccheck_fbrel_" + tool, ""); }catch(e){}
+  /* A path inside the OLD folder means nothing in the new one — but ONLY when it really is
+     a new one. main.js answers a CANCELLED dialog with the folder he already had, which is
+     truthy, so clearing unconditionally threw away where he was every time he opened the
+     picker and thought better of it. Found by the 1.17.53 audit. */
+  if(dir !== prev){ FB.p[tool].rel = ""; saveRel(tool, ""); }
   paintDirSub();
   if(SCREEN === "files" && FB.tool === tool) fbRefresh();
   if(SCREEN === "reports" && tool === "rep") renderReports();
@@ -6220,7 +6265,12 @@ async function repParse(f){
     const p = parseDepList(xmls);
     res = isDepList(p) ? {ok: true, parsed: p} : {ok: false};
   }catch(e){ res = {ok: false, err: String((e && e.message) || e || "?")}; }
-  REP_CACHE[k] = res;
+  /* ONLY SUCCESSES ARE REMEMBERED. A failure cached under path+mtime never expires, and
+     the file is then skipped in silence for the rest of the session: a list read while the
+     XPS writer still held the handle would never appear again until he restarted the app,
+     with nothing on screen to say why. The cost of re-reading is bounded by the folder.
+     Found by the 1.17.53 audit. */
+  if(res.ok) REP_CACHE[k] = res;
   return res;
 }
 /* a plain string escaper for the sheet — no DOM, so the harness can drive it and a
@@ -6265,7 +6315,7 @@ let REP_RUN = 0;               // only the newest render may paint — see rende
    away. Its `rel` is remembered per tool exactly like theirs (`reccheck_fbrel_rep`). */
 function repGo(rel){
   FB.p.rep.rel = String(rel || "");
-  try{ localStorage.setItem("reccheck_fbrel_rep", FB.p.rep.rel); }catch(e){}
+  saveRel("rep", FB.p.rep.rel);
   renderReports();
 }
 function repUpRel(){
@@ -6287,10 +6337,16 @@ async function renderReports(){
   const note = (k, v) => { const d = el("div", "stNote", t(k, v)); box.append(d); };
   if(!window.reccheckFiles){ note("rep.noBridge"); return; }
   let res;
-  try{ res = await window.reccheckFiles.list("rep", FB.p.rep.rel || ""); }catch(e){ note("rep.noDir"); return; }
+  try{ res = await window.reccheckFiles.list("rep", FB.p.rep.rel || ""); }
+  catch(e){ if(run === REP_RUN) note("rep.noDir"); return; }      // a stale run must not paint either
   if(run !== REP_RUN) return;
   if(!res || !res.dir){ note("rep.noDir"); return; }
   if(res.error && FB.p.rep.rel){ repGo(""); return; }             // the sub-folder is gone — back to the root
+  /* and a folder he cannot READ is not a folder with no departure lists in it. Saying
+     "print one and save it there" about a folder that answered EPERM is the tool making a
+     claim it has not established — 7a fault 6, the same shape as the watch log's
+     "Nothing recorded this shift". Found by the 1.17.53 audit. */
+  if(res.error){ note("rep.err", {dir: res.dir, e: String(res.error)}); return; }
   if(typeof res.rel === "string") FB.p.rep.rel = res.rel.split("\\").join("/");
   const here = FB.p.rep.rel;
   const dirs = res.dirs || [];                                    // an old engine sends none
@@ -6314,8 +6370,12 @@ async function renderReports(){
   let shown = 0;
   for(const f of files){
     const r = await repParse(f);
+    /* ABOVE the `continue`, not below it: a superseded render whose files all fail to
+       parse would otherwise never reach the guard, run its loop to the end and append its
+       "no departure list" note into the list the NEWER render had already drawn — naming
+       the folder he had just left. It also stops a dead render unzipping the rest. */
+    if(SCREEN !== "reports" || run !== REP_RUN) return;
     if(!r.ok) continue;
-    if(SCREEN !== "reports" || run !== REP_RUN) return;            // he left, or a newer render started
     const p = r.parsed;
     const b = el("button", "mItem primary");
     b.append(el("span", "mLabel", t("rep.item", {d: p.listDate || "?"})));
@@ -6354,6 +6414,11 @@ function openDepPreview(f, p){
   };
 }
 function printCorrections(){
+  /* This function only ever means the corrections, so it disarms REPORTS' job rather than
+     being one more entry point the rule has to remember. Without it a job that outlived its
+     print — a print dialog cancelled, so no afterprint — could show him the CORRECTIONS
+     preview and put the DEPARTURES on paper. Found by the 1.17.53 audit. */
+  clearPrintJob();
   if(!MODEL) return;
   if(!buildPrintSheet()){ toast("Καμία διόρθωση για εκτύπωση", true); return; }
   openModal(`
@@ -6379,22 +6444,27 @@ $("#printBtn").onclick = printCorrections;
    two-way switch (7m): an exception list does not cover what is added after it.
    So the INTENT is named instead. A print job says which sheet to build; no job means the
    corrections, which is every other print in the app.
-   THE JOB IS NOT CONSUMED HERE. Chromium re-renders its print preview when the paper size
-   or the margins are changed, and a second `beforeprint` finding the job already spent
-   would print the corrections — his bug again, at the moment paper is coming out. It is
-   disarmed instead by `afterprint`, which this app has relied on since the Tax Check
-   shipped (it is what drops the taxPrint class), and by showScreen, and by Cancel and
-   Delete. So a stale job can only ever mean the departures sheet while he is standing on
-   the REPORTS screen, which is the harmless direction of the two. */
+   THE JOB IS NOT CONSUMED HERE, AND NOTHING DISARMS IT ON `afterprint` EITHER. It was
+   cleared on afterprint at first, until the audit showed what that costs: a preview
+   re-rendered mid-print (he changes the paper size or the margins) can fire
+   beforeprint → afterprint → beforeprint for ONE job, and the second beforeprint would
+   find it spent and print the corrections — his bug again, with paper already moving.
+   The sheet must not depend on the engine's event pairing at all. It is disarmed only
+   where the APP names a different intent: showScreen, Cancel, Delete, and
+   printCorrections. So a stale job can only mean the departures sheet while he is standing
+   on the REPORTS screen, which is the harmless direction of the two. */
 window.addEventListener("beforeprint", () => {
   if(document.body.classList.contains("taxPrint")) return;    // the tax half prints its own mount
   if(PRINT_JOB && PRINT_JOB.kind === "dep"){ buildDepSheet(PRINT_JOB.p, PRINT_JOB.fname); return; }
   if(MODEL) buildPrintSheet(true);
 });
-window.addEventListener("afterprint", clearPrintJob);
 document.addEventListener("keydown", e => {
   if((e.ctrlKey || e.metaKey) && (e.key === "p" || e.key === "P")){
     e.preventDefault();
+    /* NEVER SWAP A DIALOG HE IS ALREADY LOOKING AT. With the departures preview open this
+       replaced it with the corrections preview — same amber Print button, same place — so
+       his 06/09 fault was reachable by the shortcut every app has. Found by the audit. */
+    if($("#modalBg").classList.contains("open")) return;
     printCorrections();
   }
 });

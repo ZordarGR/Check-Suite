@@ -15,7 +15,7 @@ try{ window.__t = { openModal:openModal, closeModal:closeModal,
   setWatch:function(w){WATCH=w;}, FB:function(){return FB;},
   buildPrintSheet:function(){return buildPrintSheet();},
   setStateKey:function(k){stateKey=k;}, rKey:function(r){return rKey(r);},
-  openDepPreview:openDepPreview, repGo:repGo,
+  openDepPreview:openDepPreview, repGo:repGo, fbPickDir:fbPickDir, saveRel:saveRel,
   armedPrint:function(){return PRINT_JOB;} }; }catch(e){}
 `;
 /* The tax half is its own <script> and shares nothing with the app half, so a probe in
