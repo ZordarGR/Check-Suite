@@ -1,11 +1,11 @@
 {
-  "version": "1.17.45",
-  "type": "full",
+  "version": "1.17.46",
+  "type": "html",
   "engine": "1.17.45",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.45/RecCheck-Setup.exe",
   "setupSha256": "df104b76bb2fe8e8450828d1fef580bf972f004f627003772016578172a80c3a",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "dc6e96b5088e3e02176b84924d38f9b554209a09506904e2bc56578785d2978c",
-  "notes": "Stage 1 of the redacted print: for ten minutes after a press in DEBUG, RecCheck copies what Windows spools to the printer and shows what the job is made of, so the departures report can be read on its way to the printer. Nothing is sent to protel or to the printer, and nothing is watched outside those ten minutes.\n\nThe receipt cards under the serial-number search now show the whole guest name from protel's in-house list, like the rows above them. The red LEAVING TODAY mark and the receipts dot are built on the receipt's own name — completed from protel's list where the report cut it, never the room's name — so the arriving guest's paper is never marked. A room is named after its checked-in guest when protel lists more than one row for it."
+  "sha256": "3d283c593a21668bfa664f694da45b6cf3af12a8e3a26c6b277255a40e697b8e",
+  "notes": "The room movements panel is now three lists — ARRIVALS, DEPARTURES, MOVES — with no turnover group: a room that departed and was arrived into is on both. A move reads old room → new room, in cyan.\n\nThe dot on a departure or move, and the red LEAVING TODAY mark, now take a receipt whose name is the opening of the departing guest's name — the report cuts names at the column, protel does not — unless another name protel shows for that room opens the same way, in which case nothing is marked. The arriving guest's paper is never marked.\n\nWhen protel's in-house list is captured while the department check is open, the names on the rows and the search cards refresh in place. The cards and rows show the whole name, wrapped, never cut with an ellipsis."
 }

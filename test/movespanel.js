@@ -78,7 +78,7 @@ const t = (k, v) => k + (v ? "(" + JSON.stringify(v) + ")" : "");
 
 const body = [elDecl, lift("dateNum"), lift("dShort"), lift("rKey"), lift("rState"),
   "const effRoom = " + line(/^function effRoom\(r\)\{.*$/m).replace(/^function effRoom\(r\)/, "(r) =>") .replace(/^\(r\) =>\{/, "(r) => {"),
-  lift("checkableList"), lift("sameName"), lift("isCutOf"), lift("receiptName"),
+  lift("checkableList"), lift("sameName"), lift("isCutOf"), lift("receiptName"), lift("nameHit"), lift("censusNameOf"), lift("roomNames"), "let ARRIVING = {};",
   "const STATUS_KEY = \"reccheck_status_v1\";", lift("loadStatus"), lift("statusRows"), lift("pillRoom"),
   "const LEGACY_KEY = \"reccheck_legacy\";", lift("legacyOn"), line(/^const MOVES_KEY = .*$/m), lift("loadMoves"), lift("ledgerMoves"), 
   lift("dateNum2"), lift("prevNightKey"), "const RECEIPTS_KEY = \"reccheck_receipts_v1\"; const RECEIPTS_KEEP = 60;", lift("loadNightReceipts"), lift("saveNightReceipts"), lift("leavingIndex"), "let LEAVING = {};", lift("isLeaving"),
@@ -93,7 +93,7 @@ let heading = null, n = 0; const drawn = {};
 for (const c of out.root.children){
   if (c.className && c.className.startsWith("mvGroup")) heading = c.children[0].textContent;
   else if (c.className === "mvGrid")
-    for (const p of c.children){ n++; drawn[p.textContent] = p.className; console.log("  " + heading.padEnd(12) + p.textContent.padEnd(5) + p.className); }
+    for (const p of c.children){ n++; const room = p.textContent.split("→").pop().trim(); drawn[room] = ((drawn[room] || "") + " " + p.className).trim(); console.log("  " + heading.padEnd(12) + p.textContent.padEnd(10) + p.className); }
   else if (c.className === "mvTitle") console.log("title        :", c.textContent);
 }
 console.log(n + " pills drawn");
@@ -103,10 +103,10 @@ console.log();
 ck("53  departs, with the departing guest's receipt -> dep, dotted", /mv-dep\b/.test(drawn["53"] || "") && /\brec\b/.test(drawn["53"]));
 ck("67  departs, no receipt -> dep, no dot",                         /mv-dep\b/.test(drawn["67"] || "") && !/\brec\b/.test(drawn["67"]));
 ck("72  arrives -> arr",                                             /mv-arr\b/.test(drawn["72"] || ""));
-ck("112 departs and is arrived into -> turnover",                    /mv-turn\b/.test(drawn["112"] || ""));
-ck("148 taken by a move -> move; 325, left, is no pill",             /mv-move\b/.test(drawn["148"] || "") && !("325" in drawn));
+ck("112 departs and is arrived into -> a departure pill AND an arrival pill, no turnover", /mv-dep\b/.test(drawn["112"] || "") && /mv-arr\b/.test(drawn["112"] || "") && !/mv-turn\b/.test(drawn["112"] || ""));
+ck("148 taken by a move -> a move pill reading 325 → 148; 325 itself is no pill",  /mv-move\b/.test(drawn["148"] || "") && !("325" in drawn));
 ck("777, tonight's departure by the ledger alone -> no pill",        !("777" in drawn));
 ck("601 stays put -> no pill",                                       !("601" in drawn));
-ck("exactly those five",                                             n === 5);
+ck("exactly those six",                                              n === 6);
 console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");
 process.exit(bad ? 1 : 0);
