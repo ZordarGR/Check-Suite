@@ -6,6 +6,6 @@
   "setupSha256": "83861ea3c98c4ca4064766b709f72a6963adf9b3ce305dc7e06ac1454bbcbab5",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "98d45a791b0523f9a647b877878aada5d3db92cb9f7f6c4df0e0e5937c9833a6",
-  "notes": "The redacted departures print now uses protel's own layout — the boxed header, the blue title, the grey departure-time bands, the room numbers and notes in blue.\n\nThe guest column stays where protel puts it, with a dash in every cell, so whoever reads the sheet can see a name was taken out rather than never printed. No name reaches the paper."
+  "sha256": "1e6640336cb17ea53696f3da332d5d735180c51a1f864b8f6e6e8624b223a1a0",
+  "notes": "The redacted departures print now uses protel's own layout — the boxed header, the centred departure date, the grey departure-time bands and the borderless rows — in black and white.\n\nThe guest column stays where protel puts it, with a dash in every cell, so whoever reads the sheet can see a name was taken out rather than never printed. No name reaches the paper."
 }

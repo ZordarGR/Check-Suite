@@ -244,14 +244,18 @@ body.onMenu #clList{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
 #printSheet .type,#pvPaper .type{font-size:10px;color:#444;margin-left:4px}
 /* ---- THE REDACTED DEPARTURES SHEET, IN PROTEL'S OWN LAYOUT ----
    His ask, 07/09, with a screenshot of departroom1time: "can you make it this exact
-   style?". The boxed three-cell header, the blue title, the centred departure date, the
-   underlined heading row, the grey ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ bands, borderless rows, blue room
-   numbers and small blue notes.
+   style?". The boxed three-cell header, the title, the centred departure date, the
+   underlined heading row, the grey ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ bands and borderless rows.
+   BLACK AND WHITE, his word the same day: "there's no need for the blue, its black and
+   white only". protel prints the title, the room numbers and the notes in blue; this sheet
+   prints them black. The only ink left that is not black is the grey of protel's own time
+   bands and the dash standing in for a name — both greyscale, both black-and-white on
+   paper.
    BOTH #printSheet and #pvPaper take every rule, because what he previews must be what
    prints — that is the whole of 1.17.53 and it is not going to be undone by a stylesheet.
-   print-color-adjust is what makes the grey band and the blue actually reach paper; a
-   browser drops backgrounds when printing otherwise, and the bands are how the times are
-   read at a glance. */
+   print-color-adjust is what still makes the grey band reach paper: a browser drops
+   backgrounds when printing otherwise, and the bands are how the times are read at a
+   glance. It is the one non-black thing left on the sheet, and it is greyscale. */
 #printSheet,#pvPaper{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 #printSheet .dlBox,#pvPaper .dlBox{display:flex;border:1px solid #000;margin:0 0 10px}
 #printSheet .dlCell,#pvPaper .dlCell{padding:5px 8px;border-right:1px solid #000;min-width:0}
@@ -264,7 +268,7 @@ body.onMenu #clList{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
 #printSheet .dlRule,#pvPaper .dlRule{border-top:1px solid #000;margin:4px -8px 3px}
 #printSheet .dlHms,#pvPaper .dlHms{font-size:10.5px}
 #printSheet .dlHotel,#pvPaper .dlHotel{font-size:11.5px}
-#printSheet .dlTitle,#pvPaper .dlTitle{font-size:15px;font-weight:600;color:#1a3fb8;margin-top:6px}
+#printSheet .dlTitle,#pvPaper .dlTitle{font-size:15px;font-weight:600;color:#000;margin-top:6px}
 #printSheet .dlMeta,#pvPaper .dlMeta{font-size:10px}
 #printSheet .dlDep,#pvPaper .dlDep{text-align:center;font-weight:700;font-size:12px;margin:8px 0 6px}
 #printSheet .dlTbl,#pvPaper .dlTbl{width:100%;border-collapse:collapse;font-size:10.5px;table-layout:auto}
@@ -272,10 +276,10 @@ body.onMenu #clList{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
 #printSheet .dlTbl td,#pvPaper .dlTbl td{border:0;padding:2px 4px;vertical-align:top}
 #printSheet .dlTbl th.num,#pvPaper .dlTbl th.num,#printSheet .dlTbl td.num,#pvPaper .dlTbl td.num{text-align:right}
 #printSheet .dlGrp td,#pvPaper .dlGrp td{background:#d9d9d9;font-weight:700;padding:3px 4px}
-#printSheet .dlRoom,#pvPaper .dlRoom{color:#1a3fb8;font-weight:600}
-#printSheet .dlOut,#pvPaper .dlOut{color:#777;text-align:center}
-#printSheet .dlTbl tr.note td,#pvPaper .dlTbl tr.note td{color:#1a3fb8;font-size:9.5px;padding-top:0;border-top:0}
-#printSheet .dlNd,#pvPaper .dlNd{color:#1a3fb8;font-size:9.5px;white-space:nowrap}
+#printSheet .dlRoom,#pvPaper .dlRoom{color:#000;font-weight:600}
+#printSheet .dlOut,#pvPaper .dlOut{color:#444;text-align:center}
+#printSheet .dlTbl tr.note td,#pvPaper .dlTbl tr.note td{color:#333;font-size:9.5px;padding-top:0;border-top:0}
+#printSheet .dlNd,#pvPaper .dlNd{color:#333;font-size:9.5px;white-space:nowrap}
 #printSheet .dlTot,#pvPaper .dlTot{margin-top:10px;font-size:10.5px}
 #printSheet .dlFoot,#pvPaper .dlFoot{margin-top:12px;font-size:9.5px;color:#444;border-top:1px solid #999;padding-top:4px}
 #printSheet tr.note td,#pvPaper tr.note td{border-top:0;padding-top:0;font-size:10.5px;color:#333}
@@ -6340,9 +6344,10 @@ function buildDepSheet(p, fname){
   /* EVERY column protel printed, the guest one included — his choice, 07/09: keep it with
      a dash in each cell, so a reader sees a name was REMOVED rather than never printed.
      The layout below is protel's own (his screenshot of departroom1time, 07/09/26): the
-     boxed three-cell header, the blue title, the centred departure date, the underlined
-     heading row, the grey ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ bands, borderless rows, blue room numbers and
-     small blue notes. Nothing on it is invented: every value comes from the file, and a
+     boxed three-cell header, the title, the centred departure date, the underlined
+     heading row, the grey ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ bands and borderless rows — in BLACK AND WHITE,
+     his word the same day: "there's no need for the blue, its black and white only".
+     Nothing on it is invented: every value comes from the file, and a
      field the parser did not find is left out rather than guessed. */
   const cols = (p.columns || []);
   const headOf = c => c.head === "Chil" ? "Child" : c.head === "Ποσ" ? "Ποσ." : c.head;
