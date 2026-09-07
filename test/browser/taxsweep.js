@@ -1,7 +1,18 @@
 require("./fresh.js")();          // refuse to run against a stale copy
 const {chromium} = require("playwright-core");
 const path = require("path");
-const bridge = `window.reccheckShortcuts={get:()=>Promise.resolve({profiles:[],active:null,available:true}),helper:()=>Promise.resolve({state:"started"})};`;
+/* REPORTS is swept with a FILE BRIDGE, or it is not swept at all: without
+   window.reccheckFiles, renderReports takes its first early return and #repList holds one
+   line of text — "Only inside the desktop app." — which of course fits at every width.
+   This screen has been in the loop since 1.17.50 and had never had a row measured. The
+   folder name is deliberately long and unbroken: that is what escapes a column. */
+const bridge = `window.reccheckShortcuts={get:()=>Promise.resolve({profiles:[],active:null,available:true}),helper:()=>Promise.resolve({state:"started"})};
+window.reccheckFiles={
+  list:(pr,rel)=>Promise.resolve({dir:"D:\\\\Departure_Lists_Exported_From_Protel\\\\2026",rel:String(rel||""),
+    dirs:[{name:"2026-08",rel:"2026-08"},{name:"Nightly_XPS_Archive_September_2026_Unbroken",rel:"long"}],files:[]}),
+  read:()=>Promise.reject(new Error("x")),stat:()=>Promise.resolve(null),
+  getDir:()=>Promise.resolve("D:\\\\Departure_Lists_Exported_From_Protel\\\\2026"),
+  pickDir:()=>Promise.resolve(null),trash:()=>Promise.resolve(true),onDirEvent:()=>{}};`;
 let bad = 0;
 (async () => {
   const b = await chromium.launch({executablePath:"/opt/pw-browsers/chromium-1194/chrome-linux/chrome", args:["--no-sandbox"]});
@@ -13,6 +24,7 @@ let bad = 0;
       await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
       await p.waitForTimeout(250);
       let note = "";
+      if (screen === "reports") await p.evaluate(() => { window.__t.FB().p.rep.dir = "D:\\Departure_Lists_Exported_From_Protel\\2026"; }).catch(()=>{});
       try { await p.evaluate(s => window.__t.showScreen(s), screen); } catch(e){ note = " (showScreen threw)"; }
       if (screen === "tax") {
         // the tax half's own dialog
@@ -33,6 +45,11 @@ let bad = 0;
         }
         return {over: de.scrollWidth - de.clientWidth, bad: bad.slice(0,5)};
       });
+      /* AND IT COUNTS. This printed "PAGE SIDE-SCROLLS" and the elements past the right
+         edge and then exited 0 — only the home-button check below fed `bad`. A sweep that
+         reports a fault and passes anyway is worse than no sweep, because a clean exit is
+         what anyone actually reads. Found by the 1.17.53 audit. */
+      if(r.over > 0 || r.bad.length) bad++;
       console.log(screen.padEnd(7) + String(W).padEnd(6) + (r.over > 0 ? "+" + r.over + " PAGE SIDE-SCROLLS" : "ok") + note);
       r.bad.forEach(x => console.log("        past the right edge: " + x));
       /* THE HOME BUTTONS LINE UP WITH THE CARD ABOVE THEM.
@@ -53,6 +70,21 @@ let bad = 0;
         bad += off.length;
         console.log("        " + (off.length ? "OUT OF THE COLUMN: " + off.map(x => "#" + x.id + " by " + x.off + "px").join(", ")
                                              : m.length + " home button(s) line up with the checklist card"));
+      }
+      /* REPORTS' rows line up with the column too — the same question as the home
+         buttons, on the screen that grew rows in 1.17.53. */
+      if (screen === "reports") {
+        const m = await p.evaluate(() => {
+          const back = document.querySelector("#repBack").getBoundingClientRect();
+          return [...document.querySelectorAll("#repList > *")].map(el => {
+            const q = el.getBoundingClientRect();
+            return {t: (el.className || el.tagName), off: Math.round(Math.abs(q.left - back.left) + Math.abs(q.width - back.width))};
+          });
+        });
+        const off = m.filter(x => x.off > 1);
+        bad += off.length;
+        console.log("        " + (off.length ? "OUT OF THE COLUMN: " + off.map(x => x.t + " by " + x.off + "px").join(", ")
+                                             : m.length + " REPORTS row(s) line up with the back button"));
       }
       await p.close();
     }

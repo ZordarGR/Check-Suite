@@ -40,7 +40,14 @@ const GLOBALS = new Set(["Object","String","Number","Array","Set","Map","JSON","
 function stripComments(js){
   return js.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/[^\n]*/g, "$1 ");
 }
-for (const fn of ["renderMoves","roomMoves","movesReport"]) {
+/* AND IT FAILS THE RUN. This printed "UNDEFINED -> name" and exited 0, so run.sh's
+   `|| fail=1` never tripped and the suite still said everything ran. The one guard in the
+   repo whose whole reason for existing is that `liveReceipts()` did not exist and the
+   movements panel was dark for two versions could not fail. The same shape as taxsweep
+   printing PAGE SIDE-SCROLLS and exiting clean. Found by the 1.17.53 second audit.
+   renderMovesFor joins the list: it is where the receipts index and the dot are written. */
+let scopeBad = 0;
+for (const fn of ["renderMoves","roomMoves","movesReport","renderMovesFor"]) {
   const body = stripComments(bodyOf(fn));
   const missing = new Set();
   for (const m of body.matchAll(/\b([A-Za-z_$][\w$]*)\s*\(/g)) {
@@ -51,8 +58,10 @@ for (const fn of ["renderMoves","roomMoves","movesReport"]) {
     if (body[at - 1] === "." ) continue;
     missing.add(id);
   }
+  scopeBad += missing.size;
   console.log(fn.padEnd(12), missing.size ? "UNDEFINED -> " + [...missing].join(", ") : "all calls resolve");
 }
+if(scopeBad) process.exitCode = 1;
 
 /* ---- every <script> block must actually PARSE ----
    Added after a duplicate `const` in the tax scope — one edit leaving the old
@@ -132,22 +141,23 @@ function tableBody(text, header){        // the text between that table's own br
 /* ---- the two language tables must hold the same keys ----
    A key present in one and not the other renders as the key itself for anyone using the
    other language, and nothing in the page complains. Four had drifted into Greek-only
-   before an audit noticed. */
-const i18nLines = src.split("\n");
-const at = [];
-i18nLines.forEach((l, i) => { if (/^\s*"menu\.audit"\s*:/.test(l)) at.push(i + 1); });
-if (at.length !== 2) { console.log("i18n       could not find both tables — check test/scopecheck.js"); }
-else {
-  const en = new Set(), gr = new Set();
-  i18nLines.forEach((l, i) => {
-    const n = i + 1;
-    if (n < at[0] - 40 || n > at[1] + 400) return;
-    const re = /"([A-Za-z0-9_]+\.[A-Za-z0-9_]+)"\s*:/g; let m;
-    while ((m = re.exec(l))) (n < at[1] ? en : gr).add(m[1]);
-  });
-  const onlyG = [...gr].filter(k => !en.has(k)), onlyE = [...en].filter(k => !gr.has(k));
-  console.log("i18n       " + (onlyG.length + onlyE.length === 0
-    ? "both tables hold the same " + en.size + " keys"
-    : "MISMATCH — only in greek: [" + onlyG + "]  only in english: [" + onlyE + "]"));
-  if (onlyG.length + onlyE.length) process.exitCode = 1;
+   before an audit noticed.
+
+   THIS USED THE REGEX /"([A-Za-z0-9_]+\.[A-Za-z0-9_]+)"\s*:/ over a window of lines —
+   quoted keys with EXACTLY ONE dot. So T's seven bare-identifier keys (subTag, welcome,
+   menu1…) and its three two-dot keys (mv.h.arr, mv.h.dep, mv.h.move — the ARRIVALS /
+   DEPARTURES / MOVES headings over the pills he reads every night) were invisible to the
+   guard, in both languages. The SAME fault this file already records for I18N, in the
+   check that comment sits above. It walks the literal now, like that one. */
+{
+  const bEn = tableBody(src, "\nen: {"), bGr = tableBody(src, "\ngr: {");
+  if(!bEn || !bGr){ console.log("i18n       could not find en/gr — fix test/scopecheck.js"); process.exitCode = 1; }
+  else {
+    const en = litKeys(bEn), gr = litKeys(bGr);
+    const onlyG = [...gr].filter(k => !en.has(k)), onlyE = [...en].filter(k => !gr.has(k));
+    console.log("i18n       " + (onlyG.length + onlyE.length === 0
+      ? "both tables hold the same " + en.size + " keys"
+      : "MISMATCH — only in greek: [" + onlyG + "]  only in english: [" + onlyE + "]"));
+    if(onlyG.length + onlyE.length) process.exitCode = 1;
+  }
 }

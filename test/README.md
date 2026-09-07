@@ -10,6 +10,7 @@ Run the ones that need nothing but node:
 
 | | what it holds the line on |
 |---|---|
+| `release.js` | the release invariants, checked where they can actually fire. The workflow's "the two copies of the page must not differ" step only runs on a push touching `dist-win64/parts/**` — which an HTML release never does, and an html release is the one that ships the page, so that guard had never once run for the releases most likely to drift them. Also: APP_VERSION equals the manifest's version, the manifest's html sha256 IS the shipped page's, the installer it points at is the engine's, and `app/package.json` is the ENGINE's version — never the page's, which is what 1.17.53 got wrong before an audit caught it |
 | `scopecheck.js` | every call in the moves functions resolves to something declared. A silent `ReferenceError` inside a `stage()` looks exactly like "there was nothing to draw" — this is how the movements panel was dark for two versions |
 | `status.js` | the STATUS store, through the shipped writer and marks: each list kept for the day as the union of its captures; an arrival gone from the arrival list is nothing until the in-house list shows the same name and room with CI; a departure gone from the departure list is nothing until a COMPLETE in-house list captured afterwards does not show it — a cut-short one proves nothing; `414` and `414-15` are one room; the pills come from the store and from nothing else — three groups since 1.17.46, ARRIVALS · DEPARTURES · MOVES, a room on two lists on both, a move pill reading `old → new` — and the dot lands on a departure or move pill only for that reservation's own name: equal, or the receipt's cut name opening it, unless another name on that room opens the same way (5c) — over the whole stay since 1.17.44, from the room+name pairs each loaded report leaves behind by night; with legacy ON the XPS-fed ledger draws them instead, as before 1.17.42 |
 | `movespanel.js` | `renderMoves` over a DOM shim, the night built through `statusIngest`: all four pill kinds, the receipts dot only on a departure whose **name** matches, and a ledger entry alone drawing nothing |
@@ -22,7 +23,7 @@ Run the ones that need nothing but node:
 | `lvitem.cs` | the LVITEM the list control reads, laid out for the **target's** bitness. Get an offset wrong and the read silently returns nothing, which looks exactly like "protel will not allow it" |
 | `livenames.js` | the protel names meeting the .oxps ingest. An uncut name and its truncation are the same guest — read as a turnover it would mark every room movedOn, delete every nickname, fire the watchlist and overwrite the good name with the cut one, all on one report load |
 | `moves.js` | recording a move that has already happened. Only rows protel has marked with its X, never a stay invented, and `mv` must never become a departure — protel did not call it one |
-| `reports.js` | the arrival and departure reports feeding the ledger. Each carries only ONE of the two dates — the other is the report's own — and the writer must never touch a room its rows do not name, because saveMoves and detectMoves reason from absence and a 30-row report would read as 170 people leaving |
+| `feedstays.js` | the arrival and departure reports feeding the ledger. Each carries only ONE of the two dates — the other is the report's own — and the writer must never touch a room its rows do not name, because saveMoves and detectMoves reason from absence and a 30-row report would read as 170 people leaving |
 | `alerts.js` | the alerts store: the same missing X seen again by a read that never stops must be the SAME alert, read is not resolved, resolving removes entirely, and broken storage loads as empty rather than throwing |
 | `roomsfile.js` | the room database on disk, through the real main.js handlers: a Greek name round-tripping byte for byte, the file not readable by opening it, every failure returning null rather than throwing, and no half-written file left beside it |
 | `splash.cs` | the installation overlay's geometry: the icon centred in the ring, the ring inside the window, the palette the update button's. The drawing needs Windows; where it is placed does not, and both ways of getting it wrong are silent until it is on his screen mid-install |
@@ -44,7 +45,16 @@ Run the ones that need nothing but node:
     node test/harness.js        # regenerate browser/h-sweep.html from the current page
 
 Then `sweep.js` (every dialog at six window widths), `taxsweep.js` (every screen),
-`legacy.js`, `ledger.js`, `live.js`, `alerts.js`, `dbgshot.js`, `optshot.js`.
+`legacy.js`, `ledger.js`, `live.js`, `alerts.js`, `movesfit.js`, `spool.js`, `reports.js`,
+`dbgshot.js`, `optshot.js`.
+
+`browser/reports.js` holds REPORTS: that Print in its preview prints the DEPARTURES sheet
+and not the corrections — `#printSheet` is shared by both and `beforeprint` used to rebuild
+the corrections over it on every print while a report was loaded, which is what he saw on
+06/09 — that an ordinary print and the Tax Check's are untouched by the fix, that an armed
+print does not outlive the screen, and that REPORTS walks sub-folders like the other two
+browsers, remembers where he was, drops back to the root when one has gone, and paints once
+when two renders overlap.
 
 `live.js` is the one to keep honest: it drives the shipped capture loop with a stubbed
 bridge and requires that a list whose caption does not name it writes **nothing** to the
