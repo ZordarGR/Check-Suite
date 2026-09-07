@@ -19,6 +19,9 @@ const DEP={title:"Departure List by Time",listDate:"07/09/26",printed:"x 03:08",
   hotel:"K",id:"departroom1time 2",page:"1",pages:1,guests:1,
   columns:[["room","Δωμάτιο"],["guest","Πελάτης"],["arr","Άφιξη"]].map(([key,head],i)=>({key,head,x:i*70})),
   groups:[{time:"16:35",rows:[{room:"210",type:"SSV",guest:"SECRET",arr:"03/09/26",notes:[]}]}],totals:[]};
+const BRD={kind:"boarding",title:"Boarding List",id:"mealplandetail",station:"220067",hotel:"K",page:"1",printed:"x 03:55",printedShort:"7/9/2026",
+  dayLabel:"\u0394\u03b5\u03c5, 07",dayArrDep:"54/39",dayTotals:{bf:"266",lunch:"6",dinner:"562",table:"552"},summe:{bf:"266",lunch:"6",dinner:"562",table:""},persLine:"270/195/2.760",
+  rows:[{name:"\u2014",room:"201",bf:"1",lunch:"",dinner:"1",table:""},{name:"\u2014",room:"414-15",bf:"1",lunch:"",dinner:"2",table:""}]};
 let bad=0; const ck=(l,ok)=>{ if(!ok)bad++; console.log("  "+(ok?"ok  ":"FAIL")+"  "+l); };
 const tmp = () => path.join(os.tmpdir(), "rc-orient-"+Math.random().toString(36).slice(2)+".pdf");
 (async () => {
@@ -36,6 +39,14 @@ const tmp = () => path.join(os.tmpdir(), "rc-orient-"+Math.random().toString(36)
   await pg.evaluate(d => window.__t.openDepPreview({name:"dep.oxps",path:"D/x",mtimeMs:Date.now()}, d), DEP);
   await pg.waitForTimeout(80); await pg.click("#pvGo"); await pg.waitForTimeout(200);
   ck("the departures sheet prints LANDSCAPE", (await shot()).land);
+
+  // the BOARDING list is portrait (protel prints it so); its print must not be landscape
+  await pg.evaluate(b => window.__t.openDepPreview({name:"boarding.oxps",path:"D/b",mtimeMs:Date.now()}, b, "board"), BRD);
+  await pg.waitForTimeout(80); await pg.click("#pvGo"); await pg.waitForTimeout(200);
+  const brd=await shot();
+  ck("the boarding sheet prints portrait, not landscape", !brd.land);
+  const noname=await pg.evaluate(()=>!/[A-Za-z]{3,}/.test((document.querySelector("#printSheet").innerText||"").replace(/Name|Breakfast|Lunch|Dinner|Table|Print Date|protel|Boarding List|Station|Pers|Arrivals|Departures|Inhouse|Guest names withheld|Summe fur Zeitraum|Kernos|Malia|mealplandetail|boarding|oxps/g,"")));
+  ck("no guest name text on the boarding print", noname);
 
   await pg.evaluate(() => { document.querySelector("#printSheet").innerHTML=""; window.__t.printCorrections(); });
   await pg.waitForTimeout(80); await pg.click("#pvGo"); await pg.waitForTimeout(200);

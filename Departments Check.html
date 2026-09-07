@@ -282,6 +282,8 @@ body.onMenu #clList{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
 #printSheet .dlNd,#pvPaper .dlNd{color:#333;font-size:9.5px;white-space:nowrap}
 #printSheet .dlTot,#pvPaper .dlTot{margin-top:10px;font-size:10.5px}
 #printSheet .dlFoot,#pvPaper .dlFoot{margin-top:12px;font-size:9.5px;color:#444;border-top:1px solid #999;padding-top:4px}
+#printSheet .blGroup,#pvPaper .blGroup{text-align:right;font-size:10.5px;color:#000;margin:4px 0 2px}
+#printSheet .blTbl th,#pvPaper .blTbl th,#printSheet .blTbl td,#pvPaper .blTbl td{padding:2px 6px}
 #printSheet tr.note td,#pvPaper tr.note td{border-top:0;padding-top:0;font-size:10.5px;color:#333}
 #statusListScreen .stNote{font-size:12px;color:var(--faint);padding:4px 2px}
 #statusListScreen .stNote.warn{color:#fbbf24}
@@ -1443,6 +1445,72 @@ function parseDepList(xmls){
   return out;
 }
 function isDepList(p){ return !!(p && p.columns && (p.title || /^departroom/.test(p.id || ""))); }
+
+/* ---- the Boarding List — protel report `mealplandetail` ----
+   A meal-plan / in-house list: Name, room (#), and the Breakfast/Lunch/Dinner/Table counts,
+   read off his 07/09 file. The NAME is the leftmost column and the only place a guest name
+   appears; the room and the counts are digits, a room range like 414-15, or "?" (a room not
+   yet allocated — his word, 07/09). When protel prints a long name it glues the room onto
+   the end of the name token (e.g. "BEGENAT/LISCHKA, MARI277"); the trailing digits are peeled
+   back off and kept as the room, the name dropped. Everything at or right of the room column
+   that carries a LETTER is a header (Station, a date, Arrivals) or the Summe/Pers footer,
+   never a guest — which is what keeps a name off the sheet. */
+function parseBoardingList(xmls){
+  const out = {kind:"boarding", id:"", title:"", printed:"", printedShort:"", station:"", hotel:"", page:"",
+               pages: xmls.length, columns:null, rows:[], dayLabel:"", dayArrDep:"", dayTotals:null, summe:null, persLine:""};
+  const REDACT = "—";
+  const near = (cols, x) => { let best=null, bd=1e9; for(const c of cols){ if(c.key==="name") continue; const d=Math.abs(c.x-x); if(d<bd){bd=d;best=c;} } return best; };
+  let mealHead = null;
+  for(const xml of xmls){
+    const toks = pageTokens(xml).sort((a,b)=>a.y-b.y || a.x-b.x);
+    const lines = [];
+    for(const tk of toks){ const L=lines[lines.length-1]; if(L && Math.abs(L.y-tk.y)<=4) L.toks.push(tk); else lines.push({y:tk.y, toks:[tk]}); }
+    for(const L of lines){
+      L.toks.sort((a,b)=>a.x-b.x);
+      const words = L.toks.map(t=>t.t.trim());
+      const text = words.join(" ");
+      if(/Boarding List/i.test(text)) out.title = "Boarding List";
+      const idm = text.match(/\b(mealplandetail\S*)/); if(idm && !out.id) out.id = idm[1];
+      const sm = text.match(/Station\s+(\S+)/); if(sm && !out.station) out.station = sm[1];
+      if(!out.columns){ const pm = text.match(/^(.*?)\s*Page\s*:?\s*(\d+)?\s*$/); if(/Page\s*:/.test(text) && pm){ if(pm[1] && !out.hotel) out.hotel = pm[1].trim(); if(pm[2] && !out.page) out.page = pm[2]; continue; } }
+      const pd = text.match(/Printdate:\s*(.+)$/); if(pd && !out.printed){ out.printed = pd[1].trim(); continue; }
+      if(/^protel\b/.test(text)){ const ds = text.match(/(\d{1,2}\/\d{1,2}\/\d{2,4})/); if(ds && !out.printedShort) out.printedShort = ds[1]; }
+      if(/Breakfast/.test(text) && /Dinner/.test(text)){ mealHead = L.toks.map(t=>({head:t.t.trim(), x:t.x})); continue; }
+      if(!out.columns && words.indexOf("Name")>=0 && words.indexOf("#")>=0){
+        const nm = L.toks.find(t=>t.t.trim()==="Name"), rm = L.toks.find(t=>t.t.trim()==="#");
+        const cols = [{key:"name",head:"Name",x:nm.x},{key:"room",head:"#",x:rm.x}];
+        const km = {Breakfast:"bf", Lunch:"lunch", Dinner:"dinner", Table:"table"};
+        if(mealHead) for(const m of mealHead) if(km[m.head]) cols.push({key:km[m.head], head:m.head, x:m.x});
+        cols.sort((a,b)=>a.x-b.x); out.columns = cols; continue;
+      }
+      if(!out.columns) continue;
+      const roomCol = out.columns.find(c=>c.key==="room"), roomCut = (roomCol?roomCol.x:230)-25;
+      if(!out.dayLabel && /(Δευ|Τρι|Τετ|Πεμ|Παρ|Σαβ|Κυρ)/.test(text) && /(Σεπ|Ιαν|Φεβ|Μαρ|Απρ|Μαη|Ιουν|Ιουλ|Αυγ|Οκτ|Νοε|Δεκ)/i.test(text)){
+        out.dayLabel = words.filter(w=>!/^\d+\/\d+$/.test(w)).join(" ").trim();
+        const ad = text.match(/(\d+\s*\/\s*\d+)\s*$/); if(ad) out.dayArrDep = ad[1].replace(/\s+/g,"");
+        continue;
+      }
+      const nameToks = L.toks.filter(t=>t.x<roomCut), dataToks = L.toks.filter(t=>t.x>=roomCut);
+      if(!nameToks.length && dataToks.length && dataToks.every(t=>/^[\d.]+$/.test(t.t.trim()))){
+        const T = out.dayTotals || {bf:"",lunch:"",dinner:"",table:""};
+        for(const t of dataToks){ const c = near(out.columns, t.x); if(c && !T[c.key]) T[c.key] = t.t.trim(); }
+        out.dayTotals = T; continue;
+      }
+      if(/Summe/i.test(text)){ const nums = words.filter(w=>/^[\d.]+$/.test(w)); out.summe = {bf:nums[0]||"", lunch:nums[1]||"", dinner:nums[2]||"", table:nums[3]||""}; continue; }
+      if(/Pers\./i.test(text) && /\//.test(text)){ const m = text.match(/([\d.]+\s*\/\s*[\d.]+\s*\/\s*[\d.]+)/); if(m) out.persLine = m[1].replace(/\s+/g,""); continue; }
+      if(!nameToks.length || !/^[A-Za-zΑ-Ωα-ω]/.test(nameToks[0].t.trim())) continue;
+      if(!dataToks.every(t=>/^(\d+(-\d+)?|\?)$/.test(t.t.trim()))) continue;
+      if(/^(Summe|Zeitraum|Pers)\b/i.test(nameToks.map(t=>t.t.trim()).join(" "))) continue;
+      const gluedRoom = (nameToks[nameToks.length-1].t.trim().match(/(\d+)$/)||[])[1] || "";
+      if(!dataToks.length && !gluedRoom) continue;
+      const row = {name:REDACT, room:gluedRoom, bf:"", lunch:"", dinner:"", table:""};
+      for(const t of dataToks){ const c = near(out.columns, t.x); if(!c) continue; if(c.key==="room"){ if(!row.room) row.room = t.t.trim(); } else row[c.key] = (row[c.key]?row[c.key]+" ":"") + t.t.trim(); }
+      out.rows.push(row);
+    }
+  }
+  return out;
+}
+function isBoardingList(p){ return !!(p && p.columns && p.rows && p.rows.length && (/Boarding List/i.test(p.title||"") || /^mealplandetail/.test(p.id||""))); }
 function parseReport(xmls){
   let section = null;
   const sections = {};          // name -> {rows:[], reported:null, group:null}
@@ -1641,7 +1709,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.55";
+const APP_VERSION = "1.17.56";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1762,6 +1830,9 @@ en: {
   "rep.none": "No departure list in {dir}. In protel, print the Departure List by Time to the Microsoft XPS Document Writer and save it there.",
   "rep.err": "Could not read {dir} — {e}",
   "rep.item": "Departure List by Time — {d}",
+  "rep.itemBoard": "Boarding List — {d}",
+  "rep.itemBoardSub": "{n} guest(s) · printed {p} · {f}",
+  "rep.pvTitleBoard": "Boarding list — names withheld",
   "rep.itemSub": "{n} room(s) · printed {p} · {f}",
   "rep.pvTitle": "Departure list — names withheld",
   "rep.withheld": "Guest names withheld",
@@ -2021,6 +2092,9 @@ gr: {
   "rep.none": "Καμία λίστα αναχωρήσεων στο {dir}. Στο protel, τύπωσε το Departure List by Time στον Microsoft XPS Document Writer και αποθήκευσέ το εκεί.",
   "rep.err": "Δεν ήταν δυνατή η ανάγνωση του {dir} — {e}",
   "rep.item": "Λίστα αναχωρήσεων — {d}",
+  "rep.itemBoard": "Boarding List — {d}",
+  "rep.itemBoardSub": "{n} άτομα · τυπώθηκε {p} · {f}",
+  "rep.pvTitleBoard": "Boarding list — χωρίς ονόματα",
   "rep.itemSub": "{n} δωμάτια · τυπώθηκε {p} · {f}",
   "rep.pvTitle": "Λίστα αναχωρήσεων — χωρίς ονόματα",
   "rep.withheld": "Χωρίς ονόματα πελατών",
@@ -6336,7 +6410,8 @@ async function repParse(f){
     const u8 = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
     const xmls = await unzipFpages(u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength));
     const p = parseDepList(xmls);
-    res = isDepList(p) ? {ok: true, parsed: p} : {ok: false};
+    if(isDepList(p)) res = {ok: true, parsed: p, kind: "dep"};
+    else { const bp = parseBoardingList(xmls); res = isBoardingList(bp) ? {ok: true, parsed: bp, kind: "board"} : {ok: false}; }
   }catch(e){ res = {ok: false, err: String((e && e.message) || e || "?")}; }
   /* ONLY SUCCESSES ARE REMEMBERED. A failure cached under path+mtime never expires, and
      the file is then skipped in silence for the rest of the session: a list read while the
@@ -6415,6 +6490,44 @@ function buildDepSheet(p, fname){
   /* the one line that is OURS and not protel's: it says the names were taken out on
      purpose, so nobody downstream reads the dashes as a fault in the report */
   h += '<div class="dlFoot">' + esc(t("rep.withheld")) + (fname ? " · " + esc(fname) : "") + "</div>";
+  sheet.innerHTML = h;
+  return h;
+}
+
+/* the redacted BOARDING sheet, in protel's own portrait layout (his file of 07/09): the
+   boxed three-cell header, the Name / # / Breakfast / Lunch / Dinner / Table columns, the
+   day sub-header with that day's totals, the guest rows with the name replaced by a dash,
+   and the Summe / Pers footer. Black and white; the guest column stays with a dash in every
+   cell (his choice, same as the departures sheet). Written into #printSheet like the others. */
+function buildBoardingSheet(p, fname){
+  const sheet = $("#printSheet");
+  const REDACT = "—";
+  const cols = [["room","#"],["bf","Breakfast"],["lunch","Lunch"],["dinner","Dinner"],["table","Table"]];
+  let h = '<div class="dlBox">';
+  h +=   '<div class="dlCell dlLeft"><div class="dlLbl">Print Date</div>'
+       +   '<div class="dlWhen"><span>' + esc(p.printed || "") + '</span></div>'
+       +   '<div class="dlRule"></div><div class="dlWhen"><span class="dlHms">protel</span><span class="dlHms">' + esc(p.printedShort || "") + '</span></div></div>';
+  h +=   '<div class="dlCell dlMid">' + (p.hotel ? '<div class="dlHotel">' + esc(p.hotel) + '</div>' : '')
+       +   '<div class="dlTitle">' + esc(p.title || "Boarding List") + '</div></div>';
+  h +=   '<div class="dlCell dlRight">' + (p.page ? '<div class="dlMeta">Σελίδα : <b>' + esc(p.page) + '</b></div>' : '')
+       +   (p.id ? '<div class="dlMeta">' + esc(p.id) + '</div>' : '')
+       +   (p.station ? '<div class="dlMeta">Station ' + esc(p.station) + '</div>' : '') + '</div>';
+  h += '</div>';
+  h += '<div class="blGroup">(Pers.  Arrivals / Departures / Inhouse)</div>';
+  h += '<table class="dlTbl blTbl"><thead><tr><th>Name</th>' + cols.map(c => '<th class="num">' + esc(c[1]) + '</th>').join("") + '</tr></thead><tbody>';
+  if(p.dayLabel){
+    const dt = p.dayTotals || {};
+    h += '<tr class="dlGrp"><td>' + esc(p.dayLabel) + (p.dayArrDep ? '  <span style="font-weight:400">' + esc(p.dayArrDep) + '</span>' : '') + '</td>'
+       + '<td class="num"></td><td class="num"><b>' + esc(dt.bf || "") + '</b></td><td class="num"><b>' + esc(dt.lunch || "") + '</b></td><td class="num"><b>' + esc(dt.dinner || "") + '</b></td><td class="num"><b>' + esc(dt.table || "") + '</b></td></tr>';
+  }
+  for(const r of p.rows){
+    h += '<tr><td class="dlOut">' + REDACT + '</td>'
+       + '<td class="num">' + esc(r.room) + '</td><td class="num">' + esc(r.bf) + '</td><td class="num">' + esc(r.lunch) + '</td><td class="num">' + esc(r.dinner) + '</td><td class="num">' + esc(r.table) + '</td></tr>';
+  }
+  h += '</tbody></table>';
+  if(p.summe) h += '<div class="dlTot">Summe fur Zeitraum : Breakfast <b>' + esc(p.summe.bf) + '</b>&nbsp;&nbsp;Lunch <b>' + esc(p.summe.lunch) + '</b>&nbsp;&nbsp;Dinner <b>' + esc(p.summe.dinner) + '</b>' + ((p.dayTotals && p.dayTotals.table) ? '&nbsp;&nbsp;Table <b>' + esc(p.dayTotals.table) + '</b>' : '') + '</div>';
+  if(p.persLine) h += '<div class="dlTot">Pers.  Arrivals / Departures / Inhouse : <b>' + esc(p.persLine) + '</b></div>';
+  h += '<div class="dlFoot">' + esc(t("rep.withheld")) + (fname ? " · " + esc(fname) : "") + '</div>';
   sheet.innerHTML = h;
   return h;
 }
@@ -6514,29 +6627,38 @@ async function renderReports(){
     if(!r.ok) continue;
     const p = r.parsed;
     const b = el("button", "mItem primary");
-    b.append(el("span", "mLabel", t("rep.item", {d: p.listDate || "?"})));
-    b.append(el("span", "mSub", t("rep.itemSub", {n: p.guests, p: p.printed || "?", f: f.name})));
-    b.onclick = () => openDepPreview(f, p);
+    if(r.kind === "board"){
+      b.append(el("span", "mLabel", t("rep.itemBoard", {d: (p.dayLabel || p.printedShort || "?")})));
+      b.append(el("span", "mSub", t("rep.itemBoardSub", {n: p.rows.length, p: p.printed || "?", f: f.name})));
+    } else {
+      b.append(el("span", "mLabel", t("rep.item", {d: p.listDate || "?"})));
+      b.append(el("span", "mSub", t("rep.itemSub", {n: p.guests, p: p.printed || "?", f: f.name})));
+    }
+    b.onclick = () => openDepPreview(f, p, r.kind);
     box.append(b);
     shown++;
   }
   if(!shown && !dirs.length) note("rep.none", {dir: res.dir + (here ? " / " + here : "")});
 }
-function openDepPreview(f, p){
-  buildDepSheet(p, f.name);
+function openDepPreview(f, p, kind){
+  const board = kind === "board";
+  if(board) buildBoardingSheet(p, f.name); else buildDepSheet(p, f.name);
   openModal(`
-    <h3>${esc(t("rep.pvTitle"))}</h3>
+    <h3>${esc(t(board ? "rep.pvTitleBoard" : "rep.pvTitle"))}</h3>
     <div id="pvPaper">${$("#printSheet").innerHTML}</div>
     <div class="actions">
       <button class="btn" id="pvCancel">${esc(t("pv.cancel"))}</button>
       <button class="btn" id="repDel">${esc(t("rep.delete"))}</button>
       <button class="btn amber" id="pvGo">${esc(t("pv.print"))}</button>
     </div>`);
-  $("#modal").classList.add("wide", "land");
+  /* the departures sheet is landscape, so its preview is wide; the boarding sheet is
+     portrait (protel prints it so), so it keeps the ordinary wide-modal width. */
+  $("#modal").classList.add("wide"); if(!board) $("#modal").classList.add("land");
   $("#pvCancel").onclick = () => { clearPrintJob(); closeModal(); };
-  /* ARM the departures sheet for this one print. beforeprint rebuilds it from the job —
-     see the listener below for why it is not enough to have written #printSheet already. */
-  $("#pvGo").onclick = () => { PRINT_JOB = {kind: "dep", p: p, fname: f.name}; closeModal(); setTimeout(() => window.print(), 80); };
+  /* ARM the sheet for this one print. beforeprint rebuilds it from the job — see the
+     listener below for why it is not enough to have written #printSheet already. The kind
+     also decides the page orientation there: "dep" landscape, "board" portrait. */
+  $("#pvGo").onclick = () => { PRINT_JOB = {kind: board ? "board" : "dep", p: p, fname: f.name}; closeModal(); setTimeout(() => window.print(), 80); };
   $("#repDel").onclick = async () => {
     clearPrintJob();
     if(!confirm(t("rep.deleteQ", {f: f.name}))) return;
@@ -6591,6 +6713,7 @@ $("#printBtn").onclick = printCorrections;
    on the REPORTS screen, which is the harmless direction of the two. */
 window.addEventListener("beforeprint", () => {
   if(document.body.classList.contains("taxPrint")){ setPrintLandscape(false); return; }   // the tax half prints its own mount, portrait
+  if(PRINT_JOB && PRINT_JOB.kind === "board"){ setPrintLandscape(false); buildBoardingSheet(PRINT_JOB.p, PRINT_JOB.fname); return; }
   if(PRINT_JOB && PRINT_JOB.kind === "dep"){ setPrintLandscape(true); buildDepSheet(PRINT_JOB.p, PRINT_JOB.fname); return; }
   setPrintLandscape(false);
   if(MODEL) buildPrintSheet(true);
