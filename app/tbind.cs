@@ -2303,6 +2303,12 @@ static class TBind {
     new System.Collections.Generic.Dictionary<string,string>();
   static readonly System.Collections.Generic.Dictionary<string,int> evLastAt =
     new System.Collections.Generic.Dictionary<string,int>();
+  const int EV_RETRY_MS  = 400;    // a list shown before protel drew its rows: try again this soon
+  const int EV_MAX_TRIES = 12;     // ... up to this many times (a window still open ~5 s), then give up
+  static readonly System.Collections.Generic.Dictionary<string,int> evReadyAt =
+    new System.Collections.Generic.Dictionary<string,int>();          // tag -> earliest tick to (re)try an empty read
+  static readonly System.Collections.Generic.Dictionary<string,int> evTries =
+    new System.Collections.Generic.Dictionary<string,int>();          // tag -> empty-read attempts so far
   /* Which of the four a caption names, or "" for anything else. Same normalisation the
      hunt uses, so the two can never disagree about what a window is. */
   static string TagOfCaption(string cap){
@@ -2344,27 +2350,43 @@ static class TBind {
          here was lost to a restatement of some other window. */
       string tag = null, cap = null;
       foreach(System.Collections.Generic.KeyValuePair<string,string> kv in evWant){
-        int last;
-        if(evLastAt.TryGetValue(kv.Key, out last) && now - last < EV_COOLDOWN_MS) continue;
+        int last, ready;
+        if(evLastAt.TryGetValue(kv.Key, out last) && now - last < EV_COOLDOWN_MS) continue;   // cooling after a success
+        if(evReadyAt.TryGetValue(kv.Key, out ready) && now < ready) continue;                 // waiting to retry an empty read
         tag = kv.Key; cap = kv.Value; break;
       }
-      if(tag == null) return;                              // every pending request is cooling
+      if(tag == null) return;                              // every pending request is cooling or waiting to retry
       bool open = evWantOpen.ContainsKey(tag) && evWantOpen[tag];
-      evWant.Remove(tag); evWantOpen.Remove(tag);
       string had;
       /* a restatement of the caption already taken says nothing new; an OPEN does */
-      if(!open && evLastCap.TryGetValue(tag, out had) && had == cap) return;
-      evLastAt[tag] = now;
+      if(!open && evLastCap.TryGetValue(tag, out had) && had == cap){
+        evWant.Remove(tag); evWantOpen.Remove(tag); evReadyAt.Remove(tag); evTries.Remove(tag);
+        return;
+      }
       READ = new StringBuilder();
       ReadTagged(tag, 2000);
       string body = READ.ToString();
       READ = new StringBuilder();
-      /* only a read that actually produced rows replaces what is on disk */
-      if(body.IndexOf("\n" + tag + "\t") >= 0 || body.StartsWith(tag + "\t")){
-        evLastCap[tag] = cap;
+      bool gotRows = (body.IndexOf("\n" + tag + "\t") >= 0 || body.StartsWith(tag + "\t"));
+      if(gotRows){
+        /* the read succeeded: take it, mark the caption taken, and cool this list for four
+           seconds so the open window restating its caption is not re-read. */
+        evWant.Remove(tag); evWantOpen.Remove(tag); evReadyAt.Remove(tag); evTries.Remove(tag);
+        evLastAt[tag] = now; evLastCap[tag] = cap;
         WriteList(tag, body);
         AppendWatch(DateTime.Now.ToString("HH:mm:ss") + "  READ   " + tag
                     + "  title=\"" + cap + "\"\r\n");
+      } else {
+        /* THE READ CAME BACK EMPTY, and that used to end it: the request was consumed and a
+           four-second cooldown started, so a list shown before protel drew its rows was read
+           once, found empty and never tried again while the window sat open. His moves dialog
+           of 07/09 opened, was read ~100 ms later before its rows existed, and the alert only
+           appeared when he reopened it. Now an empty read is NOT a success: no cooldown, the
+           request stays armed, and it is retried soon a bounded number of times while the
+           window is still open, then given up so a genuinely empty list is not read for ever. */
+        int tr = 0; evTries.TryGetValue(tag, out tr); tr++;
+        if(tr >= EV_MAX_TRIES){ evWant.Remove(tag); evWantOpen.Remove(tag); evReadyAt.Remove(tag); evTries.Remove(tag); }
+        else { evTries[tag] = tr; evReadyAt[tag] = now + EV_RETRY_MS; }   // evWant / evWantOpen stay armed
       }
     }catch(Exception e){ WriteCrash("evread", e); }
   }
@@ -2483,6 +2505,7 @@ static class TBind {
           bool was = evWantOpen.ContainsKey(tg) && evWantOpen[tg];
           evWantOpen[tg] = (evWant.TryGetValue(tg, out had) && had == t) ? (was || open) : open;
           evWant[tg] = t;
+          if(open){ evReadyAt.Remove(tg); evTries.Remove(tg); }   // a real open reads promptly, not behind a stale retry
         }
       }
       bool windowish = top || cls.ToString() == "OWL_Window" || cls.ToString() == "#32770";
@@ -2706,7 +2729,7 @@ static class TBind {
     }catch(Exception){}
   }
 
-  const string VER = "v28";
+  const string VER = "v29";
 
   static int Main(string[] args){
     int parentPid;

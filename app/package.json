@@ -1,7 +1,7 @@
 {
   "name": "reccheck",
   "productName": "RecCheck",
-  "version": "1.17.52",
-  "description": "Nightly POS receipt audit — protel checkcharge1",
+  "version": "1.17.57",
+  "description": "Nightly POS receipt audit \u2014 protel checkcharge1",
   "main": "main.js"
 }
