@@ -15,6 +15,7 @@ const line = re => { const m = src.match(re); if(!m) throw new Error(String(re))
 const PARSE = [line(/^const SPLIT_GAP = .*$/m), line(/^const DEFAULT_ADV = .*$/m), line(/^const DEPLIST_HEAD = [\s\S]*?\];$/m),
   lift("xmlDecode"), lift("parseIndices"), lift("pageTokens"), lift("parseDepList"), lift("isDepList")].join("\n");
 const parse = xmls => new Function("xmls", PARSE + "\nreturn {p: parseDepList(xmls), is: isDepList(parseDepList(xmls))};")(xmls);
+const BOARD = [line(/^const SPLIT_GAP = .*$/m), line(/^const DEFAULT_ADV = .*$/m), lift("xmlDecode"), lift("parseIndices"), lift("pageTokens"), lift("parseBoardingList"), lift("isBoardingList"), lift("esc"), lift("buildBoardingSheet")].join("\n");
 
 let bad = 0;
 const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok?"ok  ":"FAIL") + "  " + l); };
@@ -129,6 +130,44 @@ ck("a report of one profile is not removable through another",      hub.trashabl
 ck("the three profiles files.js knows are dept, tax and rep",       hub.norm("dept") === "dept" && hub.norm("tax") === "tax" && hub.norm("rep") === "rep");
 ck("no profile at all still means the Department Check",            hub.norm(undefined) === "dept" && hub.norm(null) === "dept");
 hub.stopWatch();
+
+
+/* ---- the Boarding List: names out, room/counts in, glued room peeled, range and "?" kept ---- */
+const BG = (x, y, str) => `<Glyphs OriginX="${x}" OriginY="${y}" FontRenderingEmSize="10" UnicodeString="${String(str).replace(/&/g,"&amp;").replace(/"/g,"&quot;")}" />`;
+const bpage = "<FixedPage>" + [
+  BG(336,86,"Kernos Hotel, GR-70007 Malia"), BG(635,86,"Page :"), BG(695,86,"1"),
+  BG(58,94,"Printdate: 7/9/2026  03:55"),
+  BG(613,118,"mealplandetail 24.010  S"), BG(392,130,"Boarding List"),
+  BG(58,134,"protel"), BG(186,134,"7/9/2026"), BG(617,134,"Station 220067"),
+  BG(262,193,"Breakfast"), BG(354,193,"Lunch"), BG(432,193,"Dinner"), BG(689,193,"Table"),
+  BG(58,207,"Name"), BG(230,207,"#"),
+  BG(51,229,"Δευ,"), BG(90,229,"07. Σεπ. 2026"), BG(665,229,"54/39"),
+  BG(297,246,"266"), BG(391,246,"6"), BG(465,246,"562"), BG(670,246,"552"),
+  BG(58,262,"ALPHA BETA"), BG(208,262,"201"), BG(294,262,"1"), BG(453,262,"1"),
+  BG(58,276,"GAMMADELTA277"), BG(291,276,"1"), BG(450,276,"2"),
+  BG(58,290,"EPSILON ZETA"), BG(210,290,"414-15"), BG(300,290,"1"), BG(460,290,"2"),
+  BG(58,304,"THETA IOTA"), BG(210,304,"?"), BG(456,304,"2"),
+  BG(48,340,"Summe fur Zeitraum"), BG(297,340,"266"), BG(389,340,"6"), BG(464,340,"562"),
+  BG(45,360,"Pers.  Arrivals / Departures / Inhouse"), BG(656,360,"270 / 195 / 2.760"),
+].join("") + "</FixedPage>";
+const bfn = new Function("xmls", BOARD + "\nreturn {p: parseBoardingList(xmls), is: isBoardingList(parseBoardingList(xmls))};");
+const bres = bfn([bpage]); const bp = bres.p;
+ck("it is recognised as a boarding list",                     bres.is === true && bp.title === "Boarding List" && bp.id === "mealplandetail");
+ck("the header: hotel, page, station, the print date",        bp.hotel === "Kernos Hotel, GR-70007 Malia" && bp.page === "1" && bp.station === "220067" && /7\/9\/2026/.test(bp.printed) && bp.printedShort === "7/9/2026");
+ck("the day sub-header and its arrivals/departures",          bp.dayLabel === "Δευ, 07. Σεπ. 2026" && bp.dayArrDep === "54/39");
+ck("the day totals, and the Pers. footer",                    bp.dayTotals && bp.dayTotals.bf === "266" && bp.dayTotals.dinner === "562" && bp.persLine === "270/195/2.760");
+ck("four guest rows, every name replaced by the dash",        bp.rows.length === 4 && bp.rows.every(r => r.name === "—"));
+ck("a plain room, kept; its meal counts in their columns",    bp.rows[0].room === "201" && bp.rows[0].bf === "1" && bp.rows[0].dinner === "1" && bp.rows[0].lunch === "" && bp.rows[0].table === "");
+ck("a name glued to the room: the room is peeled back off",   bp.rows[1].room === "277" && bp.rows[1].bf === "1" && bp.rows[1].dinner === "2");
+ck("an adjoining-room range is kept whole",                   bp.rows[2].room === "414-15");
+ck("an unallocated room stays '?'",                            bp.rows[3].room === "?");
+const bsheetEl = {innerHTML: ""};
+const bhtml = new Function("p", "fname", "$", "t", BOARD + "\nreturn buildBoardingSheet(p, fname);")(bp, "boarding.oxps", () => bsheetEl, t);
+ck("the sheet is written into the print sheet",               bsheetEl.innerHTML === bhtml && bhtml.length > 400);
+ck("NO fixture guest name anywhere on the boarding sheet",    !/ALPHA|BETA|GAMMA|DELTA|EPSILON|ZETA|THETA|IOTA/.test(bhtml));
+ck("no Name value column — only the dash under Name",          !/>ALPHA/.test(bhtml) && (bhtml.match(/class="dlOut">—</g) || []).length === 4);
+ck("the boarding sheet keeps the room, the counts, the totals", /201/.test(bhtml) && /277/.test(bhtml) && /414-15/.test(bhtml) && /Boarding List/.test(bhtml) && /Summe fur Zeitraum/.test(bhtml));
+
 
 console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");
 process.exit(bad ? 1 : 0);
