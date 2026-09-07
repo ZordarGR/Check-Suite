@@ -557,6 +557,10 @@ body.hasMoves main{max-width:1330px}
   max-height:calc(100vh - 32px);overflow-y:auto;overscroll-behavior:contain;
   box-shadow:0 24px 60px rgba(0,0,0,.7)}
 #modal.wide{width:min(780px,94vw)}
+/* the departures preview is a LANDSCAPE page: show it as one, or the preview and the paper
+   disagree about the shape of the thing — which is the one disagreement this release has
+   spent two versions removing */
+#modal.land{width:min(1180px,96vw)}
 /* The 1.17.4-1.17.5 work made the HOME SCREEN flow into columns and fixed the modal's
    HEIGHT; dialog WIDTH was never in scope, so this one stayed a 420 px strip with a
    scrollbar on a wide window. The cards flow now, the same way the checklist does. */
@@ -730,6 +734,16 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
   html,body{height:auto !important;min-height:0 !important;overflow:visible !important}
   body{background:#fff !important;margin:0;padding:0}
   @page{margin:12mm}
+  /* PROTEL PRINTS THIS REPORT LANDSCAPE, and the orientation IS the layout — thirteen
+     columns do not belong on a portrait page. His words, 07/09: "i give you a landscape,
+     why is it portrait?". A NAMED page (`@page dlLand; #printSheet{page:dlLand}`) was tried
+     and does NOT hold: the element computes `page:dlLand` correctly and Chromium's own
+     print still falls back to portrait Letter — verified by rendering the real sheet to
+     PDF. So the ORIENTATION is set the way the SHEET is chosen: `setPrintLandscape()`
+     writes a GLOBAL `@page{size:A4 landscape}` into a style element the beforeprint
+     listener toggles — landscape for the departures sheet, cleared (portrait) for the
+     corrections and the Tax Check, which is where a narrow list belongs. A global @page
+     is honoured where a named one is not. */
   header,main,#landing,#modalBg,#toast,#updateBtn,#updBox,#rail,#drawer,#taxScreen,#helpPanel,#helpTab{display:none !important}
   /* THERE ARE EXACTLY TWO PRINT ROOTS AND EACH HIDES THE OTHER. #print-mount is the tax
      half's sheet; it was hidden only by `@media screen{#print-mount{display:none}}`, a
@@ -1627,7 +1641,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.54";
+const APP_VERSION = "1.17.55";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -5042,7 +5056,7 @@ function openRowMenu(anchor, r){
 
 /* ---------- modal ---------- */
 function openModal(html){ const bg = $("#modalBg"); $("#modal").innerHTML = html; bg.classList.add("open"); }
-function closeModal(){ $("#modalBg").classList.remove("open"); $("#modal").classList.remove("wide", "cards"); armEnterGuard(); $("#snInput").focus(); }
+function closeModal(){ $("#modalBg").classList.remove("open"); $("#modal").classList.remove("wide", "cards", "land"); armEnterGuard(); $("#snInput").focus(); }
 $("#modalBg").addEventListener("click", e => { if(e.target.id === "modalBg") closeModal(); });
 /* every prompt: Enter = its default (amber) button, Esc = cancel/close */
 function modalDefaultBtn(){
@@ -6417,7 +6431,18 @@ let PRINT_JOB = null;          // {kind:"dep", p, fname} — armed only by REPOR
    class is added and window.print() called in the same synchronous statement, so no screen
    change, Cancel, Delete or corrections print can land between them.
    Found by the second audit, 06/09. */
-function clearPrintJob(){ PRINT_JOB = null; document.body.classList.remove("taxPrint"); }
+function clearPrintJob(){ PRINT_JOB = null; document.body.classList.remove("taxPrint"); setPrintLandscape(false); }
+/* The ONE place a print's page orientation is decided. A global @page — written into a
+   style element appended to <head>, so it is last in the cascade and its `size` wins over
+   the app's two portrait `@page{margin:12mm}` rules. Empty = portrait (the departures
+   report is the only landscape thing in the app). Set by the beforeprint listener from the
+   same intent that chooses the sheet, cleared by clearPrintJob so no print inherits the
+   last one's shape. */
+function setPrintLandscape(on){
+  let st = document.getElementById("dlOrient");
+  if(!st){ st = document.createElement("style"); st.id = "dlOrient"; document.head.appendChild(st); }
+  st.textContent = on ? "@media print{@page{size:A4 landscape;margin:10mm}}" : "";
+}
 let REP_RUN = 0;               // only the newest render may paint — see renderReports
 /* REPORTS walks sub-folders the way the Department Check's and the Tax Check's browsers
    do — his ask, 06/09: "i want to be able to see subfolders also, like dep and tax
@@ -6507,7 +6532,7 @@ function openDepPreview(f, p){
       <button class="btn" id="repDel">${esc(t("rep.delete"))}</button>
       <button class="btn amber" id="pvGo">${esc(t("pv.print"))}</button>
     </div>`);
-  $("#modal").classList.add("wide");
+  $("#modal").classList.add("wide", "land");
   $("#pvCancel").onclick = () => { clearPrintJob(); closeModal(); };
   /* ARM the departures sheet for this one print. beforeprint rebuilds it from the job —
      see the listener below for why it is not enough to have written #printSheet already. */
@@ -6565,8 +6590,9 @@ $("#printBtn").onclick = printCorrections;
    printCorrections. So a stale job can only mean the departures sheet while he is standing
    on the REPORTS screen, which is the harmless direction of the two. */
 window.addEventListener("beforeprint", () => {
-  if(document.body.classList.contains("taxPrint")) return;    // the tax half prints its own mount
-  if(PRINT_JOB && PRINT_JOB.kind === "dep"){ buildDepSheet(PRINT_JOB.p, PRINT_JOB.fname); return; }
+  if(document.body.classList.contains("taxPrint")){ setPrintLandscape(false); return; }   // the tax half prints its own mount, portrait
+  if(PRINT_JOB && PRINT_JOB.kind === "dep"){ setPrintLandscape(true); buildDepSheet(PRINT_JOB.p, PRINT_JOB.fname); return; }
+  setPrintLandscape(false);
   if(MODEL) buildPrintSheet(true);
 });
 document.addEventListener("keydown", e => {
