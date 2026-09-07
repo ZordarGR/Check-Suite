@@ -52,6 +52,7 @@ const PAGE = "<FixedPage>" + [
 const {p, is} = parse([PAGE]);
 ck("it is a departure list",                                  is === true);
 ck("the report id, the title, the list date and the station", p.id === "departroom1time" && p.title === "Departure List by Time" && p.listDate === "06/09/26" && p.station === "219691");
+ck("the hotel and the page, off the line protel shares between them", p.hotel === "Kernos Hotel, GR-70007 Malia" && p.page === "1");
 ck("the print date and time, as printed",                     p.printed === "Κυριακή, 6 Σεπτέμβριος 2026 07:06");
 ck("the columns come from the heading line, thirteen of them", p.columns && p.columns.length === 13 && p.columns.map(c => c.key).join(",") === "room,qty,req,guest,arr,adults,eb,child,bc,rate,board,price,vip");
 ck("three groups: no time, 16:35, 16:55",                     p.groups.length === 3 && p.groups.map(g => g.time).join("|") === "|16:35|16:55");
@@ -76,12 +77,20 @@ const html = new Function("p", "fname", "$", "t", SHEET + "\nreturn buildDepShee
 ck("the sheet is written into the print sheet",               sheetEl.innerHTML === html && html.length > 500);
 ck("no guest name anywhere on it",                            !/ALPHA|BETA|GAMMA|DELTA|EPSILON|ZETA|ETA\/THETA|IOTA|KAPPA/.test(html));
 ck("nor the fragment protel printed in the name's place",     !/>TA</.test(html) && !/\bTA\b/.test(html.replace(/<[^>]+>/g, " ")));
-ck("no Πελάτης heading",                                      !/Πελάτης/.test(html) && /Δωμάτιο/.test(html) && /Άφιξη/.test(html) && /Όροι/.test(html));
-ck("the title carries the list date, the meta says names are withheld and when it was printed", /Departure List by Time — 06\/09\/26/.test(html) && /Guest names withheld/.test(html) && /printed Κυριακή, 6 Σεπτέμβριος 2026 07:06/.test(html));
-ck("the groups carry their time, the first one says it has none", /ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ — no departure time/.test(html) && /ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ 16:35/.test(html) && /ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ 16:55/.test(html));
-ck("every room, its type, arrival, board and rate",           /201/.test(html) && /SPMV/.test(html) && /01\/09\/26/.test(html) && />HB</.test(html) && />FB</.test(html) && /218,00/.test(html) && /250,80/.test(html) && />73 /.test(html) && /BGV/.test(html));
+/* HIS CHOICE, 07/09: the guest column STAYS, with a dash in every cell, so a reader sees
+   a name was removed rather than never printed. The heading is therefore present and the
+   count of markers must equal the count of rows — a missing marker would be a row whose
+   name simply vanished, which looks like protel printed nothing there. */
+ck("the Πελάτης heading stays, with every other heading",     /Πελάτης/.test(html) && /Δωμάτιο/.test(html) && /Άφιξη/.test(html) && /Όροι/.test(html) && /Τιμοκατάλογος/.test(html));
+ck("every guest cell is redacted, one marker per row",        (html.match(/class="dlOut">—</g) || []).length === 6);
+ck("protel's own header block, read off the file",            /Ημερομηνία Εκτύπωσης/.test(html) && /Kernos Hotel, GR-70007 Malia/.test(html) && /departroom1time/.test(html) && /Station 219691/.test(html) && /PROTEL HMS/.test(html));
+ck("the print date and its time in their own places",         /<span>Κυριακή, 6 Σεπτέμβριος 2026<\/span>/.test(html) && /class="dlTime">07:06</.test(html));
+ck("the title, and the departure date centred under the box", /class="dlTitle">Departure List by Time</.test(html) && /Ημερομηνία Αναχώρησης : <b>06\/09\/26<\/b>/.test(html));
+ck("the sheet still says the names were taken out on purpose", /Guest names withheld/.test(html) && /dep\.oxps/.test(html));
+ck("the groups carry their time, the first one protel's own \":\"", /ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ  :/.test(html) && /ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ  16:35/.test(html) && /ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ  16:55/.test(html));
+ck("every room, its type, arrival, board and rate",           /class="dlRoom">201</.test(html) && /SPMV/.test(html) && /01\/09\/26/.test(html) && />HB</.test(html) && />FB</.test(html) && /218,00/.test(html) && /250,80/.test(html) && /class="dlRoom">73</.test(html) && /BGV/.test(html));
 ck("the notes under their rooms",                             /FULLY PREPAID!!!/.test(html) && /asked to extend 1 night/.test(html) && /FB RATE OK!!/.test(html));
-ck("the totals",                                              /Ατόμων: <b>18<\/b>/.test(html) && /Δωματίων: <b>9<\/b>/.test(html));
+ck("the totals",                                              /Ατόμων : <b>18<\/b>/.test(html) && /Δωματίων : <b>9<\/b>/.test(html));
 ck("and it is escaped",                                       !/<script/i.test(html) && /&amp;/.test(new Function("p","fname","$","t", SHEET + "\nreturn buildDepSheet(p, fname);")(Object.assign({}, p, {station: "a&b"}), "x", () => ({}), t)));
 
 /* ---- the delete door: only a report file inside the reports folder ---- */

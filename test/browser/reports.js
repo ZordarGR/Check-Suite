@@ -207,7 +207,12 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
   await p.evaluate(dep => window.__t.openDepPreview({name: "dep.oxps", path: "D:\\reports\\dep.oxps", mtimeMs: Date.now()}, dep), DEP);
   await p.waitForTimeout(120);
   const pv = await p.evaluate(() => (document.querySelector("#pvPaper") || {}).innerHTML || "");
-  ck("the preview shows the departures sheet, no guest name", /Departure List by Time/.test(pv) && !/ALPHA/.test(pv) && !/Πελάτης/.test(pv));
+  /* his choice, 07/09: the Πελάτης heading STAYS and every cell under it is a dash, so a
+     reader sees a name was removed rather than never printed. The name itself never appears. */
+  ck("the preview shows the departures sheet, no guest name", /Departure List by Time/.test(pv) && !/ALPHA/.test(pv));
+  ck("the preview keeps the Πελάτης heading and redacts its cells",
+     /Πελάτης/.test(pv) && (pv.match(/class="dlOut">—</g) || []).length === 1);
+  ck("the preview carries protel's own header block",         /Ημερομηνία Εκτύπωσης/.test(pv) && /Ημερομηνία Αναχώρησης/.test(pv) && /ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ/.test(pv));
 
   await p.click("#pvGo");
   await p.waitForTimeout(300);
@@ -215,7 +220,8 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
   ck("Print actually printed",                               sheet.printed === 3);
   ck("what prints is the DEPARTURES sheet",                  /Departure List by Time/.test(sheet.html) && /06\/09\/26/.test(sheet.html));
   ck("... and not the corrections",                          !/ΔΙΟΡΘΩΣ/i.test(sheet.html) && !/12345/.test(sheet.html));
-  ck("... still with no guest name on it",                   !/ALPHA/.test(sheet.html) && !/Πελάτης/.test(sheet.html));
+  ck("... still with no guest name on it",                   !/ALPHA/.test(sheet.html));
+  ck("... with the column kept and every cell redacted",      /Πελάτης/.test(sheet.html) && (sheet.html.match(/class="dlOut">—</g) || []).length === 1);
 
   /* THE SHEET MUST NOT DEPEND ON THE ENGINE'S EVENT PAIRING. A preview re-rendered
      mid-print (paper size or margins changed) can fire beforeprint, afterprint and
