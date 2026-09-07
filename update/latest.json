@@ -1,11 +1,11 @@
 {
-  "version": "1.17.54",
+  "version": "1.17.55",
   "type": "html",
   "engine": "1.17.52",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.52/RecCheck-Setup.exe",
   "setupSha256": "83861ea3c98c4ca4064766b709f72a6963adf9b3ce305dc7e06ac1454bbcbab5",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "1e6640336cb17ea53696f3da332d5d735180c51a1f864b8f6e6e8624b223a1a0",
-  "notes": "The redacted departures print now uses protel's own layout — the boxed header, the centred departure date, the grey departure-time bands and the borderless rows — in black and white.\n\nThe guest column stays where protel puts it, with a dash in every cell, so whoever reads the sheet can see a name was taken out rather than never printed. No name reaches the paper."
+  "sha256": "8d4c92b3c9f68af334b88700e2376ce9d8b736338b14c52d91473476ac9dab24",
+  "notes": "The redacted departures print now comes out landscape, the way protel prints it — thirteen columns do not fit a portrait page. Only that sheet is landscape; the corrections and the Tax Check stay portrait."
 }
