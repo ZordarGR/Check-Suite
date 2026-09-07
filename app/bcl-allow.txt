@@ -865,3 +865,9 @@ watchNeedle
 WatchTarget
 IsDigit
 ResidentVer
+
+# 1.17.57 — the empty-read retry in EvServiceReads (our own names, not BCL)
+EV_MAX_TRIES
+EV_RETRY_MS
+evReadyAt
+evTries

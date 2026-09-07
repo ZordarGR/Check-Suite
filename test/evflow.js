@@ -64,7 +64,7 @@ const rig = `
   static void Ck(string l, bool ok){ if(!ok) bad++; Console.WriteLine("  " + (ok ? "ok  " : "FAIL") + "  " + l); }
   static void Fire(uint ev, int h){ WinEventCallback(IntPtr.Zero, ev, new IntPtr(h), OBJID_WINDOW, 0, 0, 0); }
   static int Main(string[] args){
-    const int FRAME = 10, DP = 11, STATIC = 12, BTN = 13, IH = 14;
+    const int FRAME = 10, DP = 11, STATIC = 12, BTN = 13, IH = 14, MVW = 15;
     FAKE.win[new IntPtr(FRAME)]  = new string[]{"FO", "Kernos Hotel  protel Hotel Management Suite 2024", "10"};
     FAKE.win[new IntPtr(DP)]     = new string[]{"OWL_Window", "Departure Report for 05/09/26", "10"};
     FAKE.win[new IntPtr(STATIC)] = new string[]{"Static", "Amount:", "10"};
@@ -73,22 +73,23 @@ const rig = `
     FAKE.rows["DP"] = new string[0];                       // shown before protel filled it
     FAKE.rows["IH"] = new string[]{"A\\t101\\t2/0/0/0/0\\t01/09/26\\t07/09/26\\tCI"};
 
-    /* 1. a report shown empty: read once, nothing written, not marked taken */
+    /* 1. a report shown before protel has drawn its rows: read once, empty, nothing
+          written, not marked taken — and the request STAYS ARMED to retry. This is the
+          07/09 moves fault: an empty read used to be consumed and a four-second cooldown
+          started, so a slow-drawing window was read once and never again while it sat open. */
     Fire(EVENT_OBJECT_SHOW, DP); EvServiceReads();
     Ck("a shown report is read", FAKE.reads.Count == 1 && FAKE.reads[0] == "DP");
     Ck("an empty read writes no file", FAKE.written.Count == 0);
     Ck("and is not marked as taken", !evLastCap.ContainsKey("DP"));
+    Ck("the request stays armed to retry, not consumed", evWant.ContainsKey("DP"));
+    FAKE.now += 100; EvServiceReads();
+    Ck("it is not retried before the retry delay", FAKE.reads.Count == 1);
 
-    /* 2. protel fills it and restates the caption after control churn (v25: the capture
-          is written before the log's de-dupe can return) */
+    /* 2. THE FIX: protel fills the rows and the retry captures it on its own — no reopen,
+          no restatement, just the window staying open past the retry delay. */
     FAKE.rows["DP"] = new string[]{"BAUMGARTNER ROLF\\t534\\t2/0/0/0/0\\t26/08/26\\tCO"};
-    Fire(EVENT_OBJECT_NAMECHANGE, STATIC); Fire(EVENT_OBJECT_NAMECHANGE, BTN);
-    Fire(EVENT_OBJECT_NAMECHANGE, DP);
-    Ck("a restatement of an untaken caption arms the read, whatever the log did", evWant.ContainsKey("DP"));
-    FAKE.now += 1000; EvServiceReads();
-    Ck("inside the cooldown the request waits", FAKE.reads.Count == 1 && evWant.ContainsKey("DP"));
-    FAKE.now += 4000; EvServiceReads();
-    Ck("and is served once the cooldown has passed", FAKE.reads.Count == 2 && FAKE.written.Count == 1);
+    FAKE.now += EV_RETRY_MS + 1; EvServiceReads();
+    Ck("the retry reads it once the rows exist, on its own", FAKE.reads.Count == 2 && FAKE.written.Count == 1);
     Ck("a read with rows marks the caption taken", evLastCap.ContainsKey("DP"));
     Ck("and the request is cleared", evWant.Count == 0);
 
@@ -155,6 +156,16 @@ const rig = `
     System.IO.File.WriteAllText(bp, "# nothing picked\\r\\n");
     LoadBinds();
     Ck("nothing picked, nothing watched", WatchTarget() == null);
+
+    /* 9. a genuinely empty list (a moves dialog with no moves) retries a bounded number
+          of times and then gives up — it is not read for ever, so protel is not hammered. */
+    FAKE.win[new IntPtr(MVW)] = new string[]{"#32770", "Perform Move for Date 07/09/26", "10"};
+    FAKE.rows["MV"] = new string[0];
+    FAKE.reads.Clear(); FAKE.written.Clear();
+    evWant.Clear(); evWantOpen.Clear(); evReadyAt.Clear(); evTries.Clear();
+    Fire(EVENT_OBJECT_SHOW, MVW);
+    for(int i = 0; i < EV_MAX_TRIES + 5; i++){ EvServiceReads(); FAKE.now += EV_RETRY_MS + 1; }
+    Ck("an always-empty list stops after EV_MAX_TRIES reads", FAKE.reads.Count == EV_MAX_TRIES && !evWant.ContainsKey("MV"));
 
     Console.WriteLine(bad > 0 ? "\\n" + bad + " FAILURES" : "\\nall pass");
     return bad > 0 ? 1 : 0;

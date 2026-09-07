@@ -1709,7 +1709,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.56";
+const APP_VERSION = "1.17.57";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1812,17 +1812,6 @@ en: {
   "sc.watchFail": "The request to read the log failed",
   "sc.watchNoBase": "Windows did not name a local app-data folder, so the log cannot be found. Nothing is known about the shift.",
   "sc.watchUnread": "The log is there and could not be read.",
-  "sc.spool": "Catch the next print (10 min)",
-  "sc.spoolShow": "What was caught",
-  "sc.spoolClear": "Delete the caught prints",
-  "sc.spoolHint": "Stage 1 of the redacted print. For ten minutes after the press, every job Windows spools on this PC is copied into RecCheck's own folder as it grows — the raw job, names included — and listed here with its format and the text it could pull. Outside those ten minutes nothing is watched or copied. Nothing is sent to protel or to the printer; it feeds nothing and prints nothing.",
-  "sc.spoolArmed": "Armed until {t}. Print the report now.",
-  "sc.spoolOff": "Not armed.",
-  "sc.spoolCleared": "The caught prints are deleted ({n} file(s)).",
-  "sc.spoolFail": "The request failed",
-  "sc.xps": "Dump the newest XPS in the reports folder",
-  "sc.xpsHint": "For the redacted print. Print the departures report to the Microsoft XPS Document Writer, save it into the reports folder, then press this: it prints that file's text with positions, page by page, so the columns can be read off it. It reads a file the tool already browses; nothing is sent anywhere.",
-  "sc.xpsNone": "No .oxps or .xps file in the reports folder ({dir}).",
   "land.reports": "REPORTS",
   "land.reportsSub": "departure lists printed to XPS — names withheld, print or delete",
   "rep.noBridge": "Only inside the desktop app.",
@@ -2074,17 +2063,6 @@ gr: {
   "sc.watchFail": "Το αίτημα ανάγνωσης του αρχείου απέτυχε",
   "sc.watchNoBase": "Τα Windows δεν έδωσαν φάκελο local app-data, οπότε το αρχείο δεν βρίσκεται. Δεν είναι γνωστό τίποτα για τη βάρδια.",
   "sc.watchUnread": "Το αρχείο υπάρχει και δεν διαβάστηκε.",
-  "sc.spool": "Πιάσε την επόμενη εκτύπωση (10 λεπτά)",
-  "sc.spoolShow": "Τι πιάστηκε",
-  "sc.spoolClear": "Σβήσε τις εκτυπώσεις που πιάστηκαν",
-  "sc.spoolHint": "Στάδιο 1 της εκτύπωσης χωρίς ονόματα. Για δέκα λεπτά μετά το πάτημα, κάθε εργασία που στέλνουν τα Windows στον spooler αυτού του υπολογιστή αντιγράφεται στον φάκελο του RecCheck όσο μεγαλώνει — η ακατέργαστη εργασία, με τα ονόματα — και εμφανίζεται εδώ με τη μορφή της και το κείμενο που βγήκε από αυτήν. Έξω από τα δέκα λεπτά τίποτα δεν παρακολουθείται ούτε αντιγράφεται. Τίποτα δεν στέλνεται στο protel ή στον εκτυπωτή· δεν τροφοδοτεί τίποτα και δεν τυπώνει τίποτα.",
-  "sc.spoolArmed": "Ενεργό μέχρι {t}. Τύπωσε την αναφορά τώρα.",
-  "sc.spoolOff": "Ανενεργό.",
-  "sc.spoolCleared": "Οι εκτυπώσεις που πιάστηκαν σβήστηκαν ({n} αρχεία).",
-  "sc.spoolFail": "Το αίτημα απέτυχε",
-  "sc.xps": "Εμφάνισε το νεότερο XPS του φακέλου αναφορών",
-  "sc.xpsHint": "Για την εκτύπωση χωρίς ονόματα. Τύπωσε την αναφορά αναχωρήσεων στον Microsoft XPS Document Writer, αποθήκευσέ την στον φάκελο αναφορών και πάτα εδώ: εμφανίζει το κείμενο του αρχείου με θέσεις, σελίδα-σελίδα, ώστε να διαβαστούν οι στήλες από αυτό. Διαβάζει αρχείο που το εργαλείο ήδη βλέπει· τίποτα δεν στέλνεται πουθενά.",
-  "sc.xpsNone": "Δεν υπάρχει αρχείο .oxps ή .xps στον φάκελο αναφορών ({dir}).",
   "land.reports": "ΑΝΑΦΟΡΕΣ",
   "land.reportsSub": "λίστες αναχωρήσεων τυπωμένες σε XPS — χωρίς ονόματα, εκτύπωση ή διαγραφή",
   "rep.noBridge": "Μόνο μέσα στην εφαρμογή.",
@@ -3755,75 +3733,6 @@ function helperVerdict(h){
   }
   return {key: "sc.hIdle", tone: "faint"};
 }
-/* ---- stage 1 of the redacted print: what the spool watcher caught ----
-   The dump is written for pasting into the chat where the parser will be read off it,
-   so its labels are English on purpose, like the window scan's. Every number in it is a
-   measurement main.js made: sizes seen per look, when the file appeared and when the
-   spooler took it away, reads refused and with what code. Nothing is inferred. */
-let SPOOL_IV = null, SPOOL_TEXTS = {};
-function spoolClock(ms){
-  if(!ms) return "-";
-  const d = new Date(ms), p = n => String(n).padStart(2, "0");
-  return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds()) + "." + Math.floor(d.getMilliseconds() / 100);
-}
-function spoolDump(st, texts){
-  const L = [], q = s => JSON.stringify(s), n1 = v => Math.round(v * 10) / 10;
-  L.push("spool folder: " + st.dir);
-  L.push((st.armed ? "ARMED until " + spoolClock(st.until) : "not armed")
-       + " — listed " + st.ticks + " time(s)" + (st.lastTick ? ", last " + spoolClock(st.lastTick) : "")
-       + (st.listErr ? " — COULD NOT LIST THE FOLDER: " + st.listErr : ""));
-  L.push("copies: " + st.capDir);
-  if(!st.files || !st.files.length){ L.push("nothing caught"); return L.join("\n"); }
-  L.push("caught " + st.files.length + " file(s):");
-  for(const f of st.files){
-    const sizes = f.sizes && f.sizes.length ? f.sizes.join(" → ") : "-";
-    const last = f.sizes && f.sizes.length ? f.sizes[f.sizes.length - 1] : 0;
-    const reads = f.readFails ? f.readFails + " read(s) refused (" + f.readErr + ")" + (f.copied ? ", then ok" : "") : "reads ok";
-    L.push("  " + f.name + "  " + (f.copied || last) + " bytes  sizes " + sizes
-         + "  first " + spoolClock(f.first)
-         + (f.gone ? "  gone " + spoolClock(f.gone) + " (lived " + (f.gone - f.first) + " ms)"
-                   : (f.earlier ? "  (from an earlier run)" : "  still there"))
-         + "  " + reads
-         + (f.copyErr ? "  COPY FAILED (" + f.copyErr + ")" : "")
-         + (f.tooBig ? "  TOO BIG, not copied" : ""));
-    const tx = texts && texts[f.name];
-    if(!tx) continue;
-    if(tx.why){ L.push("     " + (tx.why === "unread" ? "the copy could not be read (" + tx.detail + ")" : tx.why)); continue; }
-    if(tx.format === "shd"){ L.push("     strings: " + (tx.strings || []).map(q).join(" ")); continue; }
-    L.push("     format: " + tx.format + (tx.head ? "  head " + tx.head : "")
-         + (tx.pages ? "  pages " + tx.pages.length : "")
-         + (tx.entries !== undefined ? "  zip entries " + tx.entries : "")
-         + (tx.emfPlus ? "  EMF+ comment records " + tx.emfPlus + " (GDI+ text lives there and is not pulled yet)" : "")
-         + (tx.textErr ? "  TEXT FAILED (" + tx.textErr + ")" : ""));
-    if(tx.types){
-      const top = Object.keys(tx.types).sort((a, b) => tx.types[b] - tx.types[a]).slice(0, 12);
-      L.push("     record types: " + top.map(k => k + "×" + tx.types[k]).join(" "));
-    }
-    for(const pg of (tx.pages || [])){
-      L.push("     page " + pg.n + "  (" + (pg.records ? pg.records + " records, " : "") + pg.texts.length + " text)");
-      for(const tt of pg.texts.slice(0, 400)) L.push("       (" + n1(tt.x) + ", " + n1(tt.y) + ")  " + tt.s);
-      if(pg.texts.length > 400) L.push("       … " + (pg.texts.length - 400) + " more");
-    }
-    if(tx.strings) L.push("     strings: " + tx.strings.map(q).join(" "));
-  }
-  return L.join("\n");
-}
-/* ---- the redacted print, route A: the first file ----
-   He prints the departures report to the XPS Document Writer into the reports folder;
-   this is that file's text with positions, every token of every page, so the column map
-   is read off his data and never guessed (the 04/09 rule). English on purpose — it is
-   for pasting. It reads a file the tool already browses; nothing is sent anywhere. */
-function xpsDump(f, xmls){
-  const L = [];
-  L.push("file: " + f.name + "  " + (f.size || 0) + " bytes  " + (f.mtimeMs ? new Date(f.mtimeMs).toISOString() : ""));
-  L.push("pages: " + xmls.length);
-  xmls.forEach((xml, i) => {
-    const toks = pageTokens(xml).sort((a, b) => a.y - b.y || a.x - b.x);
-    L.push("page " + (i + 1) + "  (" + toks.length + " tokens)");
-    for(const tk of toks) L.push("  (" + Math.round(tk.x) + ", " + Math.round(tk.y) + ")  " + tk.t);
-  });
-  return L.join("\n");
-}
 function helperDetail(h){
   if(!h) return "";
   const bits = [];
@@ -3911,14 +3820,6 @@ function openDebug(){
     '<div class="err" style="color:var(--faint)">' + t("sc.watchHint") + '</div>' +
     '<div class="err" style="color:var(--faint)">' + t("sc.readHint") + '</div>' +
     '<div class="err" style="color:var(--faint)">' + t("sc.testHint") + '</div>' +
-    '<div class="dbgGrid" style="margin-top:8px">' +
-      '<button class="btn" id="scSpool">' + t("sc.spool") + '</button>' +
-      '<button class="btn" id="scSpoolShow">' + t("sc.spoolShow") + '</button>' +
-      '<button class="btn" id="scSpoolClear">' + t("sc.spoolClear") + '</button>' +
-      '<button class="btn" id="scXps">' + t("sc.xps") + '</button>' +
-    '</div>' +
-    '<div class="err" style="color:var(--faint)">' + t("sc.spoolHint") + '</div>' +
-    '<div class="err" style="color:var(--faint)">' + t("sc.xpsHint") + '</div>' +
     '<pre id="scDiag" style="display:none"></pre>' +
     '<div class="actions">' +
       '<button class="btn" id="dbgLock">' + t("dbg.lock") + '</button>' +
@@ -3988,80 +3889,6 @@ function openDebug(){
     pre.textContent = log;
     copy.style.display = "";
     copy.onclick = () => { try{ navigator.clipboard.writeText(log); }catch(e){} };
-  };
-  /* ---- stage 1 of the redacted print ----
-     Armed from here for ten minutes. While armed and the dialog is open the state is
-     re-read every second, and a file's text is pulled once it has stopped changing —
-     once per name and size, never per tick. The interval lives at the IIFE level so a
-     dialog opened twice does not run two of them, and it stops itself when there is no
-     #scDiag to write into. */
-  const spoolStop = () => { if(SPOOL_IV){ clearInterval(SPOOL_IV); SPOOL_IV = null; } };
-  /* closeModal() hides the modal and leaves its DOM in place, so "#scDiag exists" is not
-     "the dialog is open" — the interval has to ask the backdrop */
-  const dbgOpen = () => !!$("#scDiag") && !!$("#scCopy") && $("#modalBg").classList.contains("open");
-  const spoolShow = async (arm) => {
-    const pre = $("#scDiag"), copy = $("#scCopy");
-    if(!dbgOpen()){ spoolStop(); return; }
-    pre.style.display = "";
-    if(!sc || !sc.spoolState){ pre.textContent = t("sc.noDoor"); copy.style.display = "none"; spoolStop(); return; }
-    let st;
-    try{ st = arm ? await sc.spoolArm() : await sc.spoolState(); }
-    catch(e){ pre.textContent = t("sc.spoolFail") + " (" + ((e && e.message) || e || "?") + ")"; spoolStop(); return; }
-    if(!st || !st.files){ pre.textContent = t("sc.spoolFail"); spoolStop(); return; }
-    for(const f of st.files){
-      const settled = f.gone || f.earlier || (st.now - f.last > 1500);
-      const key = f.name + ":" + (f.copied || 0);
-      if(!settled || (SPOOL_TEXTS[f.name] && SPOOL_TEXTS[f.name].key === key)) continue;
-      try{ const tx = await sc.spoolText(f.name); if(tx) SPOOL_TEXTS[f.name] = Object.assign({key: key}, tx); }catch(e){}
-    }
-    const dump = (st.armed ? t("sc.spoolArmed", {t: spoolClock(st.until)}) : t("sc.spoolOff")) + "\n\n" + spoolDump(st, SPOOL_TEXTS);
-    if(!dbgOpen()){ spoolStop(); return; }        // closed while we were asking
-    pre.textContent = dump;
-    copy.style.display = "";
-    copy.onclick = () => { try{ navigator.clipboard.writeText(dump); }catch(e){} };
-    if(!st.armed && SPOOL_IV && st.now - st.until > 3000) spoolStop();   // one last draw after the window ends, then quiet
-  };
-  $("#scSpool").onclick = () => {
-    spoolShow(true);
-    if(!SPOOL_IV) SPOOL_IV = setInterval(() => { spoolShow(false); }, 1000);
-  };
-  $("#scSpoolShow").onclick = () => { spoolShow(false); };
-  $("#scSpoolClear").onclick = async () => {
-    const pre = $("#scDiag"), copy = $("#scCopy");
-    spoolStop();
-    pre.style.display = ""; copy.style.display = "none";
-    if(!sc || !sc.spoolClear){ pre.textContent = t("sc.noDoor"); return; }
-    let r = null;
-    try{ r = await sc.spoolClear(); }
-    catch(e){ pre.textContent = t("sc.spoolFail") + " (" + ((e && e.message) || e || "?") + ")"; return; }
-    SPOOL_TEXTS = {};
-    pre.textContent = t("sc.spoolCleared", {n: (r && r.removed) || 0}) + (r && r.err ? " (" + r.err + ")" : "");
-  };
-  /* ---- the newest XPS in the reports folder, as text with positions ---- */
-  $("#scXps").onclick = async () => {
-    const pre = $("#scDiag"), copy = $("#scCopy"), b = $("#scXps");
-    if(b.dataset.busy) return;
-    pre.style.display = ""; copy.style.display = "none";
-    if(!window.reccheckFiles){ pre.textContent = t("sc.noDoor"); return; }
-    b.dataset.busy = "1";
-    try{
-      /* the REPORTS folder — what every string on this button says. It read "dept" from
-         1.17.50, when there was only one folder; 1.17.52 gave REPORTS its own and this was
-         left behind, so the one diagnostic built for the redacted print dumped the newest
-         checkcharge report instead. Found by the 1.17.53 audit. */
-      const res = await window.reccheckFiles.list("rep", "");
-      const files = ((res && res.files) || []).filter(f => /\.(oxps|xps)$/i.test(f.name));
-      if(!files.length){ pre.textContent = t("sc.xpsNone", {dir: (res && res.dir) || "?"}); return; }
-      const f = files[0];                                   // list() sorts newest first
-      const raw = await window.reccheckFiles.read("rep", f.path);
-      const u8 = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
-      const xmls = await unzipFpages(u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength));
-      const dump = xpsDump(f, xmls);
-      pre.textContent = dump;
-      copy.style.display = "";
-      copy.onclick = () => { try{ navigator.clipboard.writeText(dump); }catch(e){} };
-    }catch(e){ pre.textContent = t("sc.spoolFail") + " (" + ((e && e.message) || e || "?") + ")"; }
-    finally{ delete b.dataset.busy; }
   };
   /* ---- reading the list in front ----
      The only thing in DEBUG that costs protel real work, and it is a PROBE: it reports

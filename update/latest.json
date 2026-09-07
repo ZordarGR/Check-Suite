@@ -1,11 +1,11 @@
 {
-  "version": "1.17.56",
-  "type": "html",
-  "engine": "1.17.52",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.52/RecCheck-Setup.exe",
-  "setupSha256": "83861ea3c98c4ca4064766b709f72a6963adf9b3ce305dc7e06ac1454bbcbab5",
+  "version": "1.17.57",
+  "type": "full",
+  "engine": "1.17.57",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.57/RecCheck-Setup.exe",
+  "setupSha256": "2625f3e412e3a8f71c73f67e2914b1f83e878343c5c68d6bcd942b9c703e419d",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "0567ba6cc61455002407f3c3021369869746f9ad169ea67816b6a530f9929961",
-  "notes": "REPORTS now also redacts protel's Boarding List (the mealplandetail meal-plan list). Print it to the XPS Writer into the reports folder like the departures list; the tool lists it, previews it with the guest names withheld, and prints it in protel's layout. Room numbers, meal counts and totals are kept; where protel prints a long name glued to the room, the room is kept and the name dropped."
+  "sha256": "c1bcef94f433f6a9b71b33efbb9d6b42d1b194fcebbcfeb632a9ca94bbc5b34b",
+  "notes": "The tool now catches a protel list even if the first read lands before protel has drawn its rows: the read is retried while the window is still open, so a move alert no longer waits for you to open the window a second time (helper v29). The dead spool-capture DEBUG buttons are removed."
 }
