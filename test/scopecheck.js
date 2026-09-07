@@ -40,7 +40,14 @@ const GLOBALS = new Set(["Object","String","Number","Array","Set","Map","JSON","
 function stripComments(js){
   return js.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/[^\n]*/g, "$1 ");
 }
-for (const fn of ["renderMoves","roomMoves","movesReport"]) {
+/* AND IT FAILS THE RUN. This printed "UNDEFINED -> name" and exited 0, so run.sh's
+   `|| fail=1` never tripped and the suite still said everything ran. The one guard in the
+   repo whose whole reason for existing is that `liveReceipts()` did not exist and the
+   movements panel was dark for two versions could not fail. The same shape as taxsweep
+   printing PAGE SIDE-SCROLLS and exiting clean. Found by the 1.17.53 second audit.
+   renderMovesFor joins the list: it is where the receipts index and the dot are written. */
+let scopeBad = 0;
+for (const fn of ["renderMoves","roomMoves","movesReport","renderMovesFor"]) {
   const body = stripComments(bodyOf(fn));
   const missing = new Set();
   for (const m of body.matchAll(/\b([A-Za-z_$][\w$]*)\s*\(/g)) {
@@ -51,8 +58,10 @@ for (const fn of ["renderMoves","roomMoves","movesReport"]) {
     if (body[at - 1] === "." ) continue;
     missing.add(id);
   }
+  scopeBad += missing.size;
   console.log(fn.padEnd(12), missing.size ? "UNDEFINED -> " + [...missing].join(", ") : "all calls resolve");
 }
+if(scopeBad) process.exitCode = 1;
 
 /* ---- every <script> block must actually PARSE ----
    Added after a duplicate `const` in the tax scope — one edit leaving the old

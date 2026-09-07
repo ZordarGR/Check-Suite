@@ -6,6 +6,6 @@
   "setupSha256": "83861ea3c98c4ca4064766b709f72a6963adf9b3ce305dc7e06ac1454bbcbab5",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "1649510d558b8ff5d6db56f705c8ec3fc16efef86b25fdd0ba5d5698611c1f60",
+  "sha256": "d3f88e5f9105dabe21fcd8455273a591272bea300200f875fc3037868bafe1f5",
   "notes": "Printing a departure list from REPORTS printed the Department Check's corrections instead. The two sheets share one page and the corrections were being rebuilt over the departures sheet at the moment of printing whenever a department report was open. What you preview is what prints now.\n\nREPORTS also walks sub-folders, the way the Department Check's and Tax Check's file browsers do: press a folder to go in, the row at the top takes you back up, and it remembers where you were."
 }

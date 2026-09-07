@@ -298,6 +298,45 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
   ck("no leftover tax report on the page that prints",       !/LEFTOVER GUEST NAME/.test(paper.text) && !/TAX REPORT/.test(paper.text));
   ck("what is visible on paper is the departures sheet",     /Departure List by Time/.test(paper.text) && !/12345/.test(paper.text));
 
+  /* AND THE TAX CHECK'S OWN PRINT STILL WORKS — the regression risk of clearing the class.
+     While taxPrint is on (printReport adds it and calls window.print() in the same
+     synchronous statement), print media must show #print-mount and hide #printSheet. */
+  await p.evaluate(() => {
+    document.querySelector("#print-mount").innerHTML = "<h1>TAX REPORT</h1><p>418 A GUEST</p>";
+    document.querySelector("#printSheet").innerHTML = "<i>the audit sheet</i>";
+    document.body.classList.add("taxPrint");
+  });
+  await p.emulateMedia({media: "print"});
+  const taxOK = await p.evaluate(() => {
+    const vis = e => { const st = getComputedStyle(e); return st.display !== "none" && e.getBoundingClientRect().height > 0; };
+    return {mount: vis(document.querySelector("#print-mount")), sheet: vis(document.querySelector("#printSheet")),
+            text: document.body.innerText.replace(/\s+/g, " ").trim()};
+  });
+  await p.emulateMedia({media: "screen"});
+  ck("the Tax Check's own print still shows its mount and hides the audit sheet",
+     taxOK.mount === true && taxOK.sheet === false && /TAX REPORT/.test(taxOK.text) && !/the audit sheet/.test(taxOK.text));
+  await p.evaluate(() => document.body.classList.remove("taxPrint"));
+
+  /* A STUCK body.taxPrint puts the tax report — guest names — on paper in place of the
+     sheet he asked for. It is dropped only by the tax half's afterprint, and this release
+     decided the engine's event pairing cannot be relied on. Navigation clears it now. */
+  await p.evaluate(() => {
+    document.body.classList.add("taxPrint");
+    document.querySelector("#print-mount").innerHTML = "<h1>TAX</h1><p>STUCK GUEST NAME</p>";
+  });
+  await p.evaluate(() => window.__t.showScreen("menu"));
+  ck("a stuck taxPrint does not survive a screen change", await p.evaluate(() => !document.body.classList.contains("taxPrint")));
+  await p.evaluate(() => { window.__t.showScreen("reports"); document.querySelector("#printSheet").innerHTML = "<i>corrections here</i>"; });
+  await p.waitForTimeout(200);
+  await p.emulateMedia({media: "print"});
+  const unstuck = await p.evaluate(() => {
+    const vis = e => { const st = getComputedStyle(e); return st.display !== "none" && e.getBoundingClientRect().height > 0; };
+    return {mount: vis(document.querySelector("#print-mount")), text: document.body.innerText};
+  });
+  await p.emulateMedia({media: "screen"});
+  ck("...so the tax report cannot reach paper after it",     unstuck.mount === false && !/STUCK GUEST NAME/.test(unstuck.text));
+  await p.evaluate(() => { document.querySelector("#print-mount").innerHTML = ""; });
+
   /* ---------- 4. what the audit found in the list itself ---------- */
   /* a folder he cannot READ is not a folder with no lists in it */
   await p.evaluate(() => { window.__repErr = true; });

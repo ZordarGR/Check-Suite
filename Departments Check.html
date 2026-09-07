@@ -6306,7 +6306,16 @@ function buildDepSheet(p, fname){
 /* WHOSE sheet #printSheet holds when the browser prints. Declared here, beside the only
    thing that ever arms it, and read by the beforeprint listener further down. */
 let PRINT_JOB = null;          // {kind:"dep", p, fname} — armed only by REPORTS' Print button
-function clearPrintJob(){ PRINT_JOB = null; }
+/* Forget any in-progress print intent — BOTH halves'. `body.taxPrint` means "the Tax Check
+   is printing right now": while it is on, the print CSS shows #print-mount (which holds the
+   tax report, GUEST NAMES and all) and hides #printSheet. It is removed only by the tax
+   half's `afterprint`, and the whole reason PRINT_JOB is not cleared there is that the
+   engine's event pairing cannot be relied on. A taxPrint that stuck would put the tax
+   report on paper in place of the next sheet he prints. Nothing can strand it here: the
+   class is added and window.print() called in the same synchronous statement, so no screen
+   change, Cancel, Delete or corrections print can land between them.
+   Found by the second audit, 06/09. */
+function clearPrintJob(){ PRINT_JOB = null; document.body.classList.remove("taxPrint"); }
 let REP_RUN = 0;               // only the newest render may paint — see renderReports
 /* REPORTS walks sub-folders the way the Department Check's and the Tax Check's browsers
    do — his ask, 06/09: "i want to be able to see subfolders also, like dep and tax
