@@ -1,11 +1,11 @@
 {
-  "version": "1.17.53",
+  "version": "1.17.54",
   "type": "html",
   "engine": "1.17.52",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.52/RecCheck-Setup.exe",
   "setupSha256": "83861ea3c98c4ca4064766b709f72a6963adf9b3ce305dc7e06ac1454bbcbab5",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "d3f88e5f9105dabe21fcd8455273a591272bea300200f875fc3037868bafe1f5",
-  "notes": "Printing a departure list from REPORTS printed the Department Check's corrections instead. The two sheets share one page and the corrections were being rebuilt over the departures sheet at the moment of printing whenever a department report was open. What you preview is what prints now.\n\nREPORTS also walks sub-folders, the way the Department Check's and Tax Check's file browsers do: press a folder to go in, the row at the top takes you back up, and it remembers where you were."
+  "sha256": "98d45a791b0523f9a647b877878aada5d3db92cb9f7f6c4df0e0e5937c9833a6",
+  "notes": "The redacted departures print now uses protel's own layout — the boxed header, the blue title, the grey departure-time bands, the room numbers and notes in blue.\n\nThe guest column stays where protel puts it, with a dash in every cell, so whoever reads the sheet can see a name was taken out rather than never printed. No name reaches the paper."
 }

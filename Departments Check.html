@@ -242,6 +242,42 @@ body.onMenu #clList{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
    which is the "out of bounds is not only off-screen" case (7l). It wraps now. */
 #repList .mItem .mLabel{max-width:100%;overflow-wrap:anywhere}
 #printSheet .type,#pvPaper .type{font-size:10px;color:#444;margin-left:4px}
+/* ---- THE REDACTED DEPARTURES SHEET, IN PROTEL'S OWN LAYOUT ----
+   His ask, 07/09, with a screenshot of departroom1time: "can you make it this exact
+   style?". The boxed three-cell header, the blue title, the centred departure date, the
+   underlined heading row, the grey ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ bands, borderless rows, blue room
+   numbers and small blue notes.
+   BOTH #printSheet and #pvPaper take every rule, because what he previews must be what
+   prints — that is the whole of 1.17.53 and it is not going to be undone by a stylesheet.
+   print-color-adjust is what makes the grey band and the blue actually reach paper; a
+   browser drops backgrounds when printing otherwise, and the bands are how the times are
+   read at a glance. */
+#printSheet,#pvPaper{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+#printSheet .dlBox,#pvPaper .dlBox{display:flex;border:1px solid #000;margin:0 0 10px}
+#printSheet .dlCell,#pvPaper .dlCell{padding:5px 8px;border-right:1px solid #000;min-width:0}
+#printSheet .dlCell:last-child,#pvPaper .dlCell:last-child{border-right:0}
+#printSheet .dlLeft,#pvPaper .dlLeft{width:31%}
+#printSheet .dlMid,#pvPaper .dlMid{flex:1;text-align:center}
+#printSheet .dlRight,#pvPaper .dlRight{width:20%;text-align:right}
+#printSheet .dlLbl,#pvPaper .dlLbl{font-size:10.5px;text-align:center}
+#printSheet .dlWhen,#pvPaper .dlWhen{display:flex;justify-content:space-between;gap:10px;font-size:10.5px}
+#printSheet .dlRule,#pvPaper .dlRule{border-top:1px solid #000;margin:4px -8px 3px}
+#printSheet .dlHms,#pvPaper .dlHms{font-size:10.5px}
+#printSheet .dlHotel,#pvPaper .dlHotel{font-size:11.5px}
+#printSheet .dlTitle,#pvPaper .dlTitle{font-size:15px;font-weight:600;color:#1a3fb8;margin-top:6px}
+#printSheet .dlMeta,#pvPaper .dlMeta{font-size:10px}
+#printSheet .dlDep,#pvPaper .dlDep{text-align:center;font-weight:700;font-size:12px;margin:8px 0 6px}
+#printSheet .dlTbl,#pvPaper .dlTbl{width:100%;border-collapse:collapse;font-size:10.5px;table-layout:auto}
+#printSheet .dlTbl th,#pvPaper .dlTbl th{border:0;border-bottom:1px solid #000;padding:2px 4px;text-align:left;font-weight:600;white-space:nowrap}
+#printSheet .dlTbl td,#pvPaper .dlTbl td{border:0;padding:2px 4px;vertical-align:top}
+#printSheet .dlTbl th.num,#pvPaper .dlTbl th.num,#printSheet .dlTbl td.num,#pvPaper .dlTbl td.num{text-align:right}
+#printSheet .dlGrp td,#pvPaper .dlGrp td{background:#d9d9d9;font-weight:700;padding:3px 4px}
+#printSheet .dlRoom,#pvPaper .dlRoom{color:#1a3fb8;font-weight:600}
+#printSheet .dlOut,#pvPaper .dlOut{color:#777;text-align:center}
+#printSheet .dlTbl tr.note td,#pvPaper .dlTbl tr.note td{color:#1a3fb8;font-size:9.5px;padding-top:0;border-top:0}
+#printSheet .dlNd,#pvPaper .dlNd{color:#1a3fb8;font-size:9.5px;white-space:nowrap}
+#printSheet .dlTot,#pvPaper .dlTot{margin-top:10px;font-size:10.5px}
+#printSheet .dlFoot,#pvPaper .dlFoot{margin-top:12px;font-size:9.5px;color:#444;border-top:1px solid #999;padding-top:4px}
 #printSheet tr.note td,#pvPaper tr.note td{border-top:0;padding-top:0;font-size:10.5px;color:#333}
 #statusListScreen .stNote{font-size:12px;color:var(--faint);padding:4px 2px}
 #statusListScreen .stNote.warn{color:#fbbf24}
@@ -1292,8 +1328,8 @@ function mainRoom(raw){ const m = raw.match(/^(\d+)-\d*/); return m ? m[1] : raw
 const DEPLIST_HEAD = [["room","Δωμάτιο"],["qty","Ποσ"],["req","Ζήτηση"],["guest","Πελάτης"],["arr","Άφιξη"],["adults","ΑΤ."],
                       ["eb","Eb"],["child","Chil"],["bc","Bc"],["rate","Τιμοκατάλογος"],["board","Όροι"],["price","Συμφωνία"],["vip","Vip"]];
 function parseDepList(xmls){
-  const out = {kind: "deplist", id: "", title: "", listDate: "", printed: "", station: "", pages: xmls.length,
-               columns: null, groups: [], totals: [], guests: 0};
+  const out = {kind: "deplist", id: "", title: "", listDate: "", printed: "", station: "", hotel: "", page: "",
+               printedShort: "", pages: xmls.length, columns: null, groups: [], totals: [], guests: 0};
   let group = null, lastRow = null, printNext = false;
   const bandOf = x => { let k = null; for(const c of out.columns) if(c.x <= x + 6) k = c; return k; };
   for(const xml of xmls){
@@ -1307,10 +1343,29 @@ function parseDepList(xmls){
       L.toks.sort((a, b) => a.x - b.x);
       const words = L.toks.map(t => t.t.trim());
       const text = words.join(" ");
-      if(/Departure List by Time/i.test(text)) out.title = "Departure List by Time";
+      if(/Departure List by Time/i.test(text)){
+        out.title = "Departure List by Time";
+        /* protel puts "PROTEL HMS" and the print date in its short form on this same line
+           (his file: x 240 and 352, the title at 523). Read, not derived — turning
+           "Δευτέρα, 7 Σεπτέμβριος 2026" into 7/9/2026 would need a Greek month table, and
+           a table is a thing that can be wrong. */
+        const ps = text.match(/(\d{1,2}\/\d{1,2}\/\d{4})/); if(ps && !out.printedShort) out.printedShort = ps[1];
+      }
       const idm = text.match(/\b(departroom\S*)/); if(idm && !out.id) out.id = idm[1];
       const dm = text.match(/Ημερομηνία Αναχώρησης\s*:?\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/); if(dm){ out.listDate = dm[1]; continue; }
       const sm = text.match(/Station\s+(\S+)/); if(sm) out.station = sm[1];
+      /* THE HOTEL AND THE PAGE, read off where protel puts them and not assumed. In his
+         file the hotel and "Σελίδα : 1" land within 4pt of each other, so they arrive as
+         ONE line, the hotel first by x. Anything that does not match leaves both empty
+         rather than guessing — the sheet then simply omits that cell. */
+      if(!out.columns && /Σελίδα/.test(text)){
+        const pm = text.match(/^(.*?)\s*Σελίδα\s*:?\s*(\d+)?\s*$/);
+        if(pm){
+          if(!out.hotel && pm[1]) out.hotel = pm[1].trim();
+          if(!out.page && pm[2]) out.page = pm[2];
+          continue;
+        }
+      }
       if(/Ημερομηνία Εκτύπωσης/.test(text)){ printNext = true; continue; }
       if(printNext && /\d{1,2}:\d{2}/.test(text)){ out.printed = text; printNext = false; continue; }
       if(!out.columns){
@@ -1568,7 +1623,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.53";
+const APP_VERSION = "1.17.54";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -6282,27 +6337,69 @@ function esc(s){
    protel prints it; a note under its room; the totals as printed */
 function buildDepSheet(p, fname){
   const sheet = $("#printSheet");
-  const cols = (p.columns || []).filter(c => c.key !== "guest");
-  /* protel breaks two headings over two lines ("Ποσ" / ".", "Chil" / "d."); the second
-     line is not part of the heading token, so those two are completed here */
+  /* EVERY column protel printed, the guest one included — his choice, 07/09: keep it with
+     a dash in each cell, so a reader sees a name was REMOVED rather than never printed.
+     The layout below is protel's own (his screenshot of departroom1time, 07/09/26): the
+     boxed three-cell header, the blue title, the centred departure date, the underlined
+     heading row, the grey ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ bands, borderless rows, blue room numbers and
+     small blue notes. Nothing on it is invented: every value comes from the file, and a
+     field the parser did not find is left out rather than guessed. */
+  const cols = (p.columns || []);
   const headOf = c => c.head === "Chil" ? "Child" : c.head === "Ποσ" ? "Ποσ." : c.head;
-  const head = cols.map(c => "<th" + (/^(qty|adults|eb|child|bc|price)$/.test(c.key) ? ' class="num"' : "") + ">" + esc(headOf(c)) + "</th>").join("");
-  const cellOf = (r, c) => c.key === "room" ? esc(r.room) + (r.type ? ' <span class="type">' + esc(r.type) + "</span>" : "") : esc(r[c.key] || "");
-  let h = "<h1>" + esc(p.title || "Departure List by Time") + (p.listDate ? " — " + esc(p.listDate) : "") + "</h1>";
-  h += '<div class="meta">' + esc(t("rep.withheld")) + (p.printed ? " · " + esc(t("rep.printedAt", {p: p.printed})) : "") + (p.station ? " · " + esc(p.station) : "") + (fname ? " · " + esc(fname) : "") + "</div>";
+  const numKey = k => /^(qty|adults|eb|child|bc|price)$/.test(k);
+  const REDACT = "—";
+  /* "Κυριακή, 6 Σεπτέμβριος 2026 07:06" → the date and the time in their own places, as
+     protel prints them. No match: the whole string goes in the date slot, unaltered. */
+  const pm = String(p.printed || "").match(/^(.*?)\s*(\d{1,2}:\d{2})\s*$/);
+  const pDate = pm ? pm[1] : (p.printed || ""), pTime = pm ? pm[2] : "";
+
+  let h = '<div class="dlBox">';
+  h +=   '<div class="dlCell dlLeft">';
+  h +=     '<div class="dlLbl">\u0397\u03bc\u03b5\u03c1\u03bf\u03bc\u03b7\u03bd\u03af\u03b1 \u0395\u03ba\u03c4\u03cd\u03c0\u03c9\u03c3\u03b7\u03c2</div>';
+  h +=     '<div class="dlWhen"><span>' + esc(pDate) + '</span><span class="dlTime">' + esc(pTime) + "</span></div>";
+  h +=     '<div class="dlRule"></div><div class="dlWhen"><span class="dlHms">PROTEL HMS</span><span class="dlHms">' + esc(p.printedShort || "") + "</span></div>";
+  h +=   "</div>";
+  h +=   '<div class="dlCell dlMid">';
+  if(p.hotel) h += '<div class="dlHotel">' + esc(p.hotel) + "</div>";
+  h +=     '<div class="dlTitle">' + esc(p.title || "Departure List by Time") + "</div>";
+  h +=   "</div>";
+  h +=   '<div class="dlCell dlRight">';
+  /* protel's page number, and ONLY when its file was a single page. On a multi-page report
+     we capture the first page's number and print every row on one continuous sheet, so
+     showing "1" would be a claim about this sheet that is not true of it. */
+  if(p.page && p.pages === 1) h += '<div class="dlMeta">Σελίδα : <b>' + esc(p.page) + "</b></div>";
+  if(p.id) h += '<div class="dlMeta">' + esc(p.id) + "</div>";
+  if(p.station) h += '<div class="dlMeta">Station ' + esc(p.station) + "</div>";
+  h +=   "</div>";
+  h += "</div>";
+  h += '<div class="dlDep">\u0397\u03bc\u03b5\u03c1\u03bf\u03bc\u03b7\u03bd\u03af\u03b1 \u0391\u03bd\u03b1\u03c7\u03ce\u03c1\u03b7\u03c3\u03b7\u03c2 : <b>' + esc(p.listDate || "") + "</b></div>";
+
+  h += '<table class="dlTbl"><thead><tr>';
+  h += cols.map(c => '<th class="' + (numKey(c.key) ? "num" : "") + '">' + esc(headOf(c)) + "</th>").join("");
+  h += "</tr></thead><tbody>";
+  const span = Math.max(1, cols.length);
   for(const g of p.groups){
-    h += "<h2>ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ " + (g.time ? esc(g.time) : "— " + esc(t("rep.noTime"))) + "</h2>";
-    h += "<table><thead><tr>" + head + "</tr></thead><tbody>";
+    h += '<tr class="dlGrp"><td colspan="' + span + '">' + "\u03a9\u03a1\u0391 \u0391\u039d\u0391\u03a7\u03a9\u03a1\u0397\u03a3\u0397\u03a3  " + (g.time ? esc(g.time) : ":") + "</td></tr>";
     for(const r of g.rows){
-      h += "<tr>" + cols.map(c => "<td" + (/^(qty|adults|eb|child|bc|price)$/.test(c.key) ? ' class="num"' : "") + ">" + cellOf(r, c) + "</td>").join("") + "</tr>";
-      for(const n of r.notes) h += '<tr class="note"><td></td><td colspan="' + (cols.length - 1) + '"><i>' + esc(n.date) + " — " + esc(n.text) + "</i></td></tr>";
+      h += "<tr>" + cols.map(c => {
+        if(c.key === "guest") return '<td class="dlOut">' + REDACT + "</td>";
+        if(c.key === "room") return '<td><span class="dlRoom">' + esc(r.room) + "</span>" + (r.type ? ' <span class="type">' + esc(r.type) + "</span>" : "") + "</td>";
+        return '<td class="' + (numKey(c.key) ? "num" : "") + '">' + esc(r[c.key] || "") + "</td>";
+      }).join("") + "</tr>";
+      for(const n of r.notes){
+        h += '<tr class="note"><td></td><td class="dlNd">' + esc(n.date) + '</td><td colspan="' + Math.max(1, span - 2) + '">' + esc(n.text) + "</td></tr>";
+      }
     }
-    h += "</tbody></table>";
   }
-  if(p.totals.length) h += '<div class="meta" style="margin-top:12px">' + p.totals.map(x => esc(x.label) + ": <b>" + esc(x.value) + "</b>").join(" · ") + "</div>";
+  h += "</tbody></table>";
+  if(p.totals.length) h += '<div class="dlTot">' + p.totals.map(x => esc(x.label) + " : <b>" + esc(x.value) + "</b>").join("&nbsp;&nbsp;·&nbsp;&nbsp;") + "</div>";
+  /* the one line that is OURS and not protel's: it says the names were taken out on
+     purpose, so nobody downstream reads the dashes as a fault in the report */
+  h += '<div class="dlFoot">' + esc(t("rep.withheld")) + (fname ? " · " + esc(fname) : "") + "</div>";
   sheet.innerHTML = h;
   return h;
 }
+
 /* WHOSE sheet #printSheet holds when the browser prints. Declared here, beside the only
    thing that ever arms it, and read by the beforeprint listener further down. */
 let PRINT_JOB = null;          // {kind:"dep", p, fname} — armed only by REPORTS' Print button
