@@ -34,7 +34,7 @@ const I18N = {en: {}};
 const tT = function(k){ let s = k; for(let i = 1; i < arguments.length; i++) s += "(" + arguments[i] + ")"; return s; };
 const taxBody = [
   line(/^const IH = \{NAME: 0.*$/m), line(/^const AR = \{NAME: 0.*$/m), line(/^const DP = \{NAME: 0.*$/m), line(/^const MV = \{FROM: 0.*$/m),
-  "const STATUS_KEY = \"reccheck_status_v1\"; const STATUS_KEEP_DAYS = 7; let STATUS_TICK = 0; let LIVE_HELD = {};",
+  "const STATUS_KEY = \"reccheck_status_v1\"; const STATUS_KEEP_DAYS = 15; let STATUS_TICK = 0; let LIVE_HELD = {};",
   lift("dkey"), lift("dfmt"), lift("leadRoom"), lift("bnk"), lift("hhmm"), lift("isInhouseTitle"), lift("inhouseDate"),
   lift("parseInhouse"), lift("parseTagged"),
   lift("statusLoad"), lift("statusSave"), lift("stName"), lift("stRoom"), lift("stKey"), lift("stSameRoom"), lift("stDayKey"),
@@ -59,8 +59,8 @@ function pillsFor(reportDate, receipts, rooms){
     lift("checkableList"), lift("sameName"), lift("isCutOf"), lift("receiptName"),
     "const STATUS_KEY = \"reccheck_status_v1\";", lift("loadStatus"), lift("statusRows"), lift("pillRoom"),
     "const LEGACY_KEY = \"reccheck_legacy\";", lift("legacyOn"), line(/^const MOVES_KEY = .*$/m), lift("loadMoves"), lift("ledgerMoves"), 
-    lift("dateNum2"), lift("prevNightKey"), "const RECEIPTS_KEY = \"reccheck_receipts_v1\"; const RECEIPTS_KEEP = 60;", lift("loadNightReceipts"), lift("saveNightReceipts"),
-    "let ARRIVING = {};", lift("leavingIndex"), "let LEAVING = {};", lift("nameHit"), lift("censusNameOf"), lift("roomNames"), lift("isLeaving"),
+    lift("dateNum2"), lift("prevNightKey"), "const RECEIPTS_KEY = \"reccheck_receipts_v1\"; const RECEIPTS_KEEP = 15;", lift("loadNightReceipts"), lift("saveNightReceipts"),
+    "let ARRIVING = {};", lift("leavingIndex"), "let LEAVING = {};", lift("nameHit"), lift("censusNameOf"), lift("opensName"), lift("otherNames"), lift("isLeaving"),
     lift("roomMoves"), lift("renderMovesFor"), lift("renderMoves"),
     "renderMoves(); return {classes: [...classes], root: moves, leaving: leavingIndex(), isLeaving: isLeaving, LEAVING: LEAVING, receiptName: receiptName};"].join("\n");
   const fn = new Function("document", "$", "localStorage", "MODEL", "STATE", "ROOMS", "t", "classes", "moves", body);
@@ -259,7 +259,10 @@ const CUTN = "MUELLER HANS-JOACHIM/ANN", WHOLEN = "MUELLER HANS-JOACHIM/ANNELIES
 P = pillsFor(NIGHT, [rc("110", CUTN)]);
 ck("a cut name that opens the departing name dots — his word: the departing name has a receipt", P.dot("110"));
 ck("and the receipt keeps its own name, uncompleted, with no census",                    P.name(rc("110", CUTN)) === CUTN);
-ck("a receipt that opens no departing name does not dot",                                !pillsFor(NIGHT, [rc("110", "MUELLER HANS-JOACHIN")]).dot("110"));
+/* the pill carries two departing names here (MUELLER HANS from the earlier capture, the
+   whole one from this) — a receipt opening with MUELLER HANS matches the first under the
+   two-way rule of 1.17.60, so the no-match case differs inside the shorter name */
+ck("a receipt that opens no departing name does not dot",                                !pillsFor(NIGHT, [rc("110", "MUELLER HANZ-JOACHIM")]).dot("110"));
 /* the one case the opening cannot settle: an arrival on the same room whose name the
    receipt opens too — then nothing is marked, the arriving guest's paper above all */
 rpt("AR", RPT("AR", "Arrival Report for the 04/09/26", [["MUELLER HANS-JOACHIM/ANNA ", "110", "2/0/0/0/0", "10/09/26", "CI"]]), T(12));
@@ -281,6 +284,55 @@ ck("a stored name with no liveKey — the .oxps's own — completes nothing eith
 ck("the completed name is what the night's index remembers",                             (JSON.parse(store["reccheck_receipts_v1"])["20260904"] || []).some(p => p[0] === "110" && p[1] === CUTN));
 P = pillsFor(NIGHT, [rc("110", CUTN)], {"110": {guest: WHOLEN, liveKey: 20260905}});
 ck("... whole when the census had it",                                                   (JSON.parse(store["reccheck_receipts_v1"])["20260904"] || []).some(p => p[0] === "110" && p[1] === WHOLEN));
+
+console.log("--- 5d. HIS RULE, 08/09 (1.17.60): the list prints what the reservation holds, often the surname alone");
+/* Room 56 on his 08/09 departure list printed QUINK; the receipt printed QUINK frederick;
+   the one-way rule (receipt = a cut of the list's name) never dotted it. His rule: room
+   first, then the shorter name must be the opening of the longer, either way round. The
+   safety condition stays: another reservation's name on that room that matches the
+   receipt the same way blocks; the census is the guest in the room now — the departing
+   reservation itself on the night it leaves, so its whole name is no rival to the list's
+   surname. And a receipt written in the room protel moved the guest OUT of, earlier in
+   the stay, belongs to the same stay (his word: "the last known room, in case of a
+   previous room change"). */
+for(const k of Object.keys(store)) delete store[k];
+store["reccheck_legacy"] = "0";
+rpt("DP", RPT("DP", "Departure Report for 04/09/26", [["QUINK ", "56", "2/0/1/1/0", "30/08/26", "CI"]]), T(11));
+P = pillsFor(NIGHT, [rc("56", "QUINK frederick")]);
+ck("the list says QUINK, the receipt QUINK frederick — the dot lands (room 56, 08/09)",      P.dot("56") && P.kind("56") === "dep");
+ck("the red mark follows",                                                                P.isLeaving("56", "QUINK frederick"));
+ck("a receipt that differs inside the shorter name does not",                             !pillsFor(NIGHT, [rc("56", "QUINT frederick")]).dot("56"));
+ck("nor one of three letters",                                                            !pillsFor(NIGHT, [rc("56", "QUI")]).dot("56"));
+P = pillsFor(NIGHT, [rc("56", "QUINK frederick")], {"56": {guest: "QUINK FREDERICK/ANNA", liveKey: 20260904}});
+ck("the census holding the reservation's whole name is no rival — still dots, the receipt completed", P.dot("56") && P.name(rc("56", "QUINK frederick")) === "QUINK FREDERICK/ANNA");
+P = pillsFor(NIGHT, [rc("56", "QUINK frederick")], {"56": {guest: "NEUMANN PETRA", liveKey: 20260904}});
+ck("a census naming another guest is not a rival for a receipt it does not match — still dots", P.dot("56"));
+ck("... and that other guest's receipt does not dot the departure",                       !pillsFor(NIGHT, [rc("56", "NEUMANN PETRA")], {"56": {guest: "NEUMANN PETRA", liveKey: 20260904}}).dot("56"));
+rpt("AR", RPT("AR", "Arrival Report for the 04/09/26", [["QUINK ", "56", "2/0/0/0/0", "10/09/26", ""]]), T(12));
+P = pillsFor(NIGHT, [rc("56", "QUINK frederick")]);
+ck("an arrival printed with the same name is another reservation: nothing is marked",     !P.dot("56") && P.kinds("56") === "arr+dep" && !P.isLeaving("56", "QUINK frederick"));
+/* a night's arrival list is the union of its captures, so the QUINK arrival above would
+   stay on the room — a fresh store for the arrival that does not match */
+for(const k of Object.keys(store)) delete store[k];
+store["reccheck_legacy"] = "0";
+rpt("DP", RPT("DP", "Departure Report for 04/09/26", [["QUINK ", "56", "2/0/1/1/0", "30/08/26", "CI"]]), T(11));
+rpt("AR", RPT("AR", "Arrival Report for the 04/09/26", [["QUINKE MARIA ", "56", "2/0/0/0/0", "10/09/26", ""]]), T(13));
+ck("an arrival whose name does not match the receipt does not block",                     pillsFor(NIGHT, [rc("56", "QUINK frederick")]).dot("56"));
+ck("... and that arrival's own receipt marks nothing",                                     !pillsFor(NIGHT, [rc("56", "QUINKE MARIA")]).dot("56"));
+/* the previous room: protel moved QUINK from 72 to 56 on 02/09 (its X); the receipt of
+   01/09 was written on 72 */
+for(const k of Object.keys(store)) delete store[k];
+store["reccheck_legacy"] = "0";
+rpt("DP", RPT("DP", "Departure Report for 04/09/26", [["QUINK ", "56", "2/0/1/1/0", "30/08/26", "CI"]]), T(11));
+rpt("MV", "TITLE\tPerform Move for Date 02/09/26\nMV\t72\tBGV\t56\tMVFAM\tQUINK\tX\t30/08/26\t04/09/26\nDONE\t1\t1\t9\t5\tunicode\tcomplete\n", Date.UTC(2026, 8, 2, 9));
+store["reccheck_receipts_v1"] = JSON.stringify({"20260901": [["72", "QUINK FREDERICK"]]});
+ck("a receipt written in the room protel moved the guest out of dots the departure from the new room", pillsFor(NIGHT, []).dot("56"));
+store["reccheck_receipts_v1"] = JSON.stringify({"20260829": [["72", "QUINK FREDERICK"]]});
+ck("... not one from before the reservation arrived",                                     !pillsFor(NIGHT, []).dot("56"));
+store["reccheck_receipts_v1"] = JSON.stringify({"20260901": [["72", "QUINK FREDERICK"]]});
+rpt("MV", "TITLE\tPerform Move for Date 02/09/26\nMV\t72\tBGV\t56\tMVFAM\tQUINK\t\t30/08/26\t04/09/26\nDONE\t1\t1\t9\t5\tunicode\tcomplete\n", Date.UTC(2026, 8, 2, 10));
+ck("... nor through a move protel has not marked",                                        !pillsFor(NIGHT, []).dot("56"));
+ck("the memory and the store keep fifteen nights — his word",                              /^const RECEIPTS_KEEP = 15;/m.test(src) && /^const STATUS_KEEP_DAYS = 15;/m.test(src));
 
 console.log("--- 6. legacy mode: nothing is captured, so the XPS-fed ledger draws, as before 1.17.42");
 for(const k of Object.keys(store)) delete store[k];

@@ -1934,7 +1934,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.59";
+const APP_VERSION = "1.17.60";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -5496,22 +5496,49 @@ let LEAVING = {};
    and the answer is no. His words, 1.17.12: "dont accidentally mark the arrival receipts";
    and 05/09: "the pills should get marked because the departing name has a receipt, not
    the arriving". */
+/* HIS RULE, 08/09 (1.17.60): "if the available characters in the list exactly match the
+   corresponding number of characters in that same room in the departure list then its a
+   match". Room first; then the SHORTER of the two names must be the opening of the
+   longer, character for character, in EITHER direction — the .oxps cuts the receipt's
+   name at the column (receipt shorter), and protel's lists print what the reservation
+   holds, often the surname alone (list shorter: room 56 printed QUINK, the receipt
+   QUINK frederick, and the one-way rule before this never dotted it). Four characters at
+   least, as the cut-completion always required. */
+function opensName(a, b){
+  const n = x => String(x || "").trim().replace(/\s+/g, " ").toUpperCase();
+  const A = n(a), B = n(b);
+  if(!A || !B) return false;
+  const s = A.length <= B.length ? A : B, l = s === A ? B : A;
+  return s.length >= 4 && l.indexOf(s) === 0;
+}
+/* Is `guest` (a receipt's name) the reservation `target` (a name from protel's list)?
+   Equal or opening each other (opensName) — unless one of the OTHER reservations' names
+   on that room (`others`: the arrival list, a move-in, the census when it is not this
+   reservation) matches the receipt the same way; then the receipt cannot say whose it is
+   and the answer is no. His words, 1.17.12: "dont accidentally mark the arrival
+   receipts"; and 05/09: "the pills should get marked because the departing name has a
+   receipt, not the arriving". An arrival printed with the very same name as the
+   departure is another reservation and blocks too — the safe direction. */
 function nameHit(guest, target, others){
   if(!guest || !target) return false;
-  if(sameName(guest, target)) return true;
-  if(!isCutOf(guest, target)) return false;
-  return !(others || []).some(o => o && !sameName(o, target) && (sameName(guest, o) || isCutOf(guest, o)));
+  if(!sameName(guest, target) && !opensName(guest, target)) return false;
+  return !(others || []).some(o => o && (sameName(guest, o) || opensName(guest, o)));
 }
 function censusNameOf(room){
   const e = ROOMS[String(room)];
   return (e && e.liveKey && e.guest) ? String(e.guest) : "";
 }
-/* every name protel shows for a room tonight, the census included — what a receipt's
-   opening is weighed against */
-function roomNames(m, room){
-  const n = m && m.names ? [].concat(m.names.dep || [], m.names.arr || [], m.names.move || []) : [];
+/* the names of the OTHER reservations protel shows for a room tonight — what a receipt
+   is weighed against for the pill of `kind` ("dep" or "move"). The census is the guest
+   in the room right now: the departing reservation itself on the night it leaves (its
+   whole name against the list's surname — the same reservation, not a rival), another
+   guest once the room has turned over. */
+function otherNames(m, room, kind){
+  const N = (m && m.names) || {};
+  const targets = kind === "move" ? (N.move || []) : (N.dep || []);
+  const n = [].concat(N.arr || [], kind === "move" ? (N.dep || []) : (N.move || []));
   const c = censusNameOf(room);
-  if(c) n.push(c);
+  if(c && !targets.some(t => t && (sameName(c, t) || opensName(c, t)))) n.push(c);
   return n;
 }
 function isLeaving(room, name){
@@ -5519,7 +5546,7 @@ function isLeaving(room, name){
   if(!names) return false;
   const others = (ARRIVING[room] || []).slice();
   const c = censusNameOf(room);
-  if(c) others.push(c);
+  if(c && !names.some(t => t && (sameName(c, t) || opensName(c, t)))) others.push(c);
   for(const n of names) if(n && nameHit(name, n, others)) return true;
   return false;
 }
@@ -5765,7 +5792,7 @@ function statusRows(st, tag, night){
    voided or re-roomed later that night is not kept as it was), kept for 60 nights, and
    it holds no amounts or serials. The dot's memory and nothing else reads it. */
 const RECEIPTS_KEY = "reccheck_receipts_v1";
-const RECEIPTS_KEEP = 60;
+const RECEIPTS_KEEP = 15;   // his word, 08/09: "keep data for that matter for the previous 15 days"
 function loadNightReceipts(){
   try{ const o = JSON.parse(localStorage.getItem(RECEIPTS_KEY) || "{}"); return (o && typeof o === "object" && !Array.isArray(o)) ? o : {}; }
   catch(e){ return {}; }
@@ -5924,10 +5951,36 @@ function renderMovesFor(box, night){
      never marked on a guess. A room can carry a departure pill and a move pill; each is
      dotted on its own names. */
   const depRec = new Set(), moveRec = new Set();
+  /* THE ROOMS A RESERVATION WAS IN BEFORE — his word, 08/09: "the last known room (in
+     case of a previous room change)". A receipt written while the guest was still in the
+     room protel later moved them out of belongs to the same stay. The moves protel has
+     marked (its X) in the STATUS store, any night the store holds, chained back from the
+     pill's room while the name matches the pill's; the pill's own movedFrom always. */
+  const st = legacyOn() ? null : loadStatus();
+  const roomsBefore = (room, names) => {
+    const out = new Set(); if(mv[room].movedFrom) out.add(String(mv[room].movedFrom));
+    if(!st || !st.MV || !names.length) return out;
+    const seen = new Set([room].concat([...out]));
+    let grew = true;
+    while(grew){
+      grew = false;
+      for(const k of Object.keys(st.MV)){
+        for(const r of statusRows(st, "MV", +k)){
+          if(!String(r.x || "").trim()) continue;
+          const to = pillRoom(r.to), from = pillRoom(r.from);
+          if(!to || !from || !seen.has(to) || seen.has(from)) continue;
+          if(!names.some(n => n && (sameName(r.name, n) || opensName(r.name, n)))) continue;
+          seen.add(from); out.add(from); grew = true;
+        }
+      }
+    }
+    return out;
+  };
+  const BEFORE = {};
+  for(const room of rooms) BEFORE[room] = {dep: roomsBefore(room, mv[room].names.dep), move: roomsBefore(room, mv[room].names.move)};
   const hit = (m, room, rm, guest) => {
-    const others = roomNames(m, room);
-    if(m.dep && rm === room && m.names.dep.some(n => nameHit(guest, n, others))) depRec.add(room);
-    if(m.movedFrom && (rm === room || rm === String(m.movedFrom)) && m.names.move.some(n => nameHit(guest, n, others))) moveRec.add(room);
+    if(m.dep && (rm === room || BEFORE[room].dep.has(rm)) && m.names.dep.some(n => nameHit(guest, n, otherNames(m, room, "dep")))) depRec.add(room);
+    if(m.movedFrom && (rm === room || BEFORE[room].move.has(rm)) && m.names.move.some(n => nameHit(guest, n, otherNames(m, room, "move")))) moveRec.add(room);
   };
   const found = room => (!mv[room].dep || depRec.has(room)) && (!mv[room].movedFrom || moveRec.has(room));
   if(MODEL){
@@ -7974,7 +8027,7 @@ async function autoReadInhouse(){
    The department check's pills read this store (roomMoves) and nothing else. Nothing here
    asks protel anything: the rows are the capture files, already read every tick. */
 const STATUS_KEY = "reccheck_status_v1";
-const STATUS_KEEP_DAYS = 7;
+const STATUS_KEEP_DAYS = 15;   // 7 until 1.17.60 — the dot's look-back needs the moves of a whole stay (his word: 15 days)
 let STATUS_TICK = 0;                           // bumped when the store changes
 function statusLoad(){
   try{ const o = JSON.parse(localStorage.getItem(STATUS_KEY) || "{}"); return (o && typeof o === "object" && !Array.isArray(o)) ? o : {}; }
