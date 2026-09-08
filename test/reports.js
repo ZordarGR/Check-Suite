@@ -13,7 +13,8 @@ const lift = n => { const at = src.indexOf("\nfunction " + n + "("); if(at<0) th
   for(let j=i;j<src.length;j++){ if(src[j]==="{")d++; else if(src[j]==="}"){d--; if(!d) return src.slice(at+1,j+1);} } };
 const line = re => { const m = src.match(re); if(!m) throw new Error(String(re)); return m[0]; };
 const PARSE = [line(/^const SPLIT_GAP = .*$/m), line(/^const DEFAULT_ADV = .*$/m), line(/^const DEPLIST_HEAD = [\s\S]*?\];$/m),
-  lift("xmlDecode"), lift("parseIndices"), lift("pageTokens"), lift("parseDepList"), lift("isDepList")].join("\n");
+  lift("xmlDecode"), lift("parseIndices"), lift("pageTokens"), lift("parseDepList"), lift("isDepList"),
+  lift("xpsDeobfuscate"), lift("ttfMetrics"), lift("parseGlyphIndices"), lift("xpsPageSvg"), lift("xpsFontCss"), lift("xpsFontKey"), lift("buildDepExact")].join("\n");
 const parse = xmls => new Function("xmls", PARSE + "\nreturn {p: parseDepList(xmls), is: isDepList(parseDepList(xmls))};")(xmls);
 const BOARD = [line(/^const SPLIT_GAP = .*$/m), line(/^const DEFAULT_ADV = .*$/m), lift("xmlDecode"), lift("parseIndices"), lift("pageTokens"), lift("parseBoardingList"), lift("isBoardingList"), lift("esc"), lift("buildBoardingSheet")].join("\n");
 
@@ -103,44 +104,7 @@ ck("and it is escaped",                                       !/<script/i.test(h
       come out whole, with its Ποσ., Άφιξη, ΑΤ. and Συμφωνία, the fragment withheld;
    3. the header block repeated on page 2 is not a note, a fragment or a row under the
       last room of page 1. */
-const G2 = (x, y, s) => `<Glyphs OriginX="${x}" OriginY="${y}" FontRenderingEmSize="10.7196" UnicodeString="${s.replace(/&/g, "&amp;").replace(/"/g, "&quot;")}" />`;
-const head2 = pg => [
-  G2(256, 41, " Ημερομηνία Εκτύπωσης"), G2(424, 49, "Kernos Hotel, GR-70007 Malia"), G2(800, 49, "Σελίδα :"), G2(866, 49, String(pg)),
-  G2(232, 64.5, "Τρίτη, 8 Σεπτέμβριος 2026"), G2(384, 64.5, "03:31"),
-  G2(784, 89, "departroom1time 2"), G2(240, 95, "PROTEL HMS"), G2(352, 95, "8/9/2026"), G2(523, 95, "Departure List by Time"), G2(784, 105, "Station 220679"),
-  G2(312, 140, "  Ημερομηνία Αναχώρησης :"), G2(512, 140, "08/09/26"),
-  G2(64, 161, "Δωμάτιο"), G2(136, 161, "Ποσ"), G2(168, 161, "Ζήτηση"), G2(224, 161, "Πελάτης"), G2(448, 161, "Άφιξη"), G2(511.2, 161, "ΑΤ."), G2(542.88, 161, "Eb"),
-  G2(560, 161, "Chil"), G2(598.56, 161, "Bc"), G2(624, 161, "Τιμοκατάλογος"), G2(801.28, 161, "Όροι"), G2(848, 161, "Συμφωνία"), G2(936, 161, "Vip Code"),
-  G2(136, 173.28, "."), G2(560, 173.28, "d.")].join("");
-const row2 = (y, rx, room, type, name, arr, ad, bc, rate, board, price, req, dy, qty) =>
-  [G2(rx, y, room), G2(88, y, type), req ? G2(176, y, req) : "", G2(232, y, name), G2(624, y, rate), board ? G2(808.48, y, board) : "",
-   G2(146.08, y + (dy || 0), qty === undefined ? "1" : qty), G2(444.96, y + (dy || 0), arr), G2(522.08, y + (dy || 0), ad), G2(551, y + (dy || 0), "0"), G2(578.08, y + (dy || 0), "0"), G2(602, y + (dy || 0), bc), G2(859.52, y + (dy || 0), price)].join("");
-const PAGE1 = "<FixedPage>" + head2(1) + [
-  G2(72, 185.28, "ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ"), G2(201, 185.28, "  :"),
-  row2(247.36, 65.6, "253", "SPMV", "MU/HO", "02/09/26", "2", "0", "SNTOR", "HB", "205,70"),
-  G2(232, 259.68, "TYA"),                                                              /* the clipped second line of 253's name */
-  row2(263.36, 65.6, "270", "SPSV", "KOV/MAL", "04/09/26", "2", "0", "SNAR", "HB", "246,00", "", 0.64),
-  row2(388.64, 71.52, "83", "BGV", "KOS/SAN", "01/09/26", "3", "0", "SNAR", "HB", "242,25"),
-  G2(232, 400.96, "A"),
-  row2(404.64, 59.68, "9015", "ACC", "MAR", "07/09/26", "0", "0", "rack", "HB", "0,00", "", 0.64, "0") + G2(368, 404.64, "Αφ.Ατόμου"),
-  G2(72, 485.28, "ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ"), G2(201, 485.28, "03:30"),
-  row2(499.36, 56, "427-2", "BSV", "TUR", "01/09/26", "2", "1", "rack", "HB", "0,00", "BGV"),
-  G2(152, 514.4, "01/09/26"), G2(200, 514.4, "1 Y.O. COT"),
-  G2(72, 546.72, "ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ"), G2(201, 546.72, "07:10"),
-  row2(560.64, 56, "319-1", "SPFA", "MOR", "02/09/26", "2", "0", "SNAR", "HB", "228,00", "BGV"),
-  row2(606.08, 56, "404-5", "BGV", "GAR/BOR", "29/08/26", "2", "0", "SNAR", "", "193,80"),
-  G2(72, 718.72, "ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ"), G2(201, 718.72, "08:40"),
-  row2(732.64, 65.6, "146", "SPSV", "KAL/KAR", "25/08/26", "2", "0", "SNAR", "HB", "246,00"),
-  G2(152, 747.68, "01/01/00"), G2(200, 747.68, "EXEI KLEISEI TAXI"),
-].join("") + "</FixedPage>";
-const PAGE2 = "<FixedPage>" + head2(2) + [
-  G2(72, 185.28, "ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ"), G2(201, 185.28, "10:40"),
-  row2(199.36, 71.52, "67", "BGV", "SCH", "03/09/26", "1", "0", "SNAR", "HB", "208,00", "SPMV"),
-  G2(152, 214.4, "03/09/26"), G2(200, 214.4, "SINGLE USE"),
-  G2(512, 585, " Σύνολο Ατόμων :"), G2(702, 585, "56"), G2(792, 585, " Σύνολο Child  :"), G2(969, 585, "2"),
-  G2(224, 601, " Σύνολο Δωματίων :"), G2(412, 601, "29"),
-  G2(512, 609, " Σύνολο Extra Bed  :"), G2(709, 609, "0"), G2(792, 609, " Σύνολο Baby Cot :"), G2(973, 609, "2"),
-].join("") + "</FixedPage>";
+const {G2, PAGE1, PAGE2, NAMES} = require("./fixtures/dep0809.js");
 const q = parse([PAGE1, PAGE2]).p;
 const rowsOf = q => [].concat(...q.groups.map(g => g.rows));
 ck("08/09: two pages, five groups, every room a row — nine of them",  q.pages === 2 && q.groups.length === 5 && q.guests === 9 && rowsOf(q).map(r => r.room).join(",") === "253,270,83,9015,427-2,319-1,404-5,146,67");
@@ -155,6 +119,75 @@ ck("08/09: page 2's group, row and note are read, and the totals from page 2", q
 ck("08/09: the header is read once — page 1's number, the hotel, the date",  q.page === "1" && q.hotel === "Kernos Hotel, GR-70007 Malia" && q.printed === "Τρίτη, 8 Σεπτέμβριος 2026 03:31" && q.listDate === "08/09/26" && q.station === "220679");
 const html2 = new Function("p", "fname", "$", "t", SHEET + "\nreturn buildDepSheet(p, fname);")(q, "d9832265-0809.oxps", () => ({}), t);
 ck("08/09: the sheet carries every room, 427-2 as printed, nine dashes, no name and no fragment", /class="dlRoom">427-2</.test(html2) && /class="dlRoom">319-1</.test(html2) && /class="dlRoom">270</.test(html2) && (html2.match(/class="dlOut">—</g) || []).length === 9 && !/TYA|KOV|MAL|MU\/HO|TUR|MOR|GAR|BOR|KAL|KAR|SCH|MAR|Αφ\.Ατόμου/.test(html2) && /04\/09\/26/.test(html2) && /246,00/.test(html2) && !/Σελίδα : <b>/.test(html2));
+
+/* ---- THE EXACT PRINT (1.17.59): protel's page as it is, the names cut out ----
+   His ask, 08/09: "everything ... an exact protel document print with the sole exclusion
+   of the names". What it holds the line on: the parser says WHICH glyph runs it withheld
+   (page, run, character range) and where each row's dash goes — on the room's baseline,
+   not on the clipped fragment's above it; a font part is un-obfuscated by its GUID; a
+   glyph's implicit advance comes from the font's own hmtx; the SVG carries every run but
+   the withheld characters, protel's rectangles, a clip id unique per page (page 2 was
+   blank where its clips resolved to page 1's), and a dash per row; nothing withheld
+   survives in the drawing. */
+const X = new Function("xmls", "fonts", PARSE + `
+const p = parseDepList(xmls);
+return {p, ex: buildDepExact(p, {pages: xmls, fonts: fonts || {}}, false), parseGlyphIndices, xpsDeobfuscate, ttfMetrics, xpsPageSvg, pageTokens};`);
+{
+  const {p, ex, parseGlyphIndices, xpsDeobfuscate, ttfMetrics, xpsPageSvg, pageTokens} = X([PAGE1, PAGE2], {});
+  const rows = [].concat(...p.groups.map(g => g.rows));
+  ck("exact: twelve withheld tokens — nine guest cells, the two clipped fragments, protel's label in the band", p.withheld.length === 12 && p.withheld.filter(w => w.t === "TYA" || w.t === "A" || w.t === "Αφ.Ατόμου").length === 3 && p.unplaced.length === 0);
+  ck("exact: every withheld token names its page, run and characters",  p.withheld.every(w => w.pg >= 0 && w.el >= 0 && w.i1 > w.i0) && p.withheld.some(w => w.pg === 1));
+  ck("exact: one dash per row, on the ROOM's baseline — 270's under 263.36 not the fragment's 259.68, 9015's under 404.64", p.dashes.length === rows.length && p.dashes.find(d => Math.abs(d.y - 263.36) < 0.01 && d.x === 232) && p.dashes.find(d => Math.abs(d.y - 404.64) < 0.01) && !p.dashes.find(d => Math.abs(d.y - 259.68) < 0.01));
+  const html = ex.html;
+  ck("exact: two pages drawn, every character the parser withheld cut, nothing unknown", ex.pages === 2 && ex.cut === p.withheld.reduce((n, w) => n + w.i1 - w.i0, 0) && ex.unknown.length === 0 && ex.unplaced === 0);
+  ck("exact: no name, no fragment, on either page",                    NAMES.every(n => html.indexOf(n) < 0) && html.indexOf("Αφ.Ατόμου") < 0);
+  ck("exact: everything else is there — 427-2, Σελίδα, departroom1time 2, the Σύνολο labels, the totals", /427-2/.test(html) && /Σελίδα :/.test(html) && /departroom1time 2/.test(html) && /Σύνολο Ατόμων :/.test(html) && /Σύνολο Δωματίων :/.test(html) && />29</.test(html) && /Kernos Hotel, GR-70007 Malia/.test(html) && /1 Y.O. COT/.test(html) && /Πελάτης/.test(html));
+  ck("exact: nine dashes",                                              (html.match(/>—</g) || []).length === 9);
+  ck("exact: the page number of page 2 is on page 2",                    /<text[^>]*>2<\/text>/.test(html.split('class="xpsPage"')[2] || ""));
+  /* a rectangle and a clipped run, on both pages: the fill is protel's, the clip ids differ */
+  const P = "<FixedPage Width=\"1122.56\" Height=\"793.76\">" + '<Path Data="F1 M 24,174.4 L 1098.56,174.4 1098.56,190.4 24,190.4 z" Fill="#ffc0c0c0" />';
+  const withClip = pg => P + pg.replace("<FixedPage>", "").replace('OriginX="424" OriginY="49"', 'OriginX="424" OriginY="49" Clip="M 424,40 L 700,40 700,52 424,52 z"');
+  const r2 = X([withClip(PAGE1), withClip(PAGE2)], {}).ex;
+  ck("exact: protel's rectangle is drawn with its own grey",             /<path d="M 24,174.4 L 1098.56,174.4 1098.56,190.4 24,190.4 z" fill-rule="nonzero" fill="#c0c0c0"\/>/.test(r2.html));
+  ck("exact: a clip id is unique to its page",                           /id="xp0c1"/.test(r2.html) && /id="xp1c1"/.test(r2.html) && /clip-path="url\(#xp1c1\)"/.test(r2.html));
+  ck("exact: the viewBox is the page",                                    /viewBox="0 0 1122.56 793.76"/.test(r2.html));
+  ck("exact: a run with children is reported and NOT counted — the next run keeps its ordinal", (r => r.unknown.join() === "Glyphs with children,Glyphs.Fill" && /x="5"/.test(r.svg) && />y</.test(r.svg) && !/>x</.test(r.svg))(xpsPageSvg('<FixedPage Width="10" Height="10"><Glyphs OriginX="1" OriginY="2" UnicodeString="x"><Glyphs.Fill/></Glyphs><Glyphs OriginX="5" OriginY="2" UnicodeString="y" /></FixedPage>', {withheld: {0: [[0, 1]]}})));
+  /* the ordinal the renderer gives a run IS the one pageTokens gives it, property elements included */
+  ck("exact: the renderer and the tokenizer number the runs alike",        (x => { const t = pageTokens(x); const s = xpsPageSvg(x, {withheld: {[t.find(k => k.t === "y").el]: [[0, 1]]}}).svg; return t.find(k => k.t === "y").el === 2 && !/>y</.test(s) && />z</.test(s); })('<FixedPage Width="10" Height="10"><Glyphs OriginX="1" OriginY="2" UnicodeString="x" /><Glyphs.Fill/><Glyphs OriginX="5" OriginY="2" UnicodeString="y" /><Glyphs OriginX="8" OriginY="2" UnicodeString="z" /></FixedPage>'));
+  ck("exact: a run with glyph indices and no text is reported",           xpsPageSvg('<FixedPage Width="10" Height="10"><Glyphs OriginX="1" OriginY="2" UnicodeString="" Indices="7" /></FixedPage>', {}).unknown.join() === "Glyphs without text");
+  ck("exact: an element the renderer does not know is reported, not dropped in silence", X(["<FixedPage Width=\"10\" Height=\"10\"><Canvas><Glyphs OriginX=\"1\" OriginY=\"2\" UnicodeString=\"x\" /></Canvas></FixedPage>"], {}).ex.unknown.join() === "Canvas");
+  /* the font part: XOR of the first 32 bytes by the GUID's bytes reversed */
+  const key = [0xE1,0x77,0xC1,0xA0,0xE1,0x46,0x11,0x95,0x48,0x45,0xC7,0x14,0x55,0xBE,0xAD,0x77];
+  const scr = new Uint8Array(40); for(let i = 0; i < 32; i++) scr[i] = key[i % 16] ^ (i < 4 ? [0,1,0,0][i] : 0x5A); scr[39] = 7;
+  const un = xpsDeobfuscate("Documents/1/Resources/Fonts/77ADBE55-14C7-4548-9511-46E1A0C177E1.odttf", scr);
+  ck("exact: the font part is unscrambled by its GUID, bytes reversed — a TrueType header appears", un[0] === 0 && un[1] === 1 && un[2] === 0 && un[3] === 0 && un[4] === 0x5A && un[31] === 0x5A && un[39] === 7 && scr[0] !== un[0]);
+  ck("exact: a part not named by a GUID is left alone",                  xpsDeobfuscate("x/font.ttf", scr)[0] === scr[0]);
+  ck("exact: Indices in full — glyph and advance, either one left to the font", JSON.stringify(parseGlyphIndices("39;72,57;,60;(2:1)5,8", 4)) === JSON.stringify([{gid:39,adv:null},{gid:72,adv:57},{gid:null,adv:60},{gid:5,adv:8}]));
+  /* a four-table TrueType: unitsPerEm 2048, three advances, cmap A→1 B→2 */
+  const u16 = (b, o, v) => { b[o] = v >> 8; b[o + 1] = v & 255; }, u32 = (b, o, v) => { u16(b, o, v >>> 16); u16(b, o + 2, v & 0xFFFF); };
+  const head = new Uint8Array(54); u16(head, 18, 2048);
+  const hhea = new Uint8Array(36); u16(hhea, 34, 3);
+  const hmtx = new Uint8Array(12); u16(hmtx, 0, 1000); u16(hmtx, 4, 1229); u16(hmtx, 8, 500);
+  const cmap = new Uint8Array(44); u16(cmap, 2, 1); u16(cmap, 4, 3); u16(cmap, 6, 1); u32(cmap, 8, 12);
+  u16(cmap, 12, 4); u16(cmap, 14, 32); u16(cmap, 18, 4); u16(cmap, 26, 66); u16(cmap, 28, 0xFFFF); u16(cmap, 32, 65); u16(cmap, 34, 0xFFFF); u16(cmap, 36, (1 - 65) & 0xFFFF); u16(cmap, 38, 1);
+  const tabs = [["cmap", cmap], ["head", head], ["hhea", hhea], ["hmtx", hmtx]];
+  const ttf = new Uint8Array(12 + 16 * tabs.length + tabs.reduce((n, t) => n + t[1].length, 0));
+  u32(ttf, 0, 0x00010000); u16(ttf, 4, tabs.length);
+  let off = 12 + 16 * tabs.length;
+  tabs.forEach(([tag, buf], i) => { const o = 12 + 16 * i; for(let k = 0; k < 4; k++) ttf[o + k] = tag.charCodeAt(k); u32(ttf, o + 8, off); u32(ttf, o + 12, buf.length); ttf.set(buf, off); off += buf.length; });
+  const met = ttfMetrics(ttf);
+  ck("exact: the font's units, advances and cmap are read",              met && met.upem === 2048 && met.adv.join() === "1000,1229,500" && met.cmap.get(65) === 1 && met.cmap.get(66) === 2);
+  ck("exact: garbage is not a font",                                      ttfMetrics(new Uint8Array(3)) === null);
+  const fonts = {"Documents/1/Resources/Fonts/F.odttf": {family: "ff", metrics: met}};
+  const resolve = uri => "Documents/1/Resources/Fonts/F.odttf";
+  const run = ind => xpsPageSvg('<FixedPage Width="100" Height="50"><Glyphs OriginX="10" OriginY="20" FontRenderingEmSize="10" FontUri="../Resources/Fonts/F.odttf" UnicodeString="AB" ' + (ind === null ? "" : 'Indices="' + ind + '" ') + "/></FixedPage>", {fonts, resolve, withheld: {}, dashes: []}).svg;
+  ck("exact: an implicit advance is the font's own — B sits 1229/2048 em after A",  /x="10 16.001"/.test(run("1;2")) && /font-family="ff,/.test(run("1;2")));
+  ck("exact: an explicit advance wins over the font's",                  /x="10 18"/.test(run("1,80;2")));
+  ck("exact: a glyph named by character only goes through the cmap",     /x="10 16.001"/.test(run(null)));
+  ck("exact: withheld characters are cut, the rest keep their places",   (s => /x="16.001"/.test(s) && />B</.test(s) && !/>A/.test(s))(xpsPageSvg('<FixedPage Width="100" Height="50"><Glyphs OriginX="10" OriginY="20" FontRenderingEmSize="10" FontUri="f" UnicodeString="AB" Indices="1;2" /></FixedPage>', {fonts, resolve, withheld: {0: [[0, 1]]}, dashes: []}).svg));
+  ck("exact: mono paints every glyph black; otherwise protel's fill and its alpha", /fill="#000000"/.test(xpsPageSvg('<FixedPage Width="9" Height="9"><Glyphs OriginX="1" OriginY="2" UnicodeString="x" Fill="#ff000080" /></FixedPage>', {mono: true}).svg) && /fill="#000080"/.test(xpsPageSvg('<FixedPage Width="9" Height="9"><Glyphs OriginX="1" OriginY="2" UnicodeString="x" Fill="#ff000080" /></FixedPage>', {}).svg) && /fill="#000080" fill-opacity="0.502"/.test(xpsPageSvg('<FixedPage Width="9" Height="9"><Glyphs OriginX="1" OriginY="2" UnicodeString="x" Fill="#80000080" /></FixedPage>', {}).svg));
+  ck("exact: a token in the guest band on a line the parser could not place is cut too", (r => r.p.unplaced.length === 1 && r.p.unplaced[0].t === "STRAY" && r.ex.html.indexOf("STRAY") < 0 && r.ex.unplaced === 1)(X([PAGE1.replace('<FixedPage>', '<FixedPage Width="1122.56" Height="793.76">').replace(G2(72, 185.28, "ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ"), G2(72, 185.28, "ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ") + G2(240, 179, "STRAY"))], {})));
+}
 
 /* ---- the delete door: only a report file inside the reports folder ---- */
 const path = require("path"), os = require("os");
