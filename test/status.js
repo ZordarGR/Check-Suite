@@ -60,7 +60,7 @@ function pillsFor(reportDate, receipts, rooms){
     "const STATUS_KEY = \"reccheck_status_v1\";", lift("loadStatus"), lift("statusRows"), lift("pillRoom"),
     "const LEGACY_KEY = \"reccheck_legacy\";", lift("legacyOn"), line(/^const MOVES_KEY = .*$/m), lift("loadMoves"), lift("ledgerMoves"), 
     lift("dateNum2"), lift("prevNightKey"), "const RECEIPTS_KEY = \"reccheck_receipts_v1\"; const RECEIPTS_KEEP = 15;", lift("loadNightReceipts"), lift("saveNightReceipts"),
-    "let ARRIVING = {};", lift("leavingIndex"), "let LEAVING = {};", lift("nameHit"), lift("censusNameOf"), lift("opensName"), lift("otherNames"), lift("isLeaving"),
+    "let ARRIVING = {};", lift("leavingIndex"), "let LEAVING = {};", lift("nameHit"), lift("censusNameOf"), lift("nameWordSet"), lift("nameLike"), lift("otherNames"), lift("isLeaving"),
     lift("roomMoves"), lift("renderMovesFor"), lift("renderMoves"),
     "renderMoves(); return {classes: [...classes], root: moves, leaving: leavingIndex(), isLeaving: isLeaving, LEAVING: LEAVING, receiptName: receiptName};"].join("\n");
   const fn = new Function("document", "$", "localStorage", "MODEL", "STATE", "ROOMS", "t", "classes", "moves", body);
@@ -262,18 +262,22 @@ ck("and the receipt keeps its own name, uncompleted, with no census",           
 /* the pill carries two departing names here (MUELLER HANS from the earlier capture, the
    whole one from this) — a receipt opening with MUELLER HANS matches the first under the
    two-way rule of 1.17.60, so the no-match case differs inside the shorter name */
-ck("a receipt that opens no departing name does not dot",                                !pillsFor(NIGHT, [rc("110", "MUELLER HANZ-JOACHIM")]).dot("110"));
+ck("a receipt sharing no word with a departing name does not dot",                       !pillsFor(NIGHT, [rc("110", "SCHMIDT KLAUS")]).dot("110"));
 /* the one case the opening cannot settle: an arrival on the same room whose name the
    receipt opens too — then nothing is marked, the arriving guest's paper above all */
 rpt("AR", RPT("AR", "Arrival Report for the 04/09/26", [["MUELLER HANS-JOACHIM/ANNA ", "110", "2/0/0/0/0", "10/09/26", "CI"]]), T(12));
 P = pillsFor(NIGHT, [rc("110", CUTN)]);
 ck("a cut name that opens BOTH the departing and the arriving name marks nothing",      !P.dot("110") && P.kinds("110") === "arr+dep");
 ck("a receipt that IS the arriving name marks nothing either, though it opens the departing one", !pillsFor(NIGHT, [rc("110", "MUELLER HANS-JOACHIM/ANNA")]).dot("110"));
-ck("a longer cut that opens only the departing name still dots",                         pillsFor(NIGHT, [rc("110", "MUELLER HANS-JOACHIM/ANNEL")]).dot("110"));
-ck("the red mark follows the same rule",                                                 !pillsFor(NIGHT, [rc("110", CUTN)]).isLeaving("110", CUTN) && pillsFor(NIGHT, []).isLeaving("110", "MUELLER HANS-JOACHIM/ANNEL"));
+/* under the WORD rule (1.17.61) the two reservations share MUELLER, HANS and JOACHIM, so
+   a receipt sharing those is either of them — nothing is marked; only a whole word of one
+   and not the other decides */
+ck("a longer cut sharing words with both still marks nothing",                            !pillsFor(NIGHT, [rc("110", "MUELLER HANS-JOACHIM/ANNEL")]).dot("110"));
+ck("a receipt with the whole word of one alone decides",                                   pillsFor(NIGHT, [rc("110", "ANNELIESE M")]).dot("110") && !pillsFor(NIGHT, [rc("110", "ANNA M")]).dot("110"));
+ck("the red mark follows the same rule",                                                 !pillsFor(NIGHT, [rc("110", CUTN)]).isLeaving("110", CUTN) && pillsFor(NIGHT, []).isLeaving("110", "ANNELIESE M") && !pillsFor(NIGHT, []).isLeaving("110", "ANNA M"));
 P = pillsFor(NIGHT, [rc("110", CUTN)], {"110": {guest: WHOLEN, liveKey: 20260905}});
 ck("with the census holding the whole name, the receipt's truncation is completed",     P.name(rc("110", CUTN)) === WHOLEN);
-ck("and the dot lands on the departure",                                                 P.dot("110"));
+ck("and the dot lands on the departure — the whole name, equal, is that reservation whatever words the arrival shares", P.dot("110"));
 ck("an arriving guest's receipt on the same room keeps its own name",                    P.name(rc("110", "NEUMANN PETRA")) === "NEUMANN PETRA");
 ck("three letters never complete",                                                       P.name(rc("110", "MUE")) === "MUE");
 P = pillsFor(NIGHT, [rc("110", "NEUMANN PETRA")], {"110": {guest: WHOLEN, liveKey: 20260905}});
@@ -301,8 +305,13 @@ rpt("DP", RPT("DP", "Departure Report for 04/09/26", [["QUINK ", "56", "2/0/1/1/
 P = pillsFor(NIGHT, [rc("56", "QUINK frederick")]);
 ck("the list says QUINK, the receipt QUINK frederick — the dot lands (room 56, 08/09)",      P.dot("56") && P.kind("56") === "dep");
 ck("the red mark follows",                                                                P.isLeaving("56", "QUINK frederick"));
-ck("a receipt that differs inside the shorter name does not",                             !pillsFor(NIGHT, [rc("56", "QUINT frederick")]).dot("56"));
-ck("nor one of three letters",                                                            !pillsFor(NIGHT, [rc("56", "QUI")]).dot("56"));
+ck("a receipt whose words are all different does not — QUINT is not QUINK",               !pillsFor(NIGHT, [rc("56", "QUINT frederick")]).dot("56"));
+ck("nor QUINKE — a word, not its characters (the hole in the character rule of 1.17.60)", !pillsFor(NIGHT, [rc("56", "QUINKE frederick")]).dot("56"));
+ck("nor a cut inside the only word",                                                      !pillsFor(NIGHT, [rc("56", "QUI")]).dot("56"));
+ck("the order and the separators do not matter — his word: regardless of how its typed in", pillsFor(NIGHT, [rc("56", "Frederick, quink")]).dot("56") && pillsFor(NIGHT, [rc("56", "QUÍNK frédérick")]).dot("56"));
+ck("a two-letter surname is a word",                                                       (() => { rpt("DP", RPT("DP", "Departure Report for 04/09/26", [["WU ", "77", "1/0/0/0/0", "01/09/26", "CI"]]), T(11)); return pillsFor(NIGHT, [rc("77", "WU MING")]).dot("77") && !pillsFor(NIGHT, [rc("77", "W MING")]).dot("77"); })());
+rpt("DP", RPT("DP", "Departure Report for 04/09/26", [["KOVACS/MEYER ", "88", "2/0/0/0/0", "01/09/26", "CI"]]), T(11));
+ck("a pair on the list, one of them on the receipt — his second example",                 pillsFor(NIGHT, [rc("88", "KOVACS PETER")]).dot("88") && pillsFor(NIGHT, [rc("88", "MEYER ANNA/KOVACS")]).dot("88") && !pillsFor(NIGHT, [rc("88", "MEIER ANNA")]).dot("88"));
 P = pillsFor(NIGHT, [rc("56", "QUINK frederick")], {"56": {guest: "QUINK FREDERICK/ANNA", liveKey: 20260904}});
 ck("the census holding the reservation's whole name is no rival — still dots, the receipt completed", P.dot("56") && P.name(rc("56", "QUINK frederick")) === "QUINK FREDERICK/ANNA");
 P = pillsFor(NIGHT, [rc("56", "QUINK frederick")], {"56": {guest: "NEUMANN PETRA", liveKey: 20260904}});
@@ -332,6 +341,23 @@ ck("... not one from before the reservation arrived",                           
 store["reccheck_receipts_v1"] = JSON.stringify({"20260901": [["72", "QUINK FREDERICK"]]});
 rpt("MV", "TITLE\tPerform Move for Date 02/09/26\nMV\t72\tBGV\t56\tMVFAM\tQUINK\t\t30/08/26\t04/09/26\nDONE\t1\t1\t9\t5\tunicode\tcomplete\n", Date.UTC(2026, 8, 2, 10));
 ck("... nor through a move protel has not marked",                                        !pillsFor(NIGHT, []).dot("56"));
+/* one reservation on two lists: moved 72 → 56 on the night it departs from 56 — a departure
+   pill and a move pill under the same name, and the receipt dots BOTH (1.17.61: 1.17.60 let
+   the departure's own name block the move pill) */
+for(const k of Object.keys(store)) delete store[k];
+store["reccheck_legacy"] = "0";
+rpt("DP", RPT("DP", "Departure Report for 04/09/26", [["QUINK ", "56", "2/0/1/1/0", "30/08/26", "CI"]]), T(11));
+rpt("MV", "TITLE\tPerform Move for Date 04/09/26\nMV\t72\tBGV\t56\tMVFAM\tQUINK\tX\t30/08/26\t04/09/26\nDONE\t1\t1\t9\t5\tunicode\tcomplete\n", T(9));
+P = pillsFor(NIGHT, [rc("56", "QUINK frederick")]);
+ck("the same reservation departing and moved carries two pills, and the receipt dots both", P.kinds("56") === "dep+move" && P.pills.filter(p => p.room === "56" && p.dot).length === 2);
+ck("... a receipt on the room it left dots both too",                                     pillsFor(NIGHT, [rc("72", "QUINK frederick")]).pills.filter(p => p.room === "56" && p.dot).length === 2);
+/* a different guest moved in on the departing guest's room: each pill its own name */
+for(const k of Object.keys(store)) delete store[k];
+store["reccheck_legacy"] = "0";
+rpt("DP", RPT("DP", "Departure Report for 04/09/26", [["QUINK ", "56", "2/0/1/1/0", "30/08/26", "CI"]]), T(11));
+rpt("MV", "TITLE\tPerform Move for Date 04/09/26\nMV\t72\tBGV\t56\tMVFAM\tNEUMANN\tX\t02/09/26\t10/09/26\nDONE\t1\t1\t9\t5\tunicode\tcomplete\n", T(9));
+P = pillsFor(NIGHT, [rc("56", "QUINK frederick"), rc("56", "NEUMANN PETRA")]);
+ck("another guest moved in: the departure dots on QUINK's receipt, the move on NEUMANN's, each alone", P.pills.filter(p => p.room === "56" && p.dot).map(p => p.kind).sort().join("+") === "dep+move" && !pillsFor(NIGHT, [rc("56", "NEUMANN PETRA")]).pills.some(p => p.kind === "dep" && p.dot) && !pillsFor(NIGHT, [rc("56", "QUINK frederick")]).pills.some(p => p.kind === "move" && p.dot));
 ck("the memory and the store keep fifteen nights — his word",                              /^const RECEIPTS_KEEP = 15;/m.test(src) && /^const STATUS_KEEP_DAYS = 15;/m.test(src));
 
 console.log("--- 6. legacy mode: nothing is captured, so the XPS-fed ledger draws, as before 1.17.42");

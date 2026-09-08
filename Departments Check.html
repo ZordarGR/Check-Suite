@@ -1934,7 +1934,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.60";
+const APP_VERSION = "1.17.61";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -5496,33 +5496,42 @@ let LEAVING = {};
    and the answer is no. His words, 1.17.12: "dont accidentally mark the arrival receipts";
    and 05/09: "the pills should get marked because the departing name has a receipt, not
    the arriving". */
-/* HIS RULE, 08/09 (1.17.60): "if the available characters in the list exactly match the
-   corresponding number of characters in that same room in the departure list then its a
-   match". Room first; then the SHORTER of the two names must be the opening of the
-   longer, character for character, in EITHER direction — the .oxps cuts the receipt's
-   name at the column (receipt shorter), and protel's lists print what the reservation
-   holds, often the surname alone (list shorter: room 56 printed QUINK, the receipt
-   QUINK frederick, and the one-way rule before this never dotted it). Four characters at
-   least, as the cut-completion always required. */
-function opensName(a, b){
-  const n = x => String(x || "").trim().replace(/\s+/g, " ").toUpperCase();
-  const A = n(a), B = n(b);
-  if(!A || !B) return false;
-  const s = A.length <= B.length ? A : B, l = s === A ? B : A;
-  return s.length >= 4 && l.indexOf(s) === 0;
+/* HIS RULE, 08/09 (1.17.60, restated the same night, 1.17.61): "we're looking for a match
+   in WORDS regardless of how its typed in". Room first; then two names are the same guest
+   when they share a whole word — case, order and separators aside. The .oxps cuts the
+   receipt's name at the column and protel's lists print what the reservation holds, often
+   the surname alone: room 56's list said QUINK, the receipt QUINK frederick; a pair's list
+   says KOVACS/MEYER and a receipt KOVACS PETER. A word is a run of letters or digits of two
+   or more; a name cut inside its only word shares nothing and matches nothing. QUINK and
+   QUINKE are different words — the character rule of 1.17.60 opened one with the other. */
+function nameWordSet(s){
+  const out = new Set();
+  /* accents off (NFD) and upper case — "regardless of how its typed in"; letters and digits
+     of any script; two characters or more (WU, LI are surnames; a lone initial is not) */
+  for(const w of String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().split(/[^\p{L}\p{N}]+/u)) if(w.length >= 2) out.add(w);
+  return out;
+}
+function nameLike(a, b){
+  if(sameName(a, b)) return true;
+  const A = nameWordSet(a), B = nameWordSet(b);
+  for(const w of A) if(B.has(w)) return true;
+  return false;
 }
 /* Is `guest` (a receipt's name) the reservation `target` (a name from protel's list)?
-   Equal or opening each other (opensName) — unless one of the OTHER reservations' names
-   on that room (`others`: the arrival list, a move-in, the census when it is not this
-   reservation) matches the receipt the same way; then the receipt cannot say whose it is
-   and the answer is no. His words, 1.17.12: "dont accidentally mark the arrival
-   receipts"; and 05/09: "the pills should get marked because the departing name has a
-   receipt, not the arriving". An arrival printed with the very same name as the
-   departure is another reservation and blocks too — the safe direction. */
+   The same guest by nameLike — unless one of the OTHER reservations' names on that room
+   (`others`: the arrival list, a move-in, the census when it is not this reservation)
+   is the same guest by the same rule; then the receipt cannot say whose it is and the
+   answer is no. His words, 1.17.12: "dont accidentally mark the arrival receipts"; and
+   05/09: "the pills should get marked because the departing name has a receipt, not the
+   arriving". An arrival printed with the very same name as the departure is another
+   reservation and blocks too — the safe direction. */
 function nameHit(guest, target, others){
   if(!guest || !target) return false;
-  if(!sameName(guest, target) && !opensName(guest, target)) return false;
-  return !(others || []).some(o => o && (sameName(guest, o) || opensName(guest, o)));
+  /* the whole name, equal: that reservation, unless another carries the very same name —
+     a shared word elsewhere does not unsettle an exact name */
+  if(sameName(guest, target)) return !(others || []).some(o => o && sameName(guest, o));
+  if(!nameLike(guest, target)) return false;
+  return !(others || []).some(o => o && nameLike(guest, o));
 }
 function censusNameOf(room){
   const e = ROOMS[String(room)];
@@ -5536,9 +5545,15 @@ function censusNameOf(room){
 function otherNames(m, room, kind){
   const N = (m && m.names) || {};
   const targets = kind === "move" ? (N.move || []) : (N.dep || []);
-  const n = [].concat(N.arr || [], kind === "move" ? (N.dep || []) : (N.move || []));
+  const same = o => o && targets.some(t => t && nameLike(o, t));
+  /* ONE RESERVATION CAN BE ON TWO OF THE LISTS — moved into the room and departing from it
+     the same day carries a departure pill AND a move pill under the same name. The other
+     pill's name is a rival only when it is not this pill's own; 1.17.60 blocked a move pill
+     with its own departure name and the dot went (his report, 08/09). The arrival list is
+     always another reservation. */
+  const n = [].concat(N.arr || [], (kind === "move" ? (N.dep || []) : (N.move || [])).filter(o => !same(o)));
   const c = censusNameOf(room);
-  if(c && !targets.some(t => t && (sameName(c, t) || opensName(c, t)))) n.push(c);
+  if(c && !same(c)) n.push(c);
   return n;
 }
 function isLeaving(room, name){
@@ -5546,7 +5561,7 @@ function isLeaving(room, name){
   if(!names) return false;
   const others = (ARRIVING[room] || []).slice();
   const c = censusNameOf(room);
-  if(c && !names.some(t => t && (sameName(c, t) || opensName(c, t)))) others.push(c);
+  if(c && !names.some(t => t && nameLike(c, t))) others.push(c);
   for(const n of names) if(n && nameHit(name, n, others)) return true;
   return false;
 }
@@ -5969,7 +5984,7 @@ function renderMovesFor(box, night){
           if(!String(r.x || "").trim()) continue;
           const to = pillRoom(r.to), from = pillRoom(r.from);
           if(!to || !from || !seen.has(to) || seen.has(from)) continue;
-          if(!names.some(n => n && (sameName(r.name, n) || opensName(r.name, n)))) continue;
+          if(!names.some(n => n && nameLike(r.name, n))) continue;
           seen.add(from); out.add(from); grew = true;
         }
       }

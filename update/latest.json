@@ -1,11 +1,11 @@
 {
-  "version": "1.17.60",
+  "version": "1.17.61",
   "type": "html",
   "engine": "1.17.57",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.57/RecCheck-Setup.exe",
   "setupSha256": "2625f3e412e3a8f71c73f67e2914b1f83e878343c5c68d6bcd942b9c703e419d",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "1227646102a2cd9f8069db92b5a807af4b786137dd4ac0d6b6d91cffbddc0966",
-  "notes": "The receipts dot on the departure and move pills, and the red LEFT TODAY mark, now match a receipt the way you said: room first, then the shorter of the two names must be the opening of the longer, either way round — so a list printing QUINK and a receipt printing QUINK frederick are the same guest. A receipt written in the room protel moved the guest out of earlier in the stay counts too. The dot's memory and the STATUS nights are kept for 15 days."
+  "sha256": "d29a3967e6d09a50ba6babd2f4bbddfbb0cec7da9601c01f6a821081e5944517",
+  "notes": "The receipts dot matches names by WORDS now, as you said: two names are the same guest when they share a whole word, whatever the order, case or separators — QUINK and QUINK frederick, KOVACS/MEYER and KOVACS PETER; QUINK and QUINKE are different words. And a reservation moved into a room and departing from it the same day dots both its pills again."
 }
