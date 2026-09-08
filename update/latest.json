@@ -1,11 +1,11 @@
 {
-  "version": "1.17.57",
-  "type": "full",
+  "version": "1.17.58",
+  "type": "html",
   "engine": "1.17.57",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.57/RecCheck-Setup.exe",
   "setupSha256": "2625f3e412e3a8f71c73f67e2914b1f83e878343c5c68d6bcd942b9c703e419d",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "c1bcef94f433f6a9b71b33efbb9d6b42d1b194fcebbcfeb632a9ca94bbc5b34b",
-  "notes": "The tool now catches a protel list even if the first read lands before protel has drawn its rows: the read is retried while the window is still open, so a move alert no longer waits for you to open the window a second time (helper v29). The dead spool-capture DEBUG buttons are removed."
+  "sha256": "8c2fb41f15658a22570bbebc586be64b18aadad57c4bb09f1769278611519fab",
+  "notes": "REPORTS: the redacted departures print no longer drops rows. A room printed with an index (427-2) was skipped, so whole departure-time groups came out empty; a room whose guest name wraps onto a second line lost its Ποσ., Άφιξη, ΑΤ. and Συμφωνία; and the header repeated on page 2 leaked into the last room of page 1. Read off the 08/09 file: all 30 rooms, every name still withheld."
 }
