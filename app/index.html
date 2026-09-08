@@ -1351,14 +1351,27 @@ function parseDepList(xmls){
   const out = {kind: "deplist", id: "", title: "", listDate: "", printed: "", station: "", hotel: "", page: "",
                printedShort: "", pages: xmls.length, columns: null, groups: [], totals: [], guests: 0};
   let group = null, lastRow = null, printNext = false;
-  const bandOf = x => { let k = null; for(const c of out.columns) if(c.x <= x + 6) k = c; return k; };
+  /* the room column is the leftmost and right-aligned, so a wider room starts further
+     left of its heading: 9015 at 4 left, 427-2 at 7.68 (his 08/09 file). Anything left
+     of the first heading is the first column's. */
+  const bandOf = x => { let k = out.columns[0] || null; for(const c of out.columns) if(c.x <= x + 6) k = c; return k; };
   for(const xml of xmls){
     const toks = pageTokens(xml).sort((a, b) => a.y - b.y || a.x - b.x);
     const lines = [];
+    /* A line is a chain of baselines within 4 of the LAST token taken, not of the first.
+       His 08/09 file: where a guest name wraps, protel prints the cut-off second line of
+       the name 3.68 above the NEXT room's text and that room's numbers 0.64 under its
+       text. Anchored on the first token, the numbers were 4.32 from the fragment and
+       became a line of their own — a row with no Ποσ., Άφιξη, ΑΤ. or Συμφωνία, and those
+       cells withheld with the name. The fragment still lands in the guest band. */
     for(const tk of toks){
       const L = lines[lines.length - 1];
-      if(L && Math.abs(L.y - tk.y) <= 4) L.toks.push(tk); else lines.push({y: tk.y, toks: [tk]});
+      if(L && Math.abs(L.toks[L.toks.length - 1].y - tk.y) <= 4) L.toks.push(tk); else lines.push({y: tk.y, toks: [tk]});
     }
+    /* protel repeats the whole header block on EVERY page, closed by the heading line.
+       Until that line is seen on a page, nothing on it is a row, a note or a fragment
+       under the previous page's last room. */
+    let inBody = false;
     for(const L of lines){
       L.toks.sort((a, b) => a.x - b.x);
       const words = L.toks.map(t => t.t.trim());
@@ -1378,7 +1391,7 @@ function parseDepList(xmls){
          file the hotel and "Σελίδα : 1" land within 4pt of each other, so they arrive as
          ONE line, the hotel first by x. Anything that does not match leaves both empty
          rather than guessing — the sheet then simply omits that cell. */
-      if(!out.columns && /Σελίδα/.test(text)){
+      if(!inBody && /Σελίδα/.test(text)){
         const pm = text.match(/^(.*?)\s*Σελίδα\s*:?\s*(\d+)?\s*$/);
         if(pm){
           if(!out.hotel && pm[1]) out.hotel = pm[1].trim();
@@ -1388,12 +1401,15 @@ function parseDepList(xmls){
       }
       if(/Ημερομηνία Εκτύπωσης/.test(text)){ printNext = true; continue; }
       if(printNext && /\d{1,2}:\d{2}/.test(text)){ out.printed = text; printNext = false; continue; }
-      if(!out.columns){
+      if(!inBody){
         if(words.indexOf("Δωμάτιο") >= 0 && words.indexOf("Πελάτης") >= 0){
-          const cols = [];
-          for(const [key, word] of DEPLIST_HEAD){ const tk = L.toks.find(t => t.t.trim().indexOf(word) === 0); if(tk) cols.push({key, x: tk.x, head: tk.t.trim()}); }
-          cols.sort((a, b) => a.x - b.x);
-          out.columns = cols;
+          inBody = true;
+          if(!out.columns){
+            const cols = [];
+            for(const [key, word] of DEPLIST_HEAD){ const tk = L.toks.find(t => t.t.trim().indexOf(word) === 0); if(tk) cols.push({key, x: tk.x, head: tk.t.trim()}); }
+            cols.sort((a, b) => a.x - b.x);
+            out.columns = cols;
+          }
         }
         continue;
       }
@@ -1418,7 +1434,10 @@ function parseDepList(xmls){
         (cell[k] = cell[k] || []).push(tk.t.trim());
       }
       const roomToks = cell.room || [];
-      const roomNo = roomToks.find(w => /^\d{1,4}$/.test(w));
+      /* the room as protel prints it: 427, or 427-2 where the stay carries an index —
+         his 08/09 file had four such rooms and every one was dropped (a whole ΩΡΑ group
+         each). Kept as printed, never shortened to the bare number. */
+      const roomNo = roomToks.find(w => /^\d{1,4}(-\d+)?$/.test(w));
       if(roomNo && (cell.guest || cell.arr)){
         const row = {room: roomNo, type: roomToks.filter(w => w !== roomNo).join(" "),
                      qty: (cell.qty || []).join(" "), req: (cell.req || []).join(" "),
@@ -1709,7 +1728,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.57";
+const APP_VERSION = "1.17.58";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
