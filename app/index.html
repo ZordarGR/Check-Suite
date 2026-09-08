@@ -281,6 +281,12 @@ body.onMenu #clList{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
 #printSheet .dlTbl tr.note td,#pvPaper .dlTbl tr.note td{color:#333;font-size:9.5px;padding-top:0;border-top:0}
 #printSheet .dlNd,#pvPaper .dlNd{color:#333;font-size:9.5px;white-space:nowrap}
 #printSheet .dlTot,#pvPaper .dlTot{margin-top:10px;font-size:10.5px}
+/* the exact page (1.17.59): protel's FixedPage as an SVG, one per page. On paper an A4
+   landscape sheet edge to edge, one page each; on screen scaled to the preview's width.
+   `print-color-adjust:exact` above keeps its grey bands. */
+#printSheet .xpsPage,#pvPaper .xpsPage{background:#fff;overflow:hidden;aspect-ratio:1122.56/793.76;width:100%}
+#printSheet .xpsPage svg,#pvPaper .xpsPage svg{display:block;width:100%;height:100%}
+#pvPaper .xpsPage + .xpsPage{border-top:2px dashed #bbb}
 #printSheet .dlFoot,#pvPaper .dlFoot{margin-top:12px;font-size:9.5px;color:#444;border-top:1px solid #999;padding-top:4px}
 #printSheet .blGroup,#pvPaper .blGroup{text-align:right;font-size:10.5px;color:#000;margin:4px 0 2px}
 #printSheet .blTbl th,#pvPaper .blTbl th,#printSheet .blTbl td,#pvPaper .blTbl td{padding:2px 6px}
@@ -594,6 +600,7 @@ body.hasMoves main{max-width:1330px}
 #pvPaper td.num,#pvPaper th.num{text-align:right;font-family:Consolas,monospace}
 #pvPaper .none{font-style:italic;margin:4px 0 0}
 #pvPaper .old{text-decoration:line-through}
+.pvNote{font-size:11px;color:#bbb;margin:-8px 0 8px}
 #modal h3{font-size:15px;letter-spacing:.08em;color:var(--amber);margin-bottom:16px;font-family:var(--mono)}
 #modal label{display:block;font-size:12px;color:var(--dim);margin:12px 0 4px;letter-spacing:.06em}
 #modal input,#modal select{width:100%;background:var(--bg2);border:1.5px solid var(--line);border-radius:8px;
@@ -756,6 +763,8 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
      !important}` is more specific and still wins when the tax half is the one printing. */
   #print-mount{display:none !important}
   #printSheet{display:block !important;color:#000;font-family:"Segoe UI",Arial,sans-serif;padding:0;font-size:12px}
+  #printSheet .xpsPage{width:297mm;height:210mm;aspect-ratio:auto;page-break-after:always;break-after:page}
+  #printSheet .xpsPage:last-child{page-break-after:auto;break-after:auto}
   #printSheet h1{font-size:16px;letter-spacing:.06em;margin:0 0 2px;font-weight:700}
   #printSheet .meta{font-size:11px;margin-bottom:14px;color:#000}
   #printSheet h2{font-size:12.5px;margin:16px 0 6px;font-weight:700;border-bottom:1.2px solid #000;padding-bottom:3px}
@@ -1200,7 +1209,10 @@ function numToMoney(n){
 }
 
 /* ---- ZIP reading (EOCD → central dir → deflate-raw) ---- */
-async function unzipFpages(buf){
+async function unzipFpages(buf){ return (await unzipXpsParts(buf)).pages; }
+/* the pages, and the font parts they refer to (still obfuscated — xpsDeobfuscate is the
+   renderer's), by their zip names */
+async function unzipXpsParts(buf){
   const dv = new DataView(buf);
   const len = buf.byteLength;
   let eocd = -1;
@@ -1229,8 +1241,9 @@ async function unzipFpages(buf){
     .filter(e => /Documents\/1\/Pages\/\d+\.fpage$/i.test(e.name))
     .sort((a,b) => parseInt(a.name.match(/(\d+)\.fpage/i)[1]) - parseInt(b.name.match(/(\d+)\.fpage/i)[1]));
   if(!fpages.length) throw new Error("No page content (.fpage) found — is this a protel OXPS report?");
-  const xmls = [];
-  for(const e of fpages){
+  const fontParts = entries.filter(e => /\.odttf$/i.test(e.name));
+  const xmls = [], fonts = {};
+  for(const e of fpages.concat(fontParts)){
     const nl = dv.getUint16(e.lho + 26, true);
     const xl = dv.getUint16(e.lho + 28, true);
     const start = e.lho + 30 + nl + xl;
@@ -1245,9 +1258,9 @@ async function unzipFpages(buf){
     }else{
       throw new Error("Unsupported ZIP compression method: " + e.method);
     }
-    xmls.push(td.decode(out));
+    if(/\.odttf$/i.test(e.name)) fonts[e.name] = out; else xmls.push(td.decode(out));
   }
-  return xmls;
+  return {pages: xmls, fonts};
 }
 
 /* ---- XML entity decode ---- */
@@ -1285,9 +1298,9 @@ function parseIndices(str, n){
 function pageTokens(xml){
   const toks = [];
   const re = /<Glyphs\b[^>]*?\/>/g;
-  let m;
+  let m, el = -1;
   while((m = re.exec(xml))){
-    const tag = m[0];
+    const tag = m[0]; el++;
     const attr = n => { const mm = tag.match(new RegExp(n + '="([^"]*)"')); return mm ? mm[1] : null; };
     const us = attr("UnicodeString");
     const ox = attr("OriginX"), oy = attr("OriginY");
@@ -1297,15 +1310,18 @@ function pageTokens(xml){
     const em = parseFloat(attr("FontRenderingEmSize") || "10") || 10;
     const advs = parseIndices(attr("Indices"), text.length);
     let x = parseFloat(ox), y = parseFloat(oy);
-    let cur = "", curX = x;
+    let cur = "", curX = x, i0 = 0;
+    /* el / i0 / i1: which <Glyphs> run (counted in document order, the ones skipped above
+       included) and which characters of it this token is — so a token withheld by a
+       parser can be cut out of the run when protel's page is drawn as it is (1.17.59). */
     for(let i = 0; i < text.length; i++){
       const a = advs[i] === null ? DEFAULT_ADV : advs[i];
-      if(cur === "") curX = x;
+      if(cur === ""){ curX = x; i0 = i; }
       cur += text[i];
-      if(a > SPLIT_GAP){ toks.push({x: curX, y, t: cur}); cur = ""; }
+      if(a > SPLIT_GAP){ toks.push({x: curX, y, t: cur, el, i0, i1: i + 1}); cur = ""; }
       x += a * em / 100;
     }
-    if(cur) toks.push({x: curX, y, t: cur});
+    if(cur) toks.push({x: curX, y, t: cur, el, i0, i1: text.length});
   }
   return toks;
 }
@@ -1349,13 +1365,20 @@ const DEPLIST_HEAD = [["room","Δωμάτιο"],["qty","Ποσ"],["req","Ζήτ�
                       ["eb","Eb"],["child","Chil"],["bc","Bc"],["rate","Τιμοκατάλογος"],["board","Όροι"],["price","Συμφωνία"],["vip","Vip"]];
 function parseDepList(xmls){
   const out = {kind: "deplist", id: "", title: "", listDate: "", printed: "", station: "", hotel: "", page: "",
-               printedShort: "", pages: xmls.length, columns: null, groups: [], totals: [], guests: 0};
-  let group = null, lastRow = null, printNext = false;
+               printedShort: "", pages: xmls.length, columns: null, groups: [], totals: [], guests: 0,
+               /* for the exact print (1.17.59): every token withheld as a name or as a fragment in
+                  the name's place, by page, glyph run and character range; where each row's dash
+                  goes; and any token in the guest band on a line this parser could not place —
+                  cut like a name, so nothing it could not vouch for reaches paper. */
+               withheld: [], dashes: [], unplaced: []};
+  let group = null, lastRow = null, printNext = false, pg = -1;
+  const hold = (tk, list) => list.push({pg, el: tk.el, i0: tk.i0, i1: tk.i1, x: tk.x, y: tk.y, t: tk.t.trim()});
   /* the room column is the leftmost and right-aligned, so a wider room starts further
      left of its heading: 9015 at 4 left, 427-2 at 7.68 (his 08/09 file). Anything left
      of the first heading is the first column's. */
   const bandOf = x => { let k = out.columns[0] || null; for(const c of out.columns) if(c.x <= x + 6) k = c; return k; };
   for(const xml of xmls){
+    pg++;
     const toks = pageTokens(xml).sort((a, b) => a.y - b.y || a.x - b.x);
     const lines = [];
     /* A line is a chain of baselines within 4 of the LAST token taken, not of the first.
@@ -1428,10 +1451,11 @@ function parseDepList(xmls){
         continue;
       }
       /* cells: every token into the band of the last heading at or left of it */
-      const cell = {};
+      const cell = {}, cellT = {};
       for(const tk of L.toks){
         const c = bandOf(tk.x); const k = c ? c.key : "left";
         (cell[k] = cell[k] || []).push(tk.t.trim());
+        (cellT[k] = cellT[k] || []).push(tk);
       }
       const roomToks = cell.room || [];
       /* the room as protel prints it: 427, or 427-2 where the stay carries an index —
@@ -1447,23 +1471,205 @@ function parseDepList(xmls){
                      price: (cell.price || []).join(" "), vip: (cell.vip || []).join(" "), notes: [], guestExtra: ""};
         if(!group){ group = {time: "", rows: []}; out.groups.push(group); }
         group.rows.push(row); lastRow = row; out.guests++;
+        for(const tk of (cellT.guest || [])) hold(tk, out.withheld);
+        /* the dash: at the leftmost guest token's x, on the ROOM NUMBER's baseline — the
+           first guest token by y can be the clipped fragment of the name above (3.68 up) */
+        if(cellT.guest && cellT.guest.length){
+          const g0 = cellT.guest.reduce((a, b) => b.x < a.x ? b : a), rt = cellT.room.find(t => t.t.trim() === roomNo) || g0;
+          out.dashes.push({pg, el: g0.el, i0: g0.i0, i1: g0.i1, x: g0.x, y: rt.y, t: ""});
+        }
         continue;
       }
-      if(!lastRow) continue;
+      /* the guest BAND: from the guest heading to the next heading, the same slack the
+         cells use. A token in it on a line that is not a row is a fragment in the name's
+         place (his file prints "TA" there, beside a note) and goes with the name; a token
+         right of the band on such a line is not (the wrapped "d." of the Child heading). */
+      const gi = out.columns.findIndex(c => c.key === "guest");
+      const gx = gi >= 0 ? out.columns[gi].x : Infinity, nx = gi >= 0 && out.columns[gi + 1] ? out.columns[gi + 1].x : Infinity;
+      const band = L.toks.filter(t => t.x >= gx - 6 && t.x < nx - 6);
+      if(!lastRow){ for(const tk of band) hold(tk, out.unplaced); continue; }
       /* a note under the room: a date then free text, both LEFT of the guest column.
-         Whatever else sits on that line from the guest column on (his file prints "TA"
-         there, beside a note) is kept out of the note and withheld with the name — a
-         fragment in the name's place is treated as the name's. */
-      const gx = (out.columns.find(c => c.key === "guest") || {x: Infinity}).x;
-      const left = L.toks.filter(t => t.x < gx - 6), right = L.toks.filter(t => t.x >= gx - 6);
+         Whatever sits in the guest band on that line is kept out of the note and withheld
+         with the name — a fragment in the name's place is treated as the name's. */
+      const left = L.toks.filter(t => t.x < gx - 6);
       const dateTok = left.map(t => t.t.trim()).find(w => /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(w));
-      if(right.length) lastRow.guestExtra += (lastRow.guestExtra ? " " : "") + right.map(t => t.t.trim()).join(" ");
+      if(band.length) lastRow.guestExtra += (lastRow.guestExtra ? " " : "") + band.map(t => t.t.trim()).join(" ");
+      for(const tk of band) hold(tk, out.withheld);
       if(dateTok) lastRow.notes.push({date: dateTok, text: left.map(t => t.t.trim()).filter(w => w !== dateTok).join(" ")});
     }
   }
   return out;
 }
 function isDepList(p){ return !!(p && p.columns && (p.title || /^departroom/.test(p.id || ""))); }
+
+/* ---- protel's page itself, drawn as it is — XPS → SVG ----
+   His ask, 08/09: "i want everything and i mean EVERYTHING on the print, tags, headers,
+   everything ... an exact protel document print with the sole exclusion of the names".
+   So the printed page is no longer a table rebuilt from the tokens: it is protel's own
+   FixedPage, every glyph run at its own origin in protel's own embedded font, every rule
+   and band, both pages — with the glyph runs the departure-list parser withheld as the
+   guest cell or a fragment in its place CUT OUT before anything is drawn (a dash at the
+   cell's origin marks the cut, his choice). Nothing is under the dash: a PDF of the
+   print holds no name. His file of 08/09 is text runs and rectangles only; the renderer
+   covers what that file uses and refuses, loudly, anything it does not understand. */
+
+/* An XPS font part is the TrueType file with its first 32 bytes XOR-ed by the GUID in
+   its own name, the GUID's bytes taken in reverse. Anything not named by a GUID is
+   returned untouched. */
+function xpsDeobfuscate(name, bytes){
+  const m = String(name).match(/([0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})\.odttf$/i);
+  if(!m) return bytes;
+  const hex = m[1].replace(/-/g, ""), key = [];
+  for(let i = hex.length - 2; i >= 0; i -= 2) key.push(parseInt(hex.substr(i, 2), 16));
+  const out = new Uint8Array(bytes);
+  for(let i = 0; i < 32 && i < out.length; i++) out[i] ^= key[i % 16];
+  return out;
+}
+/* what the renderer needs of a TrueType font: units per em, each glyph's advance (for a
+   glyph whose advance XPS left implicit) and the cmap for a glyph XPS named by character
+   only. Null where the tables are not there. */
+function ttfMetrics(u8){
+  try{
+    const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    const n = dv.getUint16(4), tab = {};
+    for(let i = 0; i < n; i++){ const o = 12 + 16 * i; tab[String.fromCharCode(u8[o], u8[o + 1], u8[o + 2], u8[o + 3])] = {off: dv.getUint32(o + 8), len: dv.getUint32(o + 12)}; }
+    if(!tab.head || !tab.hhea || !tab.hmtx) return null;
+    const upem = dv.getUint16(tab.head.off + 18);
+    const nh = dv.getUint16(tab.hhea.off + 34);
+    const adv = new Array(nh);
+    for(let g = 0; g < nh; g++) adv[g] = dv.getUint16(tab.hmtx.off + 4 * g);
+    const cmap = new Map();
+    if(tab.cmap){
+      const c = tab.cmap.off, nt = dv.getUint16(c + 2);
+      for(let i = 0; i < nt; i++){
+        const pid = dv.getUint16(c + 4 + 8 * i), eid = dv.getUint16(c + 6 + 8 * i), s = c + dv.getUint32(c + 8 + 8 * i);
+        if(dv.getUint16(s) !== 4 || !((pid === 3 && (eid === 1 || eid === 0)) || pid === 0)) continue;
+        const segX2 = dv.getUint16(s + 6), ends = s + 14, starts = ends + segX2 + 2, deltas = starts + segX2, ranges = deltas + segX2;
+        for(let k = 0; k < segX2 / 2; k++){
+          const end = dv.getUint16(ends + 2 * k), start = dv.getUint16(starts + 2 * k), delta = dv.getInt16(deltas + 2 * k), ro = dv.getUint16(ranges + 2 * k);
+          if(start === 0xFFFF) continue;
+          for(let ch = start; ch <= end; ch++){
+            let g;
+            if(ro === 0) g = (ch + delta) & 0xFFFF;
+            else { g = dv.getUint16(ranges + 2 * k + ro + 2 * (ch - start)); if(g) g = (g + delta) & 0xFFFF; }
+            if(g) cmap.set(ch, g);
+          }
+        }
+        break;
+      }
+    }
+    return {upem, adv, cmap};
+  }catch(e){ return null; }
+}
+/* Indices, in full: "gid,adv;gid;gid,adv…" → one {gid, adv} per character, either half
+   null where XPS left it to the font. A cluster prefix "(n:m)" is stripped. */
+function parseGlyphIndices(str, n){
+  const out = new Array(n).fill(null).map(() => ({gid: null, adv: null}));
+  if(!str) return out;
+  const parts = str.split(";");
+  for(let i = 0; i < parts.length && i < n; i++){
+    const f = parts[i].replace(/^\(\d+:\d+\)/, "").split(",");
+    if(f[0] !== "" && f[0] !== undefined){ const g = parseInt(f[0], 10); if(!isNaN(g)) out[i].gid = g; }
+    if(f.length >= 2 && f[1] !== ""){ const a = parseFloat(f[1]); if(!isNaN(a)) out[i].adv = a; }
+  }
+  return out;
+}
+/* One FixedPage → one SVG. ctx:
+     fonts    { fontKey → {family, metrics} }   resolve(uri) → fontKey (or null)
+     withheld { glyphElementOrdinal → [[i0,i1], …] }   character ranges cut out of that run
+     dashes   [ {el, x, y} ]                    a dash drawn in the run's own font at (x,y)
+     mono     true → every glyph black (protel's own fills otherwise)
+     idp      prefix for clip ids, unique per page in one document
+   The glyph element ordinal counts every <Glyphs> in document order, exactly as
+   pageTokens numbers them, so a withheld token names the run it came from.
+   Returns {svg, W, H, cut, unknown}: cut = characters removed; unknown = elements the
+   renderer did not draw (a caller refuses the print when it is not empty). */
+function xpsPageSvg(xml, ctx){
+  const attr = (tag, n) => { const m = tag.match(new RegExp('\\b' + n + '="([^"]*)"')); return m ? xmlDecode(m[1]) : null; };
+  const fp = xml.match(/<FixedPage\b[^>]*>/);
+  const W = parseFloat(fp ? attr(fp[0], "Width") : 0) || 0, H = parseFloat(fp ? attr(fp[0], "Height") : 0) || 0;
+  const color = f => { const m = String(f || "").match(/^#([0-9a-f]{2})?([0-9a-f]{6})$/i); return m ? {c: "#" + m[2], a: m[1] ? parseInt(m[1], 16) / 255 : 1} : {c: "#000000", a: 1}; };
+  const num = v => (Math.round(v * 1000) / 1000).toString();
+  const geom = d => String(d || "").replace(/^\s*F[01]\s*/, "").replace(/\s+/g, " ").trim();
+  const fill = (f, mono) => { const k = color(mono ? "#ff000000" : f); return ' fill="' + k.c + '"' + (k.a < 1 ? ' fill-opacity="' + num(k.a) + '"' : ""); };
+  const body = [], defs = [], unknown = [];
+  /* clip ids carry the caller's prefix: several pages share one document, and a clip id
+     repeated across pages would clip page 2's runs by page 1's rectangles */
+  const idp = String(ctx.idp || "xc");
+  let clipN = 0, el = -1, cut = 0;
+  const re = /<([A-Za-z][\w.]*)([^>]*?)(\/?)>/g;
+  let m;
+  while((m = re.exec(xml))){
+    const name = m[1], tag = m[0];
+    /* the run ordinal advances on EXACTLY what pageTokens counts — its own pattern, which
+       takes a self-closing <Glyphs…/> and, by the same \b, a property element such as
+       <Glyphs.Fill/> — so a withheld token can never name the wrong run */
+    if(/^<Glyphs\b[^>]*?\/>$/.test(tag)) el++;
+    if(name === "FixedPage") continue;
+    if(name.indexOf(".") >= 0){ unknown.push(name); continue; }
+    if(name === "Path"){
+      const d = geom(attr(tag, "Data"));
+      if(!d){ unknown.push("Path without Data"); continue; }
+      const rule = /^\s*F1/.test(attr(tag, "Data") || "") ? "nonzero" : "evenodd";
+      const st = attr(tag, "Stroke"), sw = attr(tag, "StrokeThickness");
+      let s = '<path d="' + d + '" fill-rule="' + rule + '"';
+      const F = attr(tag, "Fill");
+      s += F ? fill(F, false) : ' fill="none"';
+      if(st){ const k = color(st); s += ' stroke="' + k.c + '" stroke-width="' + num(parseFloat(sw || "1")) + '"'; }
+      const clip = geom(attr(tag, "Clip"));
+      if(clip){ const id = idp + (++clipN); defs.push('<clipPath id="' + id + '"><path d="' + clip + '"/></clipPath>'); s += ' clip-path="url(#' + id + ')"'; }
+      body.push(s + "/>");
+      continue;
+    }
+    if(name === "Glyphs"){
+      /* only a self-closing run counts: pageTokens numbers exactly those, and a run with
+         child elements would shift every ordinal after it — the wrong characters cut */
+      if(m[3] !== "/"){ unknown.push("Glyphs with children"); continue; }
+      const us = attr(tag, "UnicodeString"), ox = attr(tag, "OriginX"), oy = attr(tag, "OriginY");
+      if(us === null || ox === null || oy === null){ unknown.push("Glyphs without text"); continue; }
+      const text = us; if(!text){ if(attr(tag, "Indices")) unknown.push("Glyphs without text"); continue; }
+      const em = parseFloat(attr(tag, "FontRenderingEmSize") || "10") || 10;
+      const key = ctx.resolve ? ctx.resolve(attr(tag, "FontUri")) : null;
+      const font = key && ctx.fonts ? ctx.fonts[key] : null;
+      const met = font && font.metrics;
+      const idx = parseGlyphIndices(attr(tag, "Indices"), text.length);
+      const sim = attr(tag, "StyleSimulations") || "None";
+      const ranges = (ctx.withheld && ctx.withheld[el]) || [];
+      const hidden = i => ranges.some(r => i >= r[0] && i < r[1]);
+      let x = parseFloat(ox); const y = parseFloat(oy);
+      const xs = [], chars = [];
+      for(let i = 0; i < text.length; i++){
+        let a = idx[i].adv;
+        if(a === null){
+          let gid = idx[i].gid;
+          if(gid === null && met) gid = met.cmap.get(text.charCodeAt(i));
+          if(met && gid !== null && gid !== undefined && met.adv.length) a = met.adv[Math.min(gid, met.adv.length - 1)] / met.upem * 100;
+          else a = DEFAULT_ADV;
+        }
+        if(hidden(i)) cut++; else { xs.push(num(x)); chars.push(text[i]); }
+        x += a * em / 100;
+      }
+      const fam = font ? font.family : "Arial";
+      let s = '<text xml:space="preserve" x="' + xs.join(" ") + '" y="' + num(y) + '" font-family="' + fam + ',Arial,sans-serif" font-size="' + num(em) + '"';
+      if(/Bold/i.test(sim)) s += ' font-weight="bold"';
+      if(/Italic/i.test(sim)) s += ' font-style="italic"';
+      s += fill(attr(tag, "Fill") || "#ff000000", !!ctx.mono);
+      const clip = geom(attr(tag, "Clip"));
+      if(clip){ const id = idp + (++clipN); defs.push('<clipPath id="' + id + '"><path d="' + clip + '"/></clipPath>'); s += ' clip-path="url(#' + id + ')"'; }
+      if(chars.length) body.push(s + ">" + chars.map(c => c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c).join("") + "</text>");
+      for(const dsh of (ctx.dashes || [])){
+        if(dsh.el !== el) continue;
+        body.push('<text x="' + num(dsh.x) + '" y="' + num(dsh.y) + '" font-family="' + fam + ',Arial,sans-serif" font-size="' + num(em) + '"' + fill("#ff000000", true) + ">—</text>");
+      }
+      continue;
+    }
+    if(name === "Canvas") { unknown.push("Canvas"); continue; }
+    if(!/^(\/|\?|!)/.test(name)) unknown.push(name);
+  }
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + num(W) + " " + num(H) + '" width="' + num(W) + '" height="' + num(H) + '">'
+            + (defs.length ? "<defs>" + defs.join("") + "</defs>" : "") + body.join("") + "</svg>";
+  return {svg, W, H, cut, unknown};
+}
 
 /* ---- the Boarding List — protel report `mealplandetail` ----
    A meal-plan / in-house list: Name, room (#), and the Breakfast/Lunch/Dinner/Table counts,
@@ -1728,7 +1934,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.58";
+const APP_VERSION = "1.17.59";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1844,6 +2050,9 @@ en: {
   "rep.itemSub": "{n} room(s) · printed {p} · {f}",
   "rep.pvTitle": "Departure list — names withheld",
   "rep.withheld": "Guest names withheld",
+  "rep.exact": "protel's own page, the names cut out — {n} characters withheld",
+  "rep.exactUnplaced": "{u} more in the name column could not be placed and were cut too",
+  "rep.exactUnknown": "{k} page elements this version cannot draw",
   "rep.printedAt": "printed {p}",
   "rep.noTime": "no departure time",
   "rep.delete": "Delete the file",
@@ -2095,6 +2304,9 @@ gr: {
   "rep.itemSub": "{n} δωμάτια · τυπώθηκε {p} · {f}",
   "rep.pvTitle": "Λίστα αναχωρήσεων — χωρίς ονόματα",
   "rep.withheld": "Χωρίς ονόματα πελατών",
+  "rep.exact": "η σελίδα του protel όπως είναι, χωρίς τα ονόματα — {n} χαρακτήρες αφαιρέθηκαν",
+  "rep.exactUnplaced": "{u} ακόμη στη στήλη ονομάτων δεν τοποθετήθηκαν και αφαιρέθηκαν επίσης",
+  "rep.exactUnknown": "{k} στοιχεία σελίδας που αυτή η έκδοση δεν σχεδιάζει",
   "rep.printedAt": "τυπώθηκε {p}",
   "rep.noTime": "χωρίς ώρα αναχώρησης",
   "rep.delete": "Διαγραφή του αρχείου",
@@ -6254,9 +6466,12 @@ async function repParse(f){
   try{
     const raw = await window.reccheckFiles.read("rep", f.path);
     const u8 = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
-    const xmls = await unzipFpages(u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength));
+    const parts = await unzipXpsParts(u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength));
+    const xmls = parts.pages;
     const p = parseDepList(xmls);
-    if(isDepList(p)) res = {ok: true, parsed: p, kind: "dep"};
+    /* a departure list keeps its pages and font parts: the exact print draws them (1.17.59).
+       Held per file for the session, like the parse — a list is deleted once printed. */
+    if(isDepList(p)) res = {ok: true, parsed: p, kind: "dep", xps: parts};
     else { const bp = parseBoardingList(xmls); res = isBoardingList(bp) ? {ok: true, parsed: bp, kind: "board"} : {ok: false}; }
   }catch(e){ res = {ok: false, err: String((e && e.message) || e || "?")}; }
   /* ONLY SUCCESSES ARE REMEMBERED. A failure cached under path+mtime never expires, and
@@ -6340,6 +6555,53 @@ function buildDepSheet(p, fname){
   return h;
 }
 
+/* ---- THE EXACT PRINT (1.17.59): protel's own pages, names cut out ----
+   His ask, 08/09: "an exact protel document print with the sole exclusion of the names".
+   The sheet is the FixedPages of his file drawn as they are, in protel's embedded fonts,
+   through xpsPageSvg; the runs the parser withheld (the guest cell, a fragment in its
+   place, and anything in the guest band it could not place) are cut out before drawing
+   and a dash marks each row's cut — the dash was his choice. Both pages, page numbers,
+   every label. Nothing is added to the page; a line about what was cut is shown in the
+   preview, beside the paper, never on it. The tabular sheet (buildDepSheet) stays as the
+   fallback for a file with no page to draw. */
+function xpsFontCss(fonts){
+  let css = ""; const out = {};
+  for(const name of Object.keys(fonts || {})){
+    const u8 = xpsDeobfuscate(name, fonts[name]);
+    const fam = "xps-" + ((name.match(/([0-9A-Fa-f-]{36})\.odttf$/i) || [])[1] || ("f" + Object.keys(out).length)).replace(/-/g, "");
+    let b = ""; for(let i = 0; i < u8.length; i += 0x8000) b += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+    css += '@font-face{font-family:"' + fam + '";src:url(data:font/ttf;base64,' + btoa(b) + ') format("truetype")}\n';
+    out[name] = {family: fam, metrics: ttfMetrics(u8)};
+  }
+  return {css, fonts: out};
+}
+/* a FontUri is relative to its page ("../Resources/Fonts/GUID.odttf"); the part is found
+   by that file name, wherever the zip put it */
+function xpsFontKey(uri, fonts){
+  const base = String(uri || "").split("/").pop().toLowerCase();
+  return Object.keys(fonts || {}).find(k => k.split("/").pop().toLowerCase() === base) || null;
+}
+/* {html, pages, cut, unplaced, unknown} — html is the whole sheet */
+function buildDepExact(p, xps, mono){
+  const F = xpsFontCss(xps.fonts);
+  const resolve = uri => xpsFontKey(uri, F.fonts);
+  let html = "<style>" + F.css + "</style>", cut = 0, unknown = [];
+  xps.pages.forEach((xml, pg) => {
+    const withheld = {};
+    for(const w of p.withheld.concat(p.unplaced)){ if(w.pg !== pg) continue; (withheld[w.el] = withheld[w.el] || []).push([w.i0, w.i1]); }
+    const dashes = p.dashes.filter(d => d.pg === pg).map(d => ({el: d.el, x: d.x, y: d.y}));
+    const r = xpsPageSvg(xml, {fonts: F.fonts, resolve, withheld, dashes, mono: !!mono, idp: "xp" + pg + "c"});
+    cut += r.cut; unknown = unknown.concat(r.unknown);
+    html += '<div class="xpsPage">' + r.svg + "</div>";
+  });
+  return {html, pages: xps.pages.length, cut, unplaced: p.unplaced.length, unknown};
+}
+/* writes the exact sheet into #printSheet; returns what buildDepExact returned */
+function buildDepExactSheet(p, xps){
+  const ex = buildDepExact(p, xps, false);
+  $("#printSheet").innerHTML = ex.html;
+  return ex;
+}
 /* the redacted BOARDING sheet, in protel's own portrait layout (his file of 07/09): the
    boxed three-cell header, the Name / # / Breakfast / Lunch / Dinner / Table columns, the
    day sub-header with that day's totals, the guest rows with the name replaced by a dash,
@@ -6397,10 +6659,12 @@ function clearPrintJob(){ PRINT_JOB = null; document.body.classList.remove("taxP
    report is the only landscape thing in the app). Set by the beforeprint listener from the
    same intent that chooses the sheet, cleared by clearPrintJob so no print inherits the
    last one's shape. */
-function setPrintLandscape(on){
+function setPrintLandscape(on, exact){
   let st = document.getElementById("dlOrient");
   if(!st){ st = document.createElement("style"); st.id = "dlOrient"; document.head.appendChild(st); }
-  st.textContent = on ? "@media print{@page{size:A4 landscape;margin:10mm}}" : "";
+  /* the exact page IS an A4 landscape sheet, protel's margins already inside it — so the
+     printer gets it edge to edge; the tabular sheet keeps its 10mm */
+  st.textContent = on ? (exact ? "@media print{@page{size:A4 landscape;margin:0}}" : "@media print{@page{size:A4 landscape;margin:10mm}}") : "";
 }
 let REP_RUN = 0;               // only the newest render may paint — see renderReports
 /* REPORTS walks sub-folders the way the Department Check's and the Tax Check's browsers
@@ -6480,17 +6744,28 @@ async function renderReports(){
       b.append(el("span", "mLabel", t("rep.item", {d: p.listDate || "?"})));
       b.append(el("span", "mSub", t("rep.itemSub", {n: p.guests, p: p.printed || "?", f: f.name})));
     }
-    b.onclick = () => openDepPreview(f, p, r.kind);
+    b.onclick = () => openDepPreview(f, p, r.kind, r.xps);
     box.append(b);
     shown++;
   }
   if(!shown && !dirs.length) note("rep.none", {dir: res.dir + (here ? " / " + here : "")});
 }
-function openDepPreview(f, p, kind){
+function openDepPreview(f, p, kind, xps){
   const board = kind === "board";
-  if(board) buildBoardingSheet(p, f.name); else buildDepSheet(p, f.name);
+  /* the departure list prints as protel's own page with the names cut out (1.17.59); the
+     tabular sheet stays only for a file that somehow carries no page to draw */
+  const exact = !board && xps && xps.pages && xps.pages.length ? xps : null;
+  let ex = null;
+  if(board) buildBoardingSheet(p, f.name); else if(exact) ex = buildDepExactSheet(p, exact); else buildDepSheet(p, f.name);
+  let note = "";
+  if(ex){
+    note = esc(t("rep.exact", {n: ex.cut}));
+    if(ex.unplaced) note += " · " + esc(t("rep.exactUnplaced", {u: ex.unplaced}));
+    if(ex.unknown.length) note += " · " + esc(t("rep.exactUnknown", {k: ex.unknown.length}));
+  }
   openModal(`
     <h3>${esc(t(board ? "rep.pvTitleBoard" : "rep.pvTitle"))}</h3>
+    ${note ? '<div class="pvNote">' + note + "</div>" : ""}
     <div id="pvPaper">${$("#printSheet").innerHTML}</div>
     <div class="actions">
       <button class="btn" id="pvCancel">${esc(t("pv.cancel"))}</button>
@@ -6504,7 +6779,7 @@ function openDepPreview(f, p, kind){
   /* ARM the sheet for this one print. beforeprint rebuilds it from the job — see the
      listener below for why it is not enough to have written #printSheet already. The kind
      also decides the page orientation there: "dep" landscape, "board" portrait. */
-  $("#pvGo").onclick = () => { PRINT_JOB = {kind: board ? "board" : "dep", p: p, fname: f.name}; closeModal(); setTimeout(() => window.print(), 80); };
+  $("#pvGo").onclick = () => { PRINT_JOB = {kind: board ? "board" : "dep", p: p, fname: f.name, xps: exact}; closeModal(); setTimeout(() => window.print(), 80); };
   $("#repDel").onclick = async () => {
     clearPrintJob();
     if(!confirm(t("rep.deleteQ", {f: f.name}))) return;
@@ -6560,7 +6835,11 @@ $("#printBtn").onclick = printCorrections;
 window.addEventListener("beforeprint", () => {
   if(document.body.classList.contains("taxPrint")){ setPrintLandscape(false); return; }   // the tax half prints its own mount, portrait
   if(PRINT_JOB && PRINT_JOB.kind === "board"){ setPrintLandscape(false); buildBoardingSheet(PRINT_JOB.p, PRINT_JOB.fname); return; }
-  if(PRINT_JOB && PRINT_JOB.kind === "dep"){ setPrintLandscape(true); buildDepSheet(PRINT_JOB.p, PRINT_JOB.fname); return; }
+  if(PRINT_JOB && PRINT_JOB.kind === "dep"){
+    if(PRINT_JOB.xps){ setPrintLandscape(true, true); buildDepExactSheet(PRINT_JOB.p, PRINT_JOB.xps); }
+    else { setPrintLandscape(true); buildDepSheet(PRINT_JOB.p, PRINT_JOB.fname); }
+    return;
+  }
   setPrintLandscape(false);
   if(MODEL) buildPrintSheet(true);
 });
