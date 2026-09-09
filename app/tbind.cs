@@ -47,13 +47,15 @@
 //
 // Triggers: m<mods>-<btn>   3 = middle, 4 = X1 (Back), 5 = X2 (Forward); bare "m4" = no mods
 //           k<mods>-<vk>    mods bitmask: 1 = Ctrl, 2 = Alt, 4 = Shift, 8 = Win
-// Actions:  tau            = a real Greek τ keypress (verified layout hop)
+// Actions:  tau            = Enter, then a real Greek τ keypress (verified layout hop),
+//                            then Enter — always, timed by TAU_PRE_MS / TAU_POST_MS.
+//                            "tau:<ms>" is read the same way, so an older binds file
+//                            still binds; the number is ignored.
 //           altn           = a real Alt+N (protel's "new" when entering a passport)
-//           tau:<ms>       = the same, then Enter <ms> after the layout is back
 //           altf4          = a real Alt+F4 (closes the focused window)
-//           seq:<vk,...>[@ms] = a fixed run of keystrokes, e.g. seq:13,13,39,13,13@120
-//                            (Enter Enter Right Enter Enter). Extended keys such as the
-//                            arrows carry the extended flag so they are not read as numpad.
+//           seq:<vk,...>[@ms] = a fixed run of keystrokes, e.g. seq:13,13,13,39,13,13@25
+//                            (Enter Enter Enter Right Enter Enter). Extended keys such as
+//                            the arrows carry the extended flag so they are not read as numpad.
 // Left/right mouse buttons are never bindable.
 //
 // Design notes (v2 — the v1 pump could stall and throttle the whole desktop's mouse):
@@ -260,6 +262,11 @@ static class TBind {
      first because asking protel directly failed, and that ordering is a fix. */
   const int ARRIVE_MS = 30;                  // was 150, and it observed nothing in 6 of 6
   const int HOP_MS = 5, HOP_TICKS = 40;      // was 20 x 10 — the same 200 ms window
+  /* Enter · τ · Enter, always — his rule, 09/09: "it becomes enter - tau - enter always",
+     and the on/off toggle for the second Enter went with it. 25 ms before the τ is the
+     invoice run's own gap, his choice; 50 ms after it is what that Enter had always
+     waited since 1.17.3. Two constants, no knob. */
+  const int TAU_PRE_MS = 25, TAU_POST_MS = 50;
   const char TAU = 'τ';
   const long GREEK = 0x0408;
 
@@ -407,7 +414,7 @@ static class TBind {
   static int mode = 0;                   // 1 = detect, 2 = bind
   static uint mainTid = 0;
   static Thread watchdog;                // static ref so it can never be collected
-  class Bind { public int action; public ushort[] keys; public int gap; public bool thenEnter; }
+  class Bind { public int action; public ushort[] keys; public int gap; }
   static readonly List<Bind> bindList = new List<Bind>();
   static readonly Dictionary<string, int> binds = new Dictionary<string, int>();   // trigger -> index
   static readonly HashSet<uint> swallowed = new HashSet<uint>();   // keys whose KEYUP we must eat too
@@ -849,14 +856,16 @@ static class TBind {
           DIAG = new StringBuilder();
           int start = Environment.TickCount;
           try{
+            /* Enter · τ · Enter. Both Enters are plain keys under whatever keyboard the
+               user is on — the layout hop lives inside SendGreekT and is back before the
+               second one goes. */
+            D("  Enter, then the tau " + TAU_PRE_MS + " ms later");
+            PressKeys(VK_RETURN, (ushort)MapVirtualKey(VK_RETURN, 0), 0);
+            Thread.Sleep(TAU_PRE_MS);
             SendGreekT();
-            if(b.thenEnter){
-              /* After the layout is back, so this is a plain Enter under whatever
-                 keyboard the user was on. */
-              D("  then Enter, " + b.gap + " ms later");
-              Thread.Sleep(b.gap);
-              PressKeys(VK_RETURN, (ushort)MapVirtualKey(VK_RETURN, 0), 0);
-            }
+            D("  then Enter, " + TAU_POST_MS + " ms later");
+            Thread.Sleep(TAU_POST_MS);
+            PressKeys(VK_RETURN, (ushort)MapVirtualKey(VK_RETURN, 0), 0);
           }
           finally{
             int took = Environment.TickCount - start;
@@ -1359,17 +1368,10 @@ static class TBind {
     Bind b = new Bind();
     if(action == "altf4") b.action = ACT_ALTF4;
     else if(action == "altn") b.action = ACT_ALTN;     // protel's "new" on the passport screen
-    else if(action == "tau") b.action = ACT_TAU;
-    /* "tau:120" — press the tau, then Enter after that many milliseconds. protel needs a
-       moment to react to the tau before it will take the Enter, and a person pressing it
-       by hand beats it there. The helper is the only one who can wait reliably. */
-    else if(action.StartsWith("tau:")){
-      b.action = ACT_TAU;
-      int ms;
-      if(!int.TryParse(action.Substring(4), out ms) || ms < 0 || ms > 5000) return;
-      b.thenEnter = true;
-      b.gap = ms;
-    }
+    /* "tau:<ms>" was the pre-v30 form (the τ, then Enter after <ms>). The helper starts at
+       login, before RecCheck has rewritten the binds file, so that form still binds the
+       same action; the number means nothing now. */
+    else if(action == "tau" || action.StartsWith("tau:")) b.action = ACT_TAU;
     else if(action.StartsWith("seq:")){
       b.action = ACT_SEQ;
       b.gap = 90;
@@ -2729,7 +2731,7 @@ static class TBind {
     }catch(Exception){}
   }
 
-  const string VER = "v29";
+  const string VER = "v30";
 
   static int Main(string[] args){
     int parentPid;

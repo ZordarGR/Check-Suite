@@ -157,8 +157,9 @@ const TRIGGER_RE = /^(?:m(?:[345]|\d{1,2}-[345])|k\d{1,2}-\d{1,3})$/;
 function validTrigger(x){ return typeof x === "string" && TRIGGER_RE.test(x); }
 /* The keystroke run is deliberately DATA, not code: it lives in config and travels to
    the helper on the command line, so tuning it later is a small update rather than a
-   whole new installer. Enter, Enter, Right, Enter, Enter. */
-const SEQ_DEFAULT = {keys: [13, 13, 39, 13, 13], gap: 25};
+   whole new installer. Enter, Enter, Enter, Right, Enter, Enter — the first Enter is
+   his, 09/09, the same night the τ got one. */
+const SEQ_DEFAULT = {keys: [13, 13, 13, 39, 13, 13], gap: 25};
 function seqConfig(){
   let c = {};
   try{ c = hub.readConfig(); }catch(e){}
@@ -172,24 +173,9 @@ function seqConfig(){
    window is in front. What "protel" looks like is not guessed here: the user points the
    app at the real window once and the needle comes from that. Off until they do, because
    a wrong needle would silently cost them every shortcut mid-shift. */
-/* The τ is one keypress, and protel takes a moment to react to it before it will accept
-   the Enter that always follows. Pressed by hand that Enter beats protel there and is
-   lost — which is what "the shortcut needed two presses" actually was. The helper is the
-   only one that can wait reliably, so it sends the Enter itself. Data, not code: the
-   delay lives in config and travels on the command line. */
-const TAU_ENTER_DEFAULT = {on: true, delay: 50};
-function tauEnterConfig(){
-  let c = {};
-  try{ c = hub.readConfig(); }catch(e){}
-  const f = (c && typeof c.tauEnter === "object" && c.tauEnter) || {};
-  const d = (Number.isInteger(f.delay) && f.delay >= 0 && f.delay <= 5000)
-            ? f.delay : TAU_ENTER_DEFAULT.delay;
-  return {on: f.on !== false, delay: d};        // absent config means on
-}
-function tauSpec(){
-  const f = tauEnterConfig();
-  return f.on ? "tau:" + f.delay : "tau";
-}
+/* The τ shortcut is Enter · τ · Enter, always, and the helper times it (v30). The on/off
+   toggle for the second Enter and its stored delay went with 1.17.62 on his word — a
+   `tauEnter` left in an older config is simply never read. */
 function focusConfig(){
   let c = {};
   try{ c = hub.readConfig(); }catch(e){}
@@ -327,7 +313,7 @@ function writeBinds(){
   try{ binds = activeBinds(); }catch(e){}
   const focus = focusSpec();
   const acts = ACTIONS.filter(a => binds[a])
-      .map(a => binds[a] + "=" + (a === "seq" ? seqSpec() : a === "tau" ? tauSpec() : a));
+      .map(a => binds[a] + "=" + (a === "seq" ? seqSpec() : a));
   const lines = ["# written by RecCheck — edited here has no effect, use the app"]
     .concat(focus).concat(acts);
   try{
@@ -734,7 +720,7 @@ ipcMain.handle("sc-get", async () => {
     /* The login entry's state is read back FROM the helper, never mirrored over here —
        a copy in this app's config could only ever drift from what is actually set. */
     return {profiles: list, active, seq: seqConfig(), focus: focusConfig(),
-            tauEnter: tauEnterConfig(), boot: await helperVerb("status"),
+            boot: await helperVerb("status"),
             available: process.platform === "win32" && !!tauPath()};
   }catch(e){ return {profiles: [], active: null, available: false}; }
 });
@@ -742,21 +728,6 @@ ipcMain.handle("sc-get", async () => {
    the switch for the whole standalone: with it off, nothing starts with Windows and the
    Caps Lock indicator only exists while RecCheck itself is open. */
 ipcMain.handle("sc-boot-set", (_e, on) => helperVerb(on ? "install" : "uninstall"));
-/* Whether the helper presses the Enter after the τ, and how long it waits first. */
-ipcMain.handle("sc-tauenter-set", (_e, on, delay) => {
-  try{
-    const c = hub.readConfig();
-    /* The right number is whatever protel turns out to need, and that is not something
-       this side can know — so it is settable, and out-of-range means "leave it alone"
-       rather than a wait nobody asked for. */
-    const d = (Number.isInteger(delay) && delay >= 0 && delay <= 2000)
-              ? delay : tauEnterConfig().delay;
-    c.tauEnter = {on: !!on, delay: d};
-    hub.writeConfig(c);
-  }catch(e){}
-  tauStart();                                  // the helper takes its actions at spawn time
-  return tauEnterConfig();
-});
 /* Turn the gate on or off, and store what it should match. An empty needle can only
    mean off — a gate matching nothing would swallow the shortcuts entirely. */
 ipcMain.handle("sc-focus-set", (_e, on, needle) => {

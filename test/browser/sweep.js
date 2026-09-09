@@ -4,12 +4,11 @@ const path = require("path");
 const bridge = `
 window.reccheckShortcuts = {
   get: () => Promise.resolve({profiles:[{id:"p1",name:"Dimitris",binds:{tau:"m4",altf4:"m3",seq:"m5"}}], active:"p1",
-    seq:{keys:[13,13,39,13,13],gap:25}, focus:{on:true,needle:"protel"}, tauEnter:{on:true,delay:50}, available:true}),
+    seq:{keys:[13,13,13,39,13,13],gap:25}, focus:{on:true,needle:"protel"}, available:true}),
   detect:()=>Promise.resolve(null), cancel:()=>Promise.resolve(true), clear:()=>Promise.resolve(true),
   helper:()=>Promise.resolve({state:"started", probe:"ok", exe:"C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\RecCheck\\\\resources\\\\rc-tbind.exe", specs:[]}),
   tauLog:()=>Promise.resolve(null), diag:()=>Promise.resolve(null), scan:()=>Promise.resolve(null),
   focusPick:()=>Promise.resolve(null), focusSet:(o,n)=>Promise.resolve({on:!!o,needle:n||"protel"}),
-  tauEnterSet:(o,d)=>Promise.resolve({on:!!o,delay:d||50}),
   bootGet:()=>Promise.resolve(true), bootSet:()=>Promise.resolve(true)
 };
 window.reccheckOverlay = { state:()=>Promise.resolve(true), toggle:()=>Promise.resolve(true),

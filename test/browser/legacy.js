@@ -2,11 +2,11 @@ require("./fresh.js")();          // refuse to run against a stale copy
 const {chromium} = require("playwright-core");
 const path = require("path");
 const bridge = `window.reccheckShortcuts={get:()=>Promise.resolve({profiles:[{id:"p1",name:"D",binds:{}}],active:"p1",
- seq:{keys:[],gap:25},focus:{on:true,needle:"PROT32"},tauEnter:{on:true,delay:50},boot:{on:true,available:true,running:true},available:true}),
+ seq:{keys:[],gap:25},focus:{on:true,needle:"PROT32"},boot:{on:true,available:true,running:true},available:true}),
  detect:()=>Promise.resolve(null),cancel:()=>Promise.resolve(true),clear:()=>Promise.resolve(true),
  helper:()=>Promise.resolve({state:"started"}),tauLog:()=>Promise.resolve(null),diag:()=>Promise.resolve(null),
  scan:()=>Promise.resolve(null),watchLog:()=>Promise.resolve(null),focusSet:()=>Promise.resolve({}),
- tauEnterSet:()=>Promise.resolve({}),bootSet:()=>Promise.resolve({on:true,available:true,running:true})};`;
+ bootSet:()=>Promise.resolve({on:true,available:true,running:true})};`;
 const vis = sel => `getComputedStyle(document.querySelector("${sel}")).display`;
 (async () => {
   const b = await chromium.launch({executablePath:"/opt/pw-browsers/chromium-1194/chrome-linux/chrome", args:["--no-sandbox"]});

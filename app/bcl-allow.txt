@@ -86,6 +86,8 @@ Arc
 args
 ArrCols
 ARRIVE_MS
+TAU_PRE_MS
+TAU_POST_MS
 AsyncCallback
 at
 attach
@@ -730,7 +732,6 @@ TBind
 text
 TextReader
 TextWriter
-thenEnter
 Thread
 ThreadHasLang
 ThreadPool
