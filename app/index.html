@@ -935,8 +935,8 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
 </header>
 
 <div id="landing">
-  <div class="logo" id="homeLogo" title="">REC<span>·</span>CHECK</div>
-  <p class="sub"><span id="subTag"></span> · <span id="appVer"></span></p>
+  <div class="logo" id="homeLogo" title="">PRO<span>·</span>CHECK</div>
+  <p class="sub"><span id="appVer"></span></p>
 
   <div id="menuScreen">
     <div id="homeBar">
@@ -1934,7 +1934,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.63";
+const APP_VERSION = "1.17.64";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1942,7 +1942,6 @@ const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 let LANG = (function(){ try{ return localStorage.getItem("reccheck_lang") || "en"; }catch(e){ return "en"; } })();
 const T = {
 en: {
-  subTag: "Nightly POS receipt audit — protel checkcharge1 (.oxps)",
   "menu.audit": "AUDIT", "menu.auditSub": "the nightly checks — receipts and accommodation tax",
   "menu.status": "STATUS", "menu.statusSub": "what protel has told the tool — arrivals, departures, in-house, moves",
   "st.arr": "ARRIVALS", "st.dep": "DEPARTURES", "st.inh": "IN-HOUSE", "st.mov": "MOVES", "st.back": "\u2190 STATUS",
@@ -2197,7 +2196,6 @@ en: {
   "imp.fail": "✗ Import failed: ", "imp.notours": "this is not a Pro-Check data file", "imp.nodata": "the file contained no usable data", "imp.noread": "✗ Could not read the file"
 },
 gr: {
-  subTag: "Νυχτερινός έλεγχος αποδείξεων POS — protel checkcharge1 (.oxps)",
   "menu.audit": "ΕΛΕΓΧΟΣ", "menu.auditSub": "οι νυχτερινοί έλεγχοι — αποδείξεις και τέλος διαμονής",
   "menu.status": "ΚΑΤΑΣΤΑΣΗ", "menu.statusSub": "τι έχει πάρει το εργαλείο από το protel — αφίξεις, αναχωρήσεις, παραμονές, μετακινήσεις",
   "st.arr": "ΑΦΙΞΕΙΣ", "st.dep": "ΑΝΑΧΩΡΗΣΕΙΣ", "st.inh": "ΠΑΡΑΜΟΝΕΣ", "st.mov": "ΜΕΤΑΚΙΝΗΣΕΙΣ", "st.back": "\u2190 ΚΑΤΑΣΤΑΣΗ",
@@ -2465,7 +2463,6 @@ function setLang(l){
   showScreen(cur);                        // …then return to wherever we were
 }
 function applyLang(){
-  $("#subTag").textContent = t("subTag");
   $("#homeLogo").title = t("menu.title");
   paintProfileName();
   paintUserBtn();
@@ -3491,7 +3488,7 @@ function paintProfileName(){
   const el = $("#homeLogo");
   if(!el) return;
   if(PROFILE_NAME) el.textContent = t("sc.welcome", {n: PROFILE_NAME});
-  else el.innerHTML = 'REC<span>·</span>CHECK';
+  else el.innerHTML = 'PRO<span>·</span>CHECK';
 }
 function refreshProfileName(){
   const sc = window.reccheckShortcuts;

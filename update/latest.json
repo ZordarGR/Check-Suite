@@ -1,11 +1,11 @@
 {
-  "version": "1.17.63",
-  "type": "full",
+  "version": "1.17.64",
+  "type": "html",
   "engine": "1.17.63",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.63/Pro-Check-Setup.exe",
   "setupSha256": "028e988e6ebde55cb30777795bd6be99edf93bd858744d60b5d514b5e4554019",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "677670d641c15f6f7838b885173b719648b846ffca90f56cfa418cd394d8b9b8",
-  "notes": "RecCheck is now Pro-Check. Same tool, a name that says what it is for: pro as in protel, check as in the things protel should have been checking on its own since the '80s. Only the name you see changed — Desktop, Start Menu, window, installer. Your data, your profiles and your bindings stay exactly where they were. From 1.17.62, if you skipped it: the τ shortcut is Enter, τ, Enter — always — and the invoice run starts with one more Enter."
+  "sha256": "9ec57c610042e74a3b5e4522476a9a63ba8fda7ea5d8787958bf436de2c6c2a8",
+  "notes": "The home screen's old subtitle (\"Nightly POS receipt audit\") is gone — the tool outgrew it — and the landing logo now says PRO·CHECK too, which 1.17.63 had missed. Nothing else changed."
 }
