@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>REC CHECK — Nightly Receipt Audit</title>
+<title>Pro-Check</title>
 <style>
 :root{
   --bg:#0a0e14;
@@ -916,7 +916,7 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
 <body>
 
 <header>
-  <h1 id="hdrLogo">REC<span>·</span>CHECK</h1>
+  <h1 id="hdrLogo">PRO<span>·</span>CHECK</h1>
   <div id="reportMeta"></div>
   <button id="staleChip"></button>
   <div class="spacer"></div>
@@ -1934,7 +1934,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.62";
+const APP_VERSION = "1.17.63";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1971,7 +1971,7 @@ en: {
   "ov.mbMid": "Middle button", "ov.mbBack": "Side button — Back", "ov.mbFwd": "Side button — Forward",
   "sc.menu": "PROTEL SHORTCUTS",
   "sc.title": "PROTEL SHORTCUTS",
-  "sc.intro": "Bind a mouse side button — or any key — to the two things the night shift does over and over. The binding works everywhere in Windows, not just inside RecCheck.",
+  "sc.intro": "Bind a mouse side button — or any key — to the two things the night shift does over and over. The binding works everywhere in Windows, not just inside Pro-Check.",
   "sc.profile": "Profile", "sc.profileHint": "each profile keeps its own bindings — hand the machine over without losing yours",
   "sc.add": "New profile", "sc.rename": "Rename", "sc.delete": "Delete",
   "sc.addPrompt": "Name for the new profile", "sc.renamePrompt": "New name for this profile",
@@ -1987,13 +1987,13 @@ en: {
   "sc.press": "press the button or key combination now… (Esc cancels)",
   "sc.none": "not set", "sc.clear": "remove the binding",
   "sc.fail": "Nothing detected — try again. Mouse: only middle and side buttons can be bound.",
-  "sc.bareKey": "Careful: a plain key is swallowed everywhere in Windows while RecCheck runs — that key stops typing in every program. A combination such as Ctrl+Alt+T is safer.",
+  "sc.bareKey": "Careful: a plain key is swallowed everywhere in Windows while Pro-Check runs — that key stops typing in every program. A combination such as Ctrl+Alt+T is safer.",
   "sc.unavailable": "Shortcuts need the Windows desktop app.",
   "sc.hStatus": "Helper",
   "sc.hChecking": "checking\u2026",
   "sc.hOk": "Running \u2014 your bindings are live.",
   "sc.hIdle": "Ready. Nothing is bound yet, so it is not running \u2014 bind a button above and it starts.",
-  "sc.hMissing": "The helper file is not on this computer. Reinstall RecCheck from the release page; if it disappears again, security software on this machine is removing it and it will need to be allowed.",
+  "sc.hMissing": "The helper file is not on this computer. Reinstall Pro-Check from the release page; if it disappears again, security software on this machine is removing it and it will need to be allowed.",
   "sc.hBlocked": "Windows will not start the helper. This is almost always antivirus or a workplace policy blocking it \u2014 the shortcuts cannot work until it is allowed to run.",
   "sc.hRefused": "The helper starts and is then shut straight back down. Security software on this machine is refusing it the keyboard and mouse hooks the shortcuts are built on.",
   "sc.hDead": "The helper started and stopped on its own. Try binding the button again; if this keeps saying the same thing, send the detail below.",
@@ -2009,15 +2009,15 @@ en: {
   "sc.focusGot": "Pointed at \u201c{n}\u201d \u2014 {w}",
   "sc.focusOff": "The shortcuts fire in every window again.",
   "sc.focusIdle": "Tick the box above to switch it on.",
-  "sc.focusSelf": "That was RecCheck, not protel. Start it again and bring protel forward before the count ends.",
+  "sc.focusSelf": "That was Pro-Check, not protel. Start it again and bring protel forward before the count ends.",
   "sc.ledgerLabel": "Room movements memory",
   "sc.ledgerSub": "{rooms} rooms, {res} stays. Everything the movements panel shows comes from here. A stay recorded under a wrong date can never be corrected by a later list \u2014 only cleared.",
   "sc.ledgerClear": "Start it again",
   "sc.ledgerConfirm": "Sure? This cannot be undone \u2014 click again",
   "sc.ledgerDone": "Cleared. The next rate list starts it again from what protel prints.",
   "sc.bootLabel": "Start with Windows",
-  "sc.bootOn": "The helper starts at login and keeps running with RecCheck closed, so the Caps Lock indicator is always there. protel's shortcuts still need RecCheck open \u2014 the helper puts the mouse hook back only while it is.",
-  "sc.bootOff": "The helper runs only while RecCheck is open. Close RecCheck and the Caps Lock indicator goes with it.",
+  "sc.bootOn": "The helper starts at login and keeps running with Pro-Check closed, so the Caps Lock indicator is always there. protel's shortcuts still need Pro-Check open \u2014 the helper puts the mouse hook back only while it is.",
+  "sc.bootOff": "The helper runs only while Pro-Check is open. Close Pro-Check and the Caps Lock indicator goes with it.",
   "sc.bootMissing": "Not available \u2014 rc-tbind.exe was not found next to the app.",
   "sc.bootStopped": "Set to start with Windows, but it is not running right now.",
   "sc.moves": "Why the room pills say what they say",
@@ -2025,9 +2025,9 @@ en: {
   "sc.read": "Read the list in front",
   "sc.readHint": "NOT free \u2014 the only thing here that is not. The list writes its answer into a buffer, and for a list in another program that buffer has to sit in that program, so a scratch page is made there and freed again. protel's own memory is never written and every message is a getter. Bring the report you want in front and press it; the report ends with what it cost.",
   "sc.readWait": "Bring the protel list to the front \u2014 reading in {n}\u2026",
-  "sc.readNone": "Nothing came back. Either protel was not in front, the window holds no list, or protel runs with more rights than RecCheck.",
+  "sc.readNone": "Nothing came back. Either protel was not in front, the window holds no list, or protel runs with more rights than Pro-Check.",
   "sc.watch": "What protel opened tonight",
-  "sc.watchHint": "Zero-touch \u2014 nothing at all is sent to protel. Windows tells RecCheck when a protel window opens or closes, and the caption is the one Windows already holds. Kept for the night only and cleared at 07:00 with the shift.",
+  "sc.watchHint": "Zero-touch \u2014 nothing at all is sent to protel. Windows tells Pro-Check when a protel window opens or closes, and the caption is the one Windows already holds. Kept for the night only and cleared at 07:00 with the shift.",
   "sc.watchNoFile": "There is no watch log on this computer. The helper writes one on its first tick and never deletes it, so either no helper of this build has run here yet, or the RecCheck folder under local app-data was removed. It says nothing about the shift.",
   "sc.watchBlank": "The log is there and empty. The helper writes a header before anything else, so an empty file is a write that failed, not a quiet shift.",
   "sc.watchFail": "The request to read the log failed",
@@ -2073,7 +2073,7 @@ en: {
   "up.active": "Active profile", "up.none": "no profiles yet",
   "up.scActive": "These bindings belong to: {n}",
   "sc.test": "Test the τ shortcut",
-  "sc.testHint": "Press Test, then click into protel and put the cursor where the τ should appear. After the countdown RecCheck runs the shortcut and reports every step — send the result back if it still fails.",
+  "sc.testHint": "Press Test, then click into protel and put the cursor where the τ should appear. After the countdown Pro-Check runs the shortcut and reports every step — send the result back if it still fails.",
   "sc.testCount": "click into protel now… {n}",
   "sc.testFail": "The test could not run — the helper did not report anything.",
   "sc.testCopy": "Copy report",
@@ -2194,7 +2194,7 @@ en: {
   "upd.dl": "Update available. Downloading: {pct}",
   "exp.none": "Nothing to export yet", "exp.done": "Exported {n} saved item(s)",
   "imp.done": "✓ Imported {n} saved item(s)", "imp.loadhint": " — they will appear when you load a report",
-  "imp.fail": "✗ Import failed: ", "imp.notours": "this is not a RecCheck data file", "imp.nodata": "the file contained no usable data", "imp.noread": "✗ Could not read the file"
+  "imp.fail": "✗ Import failed: ", "imp.notours": "this is not a Pro-Check data file", "imp.nodata": "the file contained no usable data", "imp.noread": "✗ Could not read the file"
 },
 gr: {
   subTag: "Νυχτερινός έλεγχος αποδείξεων POS — protel checkcharge1 (.oxps)",
@@ -2221,7 +2221,7 @@ gr: {
   "ov.doneMsgSub": "η επικάλυψη αποσύρεται μόλις τικαριστούν όλες οι εργασίες — με αυτό ενεργό, αν τη ζητήσεις ξανά σου το λέει αντί να μη γίνεται τίποτα",
   "sc.menu": "ΣΥΝΤΟΜΕΥΣΕΙΣ PROTEL",
   "sc.title": "ΣΥΝΤΟΜΕΥΣΕΙΣ PROTEL",
-  "sc.intro": "Αντιστοίχισε ένα πλαϊνό πλήκτρο του ποντικιού — ή οποιοδήποτε πλήκτρο — στα δύο πράγματα που κάνει ξανά και ξανά η νυχτερινή βάρδια. Δουλεύει παντού στα Windows, όχι μόνο μέσα στο RecCheck.",
+  "sc.intro": "Αντιστοίχισε ένα πλαϊνό πλήκτρο του ποντικιού — ή οποιοδήποτε πλήκτρο — στα δύο πράγματα που κάνει ξανά και ξανά η νυχτερινή βάρδια. Δουλεύει παντού στα Windows, όχι μόνο μέσα στο Pro-Check.",
   "sc.profile": "Προφίλ", "sc.profileHint": "κάθε προφίλ κρατά τις δικές του αντιστοιχίσεις — δώσε το μηχάνημα χωρίς να χάσεις τις δικές σου",
   "sc.add": "Νέο προφίλ", "sc.rename": "Μετονομασία", "sc.delete": "Διαγραφή",
   "sc.addPrompt": "Όνομα για το νέο προφίλ", "sc.renamePrompt": "Νέο όνομα για αυτό το προφίλ",
@@ -2237,13 +2237,13 @@ gr: {
   "sc.press": "πάτα τώρα το πλήκτρο ή τον συνδυασμό… (Esc ακυρώνει)",
   "sc.none": "δεν έχει οριστεί", "sc.clear": "αφαίρεση της αντιστοίχισης",
   "sc.fail": "Δεν ανιχνεύθηκε τίποτα — δοκίμασε ξανά. Ποντίκι: μόνο το μεσαίο και τα πλαϊνά πλήκτρα.",
-  "sc.bareKey": "Προσοχή: ένα σκέτο πλήκτρο δεσμεύεται παντού στα Windows όσο τρέχει το RecCheck — παύει να γράφει σε κάθε πρόγραμμα. Ένας συνδυασμός όπως Ctrl+Alt+T είναι ασφαλέστερος.",
+  "sc.bareKey": "Προσοχή: ένα σκέτο πλήκτρο δεσμεύεται παντού στα Windows όσο τρέχει το Pro-Check — παύει να γράφει σε κάθε πρόγραμμα. Ένας συνδυασμός όπως Ctrl+Alt+T είναι ασφαλέστερος.",
   "sc.unavailable": "Οι συντομεύσεις χρειάζονται την εφαρμογή Windows.",
   "sc.hStatus": "Βοηθός",
   "sc.hChecking": "έλεγχος…",
   "sc.hOk": "Τρέχει — οι αντιστοιχίσεις σου είναι ενεργές.",
   "sc.hIdle": "Έτοιμος. Δεν έχει οριστεί τίποτα, οπότε δεν τρέχει — όρισε ένα πλήκτρο παραπάνω και ξεκινάει.",
-  "sc.hMissing": "Το αρχείο του βοηθού δεν υπάρχει σε αυτόν τον υπολογιστή. Κάνε ξανά εγκατάσταση του RecCheck· αν ξαναχαθεί, το σβήνει το antivirus του μηχανήματος και πρέπει να επιτραπεί.",
+  "sc.hMissing": "Το αρχείο του βοηθού δεν υπάρχει σε αυτόν τον υπολογιστή. Κάνε ξανά εγκατάσταση του Pro-Check· αν ξαναχαθεί, το σβήνει το antivirus του μηχανήματος και πρέπει να επιτραπεί.",
   "sc.hBlocked": "Τα Windows δεν ξεκινούν τον βοηθό. Σχεδόν πάντα τον μπλοκάρει antivirus ή πολιτική της εταιρείας — οι συντομεύσεις δεν δουλεύουν μέχρι να του επιτραπεί.",
   "sc.hRefused": "Ο βοηθός ξεκινάει και κλείνει αμέσως. Κάποιο πρόγραμμα ασφαλείας του μηχανήματος του αρνείται τα hooks πληκτρολογίου και ποντικιού που χρειάζονται οι συντομεύσεις.",
   "sc.hDead": "Ο βοηθός ξεκίνησε και σταμάτησε μόνος του. Δοκίμασε ξανά την αντιστοίχιση· αν συνεχίζει να το λέει, στείλε τη λεπτομέρεια παρακάτω.",
@@ -2259,15 +2259,15 @@ gr: {
   "sc.focusGot": "Ορίστηκε στο \u201c{n}\u201d \u2014 {w}",
   "sc.focusOff": "Οι συντομεύσεις δουλεύουν ξανά παντού.",
   "sc.focusIdle": "Τσέκαρε το κουτί από πάνω για να ενεργοποιηθεί.",
-  "sc.focusSelf": "Αυτό ήταν το RecCheck, όχι το protel. Ξεκίνα το ξανά και φέρε το protel μπροστά πριν τελειώσει η αντίστροφη μέτρηση.",
+  "sc.focusSelf": "Αυτό ήταν το Pro-Check, όχι το protel. Ξεκίνα το ξανά και φέρε το protel μπροστά πριν τελειώσει η αντίστροφη μέτρηση.",
   "sc.ledgerLabel": "Μνήμη κινήσεων δωματίων",
   "sc.ledgerSub": "{rooms} δωμάτια, {res} διαμονές. Ό,τι δείχνει ο πίνακας κινήσεων προέρχεται από εδώ. Μια διαμονή καταγεγραμμένη σε λάθος ημερομηνία δεν διορθώνεται ποτέ από επόμενη λίστα — μόνο σβήνεται.",
   "sc.ledgerClear": "Ξεκίνα την από την αρχή",
   "sc.ledgerConfirm": "Σίγουρα; Δεν αναιρείται — πάτα ξανά",
   "sc.ledgerDone": "Καθαρίστηκε. Η επόμενη λίστα δωματίων την ξαναχτίζει από ό,τι τυπώνει το protel.",
   "sc.bootLabel": "Εκκίνηση με τα Windows",
-  "sc.bootOn": "Ο βοηθός ξεκινά με τη σύνδεση και συνεχίζει με το RecCheck κλειστό, οπότε η ένδειξη Caps Lock υπάρχει πάντα. Οι συντομεύσεις του protel χρειάζονται ακόμα ανοιχτό το RecCheck — ο βοηθός βάζει το άγκιστρο του ποντικιού μόνο όσο είναι.",
-  "sc.bootOff": "Ο βοηθός τρέχει μόνο όσο είναι ανοιχτό το RecCheck. Κλείνοντάς το, φεύγει και η ένδειξη Caps Lock.",
+  "sc.bootOn": "Ο βοηθός ξεκινά με τη σύνδεση και συνεχίζει με το Pro-Check κλειστό, οπότε η ένδειξη Caps Lock υπάρχει πάντα. Οι συντομεύσεις του protel χρειάζονται ακόμα ανοιχτό το Pro-Check — ο βοηθός βάζει το άγκιστρο του ποντικιού μόνο όσο είναι.",
+  "sc.bootOff": "Ο βοηθός τρέχει μόνο όσο είναι ανοιχτό το Pro-Check. Κλείνοντάς το, φεύγει και η ένδειξη Caps Lock.",
   "sc.bootMissing": "Μη διαθέσιμο — το rc-tbind.exe δεν βρέθηκε δίπλα στην εφαρμογή.",
   "sc.bootStopped": "Έχει οριστεί να ξεκινά με τα Windows, αλλά αυτή τη στιγμή δεν τρέχει.",
   "sc.moves": "Γιατί λένε αυτό τα πλακίδια δωματίων",
@@ -2277,7 +2277,7 @@ gr: {
   "sc.readWait": "Φέρε τη λίστα του protel μπροστά — διάβασμα σε {n}…",
   "sc.readNone": "Δεν ήρθε τίποτα. Είτε το protel δεν ήταν μπροστά, είτε το παράθυρο δεν έχει λίστα, είτε το protel τρέχει με περισσότερα δικαιώματα.",
   "sc.watch": "Τι άνοιξε το protel απόψε",
-  "sc.watchHint": "Μηδενική επαφή — τίποτα δεν στέλνεται στο protel. Τα Windows λένε στο RecCheck όταν ανοίγει ή κλείνει παράθυρο του protel, και ο τίτλος είναι αυτός που έχουν ήδη. Κρατιέται μόνο για τη νύχτα και σβήνει στις 07:00 με τη βάρδια.",
+  "sc.watchHint": "Μηδενική επαφή — τίποτα δεν στέλνεται στο protel. Τα Windows λένε στο Pro-Check όταν ανοίγει ή κλείνει παράθυρο του protel, και ο τίτλος είναι αυτός που έχουν ήδη. Κρατιέται μόνο για τη νύχτα και σβήνει στις 07:00 με τη βάρδια.",
   "sc.watchNoFile": "Δεν υπάρχει αρχείο καταγραφής σε αυτόν τον υπολογιστή. Ο βοηθός το γράφει στον πρώτο του κύκλο και δεν το σβήνει ποτέ, άρα είτε δεν έχει τρέξει εδώ βοηθός αυτής της έκδοσης, είτε αφαιρέθηκε ο φάκελος RecCheck στο local app-data. Δεν λέει τίποτα για τη βάρδια.",
   "sc.watchBlank": "Το αρχείο υπάρχει και είναι άδειο. Ο βοηθός γράφει πρώτα επικεφαλίδα, οπότε άδειο αρχείο σημαίνει εγγραφή που απέτυχε, όχι ήσυχη βάρδια.",
   "sc.watchFail": "Το αίτημα ανάγνωσης του αρχείου απέτυχε",
@@ -2323,7 +2323,7 @@ gr: {
   "up.active": "Ενεργό προφίλ", "up.none": "δεν υπάρχουν προφίλ",
   "up.scActive": "Αυτές οι αντιστοιχίσεις ανήκουν στο: {n}",
   "sc.test": "Δοκιμή της συντόμευσης τ",
-  "sc.testHint": "Πάτα Δοκιμή, μετά κάνε κλικ στο protel και βάλε τον κέρσορα εκεί που πρέπει να εμφανιστεί το τ. Μετά την αντίστροφη μέτρηση το RecCheck εκτελεί τη συντόμευση και αναφέρει κάθε βήμα — στείλε το αποτέλεσμα αν αποτύχει πάλι.",
+  "sc.testHint": "Πάτα Δοκιμή, μετά κάνε κλικ στο protel και βάλε τον κέρσορα εκεί που πρέπει να εμφανιστεί το τ. Μετά την αντίστροφη μέτρηση το Pro-Check εκτελεί τη συντόμευση και αναφέρει κάθε βήμα — στείλε το αποτέλεσμα αν αποτύχει πάλι.",
   "sc.testCount": "κάνε κλικ στο protel τώρα… {n}",
   "sc.testFail": "Η δοκιμή δεν έτρεξε — ο βοηθός δεν ανέφερε τίποτα.",
   "sc.testCopy": "Αντιγραφή αναφοράς",
@@ -2448,7 +2448,7 @@ gr: {
   "upd.dl": "Διαθέσιμη ενημέρωση. Λήψη: {pct}",
   "exp.none": "Δεν υπάρχει τίποτα για εξαγωγή ακόμη", "exp.done": "Εξήχθησαν {n} στοιχεία",
   "imp.done": "✓ Εισήχθησαν {n} στοιχεία", "imp.loadhint": " — θα εμφανιστούν όταν φορτώσετε αναφορά",
-  "imp.fail": "✗ Η εισαγωγή απέτυχε: ", "imp.notours": "δεν είναι αρχείο δεδομένων RecCheck", "imp.nodata": "το αρχείο δεν είχε αξιοποιήσιμα δεδομένα", "imp.noread": "✗ Δεν ήταν δυνατή η ανάγνωση του αρχείου"
+  "imp.fail": "✗ Η εισαγωγή απέτυχε: ", "imp.notours": "δεν είναι αρχείο δεδομένων Pro-Check", "imp.nodata": "το αρχείο δεν είχε αξιοποιήσιμα δεδομένα", "imp.noread": "✗ Δεν ήταν δυνατή η ανάγνωση του αρχείου"
 }
 };
 function t(key, vars){

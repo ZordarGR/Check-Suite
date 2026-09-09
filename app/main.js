@@ -19,10 +19,10 @@ if(!app.requestSingleInstanceLock()){
 app.on("second-instance", () => { if(win){ win.show(); win.focus(); } });
 
 const TRAY_TXT = {
-  en: {open: "Open RecCheck", overlay: "Toggle checklist overlay", check: "Check for updates",
-       uptodate: "You are up to date — v", close: "Close RecCheck"},
-  gr: {open: "Άνοιγμα RecCheck", overlay: "Εναλλαγή επικάλυψης λίστας", check: "Έλεγχος για ενημερώσεις",
-       uptodate: "Είστε ενημερωμένοι — v", close: "Κλείσιμο RecCheck"}
+  en: {open: "Open Pro-Check", overlay: "Toggle checklist overlay", check: "Check for updates",
+       uptodate: "You are up to date — v", close: "Close Pro-Check"},
+  gr: {open: "Άνοιγμα Pro-Check", overlay: "Εναλλαγή επικάλυψης λίστας", check: "Έλεγχος για ενημερώσεις",
+       uptodate: "Είστε ενημερωμένοι — v", close: "Κλείσιμο Pro-Check"}
 };
 let CHECKING = false, MANUAL_SHOWN = false;
 async function runCheck(manual){
@@ -41,7 +41,7 @@ async function runCheck(manual){
       if(manual) showMain();
     }else if(manual && tray){
       const L = TRAY_TXT[TRAYLANG] || TRAY_TXT.en;
-      try{ tray.displayBalloon({title: "RecCheck", content: L.uptodate + updater.effective().version, iconType: "info"}); }catch(e){}
+      try{ tray.displayBalloon({title: "Pro-Check", content: L.uptodate + updater.effective().version, iconType: "info"}); }catch(e){}
     }
   }catch(e){}
   finally{ CHECKING = false; }   // the pending early-return used to skip this and wedge every later check
@@ -390,7 +390,7 @@ function announceOverlayState(){
 function buildTray(){
   if(!tray){
     tray = new Tray(path.join(__dirname, "tray.ico"));
-    tray.setToolTip("RecCheck");
+    tray.setToolTip("Pro-Check");
     tray.on("click", showMain);
     tray.on("double-click", showMain);
   }
@@ -446,7 +446,7 @@ function createWindow(file){
     height: 860,
     autoHideMenuBar: true,
     backgroundColor: "#0a0e14",
-    title: "REC CHECK",
+    title: "Pro-Check",
     webPreferences: {
       contextIsolation: true,
       preload: path.join(__dirname, "preload.js")

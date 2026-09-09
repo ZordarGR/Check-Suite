@@ -1,4 +1,4 @@
-name: Publish RecCheck release
+name: Publish Pro-Check release
 on:
   workflow_dispatch:
   push:
@@ -8,8 +8,8 @@ on:
 permissions:
   contents: write
 env:
-  VERSION: v1.17.62
-  SETUP_SHA256: d0e2233c8c03f7fe7340f637248dd92a76be1d080263a20dafaac92efc979552
+  VERSION: v1.17.63
+  SETUP_SHA256: 028e988e6ebde55cb30777795bd6be99edf93bd858744d60b5d514b5e4554019
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -29,8 +29,9 @@ jobs:
           }
       - name: Assemble installer from parts
         run: |
-          cat dist-win64/parts/RecCheck-Setup.exe.* > RecCheck-Setup.exe
-          echo "$SETUP_SHA256  RecCheck-Setup.exe" | sha256sum -c -
+          # the parts keep the internal name; the asset carries the one people see
+          cat dist-win64/parts/RecCheck-Setup.exe.* > Pro-Check-Setup.exe
+          echo "$SETUP_SHA256  Pro-Check-Setup.exe" | sha256sum -c -
       # The release page was published from a static file that said "1.17.14" on every
       # release after it, because nothing ever rewrote it. The app already shows the
       # right notes from update/latest.json; the release page now says the same thing,
@@ -44,7 +45,8 @@ jobs:
       - name: Write the release notes from the manifest
         run: |
           t=$(jq -r .type update/latest.json); v=$(jq -r .version update/latest.json)
-          { printf '## RecCheck %s — Windows\n\n' "${VERSION#v}"
+          { printf '## Pro-Check %s — Windows\n\n' "${VERSION#v}"
+            printf '*For protel setups that have been stuck in the '"'"'80s.*\n\n'
             [ "$t" = html ] && printf 'The page updates itself to %s on first run.\n\n' "$v"
             jq -r .notes update/latest.json
             printf '\n'
@@ -55,7 +57,7 @@ jobs:
         run: |
           gh release delete "$VERSION" --yes || true
           git push --delete origin "refs/tags/$VERSION" || true
-          gh release create "$VERSION" RecCheck-Setup.exe \
-            --title "RecCheck ${VERSION#v} — Windows" \
+          gh release create "$VERSION" Pro-Check-Setup.exe \
+            --title "Pro-Check ${VERSION#v} — Windows" \
             --notes-file release-notes.md \
             --latest
