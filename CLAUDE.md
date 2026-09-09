@@ -105,6 +105,15 @@ guessing — mine, twice — not by a lost context. When something is wrong, the
 that I guessed instead of asking. His words, 06/09: *"it is your own fault and guessing,
 dont troll me, next time ask me"*.
 
+**8. If something he was asked is left unanswered, ask it again. He is not skipping it on
+purpose.**
+His words, 09/09: *"i have adhd, i sometimes read half the message and rush to answer, then
+read the rest and realize i have to also answer something more, so... if something is left
+unanswered try insisting in case i haven't noticed it.. i am not ommiting it on purpose"*.
+So a half-answered list is not a decision on the unanswered half. Re-ask the open item, on
+its own and short, until it has an answer — and never fill it with an assumption because the
+rest was answered.
+
 ## The hard constraint
 
 **protel is not his.** It is vendor-managed software on the hotel's PC, which is also not

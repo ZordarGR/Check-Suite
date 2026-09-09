@@ -1,4 +1,4 @@
-; reccheck.nsi -- RecCheck installer.  NSIS 3.09, Unicode, solid LZMA, MUI2.
+; reccheck.nsi -- Pro-Check installer (internally still RecCheck: exe, folders, registry key).  NSIS 3.09, Unicode, solid LZMA, MUI2.
 ;
 ; RECONSTRUCTED on 2026-09-05 from the shipped 1.17.38 installer: the original
 ; script lived only in a previous container's scratchpad and was lost.  It was
@@ -17,12 +17,12 @@
 ;           skipped; the real one is written by WriteUninstaller.  ICON and
 ;           OUTFILE default to paths relative to the current directory, so run
 ;           makensis from here or pass -DICON= / -DOUTFILE=.)
-; Output:  out\RecCheck-Setup.exe        (~5 minutes; wait for the process)
+; Output:  out\Pro-Check-Setup.exe        (~5 minutes; wait for the process)
 ; File encoding: UTF-8, no BOM (two em dashes below).  makensis on POSIX reads
 ; UTF-8 by default; on Windows add -INPUTCHARSET UTF8.
 
 !ifndef VERSION
-  !define VERSION "1.17.62"                 ; DisplayVersion -- bump per release
+  !define VERSION "1.17.63"                 ; DisplayVersion -- bump per release
 !endif
 !ifndef STAGE
   !error "pass -DSTAGE=<payload dir>"
@@ -31,7 +31,7 @@
   !define ICON "reccheck.ico"               ; == app\reccheck.ico in the repo
 !endif
 !ifndef OUTFILE
-  !define OUTFILE "out\RecCheck-Setup.exe"
+  !define OUTFILE "out\Pro-Check-Setup.exe"
 !endif
 !define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\RecCheck"
 
@@ -41,18 +41,18 @@ SetCompressorDictSize 64
 
 !include "MUI2.nsh"
 
-Name "RecCheck"
+Name "Pro-Check"
 OutFile "${OUTFILE}"
 InstallDir "$LOCALAPPDATA\RecCheck"
 RequestExecutionLevel user
-BrandingText "REC CHECK — Kernos Hotel"
+BrandingText "Pro-Check — ZordarGR"
 
 !define MUI_ICON "${ICON}"
 !define MUI_UNICON "${ICON}"
-!define MUI_FINISHPAGE_TITLE "RecCheck is installed"
+!define MUI_FINISHPAGE_TITLE "Pro-Check is installed"
 !define MUI_FINISHPAGE_TEXT "A shortcut is on the Desktop and in the Start Menu.$\r$\n$\r$\nThe app updates itself automatically from now on."
 !define MUI_FINISHPAGE_RUN "$INSTDIR\RecCheck.exe"
-!define MUI_FINISHPAGE_RUN_TEXT "Start RecCheck now"
+!define MUI_FINISHPAGE_RUN_TEXT "Start Pro-Check now"
 
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
@@ -86,12 +86,16 @@ Section "Install"
   RMDir /r "$APPDATA\reccheck\updates"
 
   WriteUninstaller "$INSTDIR\Uninstall.exe"
-  CreateShortcut "$SMPROGRAMS\RecCheck.lnk" "$INSTDIR\RecCheck.exe"
-  CreateShortcut "$DESKTOP\RecCheck.lnk" "$INSTDIR\RecCheck.exe"
+  ; 1.17.63 renamed what the user sees. The shortcuts an earlier install made under the
+  ; old name go, or the Desktop would carry two icons for one program.
+  Delete "$SMPROGRAMS\RecCheck.lnk"
+  Delete "$DESKTOP\RecCheck.lnk"
+  CreateShortcut "$SMPROGRAMS\Pro-Check.lnk" "$INSTDIR\RecCheck.exe"
+  CreateShortcut "$DESKTOP\Pro-Check.lnk" "$INSTDIR\RecCheck.exe"
 
-  WriteRegStr   HKCU "${UNINST_KEY}" "DisplayName"     "RecCheck — nightly receipt audit"
+  WriteRegStr   HKCU "${UNINST_KEY}" "DisplayName"     "Pro-Check"
   WriteRegStr   HKCU "${UNINST_KEY}" "DisplayVersion"  "${VERSION}"
-  WriteRegStr   HKCU "${UNINST_KEY}" "Publisher"       "Kernos Hotel"
+  WriteRegStr   HKCU "${UNINST_KEY}" "Publisher"       "ZordarGR"
   WriteRegStr   HKCU "${UNINST_KEY}" "DisplayIcon"     "$INSTDIR\RecCheck.exe"
   WriteRegStr   HKCU "${UNINST_KEY}" "UninstallString" '"$INSTDIR\Uninstall.exe"'
   WriteRegStr   HKCU "${UNINST_KEY}" "InstallLocation" "$INSTDIR"
@@ -109,6 +113,8 @@ Section "Uninstall"
   nsExec::Exec 'taskkill /F /IM RecCheck.exe'
   nsExec::Exec 'taskkill /F /IM rc-tbind.exe'
   Sleep 800
+  Delete "$SMPROGRAMS\Pro-Check.lnk"
+  Delete "$DESKTOP\Pro-Check.lnk"
   Delete "$SMPROGRAMS\RecCheck.lnk"
   Delete "$DESKTOP\RecCheck.lnk"
   RMDir /r "$INSTDIR\locales"

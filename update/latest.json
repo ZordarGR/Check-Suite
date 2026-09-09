@@ -1,11 +1,11 @@
 {
-  "version": "1.17.62",
+  "version": "1.17.63",
   "type": "full",
-  "engine": "1.17.62",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.62/RecCheck-Setup.exe",
-  "setupSha256": "d0e2233c8c03f7fe7340f637248dd92a76be1d080263a20dafaac92efc979552",
+  "engine": "1.17.63",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.63/Pro-Check-Setup.exe",
+  "setupSha256": "028e988e6ebde55cb30777795bd6be99edf93bd858744d60b5d514b5e4554019",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "8267578e61c942460d2d62eb5434aa9156bf8006fd7e7c60f8d084203b0773c7",
-  "notes": "The τ shortcut is now Enter, then the τ, then Enter — always, as you asked — and the invoice run starts with one more Enter: Enter · Enter · Enter · Right · Enter · Enter. The \"Press Enter for me after the τ\" switch is gone. Helper v30."
+  "sha256": "677670d641c15f6f7838b885173b719648b846ffca90f56cfa418cd394d8b9b8",
+  "notes": "RecCheck is now Pro-Check. Same tool, a name that says what it is for: pro as in protel, check as in the things protel should have been checking on its own since the '80s. Only the name you see changed — Desktop, Start Menu, window, installer. Your data, your profiles and your bindings stay exactly where they were. From 1.17.62, if you skipped it: the τ shortcut is Enter, τ, Enter — always — and the invoice run starts with one more Enter."
 }
