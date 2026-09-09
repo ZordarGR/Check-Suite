@@ -49,7 +49,6 @@ contextBridge.exposeInMainWorld("reccheckShortcuts", {
   /* what the resident helper captured when protel opened the list: a file read, no process
      and no contact with protel at all */
   listFile: (tag) => ipcRenderer.invoke("sc-listfile", tag),
-  tauEnterSet: (on, delay) => ipcRenderer.invoke("sc-tauenter-set", on, delay),
   bootSet: (on) => ipcRenderer.invoke("sc-boot-set", on),
   focusSet: (on, needle) => ipcRenderer.invoke("sc-focus-set", on, needle),
   focusPick: (ms) => ipcRenderer.invoke("sc-focus-pick", ms),

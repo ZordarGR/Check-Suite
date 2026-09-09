@@ -1934,7 +1934,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.61";
+const APP_VERSION = "1.17.62";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -1977,9 +1977,9 @@ en: {
   "sc.addPrompt": "Name for the new profile", "sc.renamePrompt": "New name for this profile",
   "sc.delConfirm": "Delete the profile \u201c{n}\u201d and its bindings?",
   "sc.tau": "Greek τ keypress",
-  "sc.tauWhy": "Jumps straight to the ΤΕΛΟΣ ΑΝΘΕΚΤΙΚΟΤΗΤΑΣ invoice. protel\u2019s list jumps to the first entry starting with the letter you press, so this replaces scrolling and hunting for it every single time. It is delivered as a real key press, which is why a pasted τ never worked.",
+  "sc.tauWhy": "Jumps straight to the ΤΕΛΟΣ ΑΝΘΕΚΤΙΚΟΤΗΤΑΣ invoice. protel\u2019s list jumps to the first entry starting with the letter you press, so this replaces scrolling and hunting for it every single time. One press sends Enter, then the τ, then Enter, with the helper timing the gaps. The τ is delivered as a real key press, which is why a pasted τ never worked.",
   "sc.seq": "Invoice keystroke run",
-  "sc.seqWhy": "Sends the same fixed run of keys every time, with a short pause between them so nothing outruns the dialog. Bind it to a button and the whole run happens on one press instead of five.",
+  "sc.seqWhy": "Sends the same fixed run of keys every time, with a short pause between them so nothing outruns the dialog. Bind it to a button and the whole run happens on one press instead of six.",
   "sc.altf4": "Alt + F4",
   "sc.altf4Why": "Closes the receipt preview that pops up after every invoice is generated. One button instead of reaching for the mouse and finding the ✕ on each one.",
   "sc.altn": "Alt + N",
@@ -2010,10 +2010,6 @@ en: {
   "sc.focusOff": "The shortcuts fire in every window again.",
   "sc.focusIdle": "Tick the box above to switch it on.",
   "sc.focusSelf": "That was RecCheck, not protel. Start it again and bring protel forward before the count ends.",
-  "sc.tauEnterLabel": "Press Enter for me after the \u03c4",
-  "sc.tauEnterOn": "The helper waits for protel to react, then presses Enter \u2014 the same way the invoice run times its own keys.",
-  "sc.tauEnterWait": "wait",
-  "sc.tauEnterOff": "The \u03c4 is sent on its own. Press Enter yourself, and not too quickly.",
   "sc.ledgerLabel": "Room movements memory",
   "sc.ledgerSub": "{rooms} rooms, {res} stays. Everything the movements panel shows comes from here. A stay recorded under a wrong date can never be corrected by a later list \u2014 only cleared.",
   "sc.ledgerClear": "Start it again",
@@ -2231,9 +2227,9 @@ gr: {
   "sc.addPrompt": "Όνομα για το νέο προφίλ", "sc.renamePrompt": "Νέο όνομα για αυτό το προφίλ",
   "sc.delConfirm": "Διαγραφή του προφίλ \u201c{n}\u201d και των αντιστοιχίσεών του;",
   "sc.tau": "Πάτημα του ελληνικού τ",
-  "sc.tauWhy": "Πηγαίνει κατευθείαν στο τιμολόγιο ΤΕΛΟΣ ΑΝΘΕΚΤΙΚΟΤΗΤΑΣ. Η λίστα του protel πηδάει στην πρώτη εγγραφή που αρχίζει από το γράμμα που πατάς, οπότε γλιτώνεις το σκρολάρισμα και το ψάξιμο κάθε φορά. Στέλνεται ως πραγματικό πάτημα πλήκτρου — γι\u2019 αυτό το επικολλημένο τ δεν δούλευε ποτέ.",
+  "sc.tauWhy": "Πηγαίνει κατευθείαν στο τιμολόγιο ΤΕΛΟΣ ΑΝΘΕΚΤΙΚΟΤΗΤΑΣ. Η λίστα του protel πηδάει στην πρώτη εγγραφή που αρχίζει από το γράμμα που πατάς, οπότε γλιτώνεις το σκρολάρισμα και το ψάξιμο κάθε φορά. Ένα πάτημα στέλνει Enter, μετά το τ, μετά Enter, με τον βοηθό να χρονίζει τα κενά. Το τ στέλνεται ως πραγματικό πάτημα πλήκτρου — γι\u2019 αυτό το επικολλημένο τ δεν δούλευε ποτέ.",
   "sc.seq": "Ακολουθία πλήκτρων τιμολογίου",
-  "sc.seqWhy": "Στέλνει κάθε φορά την ίδια σταθερή ακολουθία πλήκτρων, με μικρή παύση ανάμεσά τους ώστε να μην προσπερνούν τον διάλογο. Αντιστοίχισέ την σε ένα πλήκτρο και όλη η ακολουθία γίνεται με ένα πάτημα αντί για πέντε.",
+  "sc.seqWhy": "Στέλνει κάθε φορά την ίδια σταθερή ακολουθία πλήκτρων, με μικρή παύση ανάμεσά τους ώστε να μην προσπερνούν τον διάλογο. Αντιστοίχισέ την σε ένα πλήκτρο και όλη η ακολουθία γίνεται με ένα πάτημα αντί για έξι.",
   "sc.altf4": "Alt + F4",
   "sc.altf4Why": "Κλείνει την προεπισκόπηση της απόδειξης που εμφανίζεται μετά από κάθε τιμολόγιο. Ένα πλήκτρο αντί να πιάνεις το ποντίκι και να βρίσκεις το ✕ σε κάθε μία.",
   "sc.altn": "Alt + N",
@@ -2264,10 +2260,6 @@ gr: {
   "sc.focusOff": "Οι συντομεύσεις δουλεύουν ξανά παντού.",
   "sc.focusIdle": "Τσέκαρε το κουτί από πάνω για να ενεργοποιηθεί.",
   "sc.focusSelf": "Αυτό ήταν το RecCheck, όχι το protel. Ξεκίνα το ξανά και φέρε το protel μπροστά πριν τελειώσει η αντίστροφη μέτρηση.",
-  "sc.tauEnterLabel": "Πάτα το Enter για μένα μετά το τ",
-  "sc.tauEnterOn": "Ο βοηθός περιμένει να αντιδράσει το protel και μετά πατάει Enter — όπως ακριβώς κάνει και η ακολουθία του τιμολογίου.",
-  "sc.tauEnterWait": "αναμονή",
-  "sc.tauEnterOff": "Το τ στέλνεται μόνο του. Πάτα εσύ το Enter, και όχι πολύ γρήγορα.",
   "sc.ledgerLabel": "Μνήμη κινήσεων δωματίων",
   "sc.ledgerSub": "{rooms} δωμάτια, {res} διαμονές. Ό,τι δείχνει ο πίνακας κινήσεων προέρχεται από εδώ. Μια διαμονή καταγεγραμμένη σε λάθος ημερομηνία δεν διορθώνεται ποτέ από επόμενη λίστα — μόνο σβήνεται.",
   "sc.ledgerClear": "Ξεκίνα την από την αρχή",
@@ -3575,7 +3567,6 @@ function renderShortcuts(){
     scApply(await sc.get().catch(() => null));
   });
   renderFocusGate();
-  renderTauEnter();
   renderBoot();
 }
 /* ---- start the movement ledger again ----
@@ -3652,40 +3643,6 @@ function ledgerClick(){
   try{ renderMoves(); }catch(e){}
 }
 
-/* ---- the Enter that follows the τ ----
-   The τ is one keypress and protel takes a moment to react to it before it will accept
-   the Enter that always comes next. Pressed by hand that Enter beats protel there and is
-   simply lost — which is what "the shortcut needed two presses" turned out to be, all
-   along. The helper waits and presses it, the way it already does for the invoice run,
-   which is why THAT one has never missed. */
-function renderTauEnter(){
-  const box = $("#scTauBox");
-  if(!box) return;
-  const sc = window.reccheckShortcuts;
-  const te = (SCSTATE && SCSTATE.tauEnter) || {on: true, delay: 50};
-  box.innerHTML =
-    '<div class="scFocus">' +
-      '<label class="scFocusTop"><input type="checkbox" id="scTauOn"' + (te.on ? " checked" : "") + '>' +
-        escapeHtml(t("sc.tauEnterLabel")) + '</label>' +
-      '<div class="scFocusSub" id="scTauSub">' +
-        escapeHtml(te.on ? t("sc.tauEnterOn") : t("sc.tauEnterOff")) + '</div>' +
-    '</div>';
-  /* The millisecond box is GONE, and it should never come back on a guess. It was made
-     settable because this side could not know what protel needed and could not test on
-     Windows — a hedge, not a decision. His own log settled it on 02/09: a tau press costs
-     922-1656 ms, of which that number was 10-20. It was the one knob with no leverage,
-     put in front of him, while the three that cost real time stayed hardcoded. Those are
-     fixed properly in the helper now. His words: "if you are the one who has to change
-     the delay for enter, why have you put the scale on the settings?" */
-  const chk = $("#scTauOn"), sub = $("#scTauSub");
-  chk.onchange = async () => {
-    const st = await sc.tauEnterSet(chk.checked, undefined).catch(() => null);
-    if(st && SCSTATE) SCSTATE.tauEnter = st;
-    const on = st ? st.on : chk.checked;
-    chk.checked = on;
-    sub.textContent = on ? t("sc.tauEnterOn") : t("sc.tauEnterOff");
-  };
-}
 /* ---- the helper stands on its own ----
    rc-tbind is not part of this app any more: it starts at Windows login and keeps the
    Caps Lock indicator going with RecCheck closed, because the state flips silently
@@ -4228,7 +4185,6 @@ function openShortcuts(){
       '<div class="scCards" id="scBody"></div>' +
       '<div class="scCards">' +
         '<div id="scFocusBox"></div>' +
-        '<div id="scTauBox"></div>' +
         '<div id="scBootBox"></div>' +
       '</div>' +
       '<div id="scHelp" style="margin-top:12px;font-size:12px;line-height:1.5"></div>' +

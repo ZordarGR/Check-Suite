@@ -1,11 +1,11 @@
 {
-  "version": "1.17.61",
-  "type": "html",
-  "engine": "1.17.57",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.57/RecCheck-Setup.exe",
-  "setupSha256": "2625f3e412e3a8f71c73f67e2914b1f83e878343c5c68d6bcd942b9c703e419d",
+  "version": "1.17.62",
+  "type": "full",
+  "engine": "1.17.62",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.62/RecCheck-Setup.exe",
+  "setupSha256": "d0e2233c8c03f7fe7340f637248dd92a76be1d080263a20dafaac92efc979552",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "d29a3967e6d09a50ba6babd2f4bbddfbb0cec7da9601c01f6a821081e5944517",
-  "notes": "The receipts dot matches names by WORDS now, as you said: two names are the same guest when they share a whole word, whatever the order, case or separators — QUINK and QUINK frederick, KOVACS/MEYER and KOVACS PETER; QUINK and QUINKE are different words. And a reservation moved into a room and departing from it the same day dots both its pills again."
+  "sha256": "8267578e61c942460d2d62eb5434aa9156bf8006fd7e7c60f8d084203b0773c7",
+  "notes": "The τ shortcut is now Enter, then the τ, then Enter — always, as you asked — and the invoice run starts with one more Enter: Enter · Enter · Enter · Right · Enter · Enter. The \"Press Enter for me after the τ\" switch is gone. Helper v30."
 }
