@@ -45,6 +45,25 @@ const tmp = () => path.join(os.tmpdir(), "rc-exact-" + Math.random().toString(36
   ck("no fixture name in the preview; nine dashes; the page fits the modal", !hasName(pv.text) && pv.dashes === 9 && pv.wide && pv.fits);
   ck("everything else is on it — 427-2, the page numbers, departroom1time 2, Σύνολο", /427-2/.test(pv.text) && /Σελίδα/.test(pv.text) && /departroom1time 2/.test(pv.text) && /Σύνολο Ατόμων/.test(pv.text));
 
+  /* THE BACKUP PRINT (1.17.66). His ask, 10/09: "a backup print for the lists just like protel
+     would print them ... in case a colleague fucks up and i see it too late". A "With names"
+     button on the redacted preview flips it to protel's page with nothing cut; "Without
+     names" flips it back; nothing is armed by the flip. */
+  ck("the redacted preview offers With names",                        await pg.evaluate(() => !!document.querySelector("#pvNames") && !window.__t.armedPrint()));
+  await pg.click("#pvNames"); await pg.waitForTimeout(150);
+  const nv = await pg.evaluate(() => ({
+    pages: document.querySelectorAll("#pvPaper .xpsPage").length, title: document.querySelector("#modal h3").textContent,
+    note: (document.querySelector(".pvNote") || {}).textContent || "", text: document.querySelector("#pvPaper").textContent,
+    dashes: (document.querySelector("#pvPaper").textContent.match(/—/g) || []).length, btn: (document.querySelector("#pvNames") || {}).textContent || "",
+    armed: !!window.__t.armedPrint()}));
+  ck("With names: the same two pages, every fixture name on them, no dashes", nv.pages === 2 && NAMES.every(n => nv.text.indexOf(n) >= 0) && nv.dashes === 0);
+  ck("the title says WITH NAMES and the note says backup",              /WITH NAMES|ΜΕ ΟΝΟΜΑΤΑ/.test(nv.title) && /Backup|Εφεδρική/.test(nv.note) && !/withheld|αφαιρέθηκαν/.test(nv.note));
+  ck("the button now reads Without names, and nothing is armed",        /Without names|Χωρίς ονόματα/.test(nv.btn) && !nv.armed);
+  ck("everything else still on it",                                     /427-2/.test(nv.text) && /Σελίδα/.test(nv.text) && /Σύνολο Ατόμων/.test(nv.text));
+  await pg.click("#pvNames"); await pg.waitForTimeout(150);
+  const bk = await pg.evaluate(() => ({text: document.querySelector("#pvPaper").textContent, dashes: (document.querySelector("#pvPaper").textContent.match(/—/g) || []).length, title: document.querySelector("#modal h3").textContent}));
+  ck("Without names: back to the redacted page, nine dashes, no name",  !hasName(bk.text) && bk.dashes === 9 && !/WITH NAMES|ΜΕ ΟΝΟΜΑΤΑ/.test(bk.title));
+
   await pg.click("#pvGo"); await pg.waitForTimeout(250);
   const armed = await pg.evaluate(() => { const j = window.__t.armedPrint(); return j && j.kind === "dep" && !!j.xps; });
   ck("Print arms the exact job",                                        armed);
@@ -58,6 +77,28 @@ const tmp = () => path.join(os.tmpdir(), "rc-exact-" + Math.random().toString(36
   await pg.emulateMedia({media: null});   // back to the default: an explicit "screen" would make page.pdf() ignore the print rules
   ck("under print media the print root holds the two pages, each 297×210mm, and no table", pr.vis === "block" && pr.n === 2 && pr.w.every(w => Math.abs(w - 1123) <= 2) && pr.h.every(h => Math.abs(h - 794) <= 2) && !pr.dl);
   ck("no fixture name on the print root",                               !hasName(pr.text) && /Σύνολο Δωματίων/.test(pr.text));
+
+  /* and the backup print itself: what he previewed WITH names is what goes on paper */
+  await pg.evaluate(([f, p, pages]) => window.__t.openDepPreview(f, p, "dep", {pages, fonts: {}}), [f, P, [PAGE1, PAGE2]]);
+  await pg.waitForTimeout(150);
+  await pg.click("#pvNames"); await pg.waitForTimeout(150);
+  await pg.click("#pvGo"); await pg.waitForTimeout(250);
+  ck("Print from the names preview arms the job WITH names",            await pg.evaluate(() => { const j = window.__t.armedPrint(); return !!(j && j.kind === "dep" && j.xps && j.names === true); }));
+  const npdf = tmp(); await pg.pdf({path: npdf, preferCSSPageSize: true, printBackground: true});
+  const nbx = boxes(npdf);
+  ck("still exactly two pages, A4 landscape, edge to edge",              nbx.length === 2 && nbx.every(x => Math.round(x.w) === 842 && Math.round(x.h) === 595));
+  await pg.emulateMedia({media: "print"});
+  const npr = await pg.evaluate(() => { const s = document.querySelector("#printSheet"); return {n: s.querySelectorAll(".xpsPage").length, text: s.textContent, dashes: (s.textContent.match(/—/g) || []).length}; });
+  await pg.emulateMedia({media: null});
+  ck("the print root carries every name and no dash",                   npr.n === 2 && NAMES.every(n => npr.text.indexOf(n) >= 0) && npr.dashes === 0);
+  /* and the redacted print after it is redacted again — the flag lives on the job, not on the page */
+  await pg.evaluate(([f, p, pages]) => window.__t.openDepPreview(f, p, "dep", {pages, fonts: {}}), [f, P, [PAGE1, PAGE2]]);
+  await pg.waitForTimeout(150);
+  await pg.click("#pvGo"); await pg.waitForTimeout(250);
+  await pg.emulateMedia({media: "print"});
+  const rpr = await pg.evaluate(() => { const s = document.querySelector("#printSheet"); return {text: s.textContent, dashes: (s.textContent.match(/—/g) || []).length}; });
+  await pg.emulateMedia({media: null});
+  ck("the next redacted print is redacted: no name, nine dashes",       !hasName(rpr.text) && rpr.dashes === 9);
 
   /* a departure list that carries no pages: the tabular sheet, as before */
   await pg.evaluate(() => window.__t.closeModal());
