@@ -92,7 +92,7 @@ ck("the sheet still says the names were taken out on purpose", /Guest names with
 ck("the groups carry their time, the first one protel's own \":\"", /ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ  :/.test(html) && /ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ  16:35/.test(html) && /ΩΡΑ ΑΝΑΧΩΡΗΣΗΣ  16:55/.test(html));
 ck("every room, its type, arrival, board and rate",           /class="dlRoom">201</.test(html) && /SPMV/.test(html) && /01\/09\/26/.test(html) && />HB</.test(html) && />FB</.test(html) && /218,00/.test(html) && /250,80/.test(html) && /class="dlRoom">73</.test(html) && /BGV/.test(html));
 ck("the notes under their rooms",                             /FULLY PREPAID!!!/.test(html) && /asked to extend 1 night/.test(html) && /FB RATE OK!!/.test(html));
-ck("the totals",                                              /Ατόμων : <b>18<\/b>/.test(html) && /Δωματίων : <b>9<\/b>/.test(html));
+ck("the totals, with protel's Σύνολο on each",               /Σύνολο Ατόμων : <b>18<\/b>/.test(html) && /Σύνολο Δωματίων : <b>9<\/b>/.test(html));
 ck("and it is escaped",                                       !/<script/i.test(html) && /&amp;/.test(new Function("p","fname","$","t", SHEET + "\nreturn buildDepSheet(p, fname);")(Object.assign({}, p, {station: "a&b"}), "x", () => ({}), t)));
 
 /* ---- his 08/09/26 file: two pages, 30 rooms — and three ways a row went missing ----
@@ -112,7 +112,10 @@ ck("08/09: a room printed 427-2 is a row, as printed, with its cells", q.groups.
 ck("08/09: 319-1, 404-5 under 07:10, one without a board",           q.groups[2].rows.map(r => r.room + ":" + r.board + ":" + r.price).join(" ") === "319-1:HB:228,00 404-5::193,80");
 const r270 = q.groups[0].rows[1], r9015 = q.groups[0].rows[3], r146 = q.groups[2].rows.concat(q.groups[3].rows).find(r => r.room === "146");
 ck("08/09: a row whose numbers sit 0.64 under its text, under a clipped name fragment, comes out whole", r270.room === "270" && r270.qty === "1" && r270.arr === "04/09/26" && r270.adults === "2" && r270.eb === "0" && r270.child === "0" && r270.bc === "0" && r270.price === "246,00" && r270.rate === "SNAR" && r270.board === "HB");
-ck("08/09: the fragment lands in the guest band and nowhere else",    /TYA/.test(r270.guest) && !r270.guestExtra && rowsOf(q).every(r => r.notes.every(n => !/TYA/.test(n.text))));
+/* 1.17.67: the fragment is 253's wrapped second line, printed 3.68 above 270 — it is 253's
+   guestExtra now, not 270's guest, and still nowhere near a note */
+const r253 = rowsOf(q).find(r => r.room === "253");
+ck("08/09: the fragment above 270 is 253's wrapped second line, not 270's name", r253 && r253.guestExtra === "TYA" && r253.guest === "MU/HO" && r270.guest === "KOV/MAL" && !r270.guestExtra && rowsOf(q).every(r => r.notes.every(n => !/TYA/.test(n.text))));
 ck("08/09: the same for 9015, with protel's label in the guest band withheld", r9015.qty === "0" && r9015.arr === "07/09/26" && r9015.price === "0,00" && /Αφ\.Ατόμου/.test(r9015.guest) && !r9015.guestExtra);
 ck("08/09: nothing of page 2's header lands under page 1's last room",  r146 && r146.notes.length === 1 && /TAXI/.test(r146.notes[0].text) && !/Σελίδα|Πελάτης|Kernos|departroom|Station/.test(r146.guestExtra + r146.notes.map(n => n.text).join("")));
 ck("08/09: page 2's group, row and note are read, and the totals from page 2", q.groups[4].time === "10:40" && q.groups[4].rows[0].room === "67" && q.groups[4].rows[0].req === "SPMV" && q.groups[4].rows[0].notes[0].text === "SINGLE USE" && q.totals.map(x => x.label + "=" + x.value).join(" ") === "Ατόμων=56 Child=2 Δωματίων=29 Extra Bed=0 Baby Cot=2");

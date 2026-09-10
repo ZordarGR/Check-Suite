@@ -278,6 +278,7 @@ body.onMenu #clList{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
 #printSheet .dlGrp td,#pvPaper .dlGrp td{background:#d9d9d9;font-weight:700;padding:3px 4px}
 #printSheet .dlRoom,#pvPaper .dlRoom{color:#000;font-weight:600}
 #printSheet .dlOut,#pvPaper .dlOut{color:#444;text-align:center}
+#printSheet .dlName,#pvPaper .dlName{white-space:normal;overflow-wrap:anywhere;max-width:34ch}
 #printSheet .dlTbl tr.note td,#pvPaper .dlTbl tr.note td{color:#333;font-size:9.5px;padding-top:0;border-top:0}
 #printSheet .dlNd,#pvPaper .dlNd{color:#333;font-size:9.5px;white-space:nowrap}
 #printSheet .dlTot,#pvPaper .dlTot{margin-top:10px;font-size:10.5px}
@@ -1463,9 +1464,20 @@ function parseDepList(xmls){
          each). Kept as printed, never shortened to the bare number. */
       const roomNo = roomToks.find(w => /^\d{1,4}(-\d+)?$/.test(w));
       if(roomNo && (cell.guest || cell.arr)){
+        /* THE WRAPPED SECOND LINE OF A NAME IS THE PREVIOUS ROOM'S. protel prints it 3.68
+           above the NEXT room's text, so the line chain puts it in THIS row's guest tokens
+           (see the chain rule above). While the name was only ever cut that cost nothing;
+           the backup print (1.17.67) prints names, and 270 would have read "TYA KOV/MAL"
+           with 253 missing its "TYA". A guest token above the room number's baseline goes
+           to the row before as its guestExtra; the withheld list and the dash are untouched. */
+        const rtk = (cellT.room || []).find(t => t.t.trim() === roomNo);
+        const gAll = cellT.guest || [];
+        const above = rtk ? gAll.filter(t => t.y < rtk.y - 2) : [];
+        const own = lastRow && above.length ? gAll.filter(t => !(t.y < rtk.y - 2)) : gAll;
+        if(lastRow && above.length) lastRow.guestExtra += (lastRow.guestExtra ? " " : "") + above.map(t => t.t.trim()).join(" ");
         const row = {room: roomNo, type: roomToks.filter(w => w !== roomNo).join(" "),
                      qty: (cell.qty || []).join(" "), req: (cell.req || []).join(" "),
-                     guest: (cell.guest || []).join(" "), arr: (cell.arr || []).join(" "),
+                     guest: own.map(t => t.t.trim()).join(" "), arr: (cell.arr || []).join(" "),
                      adults: (cell.adults || []).join(" "), eb: (cell.eb || []).join(" "), child: (cell.child || []).join(" "),
                      bc: (cell.bc || []).join(" "), rate: (cell.rate || []).join(" "), board: (cell.board || []).join(" "),
                      price: (cell.price || []).join(" "), vip: (cell.vip || []).join(" "), notes: [], guestExtra: ""};
@@ -1934,7 +1946,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.66";
+const APP_VERSION = "1.17.67";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -2047,7 +2059,8 @@ en: {
   "rep.withheld": "Guest names withheld",
   "rep.exact": "protel's own page, the names cut out — {n} characters withheld",
   "rep.pvTitleNames": "Departure list — WITH NAMES, as protel prints it",
-  "rep.exactNames": "Backup print: protel's own page with nothing cut out. The names are on this one.",
+  "rep.exactNames": "Backup print: the same sheet with the guest names in full. Nothing cut, nothing clipped, a long name wraps inside its own cell.",
+  "rep.namesFoot": "Backup print · guest names in full",
   "rep.showNames": "With names",
   "rep.hideNames": "Without names",
   "rep.exactUnplaced": "{u} more in the name column could not be placed and were cut too",
@@ -2300,7 +2313,8 @@ gr: {
   "rep.withheld": "Χωρίς ονόματα πελατών",
   "rep.exact": "η σελίδα του protel όπως είναι, χωρίς τα ονόματα — {n} χαρακτήρες αφαιρέθηκαν",
   "rep.pvTitleNames": "Λίστα αναχωρήσεων — ΜΕ ΟΝΟΜΑΤΑ, όπως την τυπώνει το protel",
-  "rep.exactNames": "Εφεδρική εκτύπωση: η σελίδα του protel χωρίς να αφαιρεθεί τίποτα. Σε αυτή τα ονόματα φαίνονται.",
+  "rep.exactNames": "Εφεδρική εκτύπωση: το ίδιο φύλλο με τα ονόματα των πελατών ολόκληρα. Τίποτα κομμένο, ένα μακρύ όνομα αναδιπλώνεται μέσα στο κελί του.",
+  "rep.namesFoot": "Εφεδρική εκτύπωση · ονόματα πελατών ολόκληρα",
   "rep.showNames": "Με ονόματα",
   "rep.hideNames": "Χωρίς ονόματα",
   "rep.exactUnplaced": "{u} ακόμη στη στήλη ονομάτων δεν τοποθετήθηκαν και αφαιρέθηκαν επίσης",
@@ -6531,8 +6545,15 @@ function esc(s){
 }
 /* the sheet: protel's own headings, minus Πελάτης; the room type beside the number as
    protel prints it; a note under its room; the totals as printed */
-function buildDepSheet(p, fname){
+function buildDepSheet(p, fname, names){
   const sheet = $("#printSheet");
+  /* `names` = the BACKUP print (1.17.67). His ask, 10/09: "a backup print for the lists just
+     like protel would print them" — then, shown that protel CLIPS a wrapped name to its row:
+     "it cuts the names to fit in the margins, let's not do that though ... if possible lets
+     fit everything, lets make it better than the original". So: the same sheet, the guest
+     column carrying the name in FULL — the cell as protel printed it plus the wrapped
+     fragment the parser kept in guestExtra — wrapping inside its own cell, the row growing
+     under it. Nothing clipped, nothing on a band. */
   /* EVERY column protel printed, the guest one included — his choice, 07/09: keep it with
      a dash in each cell, so a reader sees a name was REMOVED rather than never printed.
      The layout below is protel's own (his screenshot of departroom1time, 07/09/26): the
@@ -6579,7 +6600,12 @@ function buildDepSheet(p, fname){
     h += '<tr class="dlGrp"><td colspan="' + span + '">' + "\u03a9\u03a1\u0391 \u0391\u039d\u0391\u03a7\u03a9\u03a1\u0397\u03a3\u0397\u03a3  " + (g.time ? esc(g.time) : ":") + "</td></tr>";
     for(const r of g.rows){
       h += "<tr>" + cols.map(c => {
-        if(c.key === "guest") return '<td class="dlOut">' + REDACT + "</td>";
+        /* the name as protel WROTE it: the cell's line, and the wrapped remainder on a line of
+           its own. Not rejoined — protel breaks a long name mid-word ("VOELKER/GIGLER/HIRM" /
+           "ANN", his file of 10/09) as readily as at a space, and a guessed join would put a
+           space, or none, where protel had the other. Two lines is the data. */
+        if(c.key === "guest") return names ? '<td class="dlName">' + esc(r.guest) + (r.guestExtra ? "<br>" + esc(r.guestExtra) : "") + "</td>"
+                                           : '<td class="dlOut">' + REDACT + "</td>";
         if(c.key === "room") return '<td><span class="dlRoom">' + esc(r.room) + "</span>" + (r.type ? ' <span class="type">' + esc(r.type) + "</span>" : "") + "</td>";
         return '<td class="' + (numKey(c.key) ? "num" : "") + '">' + esc(r[c.key] || "") + "</td>";
       }).join("") + "</tr>";
@@ -6589,10 +6615,11 @@ function buildDepSheet(p, fname){
     }
   }
   h += "</tbody></table>";
-  if(p.totals.length) h += '<div class="dlTot">' + p.totals.map(x => esc(x.label) + " : <b>" + esc(x.value) + "</b>").join("&nbsp;&nbsp;·&nbsp;&nbsp;") + "</div>";
+  /* "Σύνολο Ατόμων : 78" — protel's own word on each; the parser keeps the label after it */
+  if(p.totals.length) h += '<div class="dlTot">' + p.totals.map(x => "Σύνολο " + esc(x.label) + " : <b>" + esc(x.value) + "</b>").join("&nbsp;&nbsp;·&nbsp;&nbsp;") + "</div>";
   /* the one line that is OURS and not protel's: it says the names were taken out on
      purpose, so nobody downstream reads the dashes as a fault in the report */
-  h += '<div class="dlFoot">' + esc(t("rep.withheld")) + (fname ? " · " + esc(fname) : "") + "</div>";
+  h += '<div class="dlFoot">' + esc(t(names ? "rep.namesFoot" : "rep.withheld")) + (fname ? " · " + esc(fname) : "") + "</div>";
   sheet.innerHTML = h;
   return h;
 }
@@ -6624,17 +6651,18 @@ function xpsFontKey(uri, fonts){
   return Object.keys(fonts || {}).find(k => k.split("/").pop().toLowerCase() === base) || null;
 }
 /* {html, pages, cut, unplaced, unknown} — html is the whole sheet.
-   `names` = the BACKUP print, his ask 10/09: "a backup print for the lists just like protel
-   would print them ... in case a colleague fucks up and i see it too late". The same page,
-   nothing withheld, no dashes — protel's page as protel prints it. */
-function buildDepExact(p, xps, mono, names){
+   (1.17.66 briefly drew this page WITH the names as the backup print. protel's file wraps a
+   long name onto a second run that protel's own viewer CLIPS to the row and this renderer
+   cannot know to — his screenshot of 10/09 showed it on the ΩΡΑ bands. The backup is the
+   tabular sheet with the names in full now, 1.17.67; this page stays names-out only.) */
+function buildDepExact(p, xps, mono){
   const F = xpsFontCss(xps.fonts);
   const resolve = uri => xpsFontKey(uri, F.fonts);
   let html = "<style>" + F.css + "</style>", cut = 0, unknown = [];
   xps.pages.forEach((xml, pg) => {
     const withheld = {};
-    if(!names) for(const w of p.withheld.concat(p.unplaced)){ if(w.pg !== pg) continue; (withheld[w.el] = withheld[w.el] || []).push([w.i0, w.i1]); }
-    const dashes = names ? [] : p.dashes.filter(d => d.pg === pg).map(d => ({el: d.el, x: d.x, y: d.y}));
+    for(const w of p.withheld.concat(p.unplaced)){ if(w.pg !== pg) continue; (withheld[w.el] = withheld[w.el] || []).push([w.i0, w.i1]); }
+    const dashes = p.dashes.filter(d => d.pg === pg).map(d => ({el: d.el, x: d.x, y: d.y}));
     const r = xpsPageSvg(xml, {fonts: F.fonts, resolve, withheld, dashes, mono: !!mono, idp: "xp" + pg + "c"});
     cut += r.cut; unknown = unknown.concat(r.unknown);
     html += '<div class="xpsPage">' + r.svg + "</div>";
@@ -6642,8 +6670,8 @@ function buildDepExact(p, xps, mono, names){
   return {html, pages: xps.pages.length, cut, unplaced: p.unplaced.length, unknown};
 }
 /* writes the exact sheet into #printSheet; returns what buildDepExact returned */
-function buildDepExactSheet(p, xps, names){
-  const ex = buildDepExact(p, xps, false, !!names);
+function buildDepExactSheet(p, xps){
+  const ex = buildDepExact(p, xps, false);
   $("#printSheet").innerHTML = ex.html;
   return ex;
 }
@@ -6800,17 +6828,16 @@ function openDepPreview(f, p, kind, xps, names){
   /* the departure list prints as protel's own page with the names cut out (1.17.59); the
      tabular sheet stays only for a file that somehow carries no page to draw */
   const exact = !board && xps && xps.pages && xps.pages.length ? xps : null;
-  /* `names`: the BACKUP print (1.17.66) — the same page with nothing cut, only ever for a
-     departure list that carries its pages, and only after he asked for it from the
-     redacted preview. What prints is what he previewed: the flip happens HERE, in the
-     preview, and the armed job carries the same flag. */
-  names = !!(names && exact);
+  /* `names`: the BACKUP print (1.17.67) — the tabular sheet with the names in full, for any
+     departure list, only after he asked for it from the redacted preview. What prints is
+     what he previewed: the flip happens HERE, in the preview, and the armed job carries the
+     same flag. */
+  names = !!(names && !board);
   let ex = null;
-  if(board) buildBoardingSheet(p, f.name); else if(exact) ex = buildDepExactSheet(p, exact, names); else buildDepSheet(p, f.name);
+  if(board) buildBoardingSheet(p, f.name); else if(names) buildDepSheet(p, f.name, true); else if(exact) ex = buildDepExactSheet(p, exact); else buildDepSheet(p, f.name);
   let note = "";
-  if(ex && names){
+  if(names){
     note = esc(t("rep.exactNames"));
-    if(ex.unknown.length) note += " · " + esc(t("rep.exactUnknown", {k: ex.unknown.length}));
   } else if(ex){
     note = esc(t("rep.exact", {n: ex.cut}));
     if(ex.unplaced) note += " · " + esc(t("rep.exactUnplaced", {u: ex.unplaced}));
@@ -6823,11 +6850,11 @@ function openDepPreview(f, p, kind, xps, names){
     <div class="actions">
       <button class="btn" id="pvCancel">${esc(t("pv.cancel"))}</button>
       <button class="btn" id="repDel">${esc(t("rep.delete"))}</button>
-      ${exact ? '<button class="btn" id="pvNames">' + esc(t(names ? "rep.hideNames" : "rep.showNames")) + '</button>' : ""}
+      ${board ? "" : '<button class="btn" id="pvNames">' + esc(t(names ? "rep.hideNames" : "rep.showNames")) + '</button>'}
       <button class="btn amber" id="pvGo">${esc(t("pv.print"))}</button>
     </div>`);
   /* the flip re-opens this same preview the other way round; nothing is armed by it */
-  if(exact) $("#pvNames").onclick = () => { clearPrintJob(); closeModal(); openDepPreview(f, p, kind, xps, !names); };
+  if(!board) $("#pvNames").onclick = () => { clearPrintJob(); closeModal(); openDepPreview(f, p, kind, xps, !names); };
   /* the departures sheet is landscape, so its preview is wide; the boarding sheet is
      portrait (protel prints it so), so it keeps the ordinary wide-modal width. */
   $("#modal").classList.add("wide"); if(!board) $("#modal").classList.add("land");
@@ -6892,7 +6919,8 @@ window.addEventListener("beforeprint", () => {
   if(document.body.classList.contains("taxPrint")){ setPrintLandscape(false); return; }   // the tax half prints its own mount, portrait
   if(PRINT_JOB && PRINT_JOB.kind === "board"){ setPrintLandscape(false); buildBoardingSheet(PRINT_JOB.p, PRINT_JOB.fname); return; }
   if(PRINT_JOB && PRINT_JOB.kind === "dep"){
-    if(PRINT_JOB.xps){ setPrintLandscape(true, true); buildDepExactSheet(PRINT_JOB.p, PRINT_JOB.xps, PRINT_JOB.names); }
+    if(PRINT_JOB.names){ setPrintLandscape(true); buildDepSheet(PRINT_JOB.p, PRINT_JOB.fname, true); }
+    else if(PRINT_JOB.xps){ setPrintLandscape(true, true); buildDepExactSheet(PRINT_JOB.p, PRINT_JOB.xps); }
     else { setPrintLandscape(true); buildDepSheet(PRINT_JOB.p, PRINT_JOB.fname); }
     return;
   }

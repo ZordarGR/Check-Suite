@@ -1,11 +1,11 @@
 {
-  "version": "1.17.66",
+  "version": "1.17.67",
   "type": "html",
   "engine": "1.17.63",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.63/Pro-Check-Setup.exe",
   "setupSha256": "028e988e6ebde55cb30777795bd6be99edf93bd858744d60b5d514b5e4554019",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "4587349fe0b714902157f61674bbc928f58c77496b17cd7b3b5b9461cf59f4d5",
-  "notes": "REPORTS: a backup print of the departure list WITH the names — protel's page exactly as protel prints it. Open the list's preview, press \"With names\", check the preview, then Print. The ordinary print stays redacted; nothing changes unless you press that button."
+  "sha256": "4999e40fbb5be50d5990a98339203a542c99e06ee8fd90f35f172f4b74c6a5b5",
+  "notes": "The backup print of the departure list is the sheet in protel's layout with the guest names in FULL — nothing cut, nothing clipped, a long name on two lines as protel wrote it. (1.17.66 had used protel's page, which clips a wrapped name to its row.) Same button: With names, then Print. Also: the totals line says Σύνολο again, as protel prints it."
 }
