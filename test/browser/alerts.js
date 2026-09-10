@@ -133,6 +133,43 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok?"ok  ":"FAIL") + "
      await p.evaluate(() => !document.getElementById("alertsBtn").classList.contains("unread")));
   await p.close();
 
+  /* A LATER OPEN CONTRADICTS AN EARLIER ONE. His ask, 10/09: "if the tool doesnt find the x
+     but later opens show it then the alert is false, therefore it should erase itself".
+     Not a resolve: the X gone again on a still later read raises it again. */
+  p = await open(MV(TWO_MISSING));
+  await p.waitForTimeout(400);
+  alerts = await p.evaluate(() => JSON.parse(localStorage.getItem("reccheck_alerts") || "[]"));
+  ck("two missing again on a fresh page",        alerts.length === 2);
+  const NOW_MARKED = [
+    ["525","BSF","505","BSF","VASSILIEV","X","03/09/26","17/09/26"],
+    ["85","BGV","153","SPMV","HEINE","X","03/09/26","12/09/26"],
+    ["134","SV","306","BGV","HARMS/HABERMEYER","","02/09/26","09/09/26"]
+  ];
+  await p.evaluate((txt) => { window.__files.MV = txt; window.__at.MV = 2; }, MV(NOW_MARKED));
+  await p.waitForTimeout(7000);
+  alerts = await p.evaluate(() => JSON.parse(localStorage.getItem("reccheck_alerts") || "[]"));
+  ck("a later open that shows the X erases that alert (" + alerts.length + ")", alerts.length === 1);
+  ck("and only that one",                      alerts.length === 1 && alerts[0].key.indexOf("HARMS") > 0);
+  ck("it is not recorded as resolved",
+     await p.evaluate(() => !Object.keys(JSON.parse(localStorage.getItem("reccheck_alerts_done") || "{}")).some(k => k.indexOf("VASSILIEV") > 0)));
+  ck("the button still pulses for the one that is left",
+     await p.evaluate(() => document.getElementById("alertsBtn").classList.contains("unread")));
+  ck("and counts one",
+     /1/.test(await p.evaluate(() => document.querySelector("#alertsBtn .mSub").textContent)));
+  /* the X gone again on a still later read — protel's data, so it comes back */
+  await p.evaluate((txt) => { window.__files.MV = txt; window.__at.MV = 3; }, MV(TWO_MISSING));
+  await p.waitForTimeout(7000);
+  alerts = await p.evaluate(() => JSON.parse(localStorage.getItem("reccheck_alerts") || "[]"));
+  ck("the X gone again on a later read raises it again (" + alerts.length + ")", alerts.length === 2);
+  /* all marked: the list empties and the button says so */
+  await p.evaluate((txt) => { window.__files.MV = txt; window.__at.MV = 4; }, MV(MARKED.concat([["134","SV","306","BGV","HARMS/HABERMEYER","X","02/09/26","09/09/26"]])));
+  await p.waitForTimeout(7000);
+  alerts = await p.evaluate(() => JSON.parse(localStorage.getItem("reccheck_alerts") || "[]"));
+  ck("every X back: nothing left (" + alerts.length + ")", alerts.length === 0);
+  ck("and the button stops pulsing",
+     await p.evaluate(() => !document.getElementById("alertsBtn").classList.contains("unread")));
+  await p.close();
+
   /* a half-read row is not a move without an X */
   p = await open(MV([["525","BSF","","","","","",""]]));
   ck("a row that came back half-empty raises nothing",

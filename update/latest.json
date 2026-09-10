@@ -1,11 +1,11 @@
 {
-  "version": "1.17.64",
+  "version": "1.17.65",
   "type": "html",
   "engine": "1.17.63",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.63/Pro-Check-Setup.exe",
   "setupSha256": "028e988e6ebde55cb30777795bd6be99edf93bd858744d60b5d514b5e4554019",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "9ec57c610042e74a3b5e4522476a9a63ba8fda7ea5d8787958bf436de2c6c2a8",
-  "notes": "The home screen's old subtitle (\"Nightly POS receipt audit\") is gone — the tool outgrew it — and the landing logo now says PRO·CHECK too, which 1.17.63 had missed. Nothing else changed."
+  "sha256": "4507951a8a9a5646eaea6f12779df8c0e4fcc4b6984fb5c76e583bbfc7170906",
+  "notes": "A 'move without X' alert now erases itself when a later open of the moves window shows the X on that move — the alert was false, protel says so. Not a resolve: if the X goes missing again on a still later open, the alert comes back, because that is what protel shows."
 }
