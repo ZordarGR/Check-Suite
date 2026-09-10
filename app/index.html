@@ -1934,7 +1934,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.65";
+const APP_VERSION = "1.17.66";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -2046,6 +2046,10 @@ en: {
   "rep.pvTitle": "Departure list — names withheld",
   "rep.withheld": "Guest names withheld",
   "rep.exact": "protel's own page, the names cut out — {n} characters withheld",
+  "rep.pvTitleNames": "Departure list — WITH NAMES, as protel prints it",
+  "rep.exactNames": "Backup print: protel's own page with nothing cut out. The names are on this one.",
+  "rep.showNames": "With names",
+  "rep.hideNames": "Without names",
   "rep.exactUnplaced": "{u} more in the name column could not be placed and were cut too",
   "rep.exactUnknown": "{k} page elements this version cannot draw",
   "rep.printedAt": "printed {p}",
@@ -2295,6 +2299,10 @@ gr: {
   "rep.pvTitle": "Λίστα αναχωρήσεων — χωρίς ονόματα",
   "rep.withheld": "Χωρίς ονόματα πελατών",
   "rep.exact": "η σελίδα του protel όπως είναι, χωρίς τα ονόματα — {n} χαρακτήρες αφαιρέθηκαν",
+  "rep.pvTitleNames": "Λίστα αναχωρήσεων — ΜΕ ΟΝΟΜΑΤΑ, όπως την τυπώνει το protel",
+  "rep.exactNames": "Εφεδρική εκτύπωση: η σελίδα του protel χωρίς να αφαιρεθεί τίποτα. Σε αυτή τα ονόματα φαίνονται.",
+  "rep.showNames": "Με ονόματα",
+  "rep.hideNames": "Χωρίς ονόματα",
   "rep.exactUnplaced": "{u} ακόμη στη στήλη ονομάτων δεν τοποθετήθηκαν και αφαιρέθηκαν επίσης",
   "rep.exactUnknown": "{k} στοιχεία σελίδας που αυτή η έκδοση δεν σχεδιάζει",
   "rep.printedAt": "τυπώθηκε {p}",
@@ -6615,15 +6623,18 @@ function xpsFontKey(uri, fonts){
   const base = String(uri || "").split("/").pop().toLowerCase();
   return Object.keys(fonts || {}).find(k => k.split("/").pop().toLowerCase() === base) || null;
 }
-/* {html, pages, cut, unplaced, unknown} — html is the whole sheet */
-function buildDepExact(p, xps, mono){
+/* {html, pages, cut, unplaced, unknown} — html is the whole sheet.
+   `names` = the BACKUP print, his ask 10/09: "a backup print for the lists just like protel
+   would print them ... in case a colleague fucks up and i see it too late". The same page,
+   nothing withheld, no dashes — protel's page as protel prints it. */
+function buildDepExact(p, xps, mono, names){
   const F = xpsFontCss(xps.fonts);
   const resolve = uri => xpsFontKey(uri, F.fonts);
   let html = "<style>" + F.css + "</style>", cut = 0, unknown = [];
   xps.pages.forEach((xml, pg) => {
     const withheld = {};
-    for(const w of p.withheld.concat(p.unplaced)){ if(w.pg !== pg) continue; (withheld[w.el] = withheld[w.el] || []).push([w.i0, w.i1]); }
-    const dashes = p.dashes.filter(d => d.pg === pg).map(d => ({el: d.el, x: d.x, y: d.y}));
+    if(!names) for(const w of p.withheld.concat(p.unplaced)){ if(w.pg !== pg) continue; (withheld[w.el] = withheld[w.el] || []).push([w.i0, w.i1]); }
+    const dashes = names ? [] : p.dashes.filter(d => d.pg === pg).map(d => ({el: d.el, x: d.x, y: d.y}));
     const r = xpsPageSvg(xml, {fonts: F.fonts, resolve, withheld, dashes, mono: !!mono, idp: "xp" + pg + "c"});
     cut += r.cut; unknown = unknown.concat(r.unknown);
     html += '<div class="xpsPage">' + r.svg + "</div>";
@@ -6631,8 +6642,8 @@ function buildDepExact(p, xps, mono){
   return {html, pages: xps.pages.length, cut, unplaced: p.unplaced.length, unknown};
 }
 /* writes the exact sheet into #printSheet; returns what buildDepExact returned */
-function buildDepExactSheet(p, xps){
-  const ex = buildDepExact(p, xps, false);
+function buildDepExactSheet(p, xps, names){
+  const ex = buildDepExact(p, xps, false, !!names);
   $("#printSheet").innerHTML = ex.html;
   return ex;
 }
@@ -6784,28 +6795,39 @@ async function renderReports(){
   }
   if(!shown && !dirs.length) note("rep.none", {dir: res.dir + (here ? " / " + here : "")});
 }
-function openDepPreview(f, p, kind, xps){
+function openDepPreview(f, p, kind, xps, names){
   const board = kind === "board";
   /* the departure list prints as protel's own page with the names cut out (1.17.59); the
      tabular sheet stays only for a file that somehow carries no page to draw */
   const exact = !board && xps && xps.pages && xps.pages.length ? xps : null;
+  /* `names`: the BACKUP print (1.17.66) — the same page with nothing cut, only ever for a
+     departure list that carries its pages, and only after he asked for it from the
+     redacted preview. What prints is what he previewed: the flip happens HERE, in the
+     preview, and the armed job carries the same flag. */
+  names = !!(names && exact);
   let ex = null;
-  if(board) buildBoardingSheet(p, f.name); else if(exact) ex = buildDepExactSheet(p, exact); else buildDepSheet(p, f.name);
+  if(board) buildBoardingSheet(p, f.name); else if(exact) ex = buildDepExactSheet(p, exact, names); else buildDepSheet(p, f.name);
   let note = "";
-  if(ex){
+  if(ex && names){
+    note = esc(t("rep.exactNames"));
+    if(ex.unknown.length) note += " · " + esc(t("rep.exactUnknown", {k: ex.unknown.length}));
+  } else if(ex){
     note = esc(t("rep.exact", {n: ex.cut}));
     if(ex.unplaced) note += " · " + esc(t("rep.exactUnplaced", {u: ex.unplaced}));
     if(ex.unknown.length) note += " · " + esc(t("rep.exactUnknown", {k: ex.unknown.length}));
   }
   openModal(`
-    <h3>${esc(t(board ? "rep.pvTitleBoard" : "rep.pvTitle"))}</h3>
+    <h3>${esc(t(board ? "rep.pvTitleBoard" : names ? "rep.pvTitleNames" : "rep.pvTitle"))}</h3>
     ${note ? '<div class="pvNote">' + note + "</div>" : ""}
     <div id="pvPaper">${$("#printSheet").innerHTML}</div>
     <div class="actions">
       <button class="btn" id="pvCancel">${esc(t("pv.cancel"))}</button>
       <button class="btn" id="repDel">${esc(t("rep.delete"))}</button>
+      ${exact ? '<button class="btn" id="pvNames">' + esc(t(names ? "rep.hideNames" : "rep.showNames")) + '</button>' : ""}
       <button class="btn amber" id="pvGo">${esc(t("pv.print"))}</button>
     </div>`);
+  /* the flip re-opens this same preview the other way round; nothing is armed by it */
+  if(exact) $("#pvNames").onclick = () => { clearPrintJob(); closeModal(); openDepPreview(f, p, kind, xps, !names); };
   /* the departures sheet is landscape, so its preview is wide; the boarding sheet is
      portrait (protel prints it so), so it keeps the ordinary wide-modal width. */
   $("#modal").classList.add("wide"); if(!board) $("#modal").classList.add("land");
@@ -6813,7 +6835,7 @@ function openDepPreview(f, p, kind, xps){
   /* ARM the sheet for this one print. beforeprint rebuilds it from the job — see the
      listener below for why it is not enough to have written #printSheet already. The kind
      also decides the page orientation there: "dep" landscape, "board" portrait. */
-  $("#pvGo").onclick = () => { PRINT_JOB = {kind: board ? "board" : "dep", p: p, fname: f.name, xps: exact}; closeModal(); setTimeout(() => window.print(), 80); };
+  $("#pvGo").onclick = () => { PRINT_JOB = {kind: board ? "board" : "dep", p: p, fname: f.name, xps: exact, names: names}; closeModal(); setTimeout(() => window.print(), 80); };
   $("#repDel").onclick = async () => {
     clearPrintJob();
     if(!confirm(t("rep.deleteQ", {f: f.name}))) return;
@@ -6870,7 +6892,7 @@ window.addEventListener("beforeprint", () => {
   if(document.body.classList.contains("taxPrint")){ setPrintLandscape(false); return; }   // the tax half prints its own mount, portrait
   if(PRINT_JOB && PRINT_JOB.kind === "board"){ setPrintLandscape(false); buildBoardingSheet(PRINT_JOB.p, PRINT_JOB.fname); return; }
   if(PRINT_JOB && PRINT_JOB.kind === "dep"){
-    if(PRINT_JOB.xps){ setPrintLandscape(true, true); buildDepExactSheet(PRINT_JOB.p, PRINT_JOB.xps); }
+    if(PRINT_JOB.xps){ setPrintLandscape(true, true); buildDepExactSheet(PRINT_JOB.p, PRINT_JOB.xps, PRINT_JOB.names); }
     else { setPrintLandscape(true); buildDepSheet(PRINT_JOB.p, PRINT_JOB.fname); }
     return;
   }
