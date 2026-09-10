@@ -8,6 +8,12 @@
 const fs = require("fs");
 const src = fs.readFileSync("app/index.html", "utf8");
 
+/* THE CLOCK IS PINNED. The STATUS store keeps STATUS_KEEP_DAYS nights back from TONIGHT, and
+   this night is dated 01/09/26 — so on 10/09 the fixture aged out of its own store and every
+   pill vanished, with nothing in the tool wrong. Tonight is 01/09/26 here, for ever. */
+const RealDate = Date, PIN = new RealDate(2026, 8, 2, 1, 0, 0).getTime();   // 02/09 01:00 -> night 01/09
+global.Date = class extends RealDate { constructor(...a){ if(a.length) super(...a); else super(PIN); } static now(){ return PIN; } };
+
 function lift(name){
   const at = src.indexOf("\nfunction " + name + "(");
   if (at < 0) throw new Error("missing " + name);

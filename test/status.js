@@ -13,6 +13,12 @@
    results (leavingIndex). Both are lifted here from app/index.html, not copied. */
 const fs = require("fs");
 const src = fs.readFileSync("app/index.html", "utf8");
+
+/* THE CLOCK IS PINNED — see test/movespanel.js. The STATUS store keeps STATUS_KEEP_DAYS nights
+   back from TONIGHT and this night is dated; without the pin the fixture ages out of its own
+   store on the calendar and the harness goes red with nothing in the tool wrong. */
+const RealDate = Date, PIN = new RealDate(2026, 8, 5, 1, 0, 0).getTime();   // 05/09 01:00 -> night 04/09
+global.Date = class extends RealDate { constructor(...a){ if(a.length) super(...a); else super(PIN); } static now(){ return PIN; } };
 const lift = name => {
   const at = src.indexOf("\nfunction " + name + "(");
   if(at < 0) throw new Error("missing " + name);
@@ -168,9 +174,11 @@ ck("a row without both a name and a room is not a reservation and is not kept", 
 ck("a capture with no date in its caption writes nothing", TAX.ingest("AR", TAX.parseTagged(RPT("AR", "Arrival Report", [["X ", "302", "", "", ""]]), "AR"), T(9)) === false);
 ck("a caption that is not the in-house list's writes no census", TAX.ingest("IH", TAX.parseInhouse(IHTXT("Arrival Report for the 04/09/26", [["X", "302", "", "", "", "CI"]])), T(9)) === false);
 ck("the same capture seen again on the next tick changes nothing", rpt("AR", RPT("AR", "Arrival Report for the 04/09/26", [["WHOLE ", "301", "1/0/0/0/0", "05/09/26", ""]]), T(8)) === false);
-rpt("AR", RPT("AR", "Arrival Report for the 20/08/26", [["OLD ", "303", "1/0/0/0/0", "21/08/26", ""]]), T(10));
+/* 15/08 is 20 nights before the pinned night of 04/09 — past STATUS_KEEP_DAYS (15) whatever the
+   calendar says. It was 20/08 under the real clock, which is exactly 15 back from the pin. */
+rpt("AR", RPT("AR", "Arrival Report for the 15/08/26", [["OLD ", "303", "1/0/0/0/0", "16/08/26", ""]]), T(10));
 st = TAX.load();
-ck("a day older than the week is pruned; today's is kept", !st.AR["20260820"] && !!st.AR["20260904"]);
+ck("a day older than the store's window is pruned; today's is kept", !st.AR["20260815"] && !!st.AR["20260904"]);
 
 console.log("--- 4. the pills: from the store, and from nothing else");
 for(const k of Object.keys(store)) delete store[k]; store["reccheck_legacy"] = "0";

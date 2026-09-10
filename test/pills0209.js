@@ -8,6 +8,12 @@
    is not on the departure list must still draw nothing. */
 const fs = require("fs");
 const src = fs.readFileSync("app/index.html", "utf8");
+
+/* THE CLOCK IS PINNED — see test/movespanel.js. The STATUS store keeps STATUS_KEEP_DAYS nights
+   back from TONIGHT and this night is dated; without the pin the fixture ages out of its own
+   store on the calendar and the harness goes red with nothing in the tool wrong. */
+const RealDate = Date, PIN = new RealDate(2026, 8, 3, 1, 0, 0).getTime();   // 03/09 01:00 -> night 02/09
+global.Date = class extends RealDate { constructor(...a){ if(a.length) super(...a); else super(PIN); } static now(){ return PIN; } };
 const lift = name => {
   const at = src.indexOf("\nfunction " + name + "(");
   if (at < 0) throw new Error("missing " + name);

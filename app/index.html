@@ -1934,7 +1934,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.64";
+const APP_VERSION = "1.17.65";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -3018,6 +3018,18 @@ function resolveAlert(key){
   ALERTS_DONE[key] = bnKey();
   saveAlerts(); paintAlertsBtn(); renderAlerts();
 }
+/* An alert protel has since contradicted. His ask, 10/09: "if the tool doesnt find the x but
+   later opens show it then the alert is false, therefore it should erase itself". Not a
+   resolve: nothing goes into ALERTS_DONE, so if a later read shows the X gone again the
+   alert is raised again — that is what protel says, and the tool records what it says. */
+function dropAlert(key){
+  const before = ALERTS.length;
+  ALERTS = ALERTS.filter(x => x.key !== key);
+  if(ALERTS.length === before) return false;
+  saveAlerts(); paintAlertsBtn();
+  if(typeof SCREEN !== "undefined" && SCREEN === "alerts") renderAlerts();
+  return true;
+}
 function unreadAlerts(){ return ALERTS.filter(x => !x.read).length; }
 function markAlertsRead(){
   if(!unreadAlerts()) return;
@@ -3068,6 +3080,7 @@ function dfmtKey(k){
 /* The tax half is a separate <script> and is where the lists are read. This is the door,
    the same shape as the others. */
 window.__rcAlert = function(a){ try{ return addAlert(a); }catch(e){ return false; } };
+window.__rcAlertDrop = function(key){ try{ return dropAlert(key); }catch(e){ return false; } };
 
 /* ---------- state ---------- */
 function blankState(date){
@@ -8459,19 +8472,26 @@ function applyMoves(p){
     MOVES_ROWS = p.rows; MOVES_NIGHT = key;
     for(const r of p.rows){
       const x = String(r[MV.X] || "").trim();
-      if(x) continue;                                  // marked, protel will show it
       const from = String(r[MV.FROM] || "").trim();
       const to   = String(r[MV.TO] || "").trim();
       const name = String(r[MV.NAME] || "").trim();
+      if(!from || !to || !name) continue;              // half-read either way, see below
+      const akey = "movex|" + key + "|" + from + "|" + to + "|" + name;
+      if(x){
+        /* Marked, protel will show it. If an EARLIER read of this night raised "no X" on
+           this same move, that alert is false now and erases itself — his ask, 10/09. The
+           same key the raise uses, so it is the same alert and nothing else. */
+        if(window.__rcAlertDrop) window.__rcAlertDrop(akey);
+        continue;
+      }
       /* AN EMPTY CELL IS NOT THE SAME AS A MISSING X. ReadCell returns "" for every
          failure it has — a send that timed out on a busy protel, a write or read of the
          scratch page that did not take — so a row that came back half-empty would mint a
          "no X" alert for a move that has one. A row is only trusted to be missing its X
          when the rest of it arrived: both rooms, the name, and a date. */
-      if(!from || !to || !name) continue;
       if(!String(r[MV.ARR] || "").trim() && !String(r[MV.DEP] || "").trim()) continue;
       if(window.__rcAlert) window.__rcAlert({
-        key: "movex|" + key + "|" + from + "|" + to + "|" + name,
+        key: akey,
         kind: "moveNoX",
         night: key,
         text: t('al_moveNoX', from || '?', to || '?', name || '?')
