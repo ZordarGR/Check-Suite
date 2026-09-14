@@ -1946,7 +1946,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.67";
+const APP_VERSION = "1.17.68";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -5541,7 +5541,10 @@ function otherNames(m, room, kind){
      always another reservation. */
   const n = [].concat(N.arr || [], (kind === "move" ? (N.dep || []) : (N.move || [])).filter(o => !same(o)));
   const c = censusNameOf(room);
-  if(c && !same(c)) n.push(c);
+  /* A full captured move name can identify its own first-name-only census entry.
+     Arrival/departure competitors above still use the original list names. */
+  const ownMove = kind === "move" && (N.moveFull || []).some(t => nameLike(c, t));
+  if(c && !same(c) && !ownMove) n.push(c);
   return n;
 }
 function isLeaving(room, name){
@@ -5826,6 +5829,26 @@ function roomMoves(nightArg){
   if(legacyOn()) return ledgerMoves(night);
   const st = loadStatus();
   const acc = {};
+  /* Moves may print surnames only while checkcharge prints first names only. Connect
+     them through a full name protel actually captured for this room and this stay.
+     Never guess across rooms/dates, or choose between conflicting full names. */
+  const fullMoveName = r => {
+    const short = String(r.name || "").trim(), words = nameWordSet(short);
+    const arrival = dateNum2(r.arr), departure = dateNum2(r.dep);
+    const from = pillRoom(r.from), to = pillRoom(r.to), names = [];
+    if(!words.size || !arrival || !departure || !from || !to) return "";
+    const add = row => {
+      if(!row || ![from, to].includes(pillRoom(row.room)) || dateNum2(row.dep) !== departure) return;
+      const full = String(row.name || "").trim(), whole = nameWordSet(full);
+      if(!full || ![...words].every(w => whole.has(w))) return;
+      if(!names.some(n => sameName(n, full))) names.push(full);
+    };
+    for(const row of statusRows(st, "AR", arrival)) add(row);
+    for(const cap of [st.IH, st.IHC]){
+      for(const row of (cap && cap.rows) || []) if(dateNum2(row.arr) === arrival) add(row);
+    }
+    return names.length === 1 && !sameName(names[0], short) ? names[0] : "";
+  };
   /* THREE FACTS PER ROOM, each its own pill — his word, 05/09: "remove the turnover tab,
      keep it simple, arrivals, departures, moves". A room on the departure list AND the
      arrival list is on both, as protel shows it; nothing is folded into a louder fact. */
@@ -5844,6 +5867,8 @@ function roomMoves(nightArg){
     if(!String(r.x || "").trim()) continue;                // protel has not marked it — not a move it shows
     const to = pillRoom(r.to), from = pillRoom(r.from); if(!to || !from || to === from) continue;
     const o = slot(to); o.move = from; o.names.move.push(r.name || ""); sinceOf(o, r.arr);
+    const full = fullMoveName(r);
+    if(full) (o.names.moveFull = o.names.moveFull || []).push(full);
   }
   for(const room of Object.keys(acc)){
     const o = acc[room];
@@ -5983,7 +6008,7 @@ function renderMovesFor(box, night){
   for(const room of rooms) BEFORE[room] = {dep: roomsBefore(room, mv[room].names.dep), move: roomsBefore(room, mv[room].names.move)};
   const hit = (m, room, rm, guest) => {
     if(m.dep && (rm === room || BEFORE[room].dep.has(rm)) && m.names.dep.some(n => nameHit(guest, n, otherNames(m, room, "dep")))) depRec.add(room);
-    if(m.movedFrom && (rm === room || BEFORE[room].move.has(rm)) && m.names.move.some(n => nameHit(guest, n, otherNames(m, room, "move")))) moveRec.add(room);
+    if(m.movedFrom && (rm === room || BEFORE[room].move.has(rm)) && m.names.move.concat(m.names.moveFull || []).some(n => nameHit(guest, n, otherNames(m, room, "move")))) moveRec.add(room);
   };
   const found = room => (!mv[room].dep || depRec.has(room)) && (!mv[room].movedFrom || moveRec.has(room));
   if(MODEL){
