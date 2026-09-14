@@ -1,11 +1,11 @@
 {
-  "version": "1.17.68",
+  "version": "1.17.69",
   "type": "html",
   "engine": "1.17.63",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.63/Pro-Check-Setup.exe",
   "setupSha256": "028e988e6ebde55cb30777795bd6be99edf93bd858744d60b5d514b5e4554019",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "fc69382c4c4f322a3809abe1d3a43e415b8739f2d9f51a24a247257d8d8e0ea0",
-  "notes": "Move receipt dots can connect a surname-only move entry to a first-name-only receipt through a full reservation name already captured by protel. The full name must uniquely match the move's room and original arrival/departure dates; conflicting names remain unmatched. Original arrival dates and the shared-word comparison rule are preserved."
+  "sha256": "e0ae474d5ac05d54c0037e1c60ff5aa4d1b3be0b28e8a9753e3d6181d727a967",
+  "notes": "Guest accounts now feed Department Check, excluding room 9000 and the named house accounts including IRIS. Tax Check excludes 9xxx accounts from warnings, charge-history checks and printouts while preserving captured charges. Matching captured account moves bound checking to physical-room nights without changing original reservation dates."
 }

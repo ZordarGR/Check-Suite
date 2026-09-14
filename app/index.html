@@ -1946,7 +1946,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.68";
+const APP_VERSION = "1.17.69";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -5461,16 +5461,16 @@ function leavingIndex(){
   }
   const st = loadStatus();
   for(const r of statusRows(st, "DP", night)){
-    const room = pillRoom(r.room);
+    const room = pillRoom(r.room, r.name);
     if(room) (out[room] = out[room] || []).push(r.name || "");
   }
   for(const r of statusRows(st, "AR", night)){
-    const room = pillRoom(r.room);
+    const room = pillRoom(r.room, r.name);
     if(room) (arr[room] = arr[room] || []).push(r.name || "");
   }
   for(const r of statusRows(st, "MV", night)){
     if(!String(r.x || "").trim()) continue;
-    const to = pillRoom(r.to);
+    const to = pillRoom(r.to, r.name);
     if(to) (arr[to] = arr[to] || []).push(r.name || "");
   }
   ARRIVING = arr;
@@ -5781,8 +5781,8 @@ function dShort(k){
    The STATUS store (written by the tax half, see statusIngest) keeps each list's rows for
    the day as a UNION of every capture of it, keyed by name and room, so a guest who has
    left the arrival list because they checked in is still that night's arrival. This
-   reads that store and nothing else. Room 9000 and the like are holding rooms and are
-   not pills, as they were never stays. */
+   reads that store and nothing else. Guest accounts in the 9xxx range are included;
+   room 9000 and the named house accounts are excluded. */
 const STATUS_KEY = "reccheck_status_v1";
 function loadStatus(){
   try{ const o = JSON.parse(localStorage.getItem(STATUS_KEY) || "{}"); return (o && typeof o === "object" && !Array.isArray(o)) ? o : {}; }
@@ -5816,9 +5816,14 @@ function saveNightReceipts(night, pairs){
     if(changed) localStorage.setItem(RECEIPTS_KEY, JSON.stringify(o));   // an unchanged night writes nothing
   }catch(e){}
 }
-function pillRoom(cell){
-  const m = String(cell || "").trim().match(/^(\d{2,3})(?!\d)/);   // the lead room of "414-15"; not 9000
-  return m ? m[1] : "";
+function pillRoom(cell, name){
+  const m = String(cell || "").trim().match(/^(\d{2,4})(?!\d)/);
+  if(!m || m[1] === "9000") return "";
+  const n = String(name || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+                  .trim().replace(/\s+/g, " ").toUpperCase();
+  // Four-digit guest accounts are valid; exclude the named house accounts, not ACC type.
+  if((m[1].length === 4 && !n) || ["ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ", "MAISON", "CREDIT CARDS", "LOST CHARGES", "IRIS"].includes(n)) return "";
+  return m[1];
 }
 function roomMoves(nightArg){
   const out = {};
@@ -5835,10 +5840,10 @@ function roomMoves(nightArg){
   const fullMoveName = r => {
     const short = String(r.name || "").trim(), words = nameWordSet(short);
     const arrival = dateNum2(r.arr), departure = dateNum2(r.dep);
-    const from = pillRoom(r.from), to = pillRoom(r.to), names = [];
+    const from = pillRoom(r.from, r.name), to = pillRoom(r.to, r.name), names = [];
     if(!words.size || !arrival || !departure || !from || !to) return "";
     const add = row => {
-      if(!row || ![from, to].includes(pillRoom(row.room)) || dateNum2(row.dep) !== departure) return;
+      if(!row || ![from, to].includes(pillRoom(row.room, row.name)) || dateNum2(row.dep) !== departure) return;
       const full = String(row.name || "").trim(), whole = nameWordSet(full);
       if(!full || ![...words].every(w => whole.has(w))) return;
       if(!names.some(n => sameName(n, full))) names.push(full);
@@ -5856,16 +5861,16 @@ function roomMoves(nightArg){
   /* the reservation's own arrival, so the dot can look back over the whole stay */
   const sinceOf = (o, cell) => { const k = dateNum2(cell); if(k && (!o.since || k < o.since)) o.since = k; };
   for(const r of statusRows(st, "DP", night)){
-    const room = pillRoom(r.room); if(!room) continue;
+    const room = pillRoom(r.room, r.name); if(!room) continue;
     const o = slot(room); o.dep = true; o.names.dep.push(r.name || ""); sinceOf(o, r.arr);
   }
   for(const r of statusRows(st, "AR", night)){
-    const room = pillRoom(r.room); if(!room) continue;
+    const room = pillRoom(r.room, r.name); if(!room) continue;
     const o = slot(room); o.arr = true; o.names.arr.push(r.name || "");
   }
   for(const r of statusRows(st, "MV", night)){
     if(!String(r.x || "").trim()) continue;                // protel has not marked it — not a move it shows
-    const to = pillRoom(r.to), from = pillRoom(r.from); if(!to || !from || to === from) continue;
+    const to = pillRoom(r.to, r.name), from = pillRoom(r.from, r.name); if(!to || !from || to === from) continue;
     const o = slot(to); o.move = from; o.names.move.push(r.name || ""); sinceOf(o, r.arr);
     const full = fullMoveName(r);
     if(full) (o.names.moveFull = o.names.moveFull || []).push(full);
@@ -5995,7 +6000,7 @@ function renderMovesFor(box, night){
       for(const k of Object.keys(st.MV)){
         for(const r of statusRows(st, "MV", +k)){
           if(!String(r.x || "").trim()) continue;
-          const to = pillRoom(r.to), from = pillRoom(r.from);
+          const to = pillRoom(r.to, r.name), from = pillRoom(r.from, r.name);
           if(!to || !from || !seen.has(to) || seen.has(from)) continue;
           if(!names.some(n => n && nameLike(r.name, n))) continue;
           seen.add(from); out.add(from); grew = true;
@@ -7374,6 +7379,16 @@ return{kind:'rate',bizDate,dateKey,dateSure,count:Object.keys(rooms).length,room
 
    The room cell carries the adjoining pair as "414-15", which is why the key is the part
    before the dash — the same split parseRate does. */
+/* Same room eligibility as the department half; keep the two pillRoom copies identical. */
+function pillRoom(cell, name){
+  const m = String(cell || "").trim().match(/^(\d{2,4})(?!\d)/);
+  if(!m || m[1] === "9000") return "";
+  const n = String(name || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+                  .trim().replace(/\s+/g, " ").toUpperCase();
+  // Four-digit guest accounts are valid; exclude the named house accounts, not ACC type.
+  if((m[1].length === 4 && !n) || ["ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ", "MAISON", "CREDIT CARDS", "LOST CHARGES", "IRIS"].includes(n)) return "";
+  return m[1];
+}
 const IH = {NAME: 0, ROOM: 2, TYPE: 3, OCC: 4, ARR: 5, DEP: 6, STATUS: 11};
 function inhouseToRate(rows, bizDate){
   const all = {}, rooms = {};
@@ -7384,7 +7399,7 @@ function inhouseToRate(rows, bizDate){
     if(/reversal|void/i.test(status)){ cancelled++; continue; }
     const cell = String(r[IH.ROOM] || "").trim();
     const room = (cell.split("-")[0] || "").trim();
-    if(!/^\d{2,3}$/.test(room)){ unusable++; continue; }
+    if(!/^\d{2,4}$/.test(room) || !pillRoom(room, r[IH.NAME])){ unusable++; continue; }
     const arr = String(r[IH.ARR] || "").trim(), dep = String(r[IH.DEP] || "").trim();
     if(!dkey(arr)){ unusable++; continue; }        // no arrival date, no stay
     const partner = cell.indexOf("-") >= 0 ? (cell.split("-")[1] || "").trim() : "";
@@ -7401,7 +7416,60 @@ function inhouseToRate(rows, bizDate){
           count: Object.keys(rooms).length, rooms: rooms, all: all,
           cancelled: cancelled, unusable: unusable};
 }
-function crossReference(rate,tax,nightKey){const N=nightKey||tax.dateKey;const totalFail=[],autoMiss=[],adjoining=[],ok=[];let notOwed=0;for(const room of Object.keys(rate.rooms)){const rr=rate.rooms[room];const aK=dkey(rr.arr),dK=dkey(rr.dep);const occ=aK&&dK&&aK<=N&&N<dK;if(!occ){notOwed++;continue;}if(rr.adjoining){adjoining.push({room,name:rr.name,partner:rr.partner});continue;}const tr=tax.rooms[room];if(!tr||tr.arr===0){totalFail.push({room,name:rr.name,covered:tr?(tr.man>0):false});}else if(tr.auto===0){autoMiss.push({room,name:rr.name,covered:tr.man>0});}else{ok.push(room);}}const over=[];for(const room of Object.keys(tax.rooms)){const b=tax.rooms[room];if((b.auto+b.man)>=2&&b.arr>0)over.push({room,extra:(b.auto+b.man)-1});}const sk=a=>a.sort((x,y)=>(parseInt(x.room||x)||0)-(parseInt(y.room||y)||0));return{nightKey:N,totalFail:sk(totalFail),autoMiss:sk(autoMiss),adjoining:sk(adjoining),overcharge:sk(over),okCount:ok.length,notOwed};}
+/* A guest account can precede or follow the physical-room stay. Only a captured,
+   X-marked move for this guest and these original stay dates supplies a tax boundary.
+   Physical-room moves connect the reservation; ambiguous account transitions supply none. */
+function taxAccountBounds(rate, days){
+  const out = {}, groups = {};
+  const words = s => new Set(String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+                                    .toUpperCase().split(/[^\p{L}\p{N}]+/u).filter(w => w.length >= 2));
+  for(const day of Object.keys(days || {})){
+    if(!/^\d{8}$/.test(day)) continue;
+    const k = +day, rows = (days[day] && days[day].rows) || {};
+    for(const r of Object.values(rows)){
+      if(!r || !/^X$/i.test(String(r.x || "").trim())) continue;
+      const from = pillRoom(r.from, r.name), to = pillRoom(r.to, r.name);
+      const a = dkey(r.arr), d = dkey(r.dep), name = [...words(r.name)];
+      if(!/^(?:\d{2,3}|9\d{3})$/.test(from) || !/^(?:\d{2,3}|9\d{3})$/.test(to) ||
+         from === to || !a || !d || k < a || k > d || !name.length) continue;
+      const key = a + "|" + d;
+      (groups[key] = groups[key] || []).push({from, to, night: k, name});
+    }
+  }
+  for(const room of Object.keys((rate && rate.rooms) || {})){
+    const stay = rate.rooms[room], full = words(stay.name);
+    const rows = (groups[dkey(stay.arr) + "|" + dkey(stay.dep)] || [])
+                   .filter(r => r.name.every(w => full.has(w)));
+    if(!rows.length) continue;
+    const adjacent = {}, edges = new Map();
+    for(const r of rows){
+      (adjacent[r.from] = adjacent[r.from] || []).push(r.to);
+      (adjacent[r.to] = adjacent[r.to] || []).push(r.from);
+      edges.set(r.from + "|" + r.to + "|" + r.night, r);
+    }
+    const seen = new Set([room]), queue = [room];
+    for(let i = 0; i < queue.length; i++) for(const next of adjacent[queue[i]] || []){
+      if(!seen.has(next)){ seen.add(next); queue.push(next); }
+    }
+    const account = [...edges.values()].filter(r => seen.has(r.from) &&
+      (/^9\d{3}$/.test(r.from) !== /^9\d{3}$/.test(r.to)));
+    if(account.length !== 1) continue;
+    const r = account[0];
+    out[room] = /^9\d{3}$/.test(r.from) ? {start: r.night} : {end: r.night};
+  }
+  return out;
+}
+/* 9xxx accounts post Arrangement but do not owe TA. Keep their captured charges
+   in TAX and memory; only the tax checking views exclude them. */
+function taxRoomKeys(rooms){
+  return Object.keys(rooms || {}).filter(room => !/^9\d{3}$/.test(room));
+}
+function taxMemory(){
+  const raw = loadMem(), out = {};
+  for(const room of taxRoomKeys(raw)) out[room] = raw[room];
+  return out;
+}
+function crossReference(rate,tax,nightKey){const N=nightKey||tax.dateKey;const bounds=rate.live?taxAccountBounds(rate,statusLoad().MV||{}):{};const totalFail=[],autoMiss=[],adjoining=[],ok=[];let notOwed=0;for(const room of taxRoomKeys(rate.rooms)){const rr=rate.rooms[room],span=bounds[room]||{};const aK=dkey(rr.arr),dK=dkey(rr.dep);const occ=aK&&dK&&aK<=N&&N<dK&&(!span.start||span.start<=N)&&(!span.end||N<span.end);if(!occ){notOwed++;continue;}if(rr.adjoining){adjoining.push({room,name:rr.name,partner:rr.partner});continue;}const tr=tax.rooms[room];if(!tr||tr.arr===0){totalFail.push({room,name:rr.name,covered:tr?(tr.man>0):false});}else if(tr.auto===0){autoMiss.push({room,name:rr.name,covered:tr.man>0});}else{ok.push(room);}}const over=[];for(const room of taxRoomKeys(tax.rooms)){const b=tax.rooms[room];if((b.auto+b.man)>=2&&b.arr>0)over.push({room,extra:(b.auto+b.man)-1});}const sk=a=>a.sort((x,y)=>(parseInt(x.room||x)||0)-(parseInt(y.room||y)||0));return{nightKey:N,totalFail:sk(totalFail),autoMiss:sk(autoMiss),adjoining:sk(adjoining),overcharge:sk(over),okCount:ok.length,notOwed};}
 
 /* ============ state + memory ============ */
 let RATE=null, TAX=null, PAIR_OVERRIDE=null, SEC_OPEN={}; // PAIR_OVERRIDE: {mode:'paired'|'decline', night}
@@ -7602,7 +7670,7 @@ function verifyOf(nightKey,room){const v=loadVerify();return (v[nightKey]&&v[nig
 function setVerify(nightKey,room,val){const v=loadVerify();const n=v[nightKey]||(v[nightKey]={});if(val)n[room]=val;else delete n[room];const keys=Object.keys(v).sort((a,b)=>Number(b)-Number(a));for(const k of keys.slice(7))delete v[k];saveVerify(v);}
 /* consolidation across the days in memory: TA total vs nights */
 function roomBalance(mem,room){const rec=mem[room]||{};let ta=0,nights=0;for(const d of Object.keys(rec)){const e=rec[d];if(e.manual==='arrival'||e.manual==='checkout')continue;ta+=(e.auto||0)+(e.man||0);if((e.arr||0)>0)nights++;}return{bal:ta-nights,nights,ta};}
-function overchargeFromMemory(){const mem=loadMem();const out=[];for(const room of Object.keys(mem)){const b=roomBalance(mem,room);if(b.bal>0)out.push({room,extra:b.bal,nights:b.nights});}out.sort((a,b)=>(parseInt(a.room)||0)-(parseInt(b.room)||0));pruneAck(out);return out;}
+function overchargeFromMemory(){const mem=taxMemory();const out=[];for(const room of Object.keys(mem)){const b=roomBalance(mem,room);if(b.bal>0)out.push({room,extra:b.bal,nights:b.nights});}out.sort((a,b)=>(parseInt(a.room)||0)-(parseInt(b.room)||0));pruneAck(out);return out;}
 /* overcharge dismissals persist across nights — an ack is tied to the room's balance
    at the moment of dismissal, so the room only resurfaces if something new happens */
 const ACK_KEY="ta_check_ack_v1";
@@ -7646,7 +7714,7 @@ function render(){
     bn.innerHTML=`<div class="banner ok">${t('b_paired', dfmt(RATE.dateKey)||RATE.bizDate, dfmt(d.night))}</div>`;
     sm.style.display='flex';
     const overPend=over.filter(o=>!ackOf(o.room,o.extra)).length;
-    sm.innerHTML=stat('stat_night',dfmt(d.night),true)+stat('stat_inhouse',RATE.count)+stat('stat_posted',TAX.totalRooms)+stat('stat_flags',x.totalFail.length+x.autoMiss.length+overPend+adjProblem);
+    sm.innerHTML=stat('stat_night',dfmt(d.night),true)+stat('stat_inhouse',RATE.count)+stat('stat_posted',taxRoomKeys(TAX.rooms).length)+stat('stat_flags',x.totalFail.length+x.autoMiss.length+overPend+adjProblem);
     rs.innerHTML=
       ackSection('fail','sec_fail','empty_fail',x.totalFail,d.night,o=>['red',t('tag_fail'),t('meta_fail')],false)+
       ackSection('auto','sec_auto','empty_auto',x.autoMiss,d.night,o=>['red',o.covered?t('tag_auto_cov'):t('tag_auto_none'),o.covered?t('meta_auto_cov'):t('meta_auto_none')],true)+
@@ -7682,7 +7750,7 @@ function buildPrintReport(){
     rooms.sort((a,b)=>(parseInt(a.room)||0)-(parseInt(b.room)||0));
   }
   else if(TAX){night=TAX.fileDate;const mem=loadMem();const man=r=>((mem[r]||{})[TAX.fileDate]||{}).manual||null;
-    rooms=Object.keys(TAX.rooms).filter(r=>{const b=TAX.rooms[r];return b.arr>0&&b.auto===0&&!man(r);}).sort((a,b)=>(parseInt(a)||0)-(parseInt(b)||0)).map(r=>({room:r,name:'',term:'',agent:'',arr:'',dep:'',covered:TAX.rooms[r].man>0,adj:false}));}
+    rooms=taxRoomKeys(TAX.rooms).filter(r=>{const b=TAX.rooms[r];return b.arr>0&&b.auto===0&&!man(r);}).sort((a,b)=>(parseInt(a)||0)-(parseInt(b)||0)).map(r=>({room:r,name:'',term:'',agent:'',arr:'',dep:'',covered:TAX.rooms[r].man>0,adj:false}));}
   const _n=new Date(),_p=x=>String(x).padStart(2,'0');const now=_p(_n.getDate())+'/'+_p(_n.getMonth()+1)+'/'+_n.getFullYear()+' '+_p(_n.getHours())+':'+_p(_n.getMinutes());
   let head='<tr><th>'+t('pr_h_room')+'</th>'+(paired?('<th>'+t('pr_h_guest')+'</th><th>'+t('pr_h_board')+'</th><th>'+t('pr_h_operator')+'</th><th>'+t('pr_h_stay')+'</th>'):'')+'<th>'+t('pr_h_auto')+'</th></tr>';
   let body=rooms.length? rooms.map(r=>{const stay=(r.arr&&r.dep)?(r.arr+' → '+r.dep):'';const status=r.adj?(t('pr_covered')+' ('+t('pr_adjnote')+')'):(r.covered?t('pr_covered'):t('pr_notcovered'));
@@ -7749,15 +7817,15 @@ function renderRosterInto(container,append){
 function renderTaxStandalone(){
   const r=TAX; const mem=loadMem();
   const manualOf=room=>((mem[room]||{})[r.fileDate]||{}).manual||null;
-  const autoMiss=[]; for(const room of Object.keys(r.rooms)){const b=r.rooms[room];if(b.arr>0&&b.auto===0&&!manualOf(room))autoMiss.push({room,covered:b.man>0});}
+  const autoMiss=[]; for(const room of taxRoomKeys(r.rooms)){const b=r.rooms[room];if(b.arr>0&&b.auto===0&&!manualOf(room))autoMiss.push({room,covered:b.man>0});}
   autoMiss.sort((a,b)=>(parseInt(a.room)||0)-(parseInt(b.room)||0));
-  const noArrAll=Object.keys(r.rooms).filter(room=>{const b=r.rooms[room];return b.arr===0&&((b.auto||0)+(b.man||0))>0;});
+  const noArrAll=taxRoomKeys(r.rooms).filter(room=>{const b=r.rooms[room];return b.arr===0&&((b.auto||0)+(b.man||0))>0;});
   const noArr=sk(noArrAll.filter(room=>!manualOf(room)));const classified=noArrAll.length-noArr.length;
   const over=overchargeFromMemory();
   over.sort((a,b)=>(parseInt(a.room)||0)-(parseInt(b.room)||0));
   const overPend=over.filter(o=>!ackOf(o.room,o.extra)).length;
   const sm=el('ta-summary'); sm.style.display='flex';
-  sm.innerHTML=stat('stat_night',r.fileDate,true)+stat('stat_posted',r.totalRooms)+stat('stat_flags',autoMiss.length+overPend);
+  sm.innerHTML=stat('stat_night',r.fileDate,true)+stat('stat_posted',taxRoomKeys(r.rooms).length)+stat('stat_flags',autoMiss.length+overPend);
   const rs=el('results');
   rs.innerHTML +=
     sectAuto(autoMiss.length, autoMiss.length? autoMiss.map(o=>rowHTML(o.room,'','red',o.covered?t('tag_auto_cov'):t('tag_auto_none'),o.covered?t('meta_auto_cov'):t('meta_auto_none'))).join(''):empt('empty_auto'))+
@@ -7776,7 +7844,7 @@ function noArrRow(room){const mem=loadMem();const cur=((mem[room]||{})[TAX.fileD
 
 /* memory accordion (tax) */
 function deriveStatus(e){const man=e.manual||null;if(man==='arrival')return['blue',t('tag_arrival'),true];if(man==='checkout')return['blue',t('tag_checkout'),true];if((e.arr||0)===0)return['grey',t('tag_noarr'),true];if((e.auto||0)===0&&(e.man||0)===0)return['red',t('tag_auto_none'),false];if((e.auto||0)===0&&(e.man||0)>0)return['red',t('tag_auto_cov'),false];if(((e.auto||0)+(e.man||0))>=2)return['amber',t('tag_double'),false];return['ok',t('tag_ok'),false];}
-function renderMemory(){const mem=loadMem();const dates=recentDates(mem,7);const acc=el('acc');if(!dates.length){acc.innerHTML=`<div class="empty" style="background:var(--panel);border:1px solid var(--line);border-radius:10px">${t('mem_empty')}</div>`;return;}let html='';for(const d of dates){const items=[];let total=0,autox=0,dbl=0,noarr=0,arr=0,out=0;for(const room of Object.keys(mem)){const e=mem[room][d];if(!e)continue;total++;const [cls,label,click]=deriveStatus(e);const man=e.manual||null;if(man==='arrival')arr++;else if(man==='checkout')out++;else if((e.arr||0)===0)noarr++;else if((e.auto||0)===0)autox++;else if(((e.auto||0)+(e.man||0))>=2)dbl++;if(cls!=='ok')items.push([room,cls,label,click]);}items.sort((a,b)=>(parseInt(a[0])||0)-(parseInt(b[0])||0));let chips=`<span class="chip">${total} ${t('chip_rooms')}</span>`;if(autox)chips+=`<span class="chip red">${autox} ${t('chip_auto')}</span>`;if(dbl)chips+=`<span class="chip amber">${dbl} ${t('chip_double')}</span>`;if(noarr)chips+=`<span class="chip grey">${noarr} ${t('chip_noarr')}</span>`;if(arr)chips+=`<span class="chip blue">${arr} ${t('chip_arr')}</span>`;if(out)chips+=`<span class="chip blue">${out} ${t('chip_out')}</span>`;let body;if(!items.length)body=`<div class="empty">${t('date_allok')}</div>`;else body=items.map(function(it){const room=it[0],cls=it[1],label=it[2],click=it[3];const tc=click?(cls+' click cyc'):cls;const da=click?('data-room="'+room+'" data-date="'+d+'"'):'';return '<div class="row"><span class="rm">'+room+'</span><span class="tag '+tc+'" '+da+'>'+label+'</span></div>';}).join('');const open=EXPANDED.has(d)?' open':'';html+='<div class="dgroup'+open+'"><div class="dhead" data-toggle="'+d+'"><span class="caret">▶</span><span class="ddate">'+d+'</span><span class="chips">'+chips+'</span></div><div class="dbody">'+body+'</div></div>';}acc.innerHTML=html;}
+function renderMemory(){const mem=taxMemory();const dates=recentDates(mem,7);const acc=el('acc');if(!dates.length){acc.innerHTML=`<div class="empty" style="background:var(--panel);border:1px solid var(--line);border-radius:10px">${t('mem_empty')}</div>`;return;}let html='';for(const d of dates){const items=[];let total=0,autox=0,dbl=0,noarr=0,arr=0,out=0;for(const room of Object.keys(mem)){const e=mem[room][d];if(!e)continue;total++;const [cls,label,click]=deriveStatus(e);const man=e.manual||null;if(man==='arrival')arr++;else if(man==='checkout')out++;else if((e.arr||0)===0)noarr++;else if((e.auto||0)===0)autox++;else if(((e.auto||0)+(e.man||0))>=2)dbl++;if(cls!=='ok')items.push([room,cls,label,click]);}items.sort((a,b)=>(parseInt(a[0])||0)-(parseInt(b[0])||0));let chips=`<span class="chip">${total} ${t('chip_rooms')}</span>`;if(autox)chips+=`<span class="chip red">${autox} ${t('chip_auto')}</span>`;if(dbl)chips+=`<span class="chip amber">${dbl} ${t('chip_double')}</span>`;if(noarr)chips+=`<span class="chip grey">${noarr} ${t('chip_noarr')}</span>`;if(arr)chips+=`<span class="chip blue">${arr} ${t('chip_arr')}</span>`;if(out)chips+=`<span class="chip blue">${out} ${t('chip_out')}</span>`;let body;if(!items.length)body=`<div class="empty">${t('date_allok')}</div>`;else body=items.map(function(it){const room=it[0],cls=it[1],label=it[2],click=it[3];const tc=click?(cls+' click cyc'):cls;const da=click?('data-room="'+room+'" data-date="'+d+'"'):'';return '<div class="row"><span class="rm">'+room+'</span><span class="tag '+tc+'" '+da+'>'+label+'</span></div>';}).join('');const open=EXPANDED.has(d)?' open':'';html+='<div class="dgroup'+open+'"><div class="dhead" data-toggle="'+d+'"><span class="caret">▶</span><span class="ddate">'+d+'</span><span class="chips">'+chips+'</span></div><div class="dbody">'+body+'</div></div>';}acc.innerHTML=html;}
 
 /* manual tagging */
 function setManual(room,date,val){const mem=loadMem();const rec=mem[room]||(mem[room]={});const e=rec[date]||(rec[date]={arr:0,auto:0,man:0,manual:null});e.manual=val;saveMem(mem);}
@@ -7997,6 +8065,7 @@ function paintHeld(){
   }
   box.textContent = bits.length ? t('held_lead') + bits.join("   ") : t('held_none');
 }
+let TAX_MOVES_STALE = false;
 async function autoReadInhouse(){
   if(legacyOn() || !LIVE_OK){ liveStop(); return; }
   if(!window.reccheckShortcuts || !window.reccheckShortcuts.listFile) return;
@@ -8014,7 +8083,7 @@ async function autoReadInhouse(){
      The mtime already says which capture is the news. Sorting by it costs nothing and the
      line then reports the list he just opened. */
   const got = [];
-  let stChanged = false;
+  let stChanged = false, taxMovesChanged = false;
   for(const tag of LIVE_TAGS){
     try{
       const f = await window.reccheckShortcuts.listFile(tag)
@@ -8033,7 +8102,7 @@ async function autoReadInhouse(){
            STATUS store, which the pills and the STATUS lists read */
         try{
           LIVE_ROWS[tag] = {p: tag === "IH" ? parseInhouse(f.text) : parseTagged(f.text, tag), at: +f.at || 0};
-          if(statusIngest(tag, LIVE_ROWS[tag].p, +f.at || 0)) stChanged = true;
+          if(statusIngest(tag, LIVE_ROWS[tag].p, +f.at || 0)){ stChanged = true; if(tag === "MV") taxMovesChanged = true; }
         }catch(e){ delete LIVE_ROWS[tag]; }
       }
       if(f.at === LIVE_AT[tag]) continue;
@@ -8054,6 +8123,10 @@ async function autoReadInhouse(){
     catch(e){ r = "threw"; }
     const h = LIVE_HELD[g.tag];
     if(h && h.at === g.at) h.why = (r === "ok") ? "" : r;
+  }
+  if(taxMovesChanged){
+    if(TAX_SCREEN === "tax" && RATE && TAX) render();
+    else TAX_MOVES_STALE = true;
   }
   try{ paintHeld(); }catch(e){}
   if(TAX_SCREEN === "status"){ try{ window.__taStatusMenu(); }catch(e){} }
@@ -8314,20 +8387,20 @@ function parseTagged(txt, tag){
    panel's date column reads Dep. and the Departures panel's reads Arr. */
 const AR = {NAME: 0, ROOM: 1, OCC: 2, DEP: 3, STATUS: 4};
 const DP = {NAME: 0, ROOM: 1, OCC: 2, ARR: 3, STATUS: 4};
-/* Room 9000, type ACC, is a holding room -- his word, 04/09: "9000 is a holding room,
-   ignore it". Anything that is not a real two or three digit room is dropped and counted,
-   never guessed at. */
+/* Room 9000 stays excluded. Guest accounts may have four digits and type ACC;
+   exclude the named house accounts instead of rejecting the whole room-number range. */
 function stayFromRow(r, map, night, arrIsNight){
   const status = String(r[map.STATUS] || "").trim();
   if(/reversal|void/i.test(status)) return {cancelled: true};
   const cell = String(r[map.ROOM] || "").trim();
   const room = (cell.split("-")[0] || "").trim();
+  const name = String(r[map.NAME] || "").trim();
   /* An EMPTY room cell is ReadCell's answer for a read that failed, not a holding room.
      It used to fall into the holding-room count, so N rows that came back half-read on a
      slow protel printed as "N holding-room row(s) ignored" — the very mislabel the split
      of these counters was made to end. */
-  if(!cell) return {dropped: "partial"};
-  if(!/^\d{2,3}$/.test(room)) return {dropped: "held"};
+  if(!cell || !name) return {dropped: "partial"};
+  if(!/^\d{2,4}$/.test(room) || !pillRoom(room, r[map.NAME])) return {dropped: "held"};
   const other = String(r[arrIsNight ? map.DEP : map.ARR] || "").trim();
   const arr = arrIsNight ? night : other;
   const dep = arrIsNight ? other : night;
@@ -8335,8 +8408,7 @@ function stayFromRow(r, map, night, arrIsNight){
   /* ReadCell returns "" for every failure it has, so a half-read row looks like a row with
      empty cells. An empty STATUS is not "not cancelled" and an empty NAME is not a guest —
      a row is only a stay when the whole of it arrived. */
-  const name = String(r[map.NAME] || "").trim();
-  if(!name || !status) return {dropped: "partial"};
+  if(!status) return {dropped: "partial"};
   return {rec: {room: room, arr: arr, dep: dep, name: name, status: status}};
 }
 /* THE THREE REASONS A ROW IS DROPPED ARE NOT THE SAME REASON, and this used to count them
@@ -8612,7 +8684,7 @@ function recordMoves(rows, night){
     const from = String(r[MV.FROM] || "").trim();
     const to   = String(r[MV.TO] || "").trim();
     const arr  = dkey(String(r[MV.ARR] || "").trim());
-    if(!/^\d{2,3}$/.test(from) || !/^\d{2,3}$/.test(to) || !arr || from === to) continue;
+    if(!/^\d{2,4}$/.test(from) || !/^\d{2,4}$/.test(to) || !pillRoom(from, r[MV.NAME]) || !pillRoom(to, r[MV.NAME]) || !arr || from === to) continue;
     const key = "mv|" + night + "|" + from + "|" + to + "|" + arr;
     if(done[key]) continue;
     const dst = led[to] && led[to][arr];
@@ -8675,7 +8747,12 @@ function applyInhouse(p, auto){
   if(auto && p.done && p.done.cut){ quiet(t('live_rcut', t('rpt_IH'), p.title || '?')); return "cut"; }
   const sig = p.title + "\u0000" + p.rows.length + "\u0000" + p.rows.map(r => r.join("\u0001")).join("\u0002");
   if(auto && sig === LIVE_SIG){ say.textContent = t('live_same', rate.count, biz || '?'); return "ok"; }
-  RATE = rate;
+  // Guest accounts feed Department Check only; Tax Check keeps its physical-room census.
+  const taxRooms = {}, taxAll = {};
+  for(const room of Object.keys(rate.rooms)) if(/^\d{2,3}$/.test(room)){
+    taxRooms[room] = rate.rooms[room]; taxAll[room] = rate.all[room];
+  }
+  RATE = Object.assign({}, rate, {rooms: taxRooms, all: taxAll, count: Object.keys(taxRooms).length});
   const saved = saveMoves(rate);
   /* A move can only be written onto a stay that exists, and the in-house list is what
      creates them. So the last moves capture is offered again here — the applied set makes
@@ -8766,6 +8843,7 @@ window.__taLegacy = function(on){
 let TAX_SCREEN = "";
 window.__taScreen = function(which){
   TAX_SCREEN = String(which || "");
+  if(TAX_MOVES_STALE && TAX_SCREEN === "tax"){ TAX_MOVES_STALE = false; render(); }
   try{ liveEnsure(); }catch(e){}
 };
 

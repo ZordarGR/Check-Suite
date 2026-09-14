@@ -638,6 +638,156 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
   ck("and the search card too, with the query still typed",                     c21b.card === "ABBUSHI MIRIAM/OLIVER/NAHLA/HELENA" && c21b.q === "12345");
   await p.close();
 
+  /* 22. GUEST ACCOUNT NAMES REFRESH IN PLACE — his word, 05/09: "yes they should be refreshed even
+         when on the screen". A report is open on the department check with the cut name
+         on its row and on a search card; the in-house list is captured; both show the
+         whole name without him leaving the screen or retyping, and the screen stays. */
+  p = await b.newPage();
+  await p.addInitScript(bridgeFor(null, false));
+  await p.setViewportSize({width: 1280, height: 720});
+  await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
+  await p.waitForTimeout(300);
+  await p.evaluate(() => {
+    const mk = (sn, room, guest) => ({sn, serial: sn, roomMain: room, room: room, guest, dept: "RESTAURANT", total: 10, cancelled: false, voided: false,
+                                      rates: {"24%": 10, "13%": 0, "6%": 0, "base": 10}, time: "21:14"});
+    const recs = [mk("12345", "9017", "ALICE/ROB")];
+    const depts = {}; for(const d of ["RESTAURANT","CAFETERIA","TAVERNAKI","KAFENIO","BAR"]) depts[d] = {list: d === "RESTAURANT" ? recs : [], other: []};
+    window.__t.setModel({reportDate: "4/9/2026", receipts: recs, depts});
+    window.__t.setState({receipts: {}, extras: []});
+    window.__t.setStateKey("20260904");
+    window.__t.showScreen("app");
+    window.__t.renderAccordions();
+    const f = document.getElementById("snInput"); f.value = "12345"; f.dispatchEvent(new Event("input"));
+  });
+  await p.waitForTimeout(300);
+  const c22a = await p.evaluate(() => ({row: (document.querySelector("#accordions .rrow .name") || {}).textContent || "",
+                                        card: (document.querySelector("#matches .match .name") || {}).textContent || ""}));
+  ck("guest account: before capture, row and card have the receipt name", /ALICE\/ROB$/.test(c22a.row) && /ALICE\/ROB$/.test(c22a.card));
+  await p.evaluate((txt) => { window.__files.IH = txt; window.__at.IH = 1756944060000; },
+    IH("Guests inhouse: 04/09/26", [
+      ["MORGAN/TAYLOR ALICE/ROBERT", "9017", "2/0/0/2/0", "29/08/26", "05/09/26", "CI"],
+      ["STONE MAYA", "426", "1/0/0/0/0", "29/08/26", "05/09/26", "CI"],
+      ["IRIS", "9605", "0/0/0/0/0", "18/04/26", "10/11/26", "CI"],
+      ["CREDIT CARDS", "9604", "0/0/0/0/0", "18/04/26", "10/11/26", "CI"]]));
+  await p.waitForTimeout(6500);
+  const c22b = await p.evaluate(() => ({row: (document.querySelector("#accordions .rrow .name") || {}).textContent || "",
+                                        card: (document.querySelector("#matches .match .name") || {}).textContent || "",
+                                        q: document.getElementById("snInput").value,
+                                        app: document.querySelector("main").style.display !== "none"}));
+  ck("guest account: captured full name appears on the current department row", c22b.row === "MORGAN/TAYLOR ALICE/ROBERT" && c22b.app);
+  ck("guest account: search card refreshes without losing the typed receipt",                     c22b.card === "MORGAN/TAYLOR ALICE/ROBERT" && c22b.q === "12345");
+  const a22 = await p.evaluate(() => ({led: JSON.parse(localStorage.getItem("reccheck_moves_v2") || "{}"), tax: window.__tx.rate()}));
+  ck("guest account reaches the ledger with its original stay dates", a22.led["9017"] && a22.led["9017"][20260829] && a22.led["9017"][20260829].d === 20260905);
+  ck("Tax Check retains only the physical room and its original count", a22.tax.count === 1 && !!a22.tax.rooms["426"] && !a22.tax.rooms["9017"] && !a22.tax.all["9017"]);
+  ck("IRIS and CREDIT CARDS do not feed the reservation ledger", !a22.led["9605"] && !a22.led["9604"]);
+  await p.close();
+
+
+  /* 23. An account move arriving AFTER the census refreshes the paired Tax Check.
+     Actual arrival/departure remain exactly what the in-house capture reported. */
+  const accountIH = IH("Guests inhouse: 04/09/26", [
+    ["MORGAN/TAYLOR ALICE/ROBERT","205","2/0/0/0/0","02/09/26","10/09/26","CI"]]);
+  const accountMV = (from,to,x) =>
+    "TITLE\tPerform Move for Date 04/09/26\nMV\t"+from+"\tACC\t"+to+
+    "\tSV\tMORGAN/TAYLOR\t"+x+"\t02/09/26\t10/09/26\nDONE\t1\t1\t9\t5\tunicode\tcomplete";
+  const setTaxNight = async (page,night) => page.evaluate(n => {
+    window.__tx.setTax({kind:"tax",dateKey:n,fileDate:"04/09/26",rooms:{},totalRooms:0,totalArrangements:0},n);
+  },night);
+  const guestFlag = page => page.evaluate(() => [...document.querySelectorAll("#results .row .nm")]
+    .some(n => n.textContent === "MORGAN/TAYLOR ALICE/ROBERT"));
+
+  p = await open(accountIH);
+  await settle(p);
+  await setTaxNight(p,20260903);
+  ck("before a captured move, the uncharged occupied night is still flagged", await guestFlag(p));
+  await p.evaluate(txt => { window.__files.MV=txt; window.__at.MV=10; },accountMV("9017","205","X"));
+  await p.waitForTimeout(6500);
+  ck("incoming account move clears the earlier account-night warning in place", !(await guestFlag(p)));
+  const original23 = await p.evaluate(() => window.__tx.rate().rooms["205"]);
+  ck("the tax boundary preserves the captured arrival and departure", original23.arr === "02/09/26" && original23.dep === "10/09/26");
+  await setTaxNight(p,20260904);
+  ck("a missing charge ON the incoming move date still warns", await guestFlag(p));
+  await setTaxNight(p,20260903);
+  await p.evaluate(() => window.__t.showScreen("app"));
+  await p.evaluate(txt => { window.__files.MV=txt; window.__at.MV=11; },accountMV("9017","205",""));
+  await p.waitForTimeout(6500);
+  ck("a changed move does not pull the user away from Department Check", await p.evaluate(() => document.querySelector("main").style.display !== "none"));
+  await p.evaluate(() => window.__t.showScreen("tax"));
+  ck("returning to Tax Check refreshes a changed move mark", await guestFlag(p));
+  await p.close();
+
+  p = await open(accountIH);
+  await settle(p);
+  await setTaxNight(p,20260904);
+  ck("before an outgoing capture, the physical room is checked", await guestFlag(p));
+  await p.evaluate(txt => { window.__files.MV=txt; window.__at.MV=12; },accountMV("205","9017","X"));
+  await p.waitForTimeout(6500);
+  ck("outgoing account move stops missing-tax warnings on its move date", !(await guestFlag(p)));
+  await setTaxNight(p,20260903);
+  ck("the physical night BEFORE an outgoing move is still checked", await guestFlag(p));
+  await p.close();
+
+
+  /* 24. Arrangement without TA is expected on 9xxx accounts. All tax views
+     exclude those accounts while preserving the report and stored charge facts. */
+  p = await open(null);
+  await p.evaluate(() => {
+    const room=(arr,auto,man=0)=>({arr,auto,man});
+    const tax={kind:"tax",fileDate:"04/09/26",dateKey:20260904,
+      rooms:{"9017":room(1,0),"9000":room(1,0),"9605":room(1,0),
+             "205":room(1,0),"901":room(1,0),"206":room(1,1)},
+      totalRooms:6,totalArrangements:6};
+    window.__accountTax=tax;
+    window.__tx.ingestTax(tax);
+    window.__tx.setRate(null);
+    window.__tx.setTax(tax,20260904);
+  });
+  const view24=await p.evaluate(() => ({
+    warnings:[...document.querySelectorAll("#results .rm")].map(n=>n.textContent),
+    memory:[...document.querySelectorAll("#acc .rm")].map(n=>n.textContent),
+    stats:[...document.querySelectorAll("#ta-summary .stat .v")].map(n=>n.textContent),
+    print:window.__tx.print(),
+    raw:JSON.parse(localStorage.getItem("ta_check_memory_v2")),
+    report:window.__accountTax
+  }));
+  ck("standalone warnings exclude 9xxx but still check physical rooms 205 and 901",
+     view24.warnings.join(",")==="205,901");
+  ck("charge-history warnings exclude accounts while retaining genuine missing TA",
+     view24.memory.join(",")==="205,901");
+  ck("standalone summary counts only the three tax-check rooms", view24.stats[1]==="3" && view24.stats[2]==="2");
+  ck("tax print excludes accounts and retains the real missing-tax rooms",
+     !/<td>9(?:017|000|605)<\/td>/.test(view24.print) && /<td>205<\/td>/.test(view24.print) && /<td>901<\/td>/.test(view24.print));
+  ck("raw account Arrangement and TA counts remain recorded",
+     view24.raw["9017"]["04/09/26"].arr===1 && view24.raw["9017"]["04/09/26"].auto===0 &&
+     Object.keys(view24.report.rooms).length===6 && view24.report.totalRooms===6);
+  const raw24=await p.evaluate(() => localStorage.getItem("ta_check_memory_v2"));
+  await p.evaluate(() => window.__tx.render());
+  ck("rendering tax exclusions never rewrites charge history",
+     await p.evaluate(() => localStorage.getItem("ta_check_memory_v2"))===raw24);
+  await p.evaluate(() => {
+    const tax={kind:"tax",fileDate:"05/09/26",dateKey:20260905,
+      rooms:{"9017":{arr:1,auto:3,man:0},"205":{arr:1,auto:3,man:0}},
+      totalRooms:2,totalArrangements:2};
+    window.__tx.ingestTax(tax);
+    window.__tx.setTax(tax,20260905);
+  });
+  const balance24=await p.evaluate(() => window.__tx.over());
+  ck("an account balance never creates an overcharge warning or offsets a physical room",
+     balance24.length===1 && balance24[0].room==="205" && balance24[0].extra===1);
+  await p.evaluate(() => {
+    window.__tx.setRate({kind:"rate",live:true,bizDate:"05/09/26",dateKey:20260905,count:1,
+      rooms:{"205":{name:"MORGAN ALICE",arr:"02/09/26",dep:"10/09/26"}}});
+    window.__tx.render();
+  });
+  const paired24=await p.evaluate(() => ({
+    warnings:[...document.querySelectorAll("#results .rm")].map(n=>n.textContent),
+    memory:[...document.querySelectorAll("#acc .rm")].map(n=>n.textContent),
+    stats:[...document.querySelectorAll("#ta-summary .stat .v")].map(n=>n.textContent)
+  }));
+  ck("paired tax and its history also exclude the 9xxx account",
+     paired24.warnings.every(r=>r!=="9017") && paired24.memory.every(r=>!/^9\d{3}$/.test(r)) && paired24.stats[2]==="1");
+  await p.close();
+
   await b.close();
   console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");
   process.exit(bad ? 1 : 0);

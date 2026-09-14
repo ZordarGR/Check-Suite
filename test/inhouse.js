@@ -19,7 +19,7 @@ const row = (name, room, arr, dep, status) =>
   [name,"",room,"SV","2/0/0/0/0",arr,dep,"EUR","0,00","RACK","0,00",status,"","","",""];
 
 const ing = new Function("Number","String","Object","Math","RegExp",
-  lift("dkey") + "\n" + src.match(/^const IH = .*$/m)[0] + "\n" + lift("inhouseToRate")
+  lift("dkey") + "\n" + src.match(/^const IH = .*$/m)[0] + "\n" + lift("pillRoom") + "\n" + lift("inhouseToRate")
   + "\nreturn inhouseToRate;")(Number,String,Object,Math,RegExp);
 
 let bad = 0;
@@ -104,6 +104,27 @@ ck("the LAST date wins on the frame form",
    tdate("protel 2024 - [Guests inhouse: 04/09/26]") === "04/09/26");
 ck("a caption with no date yields none",            tdate("Guests inhouse") === "");
 ck("and the bare frame caption yields none either", tdate(FRAME_BARE) === "");
+
+/* Four-digit guest accounts must feed whole names, while house accounts stay out. */
+const GUEST_ACC = row("MORGAN/TAYLOR ALICE/ROBERT", "9017", "02/09/26", "09/09/26", "CI");
+GUEST_ACC[3] = "ACC";
+const HOUSE = [["9000", "MORGAN ALICE"], ["9601", " μετρητά   τμημάτων "],
+               ["9040", "maison"], ["9604", "CREDIT CARDS"], ["9608", "LOST CHARGES"], ["9605", "IRIS"]];
+const A = ing([GUEST_ACC, ...HOUSE.map(([room, name]) => row(name, room, "01/09/26", "10/11/26", "CI")),
+               row("MAISON ALICE", "9008", "02/09/26", "09/09/26", "CI")], "04/09/26");
+ck("ACC guest 9017 is fed with the complete captured name", A.rooms["9017"] && A.rooms["9017"].name === "MORGAN/TAYLOR ALICE/ROBERT");
+ck("the guest account keeps its actual arrival and departure", A.rooms["9017"] && A.rooms["9017"].arr === "02/09/26" && A.rooms["9017"].dep === "09/09/26");
+ck("9000 and named house accounts stay excluded", HOUSE.every(([room]) => !A.rooms[room]) && A.unusable === 6);
+ck("a guest surname containing a house-account word is not excluded", !!A.rooms["9008"]);
+const E = ing([row("", "9017", "02/09/26", "09/09/26", "CI"),
+               row("MORGAN ALICE", "90170", "02/09/26", "09/09/26", "CI"),
+               row("MORGAN ALICE", "9017", "02/09/26", "09/09/26", "Reversal/Void")], "04/09/26");
+ck("unnamed, overlong and cancelled account rows do not become stays", E.count === 0 && E.unusable === 2 && E.cancelled === 1);
+save(A);
+const accLed = JSON.parse(store["reccheck_moves_v2"] || "{}");
+ck("the guest account reaches the real ledger writer with its original dates", accLed["9017"] && accLed["9017"][20260902].d === 20260909);
+const copies = src.split("function pillRoom(cell, name){").slice(1).map(x => x.slice(0, x.indexOf("\n}")));
+ck("department and tax halves use the identical room eligibility function", copies.length === 2 && copies[0] === copies[1]);
 
 console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");
 process.exit(bad ? 1 : 0);

@@ -31,7 +31,7 @@ const localStorage = {getItem:k=>(k in store?store[k]:null), setItem:(k,v)=>stor
 const mk = (extra) => new Function("localStorage","JSON","Object","String","Number","RegExp","console",
   [ 'const MOVES_KEY = "reccheck_moves_v2";',
     src.match(/^const AR = .*$/m)[0], src.match(/^const DP = .*$/m)[0],
-    lift("dkey"), lift("loadLedger"), lift("stayFromRow"), lift("reportToStays"), lift("feedStays"),
+    lift("dkey"), lift("loadLedger"), lift("pillRoom"), lift("stayFromRow"), lift("reportToStays"), lift("feedStays"),
     extra || "",
     "return {reportToStays, feedStays, led: () => loadLedger()};" ].join("\n"))(
   localStorage, JSON, Object, String, Number, RegExp, console);
@@ -241,6 +241,18 @@ ck("and the old total still adds up",               mixed.dropped === 5);
 ck("a cancelled row is none of those three",
    (() => { const c = R.reportToStays([["X ", "201", "2/0/0/0/0", "09/09/26", "Reversal/Void"]], "04/09/26", false);
             return c.cancelled === 1 && c.dropped === 0 && c.recs.length === 0; })());
+
+/* Guest accounts are stays in both list directions; house accounts are not. */
+const unnamedAccount = R.reportToStays([["", "9017", "2/0/0/0/0", "09/09/26", "CI"]], "04/09/26", true);
+ck("an unread guest-account name is partial data, not a house account", unnamedAccount.dropped === 1 && unnamedAccount.partial === 1 && unnamedAccount.held === 0);
+const GA = [["MORGAN/TAYLOR ALICE/ROBERT", "9017", "2/0/0/0/0", "09/09/26", "CI"],
+            ["CREDIT CARDS", "9604", "0/0/0/0/0", "09/09/26", "CI"]];
+const gar = R.reportToStays(GA, "04/09/26", true);
+const gdp = R.reportToStays(GA.map(r => [r[0], r[1], r[2], "02/09/26", r[4]]), "04/09/26", false);
+ck("arrival list feeds guest account 9017 and excludes its house account", gar.recs.length === 1 && gar.recs[0].room === "9017");
+ck("departure list feeds guest account 9017 with the captured arrival", gdp.recs.length === 1 && gdp.recs[0].room === "9017" && gdp.recs[0].arr === "02/09/26");
+R.feedStays(gar.recs, 20260904);
+ck("guest-account arrival is written without changing its stay dates", R.led()["9017"] && R.led()["9017"][20260904].d === 20260909);
 
 console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");
 process.exit(bad ? 1 : 0);
