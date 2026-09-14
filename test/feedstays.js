@@ -243,6 +243,8 @@ ck("a cancelled row is none of those three",
             return c.cancelled === 1 && c.dropped === 0 && c.recs.length === 0; })());
 
 /* Guest accounts are stays in both list directions; house accounts are not. */
+const unnamedAccount = R.reportToStays([["", "9017", "2/0/0/0/0", "09/09/26", "CI"]], "04/09/26", true);
+ck("an unread guest-account name is partial data, not a house account", unnamedAccount.dropped === 1 && unnamedAccount.partial === 1 && unnamedAccount.held === 0);
 const GA = [["MORGAN/TAYLOR ALICE/ROBERT", "9017", "2/0/0/0/0", "09/09/26", "CI"],
             ["CREDIT CARDS", "9604", "0/0/0/0/0", "09/09/26", "CI"]];
 const gar = R.reportToStays(GA, "04/09/26", true);

@@ -5822,7 +5822,7 @@ function pillRoom(cell, name){
   const n = String(name || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
                   .trim().replace(/\s+/g, " ").toUpperCase();
   // Four-digit guest accounts are valid; exclude the named house accounts, not ACC type.
-  if((m[1].length === 4 && !n) || ["ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ", "MAISON", "CREDIT CARDS", "LOST CHARGES"].includes(n)) return "";
+  if((m[1].length === 4 && !n) || ["ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ", "MAISON", "CREDIT CARDS", "LOST CHARGES", "IRIS"].includes(n)) return "";
   return m[1];
 }
 function roomMoves(nightArg){
@@ -7386,7 +7386,7 @@ function pillRoom(cell, name){
   const n = String(name || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
                   .trim().replace(/\s+/g, " ").toUpperCase();
   // Four-digit guest accounts are valid; exclude the named house accounts, not ACC type.
-  if((m[1].length === 4 && !n) || ["ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ", "MAISON", "CREDIT CARDS", "LOST CHARGES"].includes(n)) return "";
+  if((m[1].length === 4 && !n) || ["ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ", "MAISON", "CREDIT CARDS", "LOST CHARGES", "IRIS"].includes(n)) return "";
   return m[1];
 }
 const IH = {NAME: 0, ROOM: 2, TYPE: 3, OCC: 4, ARR: 5, DEP: 6, STATUS: 11};
@@ -8336,11 +8336,12 @@ function stayFromRow(r, map, night, arrIsNight){
   if(/reversal|void/i.test(status)) return {cancelled: true};
   const cell = String(r[map.ROOM] || "").trim();
   const room = (cell.split("-")[0] || "").trim();
+  const name = String(r[map.NAME] || "").trim();
   /* An EMPTY room cell is ReadCell's answer for a read that failed, not a holding room.
      It used to fall into the holding-room count, so N rows that came back half-read on a
      slow protel printed as "N holding-room row(s) ignored" — the very mislabel the split
      of these counters was made to end. */
-  if(!cell) return {dropped: "partial"};
+  if(!cell || !name) return {dropped: "partial"};
   if(!/^\d{2,4}$/.test(room) || !pillRoom(room, r[map.NAME])) return {dropped: "held"};
   const other = String(r[arrIsNight ? map.DEP : map.ARR] || "").trim();
   const arr = arrIsNight ? night : other;
@@ -8349,8 +8350,7 @@ function stayFromRow(r, map, night, arrIsNight){
   /* ReadCell returns "" for every failure it has, so a half-read row looks like a row with
      empty cells. An empty STATUS is not "not cancelled" and an empty NAME is not a guest —
      a row is only a stay when the whole of it arrived. */
-  const name = String(r[map.NAME] || "").trim();
-  if(!name || !status) return {dropped: "partial"};
+  if(!status) return {dropped: "partial"};
   return {rec: {room: room, arr: arr, dep: dep, name: name, status: status}};
 }
 /* THE THREE REASONS A ROW IS DROPPED ARE NOT THE SAME REASON, and this used to count them
@@ -8689,7 +8689,12 @@ function applyInhouse(p, auto){
   if(auto && p.done && p.done.cut){ quiet(t('live_rcut', t('rpt_IH'), p.title || '?')); return "cut"; }
   const sig = p.title + "\u0000" + p.rows.length + "\u0000" + p.rows.map(r => r.join("\u0001")).join("\u0002");
   if(auto && sig === LIVE_SIG){ say.textContent = t('live_same', rate.count, biz || '?'); return "ok"; }
-  RATE = rate;
+  // Guest accounts feed Department Check only; Tax Check keeps its physical-room census.
+  const taxRooms = {}, taxAll = {};
+  for(const room of Object.keys(rate.rooms)) if(/^\d{2,3}$/.test(room)){
+    taxRooms[room] = rate.rooms[room]; taxAll[room] = rate.all[room];
+  }
+  RATE = Object.assign({}, rate, {rooms: taxRooms, all: taxAll, count: Object.keys(taxRooms).length});
   const saved = saveMoves(rate);
   /* A move can only be written onto a stay that exists, and the in-house list is what
      creates them. So the last moves capture is offered again here — the applied set makes

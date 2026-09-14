@@ -24,7 +24,7 @@ try{ window.__t = { openModal:openModal, closeModal:closeModal,
    five-second automatic read from throwing away his pairing decision cannot be checked
    from outside that scope. */
 const taxProbe = `
-try{ window.__tx = { setPair:function(v){ PAIR_OVERRIDE = v; },
+try{ window.__tx = { rate:function(){ return RATE; }, setPair:function(v){ PAIR_OVERRIDE = v; },
                      getPair:function(){ return PAIR_OVERRIDE; },
                      read:function(auto){ return readInhouseLive(auto); },
                      sig:function(){ return LIVE_SIG; },

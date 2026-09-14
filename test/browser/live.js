@@ -664,7 +664,11 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
                                         card: (document.querySelector("#matches .match .name") || {}).textContent || ""}));
   ck("guest account: before capture, row and card have the receipt name", /ALICE\/ROB$/.test(c22a.row) && /ALICE\/ROB$/.test(c22a.card));
   await p.evaluate((txt) => { window.__files.IH = txt; window.__at.IH = 1756944060000; },
-    IH("Guests inhouse: 04/09/26", [["MORGAN/TAYLOR ALICE/ROBERT", "9017", "2/0/0/2/0", "29/08/26", "05/09/26", "CI"]]));
+    IH("Guests inhouse: 04/09/26", [
+      ["MORGAN/TAYLOR ALICE/ROBERT", "9017", "2/0/0/2/0", "29/08/26", "05/09/26", "CI"],
+      ["STONE MAYA", "426", "1/0/0/0/0", "29/08/26", "05/09/26", "CI"],
+      ["IRIS", "9605", "0/0/0/0/0", "18/04/26", "10/11/26", "CI"],
+      ["CREDIT CARDS", "9604", "0/0/0/0/0", "18/04/26", "10/11/26", "CI"]]));
   await p.waitForTimeout(6500);
   const c22b = await p.evaluate(() => ({row: (document.querySelector("#accordions .rrow .name") || {}).textContent || "",
                                         card: (document.querySelector("#matches .match .name") || {}).textContent || "",
@@ -672,8 +676,10 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
                                         app: document.querySelector("main").style.display !== "none"}));
   ck("guest account: captured full name appears on the current department row", c22b.row === "MORGAN/TAYLOR ALICE/ROBERT" && c22b.app);
   ck("guest account: search card refreshes without losing the typed receipt",                     c22b.card === "MORGAN/TAYLOR ALICE/ROBERT" && c22b.q === "12345");
-  const a22 = await p.evaluate(() => ({led: JSON.parse(localStorage.getItem("reccheck_moves_v2") || "{}"), rooms: JSON.parse(localStorage.getItem("reccheck_rooms_v1") || "{}")}));
+  const a22 = await p.evaluate(() => ({led: JSON.parse(localStorage.getItem("reccheck_moves_v2") || "{}"), tax: window.__tx.rate()}));
   ck("guest account reaches the ledger with its original stay dates", a22.led["9017"] && a22.led["9017"][20260829] && a22.led["9017"][20260829].d === 20260905);
+  ck("Tax Check retains only the physical room and its original count", a22.tax.count === 1 && !!a22.tax.rooms["426"] && !a22.tax.rooms["9017"] && !a22.tax.all["9017"]);
+  ck("IRIS and CREDIT CARDS do not feed the reservation ledger", !a22.led["9605"] && !a22.led["9604"]);
   await p.close();
 
   await b.close();

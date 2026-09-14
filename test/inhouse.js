@@ -109,12 +109,12 @@ ck("and the bare frame caption yields none either", tdate(FRAME_BARE) === "");
 const GUEST_ACC = row("MORGAN/TAYLOR ALICE/ROBERT", "9017", "02/09/26", "09/09/26", "CI");
 GUEST_ACC[3] = "ACC";
 const HOUSE = [["9000", "MORGAN ALICE"], ["9601", " μετρητά   τμημάτων "],
-               ["9040", "maison"], ["9604", "CREDIT CARDS"], ["9608", "LOST CHARGES"]];
+               ["9040", "maison"], ["9604", "CREDIT CARDS"], ["9608", "LOST CHARGES"], ["9605", "IRIS"]];
 const A = ing([GUEST_ACC, ...HOUSE.map(([room, name]) => row(name, room, "01/09/26", "10/11/26", "CI")),
                row("MAISON ALICE", "9008", "02/09/26", "09/09/26", "CI")], "04/09/26");
 ck("ACC guest 9017 is fed with the complete captured name", A.rooms["9017"] && A.rooms["9017"].name === "MORGAN/TAYLOR ALICE/ROBERT");
 ck("the guest account keeps its actual arrival and departure", A.rooms["9017"] && A.rooms["9017"].arr === "02/09/26" && A.rooms["9017"].dep === "09/09/26");
-ck("9000 and named house accounts stay excluded", HOUSE.every(([room]) => !A.rooms[room]) && A.unusable === 5);
+ck("9000 and named house accounts stay excluded", HOUSE.every(([room]) => !A.rooms[room]) && A.unusable === 6);
 ck("a guest surname containing a house-account word is not excluded", !!A.rooms["9008"]);
 const E = ing([row("", "9017", "02/09/26", "09/09/26", "CI"),
                row("MORGAN ALICE", "90170", "02/09/26", "09/09/26", "CI"),
