@@ -6,6 +6,6 @@
   "setupSha256": "028e988e6ebde55cb30777795bd6be99edf93bd858744d60b5d514b5e4554019",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "70dbdbd619cbeddcd83ce3ca17725d8ca45820cb20691dd75f400fb82df93dac",
-  "notes": "Guest accounts with four-digit room numbers now feed Department Check. Room 9000 and the named house accounts, including IRIS, remain excluded. Tax Check uses matching captured moves to start checking on a move out of a 9xxx account, or stop on a move into one. Original reservation dates stay unchanged."
+  "sha256": "e0ae474d5ac05d54c0037e1c60ff5aa4d1b3be0b28e8a9753e3d6181d727a967",
+  "notes": "Guest accounts now feed Department Check, excluding room 9000 and the named house accounts including IRIS. Tax Check excludes 9xxx accounts from warnings, charge-history checks and printouts while preserving captured charges. Matching captured account moves bound checking to physical-room nights without changing original reservation dates."
 }

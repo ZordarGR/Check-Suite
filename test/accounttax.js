@@ -15,7 +15,7 @@ const lift = n => {
 let stored = "{}", writes = 0, count = 0;
 const storage = {getItem: () => stored, setItem: () => { writes++; }};
 const compare = new Function("localStorage", 'const STATUS_KEY="reccheck_status_v1";\n' +
-  ["dkey", "pillRoom", "statusLoad", "taxAccountBounds", "crossReference"].map(lift).join("\n") +
+  ["dkey", "pillRoom", "statusLoad", "taxAccountBounds", "taxRoomKeys", "crossReference"].map(lift).join("\n") +
   "\nreturn crossReference;")(storage);
 const stay = () => ({name:"MORGAN/TAYLOR ALICE/ROBERT",arr:"02/09/26",dep:"10/09/26"});
 const rate = room => ({live:true,rooms:{[room || "205"]:stay()}});
@@ -93,5 +93,25 @@ check("comparison changes neither reservation dates nor captured facts", () => {
   const rr=rate(), before=JSON.stringify(rr), entries=JSON.stringify(incoming);
   run(20260903,incoming,rr);
   assert.equal(JSON.stringify(rr),before); assert.equal(JSON.stringify(incoming),entries); assert.equal(writes,0);
+});
+
+check("9xxx accounts cannot enter the tax census, even through a legacy rate list", () => {
+  const rr={live:false,rooms:{"9017":stay(),"9000":stay(),"205":stay()}};
+  assert.deepEqual(run(20260903,[],rr).totalFail.map(x=>x.room),["205"]);
+});
+check("account tax postings do not create paired overcharge warnings", () => {
+  const x=run(20260903,[],null,{"9017":{arr:1,auto:2,man:0},"205":{arr:1,auto:2,man:0}});
+  assert.deepEqual(x.overcharge.map(x=>x.room),["205"]);
+});
+check("the tax history view excludes accounts without erasing captured charges", () => {
+  const raw={"9017":{"03/09/26":{arr:1,auto:0,man:0}},
+             "9605":{"04/09/26":{arr:1,auto:0,man:0}},
+             "205":{"03/09/26":{arr:1,auto:0,man:0}},
+             "901":{"03/09/26":{arr:1,auto:0,man:0}}};
+  const before=JSON.stringify(raw);
+  const view=new Function("loadMem",lift("taxRoomKeys")+"\n"+lift("taxMemory")+"\nreturn taxMemory();")(()=>raw);
+  assert.deepEqual(Object.keys(view).sort(),["205","901"]);
+  assert.equal(JSON.stringify(raw),before);
+  assert.strictEqual(view["205"],raw["205"]);
 });
 console.log(count + " account-tax checks passed");

@@ -727,6 +727,67 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
   ck("the physical night BEFORE an outgoing move is still checked", await guestFlag(p));
   await p.close();
 
+
+  /* 24. Arrangement without TA is expected on 9xxx accounts. All tax views
+     exclude those accounts while preserving the report and stored charge facts. */
+  p = await open(null);
+  await p.evaluate(() => {
+    const room=(arr,auto,man=0)=>({arr,auto,man});
+    const tax={kind:"tax",fileDate:"04/09/26",dateKey:20260904,
+      rooms:{"9017":room(1,0),"9000":room(1,0),"9605":room(1,0),
+             "205":room(1,0),"901":room(1,0),"206":room(1,1)},
+      totalRooms:6,totalArrangements:6};
+    window.__accountTax=tax;
+    window.__tx.ingestTax(tax);
+    window.__tx.setRate(null);
+    window.__tx.setTax(tax,20260904);
+  });
+  const view24=await p.evaluate(() => ({
+    warnings:[...document.querySelectorAll("#results .rm")].map(n=>n.textContent),
+    memory:[...document.querySelectorAll("#acc .rm")].map(n=>n.textContent),
+    stats:[...document.querySelectorAll("#ta-summary .stat .v")].map(n=>n.textContent),
+    print:window.__tx.print(),
+    raw:JSON.parse(localStorage.getItem("ta_check_memory_v2")),
+    report:window.__accountTax
+  }));
+  ck("standalone warnings exclude 9xxx but still check physical rooms 205 and 901",
+     view24.warnings.join(",")==="205,901");
+  ck("charge-history warnings exclude accounts while retaining genuine missing TA",
+     view24.memory.join(",")==="205,901");
+  ck("standalone summary counts only the three tax-check rooms", view24.stats[1]==="3" && view24.stats[2]==="2");
+  ck("tax print excludes accounts and retains the real missing-tax rooms",
+     !/<td>9(?:017|000|605)<\/td>/.test(view24.print) && /<td>205<\/td>/.test(view24.print) && /<td>901<\/td>/.test(view24.print));
+  ck("raw account Arrangement and TA counts remain recorded",
+     view24.raw["9017"]["04/09/26"].arr===1 && view24.raw["9017"]["04/09/26"].auto===0 &&
+     Object.keys(view24.report.rooms).length===6 && view24.report.totalRooms===6);
+  const raw24=await p.evaluate(() => localStorage.getItem("ta_check_memory_v2"));
+  await p.evaluate(() => window.__tx.render());
+  ck("rendering tax exclusions never rewrites charge history",
+     await p.evaluate(() => localStorage.getItem("ta_check_memory_v2"))===raw24);
+  await p.evaluate(() => {
+    const tax={kind:"tax",fileDate:"05/09/26",dateKey:20260905,
+      rooms:{"9017":{arr:1,auto:3,man:0},"205":{arr:1,auto:3,man:0}},
+      totalRooms:2,totalArrangements:2};
+    window.__tx.ingestTax(tax);
+    window.__tx.setTax(tax,20260905);
+  });
+  const balance24=await p.evaluate(() => window.__tx.over());
+  ck("an account balance never creates an overcharge warning or offsets a physical room",
+     balance24.length===1 && balance24[0].room==="205" && balance24[0].extra===1);
+  await p.evaluate(() => {
+    window.__tx.setRate({kind:"rate",live:true,bizDate:"05/09/26",dateKey:20260905,count:1,
+      rooms:{"205":{name:"MORGAN ALICE",arr:"02/09/26",dep:"10/09/26"}}});
+    window.__tx.render();
+  });
+  const paired24=await p.evaluate(() => ({
+    warnings:[...document.querySelectorAll("#results .rm")].map(n=>n.textContent),
+    memory:[...document.querySelectorAll("#acc .rm")].map(n=>n.textContent),
+    stats:[...document.querySelectorAll("#ta-summary .stat .v")].map(n=>n.textContent)
+  }));
+  ck("paired tax and its history also exclude the 9xxx account",
+     paired24.warnings.every(r=>r!=="9017") && paired24.memory.every(r=>!/^9\d{3}$/.test(r)) && paired24.stats[2]==="1");
+  await p.close();
+
   await b.close();
   console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");
   process.exit(bad ? 1 : 0);

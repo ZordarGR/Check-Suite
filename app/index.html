@@ -7459,7 +7459,17 @@ function taxAccountBounds(rate, days){
   }
   return out;
 }
-function crossReference(rate,tax,nightKey){const N=nightKey||tax.dateKey;const bounds=rate.live?taxAccountBounds(rate,statusLoad().MV||{}):{};const totalFail=[],autoMiss=[],adjoining=[],ok=[];let notOwed=0;for(const room of Object.keys(rate.rooms)){const rr=rate.rooms[room],span=bounds[room]||{};const aK=dkey(rr.arr),dK=dkey(rr.dep);const occ=aK&&dK&&aK<=N&&N<dK&&(!span.start||span.start<=N)&&(!span.end||N<span.end);if(!occ){notOwed++;continue;}if(rr.adjoining){adjoining.push({room,name:rr.name,partner:rr.partner});continue;}const tr=tax.rooms[room];if(!tr||tr.arr===0){totalFail.push({room,name:rr.name,covered:tr?(tr.man>0):false});}else if(tr.auto===0){autoMiss.push({room,name:rr.name,covered:tr.man>0});}else{ok.push(room);}}const over=[];for(const room of Object.keys(tax.rooms)){const b=tax.rooms[room];if((b.auto+b.man)>=2&&b.arr>0)over.push({room,extra:(b.auto+b.man)-1});}const sk=a=>a.sort((x,y)=>(parseInt(x.room||x)||0)-(parseInt(y.room||y)||0));return{nightKey:N,totalFail:sk(totalFail),autoMiss:sk(autoMiss),adjoining:sk(adjoining),overcharge:sk(over),okCount:ok.length,notOwed};}
+/* 9xxx accounts post Arrangement but do not owe TA. Keep their captured charges
+   in TAX and memory; only the tax checking views exclude them. */
+function taxRoomKeys(rooms){
+  return Object.keys(rooms || {}).filter(room => !/^9\d{3}$/.test(room));
+}
+function taxMemory(){
+  const raw = loadMem(), out = {};
+  for(const room of taxRoomKeys(raw)) out[room] = raw[room];
+  return out;
+}
+function crossReference(rate,tax,nightKey){const N=nightKey||tax.dateKey;const bounds=rate.live?taxAccountBounds(rate,statusLoad().MV||{}):{};const totalFail=[],autoMiss=[],adjoining=[],ok=[];let notOwed=0;for(const room of taxRoomKeys(rate.rooms)){const rr=rate.rooms[room],span=bounds[room]||{};const aK=dkey(rr.arr),dK=dkey(rr.dep);const occ=aK&&dK&&aK<=N&&N<dK&&(!span.start||span.start<=N)&&(!span.end||N<span.end);if(!occ){notOwed++;continue;}if(rr.adjoining){adjoining.push({room,name:rr.name,partner:rr.partner});continue;}const tr=tax.rooms[room];if(!tr||tr.arr===0){totalFail.push({room,name:rr.name,covered:tr?(tr.man>0):false});}else if(tr.auto===0){autoMiss.push({room,name:rr.name,covered:tr.man>0});}else{ok.push(room);}}const over=[];for(const room of taxRoomKeys(tax.rooms)){const b=tax.rooms[room];if((b.auto+b.man)>=2&&b.arr>0)over.push({room,extra:(b.auto+b.man)-1});}const sk=a=>a.sort((x,y)=>(parseInt(x.room||x)||0)-(parseInt(y.room||y)||0));return{nightKey:N,totalFail:sk(totalFail),autoMiss:sk(autoMiss),adjoining:sk(adjoining),overcharge:sk(over),okCount:ok.length,notOwed};}
 
 /* ============ state + memory ============ */
 let RATE=null, TAX=null, PAIR_OVERRIDE=null, SEC_OPEN={}; // PAIR_OVERRIDE: {mode:'paired'|'decline', night}
@@ -7660,7 +7670,7 @@ function verifyOf(nightKey,room){const v=loadVerify();return (v[nightKey]&&v[nig
 function setVerify(nightKey,room,val){const v=loadVerify();const n=v[nightKey]||(v[nightKey]={});if(val)n[room]=val;else delete n[room];const keys=Object.keys(v).sort((a,b)=>Number(b)-Number(a));for(const k of keys.slice(7))delete v[k];saveVerify(v);}
 /* consolidation across the days in memory: TA total vs nights */
 function roomBalance(mem,room){const rec=mem[room]||{};let ta=0,nights=0;for(const d of Object.keys(rec)){const e=rec[d];if(e.manual==='arrival'||e.manual==='checkout')continue;ta+=(e.auto||0)+(e.man||0);if((e.arr||0)>0)nights++;}return{bal:ta-nights,nights,ta};}
-function overchargeFromMemory(){const mem=loadMem();const out=[];for(const room of Object.keys(mem)){const b=roomBalance(mem,room);if(b.bal>0)out.push({room,extra:b.bal,nights:b.nights});}out.sort((a,b)=>(parseInt(a.room)||0)-(parseInt(b.room)||0));pruneAck(out);return out;}
+function overchargeFromMemory(){const mem=taxMemory();const out=[];for(const room of Object.keys(mem)){const b=roomBalance(mem,room);if(b.bal>0)out.push({room,extra:b.bal,nights:b.nights});}out.sort((a,b)=>(parseInt(a.room)||0)-(parseInt(b.room)||0));pruneAck(out);return out;}
 /* overcharge dismissals persist across nights — an ack is tied to the room's balance
    at the moment of dismissal, so the room only resurfaces if something new happens */
 const ACK_KEY="ta_check_ack_v1";
@@ -7704,7 +7714,7 @@ function render(){
     bn.innerHTML=`<div class="banner ok">${t('b_paired', dfmt(RATE.dateKey)||RATE.bizDate, dfmt(d.night))}</div>`;
     sm.style.display='flex';
     const overPend=over.filter(o=>!ackOf(o.room,o.extra)).length;
-    sm.innerHTML=stat('stat_night',dfmt(d.night),true)+stat('stat_inhouse',RATE.count)+stat('stat_posted',TAX.totalRooms)+stat('stat_flags',x.totalFail.length+x.autoMiss.length+overPend+adjProblem);
+    sm.innerHTML=stat('stat_night',dfmt(d.night),true)+stat('stat_inhouse',RATE.count)+stat('stat_posted',taxRoomKeys(TAX.rooms).length)+stat('stat_flags',x.totalFail.length+x.autoMiss.length+overPend+adjProblem);
     rs.innerHTML=
       ackSection('fail','sec_fail','empty_fail',x.totalFail,d.night,o=>['red',t('tag_fail'),t('meta_fail')],false)+
       ackSection('auto','sec_auto','empty_auto',x.autoMiss,d.night,o=>['red',o.covered?t('tag_auto_cov'):t('tag_auto_none'),o.covered?t('meta_auto_cov'):t('meta_auto_none')],true)+
@@ -7740,7 +7750,7 @@ function buildPrintReport(){
     rooms.sort((a,b)=>(parseInt(a.room)||0)-(parseInt(b.room)||0));
   }
   else if(TAX){night=TAX.fileDate;const mem=loadMem();const man=r=>((mem[r]||{})[TAX.fileDate]||{}).manual||null;
-    rooms=Object.keys(TAX.rooms).filter(r=>{const b=TAX.rooms[r];return b.arr>0&&b.auto===0&&!man(r);}).sort((a,b)=>(parseInt(a)||0)-(parseInt(b)||0)).map(r=>({room:r,name:'',term:'',agent:'',arr:'',dep:'',covered:TAX.rooms[r].man>0,adj:false}));}
+    rooms=taxRoomKeys(TAX.rooms).filter(r=>{const b=TAX.rooms[r];return b.arr>0&&b.auto===0&&!man(r);}).sort((a,b)=>(parseInt(a)||0)-(parseInt(b)||0)).map(r=>({room:r,name:'',term:'',agent:'',arr:'',dep:'',covered:TAX.rooms[r].man>0,adj:false}));}
   const _n=new Date(),_p=x=>String(x).padStart(2,'0');const now=_p(_n.getDate())+'/'+_p(_n.getMonth()+1)+'/'+_n.getFullYear()+' '+_p(_n.getHours())+':'+_p(_n.getMinutes());
   let head='<tr><th>'+t('pr_h_room')+'</th>'+(paired?('<th>'+t('pr_h_guest')+'</th><th>'+t('pr_h_board')+'</th><th>'+t('pr_h_operator')+'</th><th>'+t('pr_h_stay')+'</th>'):'')+'<th>'+t('pr_h_auto')+'</th></tr>';
   let body=rooms.length? rooms.map(r=>{const stay=(r.arr&&r.dep)?(r.arr+' → '+r.dep):'';const status=r.adj?(t('pr_covered')+' ('+t('pr_adjnote')+')'):(r.covered?t('pr_covered'):t('pr_notcovered'));
@@ -7807,15 +7817,15 @@ function renderRosterInto(container,append){
 function renderTaxStandalone(){
   const r=TAX; const mem=loadMem();
   const manualOf=room=>((mem[room]||{})[r.fileDate]||{}).manual||null;
-  const autoMiss=[]; for(const room of Object.keys(r.rooms)){const b=r.rooms[room];if(b.arr>0&&b.auto===0&&!manualOf(room))autoMiss.push({room,covered:b.man>0});}
+  const autoMiss=[]; for(const room of taxRoomKeys(r.rooms)){const b=r.rooms[room];if(b.arr>0&&b.auto===0&&!manualOf(room))autoMiss.push({room,covered:b.man>0});}
   autoMiss.sort((a,b)=>(parseInt(a.room)||0)-(parseInt(b.room)||0));
-  const noArrAll=Object.keys(r.rooms).filter(room=>{const b=r.rooms[room];return b.arr===0&&((b.auto||0)+(b.man||0))>0;});
+  const noArrAll=taxRoomKeys(r.rooms).filter(room=>{const b=r.rooms[room];return b.arr===0&&((b.auto||0)+(b.man||0))>0;});
   const noArr=sk(noArrAll.filter(room=>!manualOf(room)));const classified=noArrAll.length-noArr.length;
   const over=overchargeFromMemory();
   over.sort((a,b)=>(parseInt(a.room)||0)-(parseInt(b.room)||0));
   const overPend=over.filter(o=>!ackOf(o.room,o.extra)).length;
   const sm=el('ta-summary'); sm.style.display='flex';
-  sm.innerHTML=stat('stat_night',r.fileDate,true)+stat('stat_posted',r.totalRooms)+stat('stat_flags',autoMiss.length+overPend);
+  sm.innerHTML=stat('stat_night',r.fileDate,true)+stat('stat_posted',taxRoomKeys(r.rooms).length)+stat('stat_flags',autoMiss.length+overPend);
   const rs=el('results');
   rs.innerHTML +=
     sectAuto(autoMiss.length, autoMiss.length? autoMiss.map(o=>rowHTML(o.room,'','red',o.covered?t('tag_auto_cov'):t('tag_auto_none'),o.covered?t('meta_auto_cov'):t('meta_auto_none'))).join(''):empt('empty_auto'))+
@@ -7834,7 +7844,7 @@ function noArrRow(room){const mem=loadMem();const cur=((mem[room]||{})[TAX.fileD
 
 /* memory accordion (tax) */
 function deriveStatus(e){const man=e.manual||null;if(man==='arrival')return['blue',t('tag_arrival'),true];if(man==='checkout')return['blue',t('tag_checkout'),true];if((e.arr||0)===0)return['grey',t('tag_noarr'),true];if((e.auto||0)===0&&(e.man||0)===0)return['red',t('tag_auto_none'),false];if((e.auto||0)===0&&(e.man||0)>0)return['red',t('tag_auto_cov'),false];if(((e.auto||0)+(e.man||0))>=2)return['amber',t('tag_double'),false];return['ok',t('tag_ok'),false];}
-function renderMemory(){const mem=loadMem();const dates=recentDates(mem,7);const acc=el('acc');if(!dates.length){acc.innerHTML=`<div class="empty" style="background:var(--panel);border:1px solid var(--line);border-radius:10px">${t('mem_empty')}</div>`;return;}let html='';for(const d of dates){const items=[];let total=0,autox=0,dbl=0,noarr=0,arr=0,out=0;for(const room of Object.keys(mem)){const e=mem[room][d];if(!e)continue;total++;const [cls,label,click]=deriveStatus(e);const man=e.manual||null;if(man==='arrival')arr++;else if(man==='checkout')out++;else if((e.arr||0)===0)noarr++;else if((e.auto||0)===0)autox++;else if(((e.auto||0)+(e.man||0))>=2)dbl++;if(cls!=='ok')items.push([room,cls,label,click]);}items.sort((a,b)=>(parseInt(a[0])||0)-(parseInt(b[0])||0));let chips=`<span class="chip">${total} ${t('chip_rooms')}</span>`;if(autox)chips+=`<span class="chip red">${autox} ${t('chip_auto')}</span>`;if(dbl)chips+=`<span class="chip amber">${dbl} ${t('chip_double')}</span>`;if(noarr)chips+=`<span class="chip grey">${noarr} ${t('chip_noarr')}</span>`;if(arr)chips+=`<span class="chip blue">${arr} ${t('chip_arr')}</span>`;if(out)chips+=`<span class="chip blue">${out} ${t('chip_out')}</span>`;let body;if(!items.length)body=`<div class="empty">${t('date_allok')}</div>`;else body=items.map(function(it){const room=it[0],cls=it[1],label=it[2],click=it[3];const tc=click?(cls+' click cyc'):cls;const da=click?('data-room="'+room+'" data-date="'+d+'"'):'';return '<div class="row"><span class="rm">'+room+'</span><span class="tag '+tc+'" '+da+'>'+label+'</span></div>';}).join('');const open=EXPANDED.has(d)?' open':'';html+='<div class="dgroup'+open+'"><div class="dhead" data-toggle="'+d+'"><span class="caret">▶</span><span class="ddate">'+d+'</span><span class="chips">'+chips+'</span></div><div class="dbody">'+body+'</div></div>';}acc.innerHTML=html;}
+function renderMemory(){const mem=taxMemory();const dates=recentDates(mem,7);const acc=el('acc');if(!dates.length){acc.innerHTML=`<div class="empty" style="background:var(--panel);border:1px solid var(--line);border-radius:10px">${t('mem_empty')}</div>`;return;}let html='';for(const d of dates){const items=[];let total=0,autox=0,dbl=0,noarr=0,arr=0,out=0;for(const room of Object.keys(mem)){const e=mem[room][d];if(!e)continue;total++;const [cls,label,click]=deriveStatus(e);const man=e.manual||null;if(man==='arrival')arr++;else if(man==='checkout')out++;else if((e.arr||0)===0)noarr++;else if((e.auto||0)===0)autox++;else if(((e.auto||0)+(e.man||0))>=2)dbl++;if(cls!=='ok')items.push([room,cls,label,click]);}items.sort((a,b)=>(parseInt(a[0])||0)-(parseInt(b[0])||0));let chips=`<span class="chip">${total} ${t('chip_rooms')}</span>`;if(autox)chips+=`<span class="chip red">${autox} ${t('chip_auto')}</span>`;if(dbl)chips+=`<span class="chip amber">${dbl} ${t('chip_double')}</span>`;if(noarr)chips+=`<span class="chip grey">${noarr} ${t('chip_noarr')}</span>`;if(arr)chips+=`<span class="chip blue">${arr} ${t('chip_arr')}</span>`;if(out)chips+=`<span class="chip blue">${out} ${t('chip_out')}</span>`;let body;if(!items.length)body=`<div class="empty">${t('date_allok')}</div>`;else body=items.map(function(it){const room=it[0],cls=it[1],label=it[2],click=it[3];const tc=click?(cls+' click cyc'):cls;const da=click?('data-room="'+room+'" data-date="'+d+'"'):'';return '<div class="row"><span class="rm">'+room+'</span><span class="tag '+tc+'" '+da+'>'+label+'</span></div>';}).join('');const open=EXPANDED.has(d)?' open':'';html+='<div class="dgroup'+open+'"><div class="dhead" data-toggle="'+d+'"><span class="caret">▶</span><span class="ddate">'+d+'</span><span class="chips">'+chips+'</span></div><div class="dbody">'+body+'</div></div>';}acc.innerHTML=html;}
 
 /* manual tagging */
 function setManual(room,date,val){const mem=loadMem();const rec=mem[room]||(mem[room]={});const e=rec[date]||(rec[date]={arr:0,auto:0,man:0,manual:null});e.manual=val;saveMem(mem);}

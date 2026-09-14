@@ -26,6 +26,8 @@ try{ window.__t = { openModal:openModal, closeModal:closeModal,
 const taxProbe = `
 try{ window.__tx = { rate:function(){ return RATE; },
                      setTax:function(v,night){ TAX=v; PAIR_OVERRIDE={mode:'paired',night:night}; render(); }, setPair:function(v){ PAIR_OVERRIDE = v; },
+                     setRate:function(v){ RATE=v; }, render:render, ingestTax:ingestTax,
+                     print:buildPrintReport, over:overchargeFromMemory,
                      getPair:function(){ return PAIR_OVERRIDE; },
                      read:function(auto){ return readInhouseLive(auto); },
                      sig:function(){ return LIVE_SIG; },
