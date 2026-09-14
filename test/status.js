@@ -448,5 +448,21 @@ store["reccheck_legacy"] = "0";
 P = pillsFor(NIGHT, []);
 ck("legacy off again: the store draws and the ledger does not",                        P.kind("130") === "dep" && !P.has("110") && !P.has("72"));
 
+console.log("--- guest account 9017 in arrival, departure and move pills");
+for(const k of Object.keys(store)) delete store[k]; store["reccheck_legacy"] = "0";
+rpt("AR", RPT("AR", "Arrival Report for the 04/09/26", [["MORGAN ALICE", "9008", "1/0/0/0/0", "09/09/26", "CI"]]), T(7));
+rpt("DP", RPT("DP", "Departure Report for 04/09/26", [
+  ["MORGAN/TAYLOR ALICE/ROBERT", "9017", "2/0/0/0/0", "02/09/26", "CI"],
+  ["CREDIT CARDS", "9604", "0/0/0/0/0", "01/09/26", "CI"],
+  ["HOUSE", "9000", "0/0/0/0/0", "01/09/26", "CI"],
+  [" maison ", "9040", "0/0/0/0/0", "01/09/26", "CI"]]), T(7));
+rpt("MV", RPT("MV", "Perform Move for Date 04/09/26", [
+  ["505", "SV", "9017", "ACC", "MORGAN/TAYLOR ALICE/ROBERT", "X", "02/09/26", "04/09/26"]]), T(7));
+P = pillsFor(NIGHT, [rc("9017", "ALICE/ROBERT")]);
+ck("guest-account arrival is a pill", P.kind("9008") === "arr");
+ck("guest-account departure and move both retain their dots", P.kinds("9017") === "dep+move" && P.pills.filter(p => p.room === "9017" && p.dot).length === 2);
+ck("guest-account departure is included in the department red mark", !!P.leaving["9017"]);
+ck("house accounts never become pills or departure marks", ["9000", "9604", "9040"].every(room => !P.has(room) && !P.leaving[room]));
+
 console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");
 process.exit(bad ? 1 : 0);

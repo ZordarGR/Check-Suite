@@ -1,11 +1,11 @@
 {
-  "version": "1.17.68",
+  "version": "1.17.69",
   "type": "html",
   "engine": "1.17.63",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.63/Pro-Check-Setup.exe",
   "setupSha256": "028e988e6ebde55cb30777795bd6be99edf93bd858744d60b5d514b5e4554019",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "fc69382c4c4f322a3809abe1d3a43e415b8739f2d9f51a24a247257d8d8e0ea0",
-  "notes": "Move receipt dots can connect a surname-only move entry to a first-name-only receipt through a full reservation name already captured by protel. The full name must uniquely match the move's room and original arrival/departure dates; conflicting names remain unmatched. Original arrival dates and the shared-word comparison rule are preserved."
+  "sha256": "d6e4b2622e9a8486cfde95ed53f21dd4e33f64cfe3bfcad21a79d6adc03cc493",
+  "notes": "Guest accounts with four-digit room numbers now feed the live names and reservation lists. Room 9000 and the named house accounts remain excluded; ACC room type alone does not exclude a guest reservation."
 }

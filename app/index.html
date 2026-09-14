@@ -1946,7 +1946,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.68";
+const APP_VERSION = "1.17.69";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -5461,16 +5461,16 @@ function leavingIndex(){
   }
   const st = loadStatus();
   for(const r of statusRows(st, "DP", night)){
-    const room = pillRoom(r.room);
+    const room = pillRoom(r.room, r.name);
     if(room) (out[room] = out[room] || []).push(r.name || "");
   }
   for(const r of statusRows(st, "AR", night)){
-    const room = pillRoom(r.room);
+    const room = pillRoom(r.room, r.name);
     if(room) (arr[room] = arr[room] || []).push(r.name || "");
   }
   for(const r of statusRows(st, "MV", night)){
     if(!String(r.x || "").trim()) continue;
-    const to = pillRoom(r.to);
+    const to = pillRoom(r.to, r.name);
     if(to) (arr[to] = arr[to] || []).push(r.name || "");
   }
   ARRIVING = arr;
@@ -5781,8 +5781,8 @@ function dShort(k){
    The STATUS store (written by the tax half, see statusIngest) keeps each list's rows for
    the day as a UNION of every capture of it, keyed by name and room, so a guest who has
    left the arrival list because they checked in is still that night's arrival. This
-   reads that store and nothing else. Room 9000 and the like are holding rooms and are
-   not pills, as they were never stays. */
+   reads that store and nothing else. Guest accounts in the 9xxx range are included;
+   room 9000 and the named house accounts are excluded. */
 const STATUS_KEY = "reccheck_status_v1";
 function loadStatus(){
   try{ const o = JSON.parse(localStorage.getItem(STATUS_KEY) || "{}"); return (o && typeof o === "object" && !Array.isArray(o)) ? o : {}; }
@@ -5816,9 +5816,14 @@ function saveNightReceipts(night, pairs){
     if(changed) localStorage.setItem(RECEIPTS_KEY, JSON.stringify(o));   // an unchanged night writes nothing
   }catch(e){}
 }
-function pillRoom(cell){
-  const m = String(cell || "").trim().match(/^(\d{2,3})(?!\d)/);   // the lead room of "414-15"; not 9000
-  return m ? m[1] : "";
+function pillRoom(cell, name){
+  const m = String(cell || "").trim().match(/^(\d{2,4})(?!\d)/);
+  if(!m || m[1] === "9000") return "";
+  const n = String(name || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+                  .trim().replace(/\s+/g, " ").toUpperCase();
+  // Four-digit guest accounts are valid; exclude the named house accounts, not ACC type.
+  if((m[1].length === 4 && !n) || ["ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ", "MAISON", "CREDIT CARDS", "LOST CHARGES"].includes(n)) return "";
+  return m[1];
 }
 function roomMoves(nightArg){
   const out = {};
@@ -5835,10 +5840,10 @@ function roomMoves(nightArg){
   const fullMoveName = r => {
     const short = String(r.name || "").trim(), words = nameWordSet(short);
     const arrival = dateNum2(r.arr), departure = dateNum2(r.dep);
-    const from = pillRoom(r.from), to = pillRoom(r.to), names = [];
+    const from = pillRoom(r.from, r.name), to = pillRoom(r.to, r.name), names = [];
     if(!words.size || !arrival || !departure || !from || !to) return "";
     const add = row => {
-      if(!row || ![from, to].includes(pillRoom(row.room)) || dateNum2(row.dep) !== departure) return;
+      if(!row || ![from, to].includes(pillRoom(row.room, row.name)) || dateNum2(row.dep) !== departure) return;
       const full = String(row.name || "").trim(), whole = nameWordSet(full);
       if(!full || ![...words].every(w => whole.has(w))) return;
       if(!names.some(n => sameName(n, full))) names.push(full);
@@ -5856,16 +5861,16 @@ function roomMoves(nightArg){
   /* the reservation's own arrival, so the dot can look back over the whole stay */
   const sinceOf = (o, cell) => { const k = dateNum2(cell); if(k && (!o.since || k < o.since)) o.since = k; };
   for(const r of statusRows(st, "DP", night)){
-    const room = pillRoom(r.room); if(!room) continue;
+    const room = pillRoom(r.room, r.name); if(!room) continue;
     const o = slot(room); o.dep = true; o.names.dep.push(r.name || ""); sinceOf(o, r.arr);
   }
   for(const r of statusRows(st, "AR", night)){
-    const room = pillRoom(r.room); if(!room) continue;
+    const room = pillRoom(r.room, r.name); if(!room) continue;
     const o = slot(room); o.arr = true; o.names.arr.push(r.name || "");
   }
   for(const r of statusRows(st, "MV", night)){
     if(!String(r.x || "").trim()) continue;                // protel has not marked it — not a move it shows
-    const to = pillRoom(r.to), from = pillRoom(r.from); if(!to || !from || to === from) continue;
+    const to = pillRoom(r.to, r.name), from = pillRoom(r.from, r.name); if(!to || !from || to === from) continue;
     const o = slot(to); o.move = from; o.names.move.push(r.name || ""); sinceOf(o, r.arr);
     const full = fullMoveName(r);
     if(full) (o.names.moveFull = o.names.moveFull || []).push(full);
@@ -5995,7 +6000,7 @@ function renderMovesFor(box, night){
       for(const k of Object.keys(st.MV)){
         for(const r of statusRows(st, "MV", +k)){
           if(!String(r.x || "").trim()) continue;
-          const to = pillRoom(r.to), from = pillRoom(r.from);
+          const to = pillRoom(r.to, r.name), from = pillRoom(r.from, r.name);
           if(!to || !from || !seen.has(to) || seen.has(from)) continue;
           if(!names.some(n => n && nameLike(r.name, n))) continue;
           seen.add(from); out.add(from); grew = true;
@@ -7374,6 +7379,16 @@ return{kind:'rate',bizDate,dateKey,dateSure,count:Object.keys(rooms).length,room
 
    The room cell carries the adjoining pair as "414-15", which is why the key is the part
    before the dash — the same split parseRate does. */
+/* Same room eligibility as the department half; keep the two pillRoom copies identical. */
+function pillRoom(cell, name){
+  const m = String(cell || "").trim().match(/^(\d{2,4})(?!\d)/);
+  if(!m || m[1] === "9000") return "";
+  const n = String(name || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+                  .trim().replace(/\s+/g, " ").toUpperCase();
+  // Four-digit guest accounts are valid; exclude the named house accounts, not ACC type.
+  if((m[1].length === 4 && !n) || ["ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ", "MAISON", "CREDIT CARDS", "LOST CHARGES"].includes(n)) return "";
+  return m[1];
+}
 const IH = {NAME: 0, ROOM: 2, TYPE: 3, OCC: 4, ARR: 5, DEP: 6, STATUS: 11};
 function inhouseToRate(rows, bizDate){
   const all = {}, rooms = {};
@@ -7384,7 +7399,7 @@ function inhouseToRate(rows, bizDate){
     if(/reversal|void/i.test(status)){ cancelled++; continue; }
     const cell = String(r[IH.ROOM] || "").trim();
     const room = (cell.split("-")[0] || "").trim();
-    if(!/^\d{2,3}$/.test(room)){ unusable++; continue; }
+    if(!/^\d{2,4}$/.test(room) || !pillRoom(room, r[IH.NAME])){ unusable++; continue; }
     const arr = String(r[IH.ARR] || "").trim(), dep = String(r[IH.DEP] || "").trim();
     if(!dkey(arr)){ unusable++; continue; }        // no arrival date, no stay
     const partner = cell.indexOf("-") >= 0 ? (cell.split("-")[1] || "").trim() : "";
@@ -8314,9 +8329,8 @@ function parseTagged(txt, tag){
    panel's date column reads Dep. and the Departures panel's reads Arr. */
 const AR = {NAME: 0, ROOM: 1, OCC: 2, DEP: 3, STATUS: 4};
 const DP = {NAME: 0, ROOM: 1, OCC: 2, ARR: 3, STATUS: 4};
-/* Room 9000, type ACC, is a holding room -- his word, 04/09: "9000 is a holding room,
-   ignore it". Anything that is not a real two or three digit room is dropped and counted,
-   never guessed at. */
+/* Room 9000 stays excluded. Guest accounts may have four digits and type ACC;
+   exclude the named house accounts instead of rejecting the whole room-number range. */
 function stayFromRow(r, map, night, arrIsNight){
   const status = String(r[map.STATUS] || "").trim();
   if(/reversal|void/i.test(status)) return {cancelled: true};
@@ -8327,7 +8341,7 @@ function stayFromRow(r, map, night, arrIsNight){
      slow protel printed as "N holding-room row(s) ignored" — the very mislabel the split
      of these counters was made to end. */
   if(!cell) return {dropped: "partial"};
-  if(!/^\d{2,3}$/.test(room)) return {dropped: "held"};
+  if(!/^\d{2,4}$/.test(room) || !pillRoom(room, r[map.NAME])) return {dropped: "held"};
   const other = String(r[arrIsNight ? map.DEP : map.ARR] || "").trim();
   const arr = arrIsNight ? night : other;
   const dep = arrIsNight ? other : night;
@@ -8612,7 +8626,7 @@ function recordMoves(rows, night){
     const from = String(r[MV.FROM] || "").trim();
     const to   = String(r[MV.TO] || "").trim();
     const arr  = dkey(String(r[MV.ARR] || "").trim());
-    if(!/^\d{2,3}$/.test(from) || !/^\d{2,3}$/.test(to) || !arr || from === to) continue;
+    if(!/^\d{2,4}$/.test(from) || !/^\d{2,4}$/.test(to) || !pillRoom(from, r[MV.NAME]) || !pillRoom(to, r[MV.NAME]) || !arr || from === to) continue;
     const key = "mv|" + night + "|" + from + "|" + to + "|" + arr;
     if(done[key]) continue;
     const dst = led[to] && led[to][arr];

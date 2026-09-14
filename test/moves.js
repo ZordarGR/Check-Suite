@@ -27,7 +27,7 @@ const R = new Function("localStorage","JSON","Object","String","RegExp","console
     "let LEDGER_TICK = 0;",                       // the STATUS redraw counter recordMoves bumps
     src.match(/^const MV = .*$/m)[0],
     "function render(){}",
-    lift("dkey"), lift("loadLedger"), lift("movesApplied"), lift("recordMoves"),
+    lift("dkey"), lift("loadLedger"), lift("movesApplied"), lift("pillRoom"), lift("recordMoves"),
     "return {recordMoves, applied: movesApplied, led: () => loadLedger()};" ].join("\n"))(
   localStorage, JSON, Object, String, RegExp, console);
 
@@ -92,6 +92,16 @@ store["reccheck_moves_v2"] = JSON.stringify({
 ck("a move on a later night is recorded too",
    R.recordMoves([ROW("505","148","VASSILIEV","X","03/09/26")], 20260905) === 2);
 ck("and the chain is kept",                      R.led()["148"][20260903].from === "505");
+
+/* Moving to a guest account is a real recorded move; account type alone cannot reject it. */
+store["reccheck_moves_v2"] = JSON.stringify({
+  "505": {"20260903": {d: 20260917, n: "MORGAN ALICE", seen: 20260904}},
+  "9017": {"20260903": {d: 20260917, n: "MORGAN ALICE", seen: 20260904}}});
+delete store["reccheck_moves_applied"];
+const accountMove = ROW("505", "9017", "MORGAN ALICE", "X", "03/09/26"); accountMove[3] = "ACC";
+ck("a marked move into guest account 9017 is recorded", R.recordMoves([accountMove], 20260904) === 2);
+ck("guest-account move preserves arrival and departure", R.led()["9017"][20260903].from === "505" && R.led()["505"][20260903].d === 20260917);
+ck("a named house-account move is refused", R.recordMoves([ROW("9017", "505", "CREDIT CARDS", "X", "03/09/26")], 20260905) === 0);
 
 console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");
 process.exit(bad ? 1 : 0);
