@@ -7416,7 +7416,50 @@ function inhouseToRate(rows, bizDate){
           count: Object.keys(rooms).length, rooms: rooms, all: all,
           cancelled: cancelled, unusable: unusable};
 }
-function crossReference(rate,tax,nightKey){const N=nightKey||tax.dateKey;const totalFail=[],autoMiss=[],adjoining=[],ok=[];let notOwed=0;for(const room of Object.keys(rate.rooms)){const rr=rate.rooms[room];const aK=dkey(rr.arr),dK=dkey(rr.dep);const occ=aK&&dK&&aK<=N&&N<dK;if(!occ){notOwed++;continue;}if(rr.adjoining){adjoining.push({room,name:rr.name,partner:rr.partner});continue;}const tr=tax.rooms[room];if(!tr||tr.arr===0){totalFail.push({room,name:rr.name,covered:tr?(tr.man>0):false});}else if(tr.auto===0){autoMiss.push({room,name:rr.name,covered:tr.man>0});}else{ok.push(room);}}const over=[];for(const room of Object.keys(tax.rooms)){const b=tax.rooms[room];if((b.auto+b.man)>=2&&b.arr>0)over.push({room,extra:(b.auto+b.man)-1});}const sk=a=>a.sort((x,y)=>(parseInt(x.room||x)||0)-(parseInt(y.room||y)||0));return{nightKey:N,totalFail:sk(totalFail),autoMiss:sk(autoMiss),adjoining:sk(adjoining),overcharge:sk(over),okCount:ok.length,notOwed};}
+/* A guest account can precede or follow the physical-room stay. Only a captured,
+   X-marked move for this guest and these original stay dates supplies a tax boundary.
+   Physical-room moves connect the reservation; ambiguous account transitions supply none. */
+function taxAccountBounds(rate, days){
+  const out = {}, groups = {};
+  const words = s => new Set(String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+                                    .toUpperCase().split(/[^\p{L}\p{N}]+/u).filter(w => w.length >= 2));
+  for(const day of Object.keys(days || {})){
+    if(!/^\d{8}$/.test(day)) continue;
+    const k = +day, rows = (days[day] && days[day].rows) || {};
+    for(const r of Object.values(rows)){
+      if(!r || !/^X$/i.test(String(r.x || "").trim())) continue;
+      const from = pillRoom(r.from, r.name), to = pillRoom(r.to, r.name);
+      const a = dkey(r.arr), d = dkey(r.dep), name = [...words(r.name)];
+      if(!/^(?:\d{2,3}|9\d{3})$/.test(from) || !/^(?:\d{2,3}|9\d{3})$/.test(to) ||
+         from === to || !a || !d || k < a || k > d || !name.length) continue;
+      const key = a + "|" + d;
+      (groups[key] = groups[key] || []).push({from, to, night: k, name});
+    }
+  }
+  for(const room of Object.keys((rate && rate.rooms) || {})){
+    const stay = rate.rooms[room], full = words(stay.name);
+    const rows = (groups[dkey(stay.arr) + "|" + dkey(stay.dep)] || [])
+                   .filter(r => r.name.every(w => full.has(w)));
+    if(!rows.length) continue;
+    const adjacent = {}, edges = new Map();
+    for(const r of rows){
+      (adjacent[r.from] = adjacent[r.from] || []).push(r.to);
+      (adjacent[r.to] = adjacent[r.to] || []).push(r.from);
+      edges.set(r.from + "|" + r.to + "|" + r.night, r);
+    }
+    const seen = new Set([room]), queue = [room];
+    for(let i = 0; i < queue.length; i++) for(const next of adjacent[queue[i]] || []){
+      if(!seen.has(next)){ seen.add(next); queue.push(next); }
+    }
+    const account = [...edges.values()].filter(r => seen.has(r.from) &&
+      (/^9\d{3}$/.test(r.from) !== /^9\d{3}$/.test(r.to)));
+    if(account.length !== 1) continue;
+    const r = account[0];
+    out[room] = /^9\d{3}$/.test(r.from) ? {start: r.night} : {end: r.night};
+  }
+  return out;
+}
+function crossReference(rate,tax,nightKey){const N=nightKey||tax.dateKey;const bounds=rate.live?taxAccountBounds(rate,statusLoad().MV||{}):{};const totalFail=[],autoMiss=[],adjoining=[],ok=[];let notOwed=0;for(const room of Object.keys(rate.rooms)){const rr=rate.rooms[room],span=bounds[room]||{};const aK=dkey(rr.arr),dK=dkey(rr.dep);const occ=aK&&dK&&aK<=N&&N<dK&&(!span.start||span.start<=N)&&(!span.end||N<span.end);if(!occ){notOwed++;continue;}if(rr.adjoining){adjoining.push({room,name:rr.name,partner:rr.partner});continue;}const tr=tax.rooms[room];if(!tr||tr.arr===0){totalFail.push({room,name:rr.name,covered:tr?(tr.man>0):false});}else if(tr.auto===0){autoMiss.push({room,name:rr.name,covered:tr.man>0});}else{ok.push(room);}}const over=[];for(const room of Object.keys(tax.rooms)){const b=tax.rooms[room];if((b.auto+b.man)>=2&&b.arr>0)over.push({room,extra:(b.auto+b.man)-1});}const sk=a=>a.sort((x,y)=>(parseInt(x.room||x)||0)-(parseInt(y.room||y)||0));return{nightKey:N,totalFail:sk(totalFail),autoMiss:sk(autoMiss),adjoining:sk(adjoining),overcharge:sk(over),okCount:ok.length,notOwed};}
 
 /* ============ state + memory ============ */
 let RATE=null, TAX=null, PAIR_OVERRIDE=null, SEC_OPEN={}; // PAIR_OVERRIDE: {mode:'paired'|'decline', night}
@@ -8012,6 +8055,7 @@ function paintHeld(){
   }
   box.textContent = bits.length ? t('held_lead') + bits.join("   ") : t('held_none');
 }
+let TAX_MOVES_STALE = false;
 async function autoReadInhouse(){
   if(legacyOn() || !LIVE_OK){ liveStop(); return; }
   if(!window.reccheckShortcuts || !window.reccheckShortcuts.listFile) return;
@@ -8029,7 +8073,7 @@ async function autoReadInhouse(){
      The mtime already says which capture is the news. Sorting by it costs nothing and the
      line then reports the list he just opened. */
   const got = [];
-  let stChanged = false;
+  let stChanged = false, taxMovesChanged = false;
   for(const tag of LIVE_TAGS){
     try{
       const f = await window.reccheckShortcuts.listFile(tag)
@@ -8048,7 +8092,7 @@ async function autoReadInhouse(){
            STATUS store, which the pills and the STATUS lists read */
         try{
           LIVE_ROWS[tag] = {p: tag === "IH" ? parseInhouse(f.text) : parseTagged(f.text, tag), at: +f.at || 0};
-          if(statusIngest(tag, LIVE_ROWS[tag].p, +f.at || 0)) stChanged = true;
+          if(statusIngest(tag, LIVE_ROWS[tag].p, +f.at || 0)){ stChanged = true; if(tag === "MV") taxMovesChanged = true; }
         }catch(e){ delete LIVE_ROWS[tag]; }
       }
       if(f.at === LIVE_AT[tag]) continue;
@@ -8069,6 +8113,10 @@ async function autoReadInhouse(){
     catch(e){ r = "threw"; }
     const h = LIVE_HELD[g.tag];
     if(h && h.at === g.at) h.why = (r === "ok") ? "" : r;
+  }
+  if(taxMovesChanged){
+    if(TAX_SCREEN === "tax" && RATE && TAX) render();
+    else TAX_MOVES_STALE = true;
   }
   try{ paintHeld(); }catch(e){}
   if(TAX_SCREEN === "status"){ try{ window.__taStatusMenu(); }catch(e){} }
@@ -8785,6 +8833,7 @@ window.__taLegacy = function(on){
 let TAX_SCREEN = "";
 window.__taScreen = function(which){
   TAX_SCREEN = String(which || "");
+  if(TAX_MOVES_STALE && TAX_SCREEN === "tax"){ TAX_MOVES_STALE = false; render(); }
   try{ liveEnsure(); }catch(e){}
 };
 

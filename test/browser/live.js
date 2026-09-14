@@ -682,6 +682,51 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
   ck("IRIS and CREDIT CARDS do not feed the reservation ledger", !a22.led["9605"] && !a22.led["9604"]);
   await p.close();
 
+
+  /* 23. An account move arriving AFTER the census refreshes the paired Tax Check.
+     Actual arrival/departure remain exactly what the in-house capture reported. */
+  const accountIH = IH("Guests inhouse: 04/09/26", [
+    ["MORGAN/TAYLOR ALICE/ROBERT","205","2/0/0/0/0","02/09/26","10/09/26","CI"]]);
+  const accountMV = (from,to,x) =>
+    "TITLE\tPerform Move for Date 04/09/26\nMV\t"+from+"\tACC\t"+to+
+    "\tSV\tMORGAN/TAYLOR\t"+x+"\t02/09/26\t10/09/26\nDONE\t1\t1\t9\t5\tunicode\tcomplete";
+  const setTaxNight = async (page,night) => page.evaluate(n => {
+    window.__tx.setTax({kind:"tax",dateKey:n,fileDate:"04/09/26",rooms:{},totalRooms:0,totalArrangements:0},n);
+  },night);
+  const guestFlag = page => page.evaluate(() => [...document.querySelectorAll("#results .row .nm")]
+    .some(n => n.textContent === "MORGAN/TAYLOR ALICE/ROBERT"));
+
+  p = await open(accountIH);
+  await settle(p);
+  await setTaxNight(p,20260903);
+  ck("before a captured move, the uncharged occupied night is still flagged", await guestFlag(p));
+  await p.evaluate(txt => { window.__files.MV=txt; window.__at.MV=10; },accountMV("9017","205","X"));
+  await p.waitForTimeout(6500);
+  ck("incoming account move clears the earlier account-night warning in place", !(await guestFlag(p)));
+  const original23 = await p.evaluate(() => window.__tx.rate().rooms["205"]);
+  ck("the tax boundary preserves the captured arrival and departure", original23.arr === "02/09/26" && original23.dep === "10/09/26");
+  await setTaxNight(p,20260904);
+  ck("a missing charge ON the incoming move date still warns", await guestFlag(p));
+  await setTaxNight(p,20260903);
+  await p.evaluate(() => window.__t.showScreen("app"));
+  await p.evaluate(txt => { window.__files.MV=txt; window.__at.MV=11; },accountMV("9017","205",""));
+  await p.waitForTimeout(6500);
+  ck("a changed move does not pull the user away from Department Check", await p.evaluate(() => document.querySelector("main").style.display !== "none"));
+  await p.evaluate(() => window.__t.showScreen("tax"));
+  ck("returning to Tax Check refreshes a changed move mark", await guestFlag(p));
+  await p.close();
+
+  p = await open(accountIH);
+  await settle(p);
+  await setTaxNight(p,20260904);
+  ck("before an outgoing capture, the physical room is checked", await guestFlag(p));
+  await p.evaluate(txt => { window.__files.MV=txt; window.__at.MV=12; },accountMV("205","9017","X"));
+  await p.waitForTimeout(6500);
+  ck("outgoing account move stops missing-tax warnings on its move date", !(await guestFlag(p)));
+  await setTaxNight(p,20260903);
+  ck("the physical night BEFORE an outgoing move is still checked", await guestFlag(p));
+  await p.close();
+
   await b.close();
   console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");
   process.exit(bad ? 1 : 0);
