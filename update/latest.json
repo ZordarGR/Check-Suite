@@ -1,11 +1,11 @@
 {
-  "version": "1.17.67",
+  "version": "1.17.68",
   "type": "html",
   "engine": "1.17.63",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.63/Pro-Check-Setup.exe",
   "setupSha256": "028e988e6ebde55cb30777795bd6be99edf93bd858744d60b5d514b5e4554019",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "4999e40fbb5be50d5990a98339203a542c99e06ee8fd90f35f172f4b74c6a5b5",
-  "notes": "The backup print of the departure list is the sheet in protel's layout with the guest names in FULL — nothing cut, nothing clipped, a long name on two lines as protel wrote it. (1.17.66 had used protel's page, which clips a wrapped name to its row.) Same button: With names, then Print. Also: the totals line says Σύνολο again, as protel prints it."
+  "sha256": "fc69382c4c4f322a3809abe1d3a43e415b8739f2d9f51a24a247257d8d8e0ea0",
+  "notes": "Move receipt dots can connect a surname-only move entry to a first-name-only receipt through a full reservation name already captured by protel. The full name must uniquely match the move's room and original arrival/departure dates; conflicting names remain unmatched. Original arrival dates and the shared-word comparison rule are preserved."
 }

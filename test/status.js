@@ -368,6 +368,70 @@ P = pillsFor(NIGHT, [rc("56", "QUINK frederick"), rc("56", "NEUMANN PETRA")]);
 ck("another guest moved in: the departure dots on QUINK's receipt, the move on NEUMANN's, each alone", P.pills.filter(p => p.room === "56" && p.dot).map(p => p.kind).sort().join("+") === "dep+move" && !pillsFor(NIGHT, [rc("56", "NEUMANN PETRA")]).pills.some(p => p.kind === "dep" && p.dot) && !pillsFor(NIGHT, [rc("56", "QUINK frederick")]).pills.some(p => p.kind === "move" && p.dot));
 ck("the memory and the store keep fifteen nights — his word",                              /^const RECEIPTS_KEEP = 15;/m.test(src) && /^const STATUS_KEEP_DAYS = 15;/m.test(src));
 
+console.log("--- 5e. move surnames and receipt first names meet through a captured full reservation");
+const MOVE_SHORT = "MORGAN/TAYLOR", MOVE_FULL = "MORGAN/TAYLOR ALICE/ROBERT", RECEIPT_FIRST = "ALICE/ROBER";
+function bridgeFixture(){
+  for(const k of Object.keys(store)) delete store[k];
+  store["reccheck_legacy"] = "0";
+  return {
+    AR: {"20260901": {rows: {
+      expected: {name: MOVE_FULL, room: "163?", dep: "10/09/26"},
+      checkedIn: {name: MOVE_FULL, room: "163", dep: "10/09/26"}
+    }}},
+    MV: {"20260904": {rows: {
+      move: {name: MOVE_SHORT, from: "163", to: "164", x: "X", arr: "01/09/26", dep: "10/09/26"}
+    }}}
+  };
+}
+function bridgePills(st, pairs, census){
+  store["reccheck_status_v1"] = JSON.stringify(st);
+  store["reccheck_receipts_v1"] = JSON.stringify({"20260901": pairs || [["163", RECEIPT_FIRST]]});
+  return pillsFor(NIGHT, [], census || {});
+}
+let bridge = bridgeFixture();
+P = bridgePills(bridge, undefined, {"164": {guest: RECEIPT_FIRST, liveKey: 20260904}});
+ck("a receipt on arrival day in the old room dots the move using the captured full name", P.dot("164"));
+ck("the move pill still displays protel's own move-list name", P.pills[0].title.includes(MOVE_SHORT) && !P.pills[0].title.includes(MOVE_FULL));
+ck("matching does not rewrite the captured status rows", store["reccheck_status_v1"] === JSON.stringify(bridge));
+ck("the same name on the new room also dots", bridgePills(bridge, [["164", RECEIPT_FIRST]]).dot("164"));
+ck("the same receipt name on an unrelated room does not dot", !bridgePills(bridge, [["165", RECEIPT_FIRST]]).dot("164"));
+ck("another guest's receipt on the old room does not dot", !bridgePills(bridge, [["163", "SOMEONE ELSE"]]).dot("164"));
+bridge = bridgeFixture();
+bridge.AR["20260901"].rows.expected.room = bridge.AR["20260901"].rows.checkedIn.room = "165";
+ck("a full name captured only on another room cannot connect the names", !bridgePills(bridge).dot("164"));
+bridge = bridgeFixture();
+bridge.AR["20260902"] = bridge.AR["20260901"]; delete bridge.AR["20260901"];
+ck("an arrival from another date cannot connect the names", !bridgePills(bridge).dot("164"));
+bridge = bridgeFixture();
+for(const r of Object.values(bridge.AR["20260901"].rows)) r.dep = "11/09/26";
+ck("a reservation with a different departure cannot connect the names", !bridgePills(bridge).dot("164"));
+bridge = bridgeFixture();
+bridge.AR["20260901"].rows.rival = {name: "MORGAN/TAYLOR CLARA/DAVID", room: "163", dep: "10/09/26"};
+ck("two different full names fitting the same room and stay remain ambiguous", !bridgePills(bridge).dot("164"));
+ck("an unresolved full name does not break the original exact move-name match", bridgePills(bridge, [["163", MOVE_SHORT]]).dot("164"));
+bridge = bridgeFixture();
+bridge.MV["20260904"].rows.move.name = "MORGAN/OTHER";
+ck("every word of the move-list name must occur in the full name", !bridgePills(bridge).dot("164"));
+bridge = bridgeFixture();
+bridge.AR["20260904"] = {rows: {rival: {name: "NEWFAMILY ALICE", room: "164", dep: "10/09/26"}}};
+ck("a competing arrival sharing the receipt's word still blocks the move dot", !bridgePills(bridge).dot("164"));
+bridge = bridgeFixture();
+delete bridge.AR;
+bridge.IH = {rows: [{name: MOVE_FULL, room: "164", arr: "01/09/26", dep: "10/09/26"}]};
+ck("the in-house capture can supply the full name for the same room and stay", bridgePills(bridge).dot("164"));
+bridge.IH.rows[0].arr = "02/09/26";
+ck("an in-house row for another arrival date cannot supply it", !bridgePills(bridge).dot("164"));
+bridge = bridgeFixture();
+bridge.IHC = {rows: [{name: "MORGAN/TAYLOR CLARA/DAVID", room: "164", arr: "01/09/26", dep: "10/09/26"}]};
+ck("conflicting arrival and in-house full names remain ambiguous", !bridgePills(bridge).dot("164"));
+bridge = bridgeFixture();
+bridge.DP = {"20260904": {rows: {departure: {name: MOVE_FULL, room: "164", arr: "01/09/26"}}}};
+P = bridgePills(bridge);
+ck("the same reservation moving and departing can dot both pills", P.pills.filter(p => p.dot).length === 2);
+bridge = bridgeFixture();
+bridge.MV["20260904"].rows.move.x = "";
+ck("a full name cannot turn an unmarked move into a move pill", !bridgePills(bridge).has("164"));
+
 console.log("--- 6. legacy mode: nothing is captured, so the XPS-fed ledger draws, as before 1.17.42");
 for(const k of Object.keys(store)) delete store[k];
 store["reccheck_legacy"] = "1";
