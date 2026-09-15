@@ -6,7 +6,14 @@ class InvoiceWindow{
  [DllImport("user32.dll",CharSet=CharSet.Unicode)]static extern IntPtr CreateWindowEx(int ex,string cls,string title,int style,int x,int y,int w,int h,IntPtr parent,IntPtr id,IntPtr inst,IntPtr param);
  [StructLayout(LayoutKind.Sequential)]struct Rect{public int left,top,right,bottom;}
  [DllImport("user32.dll")]static extern bool GetWindowRect(IntPtr h,out Rect r);
+ [DllImport("user32.dll")]static extern bool GetClientRect(IntPtr h,out Rect r);
  [DllImport("user32.dll")]static extern bool SetProcessDpiAwarenessContext(IntPtr context);
+ static void PlaceGrid(IntPtr win,IntPtr grid,int x,int y,int width,int height){
+  Rect client;if(!GetClientRect(win,out client))throw new Exception("fixture client bounds unavailable");
+  width=Math.Min(width,client.right-x-10);height=Math.Min(height,client.bottom-y-10);
+  if(width<20||height<20)throw new Exception("fixture window is too small for B");
+  if(!SetWindowPos(grid,IntPtr.Zero,x,y,width,height,0))throw new Exception("fixture grid resize failed");
+ }
  static void RecordGrid(IntPtr grid,StringBuilder expected){
   Rect r;if(!GetWindowRect(grid,out r))throw new Exception("fixture grid bounds unavailable");
   expected.AppendLine("{\"x\":"+r.left+",\"y\":"+r.top+",\"width\":"+(r.right-r.left)+",\"height\":"+(r.bottom-r.top)+"}");
@@ -92,9 +99,9 @@ class InvoiceWindow{
   int start=Environment.TickCount,phase=0;
   PumpUntil(()=>{
    int elapsed=Environment.TickCount-start;
-   if(elapsed>6000&&phase==0){SetWindowPos(win,IntPtr.Zero,150,130,1100,650,0);SetWindowPos(b,IntPtr.Zero,350,130,700,390,0);RecordGrid(b,expectedGrid);phase++;}
-   if(elapsed>10000&&phase==1){ShowWindow(win,3);SetWindowPos(b,IntPtr.Zero,300,100,650,400,0);RecordGrid(b,expectedGrid);phase++;}
-   if(elapsed>14000&&phase==2){ShowWindow(win,9);SetWindowPos(b,IntPtr.Zero,340,120,620,350,0);SetForegroundWindow(win);RecordGrid(b,expectedGrid);phase++;}
+   if(elapsed>6000&&phase==0){SetWindowPos(win,IntPtr.Zero,150,130,1100,650,0);PlaceGrid(win,b,350,130,700,390);RecordGrid(b,expectedGrid);phase++;}
+   if(elapsed>10000&&phase==1){ShowWindow(win,3);PlaceGrid(win,b,340,120,650,400);RecordGrid(b,expectedGrid);phase++;}
+   if(elapsed>14000&&phase==2){ShowWindow(win,9);PlaceGrid(win,b,340,120,620,350);SetForegroundWindow(win);RecordGrid(b,expectedGrid);phase++;}
    if(elapsed>18000&&phase==3){
     SetWindowText(name,"SECOND TEST GUEST");Cell(b,1,3,"Deposit Cash",false);Cell(b,1,4,"-750,00",false);phase++;
    }
