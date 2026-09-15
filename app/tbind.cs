@@ -2751,7 +2751,7 @@ static class TBind {
     }catch(Exception){}
   }
 
-  const string VER = "v31";
+  const string VER = "v32";
 
 
   /* Live accommodation reader. Separate child mode: no keyboard hooks, no protel writes.
@@ -2963,9 +2963,10 @@ static class TBind {
           hook=SetWinEventHook(EVENT_OBJECT_SHOW,0x800E,IntPtr.Zero,keep,pid,0,WINEVENT_OUTOFCONTEXT|WINEVENT_SKIPOWNPROCESS);
           hookedPid=pid;
         }
-        RECT rect,strip;
-        IntPtr bt=GetDlgItem(h,214);
-        if(bt==IntPtr.Zero||!IsWindowVisible(bt)||!GetWindowRect(h,out rect)||!GetWindowRect(bt,out strip)){
+        RECT rect,strip,grid;
+        IntPtr bt=GetDlgItem(h,214), bg=GetDlgItem(h,24445);
+        if(bt==IntPtr.Zero||bg==IntPtr.Zero||!IsWindowVisible(bt)||!IsWindowVisible(bg)
+            ||!GetWindowRect(h,out rect)||!GetWindowRect(bt,out strip)||!GetWindowRect(bg,out grid)){
           Say("{\"kind\":\"hide\"}");Thread.Sleep(100);continue;
         }
         RECT frame;
@@ -2975,7 +2976,7 @@ static class TBind {
           string caption=InvoiceText(bt);
           measuredText=caption==null?-1:InvoiceTextWidth(bt,caption);
         }
-        Say("{\"kind\":\"geometry\",\"id\":"+J(Hex(h))+",\"rect\":"+JR(rect)+",\"strip\":"+JR(strip)+",\"textWidth\":"+measuredText+"}");
+        Say("{\"kind\":\"geometry\",\"id\":"+J(Hex(h))+",\"rect\":"+JR(rect)+",\"strip\":"+JR(strip)+",\"grid\":"+JR(grid)+",\"textWidth\":"+measuredText+"}");
         // Text-only verification catches reused Invoice windows, even if an event was lost.
         if(now-checkedAt>=1000){
           checkedAt=now;

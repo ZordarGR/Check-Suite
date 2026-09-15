@@ -2,13 +2,17 @@
 const fs=require("fs"), path=require("path"), {spawn}=require("child_process");
 const calc=require("./arrangement");
 function layout(g, convert){
-  const r=g.rect, s=g.strip;
+  const r=g.rect, s=g.strip, q=g.grid;
   if(!r||!s||![r.x,r.y,r.width,r.height,s.x,s.y,s.width,s.height].every(Number.isFinite)
      ||r.width<100||r.height<100||s.width<20||s.height<10
      ||s.x<r.x||s.y<r.y||s.x+s.width>r.x+r.width+2||s.y+s.height>r.y+r.height+2) return null;
+  // The tint belongs to the actual B ListView, never the whole Invoice.
+  if(!q||![q.x,q.y,q.width,q.height].every(Number.isFinite)||q.width<20||q.height<20
+     ||q.x<r.x||q.y<r.y||q.x+q.width>r.x+r.width||q.y+q.height>r.y+r.height) return null;
   const bounds=convert(r), scale=bounds.width/r.width;
   const strip={x:(s.x-r.x)*scale,y:(s.y-r.y)*scale,width:s.width*scale,height:s.height*scale};
-  return {bounds,strip,scale};
+  const grid={x:(q.x-r.x)*scale,y:(q.y-r.y)*scale,width:q.width*scale,height:q.height*scale};
+  return {bounds,strip,grid,scale};
 }
 class InvoiceState {
   constructor(){this.reset();}
@@ -78,7 +82,7 @@ function start({electron,helperPath,captureDir,userData,spawnHelper=spawn}){
     if(!ready)return;
     const b=JSON.stringify(l.bounds);
     if(b!==lastBounds){overlay.setBounds(l.bounds);lastBounds=b;}
-    const packet={result:d.result,strip:l.strip,textWidth:d.textWidth<0?-1:d.textWidth*l.scale};
+    const packet={result:d.result,strip:l.strip,grid:l.grid,textWidth:d.textWidth<0?-1:d.textWidth*l.scale};
     const p=JSON.stringify(packet);
     pending={p,id:state.id};
     if(p!==lastPaint){

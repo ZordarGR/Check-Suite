@@ -4,6 +4,13 @@ class InvoiceWindow{
  [StructLayout(LayoutKind.Sequential)]struct Init{public int size;public int classes;}
  [DllImport("comctl32.dll")]static extern bool InitCommonControlsEx(ref Init init);
  [DllImport("user32.dll",CharSet=CharSet.Unicode)]static extern IntPtr CreateWindowEx(int ex,string cls,string title,int style,int x,int y,int w,int h,IntPtr parent,IntPtr id,IntPtr inst,IntPtr param);
+ [StructLayout(LayoutKind.Sequential)]struct Rect{public int left,top,right,bottom;}
+ [DllImport("user32.dll")]static extern bool GetWindowRect(IntPtr h,out Rect r);
+ [DllImport("user32.dll")]static extern bool SetProcessDpiAwarenessContext(IntPtr context);
+ static void RecordGrid(IntPtr grid,StringBuilder expected){
+  Rect r;if(!GetWindowRect(grid,out r))throw new Exception("fixture grid bounds unavailable");
+  expected.AppendLine("{\"x\":"+r.left+",\"y\":"+r.top+",\"width\":"+(r.right-r.left)+",\"height\":"+(r.bottom-r.top)+"}");
+ }
  [DllImport("user32.dll")]static extern bool ShowWindow(IntPtr h,int cmd);
  [DllImport("user32.dll")]static extern bool SetForegroundWindow(IntPtr h);
  [DllImport("user32.dll")]static extern bool SetWindowPos(IntPtr h,IntPtr z,int x,int y,int w,int height,uint flags);
@@ -35,6 +42,7 @@ class InvoiceWindow{
   }
  }
  [STAThread]static int Main(string[] args){
+  SetProcessDpiAwarenessContext(new IntPtr(-4));
   var init=new Init{size=8,classes=1};InitCommonControlsEx(ref init);
   string folder=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"RecCheck");
   Directory.CreateDirectory(folder);File.WriteAllText(Path.Combine(folder,"rc-tbind-binds.txt"),"watch=PROT32\n");
@@ -76,6 +84,7 @@ class InvoiceWindow{
   for(int i=0;i<headers.Length;i++)Column(a,i,headers[i]);
   Row(a,0,new string[]{"14/09/26","14/09/26","1","IRRELEVANT A PAYMENT","-999,00","","EUR"});
   ShowWindow(win,5);SetForegroundWindow(win);
+  var expectedGrid=new StringBuilder();RecordGrid(b,expectedGrid);
   var si=new ProcessStartInfo(args[0],"invoice "+Process.GetCurrentProcess().Id){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true};
   var helper=Process.Start(si);var output=new StringBuilder();object gate=new object();
   helper.OutputDataReceived+=(sender,e)=>{if(e.Data!=null)lock(gate)output.AppendLine(e.Data);};
@@ -83,9 +92,9 @@ class InvoiceWindow{
   int start=Environment.TickCount,phase=0;
   PumpUntil(()=>{
    int elapsed=Environment.TickCount-start;
-   if(elapsed>6000&&phase==0){SetWindowPos(win,IntPtr.Zero,150,130,1100,650,0);phase++;}
-   if(elapsed>10000&&phase==1){ShowWindow(win,3);phase++;}
-   if(elapsed>14000&&phase==2){ShowWindow(win,9);SetForegroundWindow(win);phase++;}
+   if(elapsed>6000&&phase==0){SetWindowPos(win,IntPtr.Zero,150,130,1100,650,0);SetWindowPos(b,IntPtr.Zero,350,130,700,390,0);RecordGrid(b,expectedGrid);phase++;}
+   if(elapsed>10000&&phase==1){ShowWindow(win,3);SetWindowPos(b,IntPtr.Zero,300,100,650,400,0);RecordGrid(b,expectedGrid);phase++;}
+   if(elapsed>14000&&phase==2){ShowWindow(win,9);SetWindowPos(b,IntPtr.Zero,340,120,620,350,0);SetForegroundWindow(win);RecordGrid(b,expectedGrid);phase++;}
    if(elapsed>18000&&phase==3){
     SetWindowText(name,"SECOND TEST GUEST");Cell(b,1,3,"Deposit Cash",false);Cell(b,1,4,"-750,00",false);phase++;
    }
@@ -94,6 +103,7 @@ class InvoiceWindow{
   },30000);
   DestroyWindow(win);Application.DoEvents();Thread.Sleep(400);
   lock(gate)File.WriteAllText(args[1],output.ToString());
+  File.WriteAllText(args[1]+".grid",expectedGrid.ToString());
   Console.WriteLine("Cloud fixture emitted "+output.Length+" characters");
   return 0;
  }
