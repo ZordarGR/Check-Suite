@@ -492,9 +492,11 @@ app.whenReady().then(() => {
   tauKillStrays(() => {
     tauStart();
     if(process.platform==="win32"){
-      const local=process.env.LOCALAPPDATA||app.getPath("userData");
-      require("./arrangement-live").start({electron:require("electron"),helperPath:tauPath(),
-        captureDir:path.join(local,"RecCheck"),userData:app.getPath("userData")});
+      try{
+        const local=process.env.LOCALAPPDATA||app.getPath("userData");
+        require("./arrangement-live").start({electron:require("electron"),helperPath:tauPath(),
+          captureDir:path.join(local,"RecCheck"),userData:app.getPath("userData")});
+      }catch(e){ console.error("Arrangement overlay unavailable:",e.message); }
     }
     /* 1.17.10 drew the Caps Lock icon inside this app and shipped with it ON. 1.17.11
        moved it into the helper, which only survives RecCheck closing if it starts at

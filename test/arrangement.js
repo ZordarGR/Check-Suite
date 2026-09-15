@@ -86,4 +86,12 @@ test("overlay coordinates follow resize, movement and DPI through parent mapping
  assert.equal(a.strip.x,400);assert.equal(a.strip.y,100);assert.equal(a.strip.width,400);
  assert.equal(layout({rect:{x:0,y:0,width:100,height:100},strip:{x:200,y:5,width:20,height:10}},r=>r),null);
 });
+test("duplicate contradictory list rows survive storage as ambiguity",()=>{
+ const list=A.mergeRefs([],[{...ref(),tag:"IH"},{...ref("200,00"),tag:"IH"}],Date.UTC(2026,8,15));
+ assert.equal(list.length,2);assert.equal(A.reference(inv(),list),null);
+});
+test("missing list price cannot turn a first doubled charge into a false green",()=>{
+ const i=inv("INDIVIDUAL",[row("*Arrangement","300,00"),row("Deposit Cash","-2.100,00")]);
+ assert.equal(A.evaluate(i,[]).state,"unknown");
+});
 console.log(tests+" arrangement tests passed");

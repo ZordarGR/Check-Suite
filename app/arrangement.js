@@ -116,8 +116,9 @@ function mergeRefs(old, fresh, now=Date.now()){
   for(const r of old.concat(fresh)){
     if(!r || !["IH","AR","DP"].includes(r.tag) || !Number.isFinite(r.at) || day(r.dep)===null || day(r.dep)<now/86400000-60) continue;
     const k=key(r), prev=m.get(k);
-    if(!prev || r.at>=prev.at) m.set(k,r);
+    if(!prev || r.at>prev[0].at) m.set(k,[r]);
+    else if(r.at===prev[0].at && !prev.some(x=>JSON.stringify(x)===JSON.stringify(r))) prev.push(r);
   }
-  return [...m.values()].sort((a,b)=>b.at-a.at).slice(0,10000);
+  return [...m.values()].flat().sort((a,b)=>b.at-a.at).slice(0,10000);
 }
 module.exports={norm,guest,cents,day,allocation,reference,eligible,evaluate,capture,mergeRefs};
