@@ -2802,12 +2802,12 @@ static class TBind {
       IntPtr dest=lv, res;
       if(header){
         messages++;
-        if(SendMessageTimeout(lv,LVM_GETHEADER,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,120,out dest)==IntPtr.Zero
+        if(SendMessageTimeout(lv,LVM_GETHEADER,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,250,out dest)==IntPtr.Zero
            ||dest==IntPtr.Zero){ok=false;return "";}
       }
       messages++;
       if(SendMessageTimeout(dest,header?0x120B:LVM_GETITEMTEXTW,(IntPtr)(header?col:row),item,
-                            SMTO_ABORTIFHUNG,120,out res)==IntPtr.Zero){
+                            SMTO_ABORTIFHUNG,250,out res)==IntPtr.Zero){
         ok=false;timedOut=true;return "";
       }
       if(header && res==IntPtr.Zero){ok=false;return "";}
@@ -2820,8 +2820,8 @@ static class TBind {
     public string[] Headers(){
       IntPtr h,res;
       messages+=2;
-      if(!ok || SendMessageTimeout(lv,LVM_GETHEADER,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,120,out h)==IntPtr.Zero
-         ||h==IntPtr.Zero||SendMessageTimeout(h,HDM_GETITEMCOUNT,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,120,out res)==IntPtr.Zero){
+      if(!ok || SendMessageTimeout(lv,LVM_GETHEADER,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,250,out h)==IntPtr.Zero
+         ||h==IntPtr.Zero||SendMessageTimeout(h,HDM_GETITEMCOUNT,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,250,out res)==IntPtr.Zero){
         ok=false;return new string[0];
       }
       int count=res.ToInt32();
@@ -2851,11 +2851,11 @@ static class TBind {
   static string InvoiceText(IntPtr h){
     if(h==IntPtr.Zero) return null;
     IntPtr n;
-    if(SendMessageTimeout(h,WM_GETTEXTLENGTH,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,120,out n)==IntPtr.Zero) return null;
+    if(SendMessageTimeout(h,WM_GETTEXTLENGTH,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,250,out n)==IntPtr.Zero) return null;
     int length=n.ToInt32();
     if(length<0||length>2048) return null;
     StringBuilder b=new StringBuilder(length+2);
-    if(SendMessageTimeoutText(h,WM_GETTEXT,(IntPtr)(length+1),b,SMTO_ABORTIFHUNG,120,out n)==IntPtr.Zero) return null;
+    if(SendMessageTimeoutText(h,WM_GETTEXT,(IntPtr)(length+1),b,SMTO_ABORTIFHUNG,250,out n)==IntPtr.Zero) return null;
     if(n.ToInt32()!=length) return null;
     return b.ToString().Trim();
   }
@@ -2877,7 +2877,7 @@ static class TBind {
   }
   static int InvoiceTextWidth(IntPtr title,string caption){
     IntPtr font,dc=IntPtr.Zero,old=IntPtr.Zero;
-    if(SendMessageTimeout(title,0x31,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,120,out font)==IntPtr.Zero) return -1;
+    if(SendMessageTimeout(title,0x31,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,250,out font)==IntPtr.Zero) return -1;
     try{
       dc=GetDC(title); if(dc==IntPtr.Zero)return -1;
       if(font!=IntPtr.Zero)old=SelectObject(dc,font);
@@ -2903,7 +2903,7 @@ static class TBind {
     StringBuilder lc=new StringBuilder(100);GetClassName(lv,lc,lc.Capacity);
     if(lc.ToString()!="SysListView32")return "[]";
     IntPtr res;
-    if(SendMessageTimeout(lv,LVM_GETITEMCOUNT,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,120,out res)==IntPtr.Zero)return "[]";
+    if(SendMessageTimeout(lv,LVM_GETITEMCOUNT,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,250,out res)==IntPtr.Zero)return "[]";
     int count=res.ToInt32();
     if(count<0||count>400)return "[]";
     using(SafeListRead read=new SafeListRead(lv)){
@@ -2918,7 +2918,7 @@ static class TBind {
         b.Append("{\"label\":").Append(J(l)).Append(",\"amount\":").Append(J(p))
           .Append(",\"date\":").Append(J(d)).Append(",\"currency\":").Append(J(c)).Append("}");
       }
-      if(SendMessageTimeout(lv,LVM_GETITEMCOUNT,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,120,out res)==IntPtr.Zero||res.ToInt32()!=count)return "[]";
+      if(SendMessageTimeout(lv,LVM_GETITEMCOUNT,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,250,out res)==IntPtr.Zero||res.ToInt32()!=count)return "[]";
       complete=read.ok;
       return b.Append("]").ToString();
     }

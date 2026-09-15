@@ -36,6 +36,9 @@ class InvoiceWindow{
   string[] ihcols={"Name","VIP","Room no.","RT","Adlt.","Arrival","Departure","Curr.","Price","Rate code","Balance","Stat.","Group","Code","Travel Agency","Sharer"};
   for(int i=0;i<ihcols.Length;i++)Column(ihlv,i,ihcols[i]);
   Row(ihlv,0,new string[]{"TEST GUEST","","101","BSV","2/0/0/0","14/09/26","21/09/26","EUR","150,00","RATE","0,00","CI","","","WEBHOTELIER",""});
+  // The target has a running UI loop before a user can open a list in the real app.
+  int warmAt=Environment.TickCount;
+  while(Environment.TickCount-warmAt<700){Application.DoEvents();Thread.Sleep(10);}
   var readInfo=new ProcessStartInfo(args[0],"inhouse "+Process.GetCurrentProcess().Id+" 0 400"){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true};
   var read=Process.Start(readInfo);
   // Pump this UI thread while the OTHER process asks its getters.
@@ -46,6 +49,7 @@ class InvoiceWindow{
   if(!read.HasExited)throw new Exception("IH reader did not finish within its budget");
   read.WaitForExit();
   File.WriteAllText(args[1]+".list",listResult??"");
+  Console.WriteLine("Synthetic IH capture:\n"+listResult);
   DestroyWindow(ih);
   IntPtr win=CreateWindowEx(0,"#32770","Invoice",unchecked((int)0x00CF0000),50,80,1000,600,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero);
   if(win==IntPtr.Zero)throw new Exception("fixture window failed");
