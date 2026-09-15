@@ -1,11 +1,11 @@
 {
-  "version": "1.17.69",
-  "type": "html",
-  "engine": "1.17.63",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.63/Pro-Check-Setup.exe",
-  "setupSha256": "028e988e6ebde55cb30777795bd6be99edf93bd858744d60b5d514b5e4554019",
+  "version": "1.17.70",
+  "type": "full",
+  "engine": "1.17.70",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.70/Pro-Check-Setup.exe",
+  "setupSha256": "f5d9acb516d2f304710cc7354071c3687d6237137fe58f125273c507fd0fe6bd",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "e0ae474d5ac05d54c0037e1c60ff5aa4d1b3be0b28e8a9753e3d6181d727a967",
-  "notes": "Guest accounts now feed Department Check, excluding room 9000 and the named house accounts including IRIS. Tax Check excludes 9xxx accounts from warnings, charge-history checks and printouts while preserving captured charges. Matching captured account moves bound checking to physical-room nights without changing original reservation dates."
+  "sha256": "791f6cf2c3aa8719016d95aaaea2e2be2fdd5a9890d8f863ec8152222f04c9b6",
+  "notes": "Live accommodation payment check in Invoice B: exact totals, over/under differences, and a faint red tint when unpaid. Uses list Price and agency, counts advance payments, handles the extra late-arrival night, and follows the Invoice as it moves or resizes. Original reservation dates and Department/Tax Check data are preserved."
 }
