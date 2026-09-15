@@ -2157,8 +2157,15 @@ static class TBind {
       CloseHandle(proc); return;
     }
     int show = rows < maxRows ? rows : maxRows, got = 0;
+    SafeListRead rates = null;
+    int rateCol=-1, agencyCol=-1, currencyCol=-1;
     bool wide = true, ranOut = false;
     try{
+      if(tag!="MV"){
+        rates=new SafeListRead(lv);
+        string[] headers=rates.Headers();
+        rateCol=HeaderAt(headers,"PRICE"); agencyCol=HeaderAt(headers,"TRAVELAGENCY"); currencyCol=HeaderAt(headers,"CURRENCY");
+      }
       /* the encoding question, settled on the first row and then left alone */
       int[] cols = ColsFor(tag);
       /* Probe on the TAG'S OWN first column, not column 0. The arrivals list has an EMPTY
@@ -2173,13 +2180,26 @@ static class TBind {
       for(int r = 0; r < show; r++){
         if(Environment.TickCount - t0 > READ_BUDGET_MS){ ranOut = true; break; }
         StringBuilder line = new StringBuilder(tag);
-        for(int c = 0; c < cols.Length; c++)
-          line.Append("\t" + ReadCell(proc, lv, target64, r, cols[c], text, item, CCH, wide));
+        string[] cells=new string[cols.Length];
+        for(int c = 0; c < cols.Length; c++){
+          cells[c]=ReadCell(proc,lv,target64,r,cols[c],text,item,CCH,wide);
+          line.Append("\t"+cells[c]);
+        }
         READ.Append(line.ToString() + "\n");
+        if(rates!=null && rates.ok && rateCol>=0 && agencyCol>=0 && currencyCol>=0){
+          string price=rates.Get(r,rateCol,false), agency=rates.Get(r,agencyCol,false), currency=rates.Get(r,currencyCol,false);
+          if(rates.ok){
+            // Additional tagged rows: existing IH/AR/DP columns and their consumers stay intact.
+            string arrival=tag=="AR"?"":cells[3], departure=tag=="DP"?"":cells[tag=="IH"?4:3];
+            READ.Append("RATE\t"+tag+"\t"+cells[0]+"\t"+cells[1]+"\t"+arrival+"\t"+departure
+                       +"\t"+price+"\t"+agency+"\t"+currency+"\t"+cells[cells.Length-1]+"\n");
+          }
+        }
         got++;
       }
     }catch(Exception e){ READ.Append("ERR\t" + e.Message + "\n"); }
     finally{
+      if(rates!=null){ readMsgs+=rates.messages; rates.Dispose(); }
       VirtualFreeEx(proc, text, UIntPtr.Zero, MEM_RELEASE);
       VirtualFreeEx(proc, item, UIntPtr.Zero, MEM_RELEASE);
       CloseHandle(proc);
@@ -2731,9 +2751,270 @@ static class TBind {
     }catch(Exception){}
   }
 
-  const string VER = "v30";
+  const string VER = "v31";
+
+
+  /* Live accommodation reader. Separate child mode: no keyboard hooks, no protel writes.
+     Geometry is message-free; financial reads are bounded and never run in a callback. */
+  [DllImport("user32.dll")] static extern IntPtr GetDlgItem(IntPtr h, int id);
+  [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
+  [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr context);
+  [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr h, int attr, out RECT rect, int size);
+  [DllImport("user32.dll")] static extern IntPtr GetDC(IntPtr h);
+  [DllImport("user32.dll")] static extern int ReleaseDC(IntPtr h, IntPtr dc);
+  [DllImport("gdi32.dll", CharSet=CharSet.Unicode)] static extern bool GetTextExtentPoint32(IntPtr dc, string text, int len, out CPOINT size);
+
+  static byte[] BuildHeaderItem(bool target64, IntPtr text, int cch){
+    byte[] b=new byte[80];
+    PutI(b,0,2); // HDI_TEXT, no setter/callback cache flags
+    if(target64){ PutL(b,8,text.ToInt64()); PutI(b,24,cch); }
+    else { PutI(b,8,(int)text.ToInt64()); PutI(b,16,cch); }
+    return b;
+  }
+  /* A timed-out pointer-bearing getter may still be executing in the target.
+     Never free/reuse that buffer. Keep at most ONE blocked reader, refuse further
+     allocation, and release only the process handle once that process exits. */
+  static SafeListRead blockedRead = null;
+  sealed class SafeListRead : IDisposable {
+    public IntPtr proc=IntPtr.Zero, text=IntPtr.Zero, item=IntPtr.Zero, lv;
+    public bool target64, ok=true, timedOut=false;
+    public int started=Environment.TickCount, messages=0;
+    public const int CCH=1024;
+    public SafeListRead(IntPtr window){
+      lv=window;
+      if(blockedRead!=null){ ok=false; return; }
+      uint pid; GetWindowThreadProcessId(lv,out pid);
+      proc=OpenProcess(PROCESS_VM_OPERATION|PROCESS_VM_READ|PROCESS_VM_WRITE|PROCESS_QUERY_LIMITED_INFORMATION,false,pid);
+      if(proc==IntPtr.Zero){ok=false;return;}
+      bool sw,tw;
+      if(!IsWow64Process(GetCurrentProcess(),out sw)||!IsWow64Process(proc,out tw)){ok=false;return;}
+      target64=TargetIs64(IntPtr.Size==8||sw,tw);
+      text=VirtualAllocEx(proc,IntPtr.Zero,(UIntPtr)(CCH*2),MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);
+      item=VirtualAllocEx(proc,IntPtr.Zero,(UIntPtr)80,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);
+      if(text==IntPtr.Zero||item==IntPtr.Zero) ok=false;
+    }
+    public string Get(int row,int col,bool header){
+      if(!ok || Environment.TickCount-started>READ_BUDGET_MS){ok=false;return "";}
+      UIntPtr n;
+      byte[] z=new byte[CCH*2], b=header?BuildHeaderItem(target64,text,CCH):BuildLvItem(target64,row,col,text,CCH);
+      if(!WriteProcessMemory(proc,text,z,(UIntPtr)z.Length,out n)||n.ToUInt64()!=(ulong)z.Length
+         ||!WriteProcessMemory(proc,item,b,(UIntPtr)b.Length,out n)||n.ToUInt64()!=(ulong)b.Length){ok=false;return "";}
+      IntPtr dest=lv, res;
+      if(header){
+        messages++;
+        if(SendMessageTimeout(lv,LVM_GETHEADER,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,120,out dest)==IntPtr.Zero
+           ||dest==IntPtr.Zero){ok=false;return "";}
+      }
+      messages++;
+      if(SendMessageTimeout(dest,header?0x120B:LVM_GETITEMTEXTW,(IntPtr)(header?col:row),item,
+                            SMTO_ABORTIFHUNG,120,out res)==IntPtr.Zero){
+        ok=false;timedOut=true;return "";
+      }
+      if(header && res==IntPtr.Zero){ok=false;return "";}
+      if(!ReadProcessMemory(proc,text,z,(UIntPtr)z.Length,out n)||n.ToUInt64()!=(ulong)z.Length){ok=false;return "";}
+      string s=System.Text.Encoding.Unicode.GetString(z);
+      int end=s.IndexOf('\0');
+      if(end<0 || end>=CCH-1){ok=false;return "";}
+      return s.Substring(0,end).Replace("\t"," ").Replace("\r"," ").Replace("\n"," ");
+    }
+    public string[] Headers(){
+      IntPtr h,res;
+      messages+=2;
+      if(!ok || SendMessageTimeout(lv,LVM_GETHEADER,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,120,out h)==IntPtr.Zero
+         ||h==IntPtr.Zero||SendMessageTimeout(h,HDM_GETITEMCOUNT,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,120,out res)==IntPtr.Zero){
+        ok=false;return new string[0];
+      }
+      int count=res.ToInt32();
+      if(count<1||count>24){ok=false;return new string[0];}
+      string[] hs=new string[count];
+      for(int i=0;i<count;i++) hs[i]=Get(0,i,true);
+      return hs;
+    }
+    public void Dispose(){
+      if(timedOut){blockedRead=this;return;}
+      if(text!=IntPtr.Zero) VirtualFreeEx(proc,text,UIntPtr.Zero,MEM_RELEASE);
+      if(item!=IntPtr.Zero) VirtualFreeEx(proc,item,UIntPtr.Zero,MEM_RELEASE);
+      if(proc!=IntPtr.Zero) CloseHandle(proc);
+      proc=IntPtr.Zero;text=IntPtr.Zero;item=IntPtr.Zero;
+    }
+  }
+  static int HeaderAt(string[] hs,string want){
+    int at=-1;
+    for(int i=0;i<hs.Length;i++){
+      string s=(hs[i]??"").Trim().ToUpperInvariant().Replace(" ","").Replace(".","");
+      bool yes=s==want || (want=="CURRENCY"&&(s=="CURR"||s=="CURRENCY"||s=="CU"))
+        || (want=="TRAVELAGENCY"&&(s=="TRAVELAGENCY"||s=="TRAVELAGENT"));
+      if(yes){ if(at!=-1)return -1;at=i; }
+    }
+    return at;
+  }
+  static string InvoiceText(IntPtr h){
+    if(h==IntPtr.Zero) return null;
+    IntPtr n;
+    if(SendMessageTimeout(h,WM_GETTEXTLENGTH,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,120,out n)==IntPtr.Zero) return null;
+    int length=n.ToInt32();
+    if(length<0||length>2048) return null;
+    StringBuilder b=new StringBuilder(length+2);
+    if(SendMessageTimeoutText(h,WM_GETTEXT,(IntPtr)(length+1),b,SMTO_ABORTIFHUNG,120,out n)==IntPtr.Zero) return null;
+    if(n.ToInt32()!=length) return null;
+    return b.ToString().Trim();
+  }
+  static string J(string s){
+    if(s==null) return "null";
+    return "\""+s.Replace("\\","\\\\").Replace("\"","\\\"").Replace("\r","\\r").Replace("\n","\\n").Replace("\t","\\t")+"\"";
+  }
+  static string JR(RECT r){
+    return "{\"x\":"+r.left+",\"y\":"+r.top+",\"width\":"+(r.right-r.left)+",\"height\":"+(r.bottom-r.top)+"}";
+  }
+  static bool InvoiceDirty=true, InvoiceGridDirty=true;
+  static IntPtr invoiceHwnd=IntPtr.Zero;
+  static void InvoiceEvent(IntPtr hook,uint ev,IntPtr hwnd,int obj,int child,uint tid,uint time){
+    if(invoiceHwnd==IntPtr.Zero || hwnd==IntPtr.Zero) return;
+    if(hwnd!=invoiceHwnd && GetAncestor(hwnd,GA_ROOT)!=invoiceHwnd) return;
+    if(ev==0x800B) return; // location: geometry follows independently, no payment read
+    int id=GetDlgCtrlID(hwnd);
+    if(id==24445){InvoiceGridDirty=true;InvoiceDirty=true;}
+    else if(id==202||id==206||id==208||id==209||id==211||id==214||id==224||id==1700||hwnd==invoiceHwnd) InvoiceDirty=true;
+  }
+  static int InvoiceTextWidth(IntPtr title,string caption){
+    IntPtr font,dc=IntPtr.Zero,old=IntPtr.Zero;
+    if(SendMessageTimeout(title,0x31,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,120,out font)==IntPtr.Zero) return -1;
+    try{
+      dc=GetDC(title); if(dc==IntPtr.Zero)return -1;
+      if(font!=IntPtr.Zero)old=SelectObject(dc,font);
+      CPOINT size;
+      return GetTextExtentPoint32(dc,caption,caption.Length,out size)?size.x:-1;
+    }finally{if(old!=IntPtr.Zero)SelectObject(dc,old);if(dc!=IntPtr.Zero)ReleaseDC(title,dc);}
+  }
+  static string InvoiceSignature(IntPtr h){
+    int[] ids=new int[9];
+    ids[0]=202;ids[1]=206;ids[2]=208;ids[3]=209;ids[4]=211;ids[5]=214;ids[6]=224;ids[7]=1700;ids[8]=566;
+    StringBuilder b=new StringBuilder();
+    for(int i=0;i<ids.Length;i++){
+      string s=InvoiceText(GetDlgItem(h,ids[i]));
+      if(s==null)return null;
+      b.Append(J(s)).Append(i==ids.Length-1?"":",");
+    }
+    return b.ToString();
+  }
+  static string ReadInvoiceRows(IntPtr h,out bool complete){
+    complete=false;
+    IntPtr lv=GetDlgItem(h,24445);
+    if(lv==IntPtr.Zero||!IsWindowVisible(lv))return "[]";
+    IntPtr res;
+    if(SendMessageTimeout(lv,LVM_GETITEMCOUNT,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,120,out res)==IntPtr.Zero)return "[]";
+    int count=res.ToInt32();
+    if(count<0||count>400)return "[]";
+    using(SafeListRead read=new SafeListRead(lv)){
+      string[] hs=read.Headers();
+      int label=HeaderAt(hs,"TEXT"), price=HeaderAt(hs,"PRICE"), date=HeaderAt(hs,"INVDATE"), curr=HeaderAt(hs,"CURRENCY");
+      if(label<0||price<0||date<0||curr<0||!read.ok)return "[]";
+      StringBuilder b=new StringBuilder("[");
+      for(int i=0;i<count;i++){
+        string l=read.Get(i,label,false), p=read.Get(i,price,false), d=read.Get(i,date,false), c=read.Get(i,curr,false);
+        if(!read.ok)return "[]";
+        if(i>0)b.Append(",");
+        b.Append("{\"label\":").Append(J(l)).Append(",\"amount\":").Append(J(p))
+          .Append(",\"date\":").Append(J(d)).Append(",\"currency\":").Append(J(c)).Append("}");
+      }
+      if(SendMessageTimeout(lv,LVM_GETITEMCOUNT,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,120,out res)==IntPtr.Zero||res.ToInt32()!=count)return "[]";
+      complete=read.ok;
+      return b.Append("]").ToString();
+    }
+  }
+  static int RunInvoice(int parentPid){
+    // This mode has its own process, so its DPI context cannot change the shortcuts.
+    try{if(!SetProcessDpiAwarenessContext(new IntPtr(-4)))return 6;}catch(Exception){return 6;}
+    LoadBinds();
+    IntPtr hook=IntPtr.Zero; uint hookedPid=0;
+    WinEventProc keep=InvoiceEvent;
+    string signature=null, body=null, previous=null;
+    int measuredW=-1, measuredH=-1, measuredText=-1;
+    int checkedAt=Environment.TickCount-2000, readAt=Environment.TickCount-2000, pidAt=Environment.TickCount-5000;
+    uint[] pids=new uint[0];
+    MSG msg;
+    try{
+      for(;;){
+        int now=Environment.TickCount;
+        if(now-pidAt>=2000){
+          pidAt=now;
+          try{using(Process p=Process.GetProcessById(parentPid)){if(p.HasExited)break;}}catch(Exception){break;}
+          LoadBinds(); pids=ProtelPids();
+        }
+        while(PeekMessage(out msg,IntPtr.Zero,0,0,PM_REMOVE)){TranslateMessage(ref msg);DispatchMessage(ref msg);}
+        IntPtr h=GetForegroundWindow();uint pid;GetWindowThreadProcessId(h,out pid);
+        StringBuilder cls=new StringBuilder(100), title=new StringBuilder(100);
+        GetClassName(h,cls,cls.Capacity);GetWindowText(h,title,title.Capacity);
+        bool visible=h!=IntPtr.Zero && InArray(pids,pid) && cls.ToString()=="#32770"
+          && title.ToString()=="Invoice" && IsWindowVisible(h) && !IsIconic(h);
+        if(!visible){
+          if(invoiceHwnd!=IntPtr.Zero){Say("{\"kind\":\"hide\"}");invoiceHwnd=IntPtr.Zero;signature=null;body=null;previous=null;}
+          Thread.Sleep(100);continue;
+        }
+        if(h!=invoiceHwnd){
+          invoiceHwnd=h;signature=null;body=null;previous=null;
+          InvoiceDirty=true;InvoiceGridDirty=true;checkedAt=now-2000;readAt=now-2000;
+          measuredW=-1;measuredH=-1;
+          Say("{\"kind\":\"reset\",\"id\":"+J(Hex(h))+"}");
+        }
+        if(pid!=hookedPid){
+          if(hook!=IntPtr.Zero)UnhookWinEvent(hook);
+          hook=SetWinEventHook(EVENT_OBJECT_SHOW,0x800E,IntPtr.Zero,keep,pid,0,WINEVENT_OUTOFCONTEXT|WINEVENT_SKIPOWNPROCESS);
+          hookedPid=pid;
+        }
+        RECT rect,strip;
+        IntPtr bt=GetDlgItem(h,214);
+        if(bt==IntPtr.Zero||!IsWindowVisible(bt)||!GetWindowRect(h,out rect)||!GetWindowRect(bt,out strip)){
+          Say("{\"kind\":\"hide\"}");Thread.Sleep(100);continue;
+        }
+        RECT frame;
+        try{if(DwmGetWindowAttribute(h,9,out frame,16)==0)rect=frame;}catch(Exception){}
+        if(strip.right-strip.left!=measuredW||strip.bottom-strip.top!=measuredH){
+          measuredW=strip.right-strip.left;measuredH=strip.bottom-strip.top;
+          string caption=InvoiceText(bt);
+          measuredText=caption==null?-1:InvoiceTextWidth(bt,caption);
+        }
+        Say("{\"kind\":\"geometry\",\"id\":"+J(Hex(h))+",\"rect\":"+JR(rect)+",\"strip\":"+JR(strip)+",\"textWidth\":"+measuredText+"}");
+        // Text-only verification catches reused Invoice windows, even if an event was lost.
+        if(now-checkedAt>=1000){
+          checkedAt=now;
+          string sig=InvoiceSignature(h);
+          if(sig!=signature){
+            signature=sig;body=null;previous=null;InvoiceGridDirty=true;measuredW=-1;
+            Say("{\"kind\":\"reset\",\"id\":"+J(Hex(h))+"}");
+          }
+          if(sig!=null&&(InvoiceGridDirty||previous==null)&&now-readAt>=1000){
+            readAt=now;InvoiceDirty=false;InvoiceGridDirty=false;
+            bool complete;string rows=ReadInvoiceRows(h,out complete);
+            string after=InvoiceSignature(h);
+            if(GetForegroundWindow()!=h || after!=sig){
+              body=null;previous=null;InvoiceDirty=true;
+              Say("{\"kind\":\"reset\",\"id\":"+J(Hex(h))+"}");
+            }else{
+              string candidate="{\"fields\":["+sig+"],\"rows\":"+rows+"}";
+              bool stable=complete && previous==candidate;
+              previous=complete?candidate:null;
+              body=candidate;
+              string btitle=InvoiceText(bt);
+              int width=btitle==null?-1:InvoiceTextWidth(bt,btitle);
+              Say("{\"kind\":\"invoice\",\"id\":"+J(Hex(h))+",\"complete\":"+(stable?"true":"false")+
+                  ",\"textWidth\":"+width+",\"data\":"+body+"}");
+              if(!stable)InvoiceGridDirty=true;
+            }
+          }
+        }
+        Thread.Sleep(100);
+      }
+    }finally{if(hook!=IntPtr.Zero)UnhookWinEvent(hook);}
+    GC.KeepAlive(keep);
+    return 0;
+  }
 
   static int Main(string[] args){
+    if(args.Length==2 && args[0]=="invoice"){
+      int host;
+      return int.TryParse(args[1],out host) ? RunInvoice(host) : 2;
+    }
     int parentPid;
     /* ---- the login entry. HKCU, so no admin and nothing is "installed". ---- */
     if(args.Length >= 1 && args[0] == "status"){

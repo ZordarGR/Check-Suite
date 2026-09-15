@@ -1,0 +1,37 @@
+name: Validate live Arrangement checker
+on:
+  push:
+    branches: ["codex/live-arrangement"]
+    paths-ignore: ["dist-win64/parts/**"]
+permissions:
+  contents: read
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Cloud dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y mono-devel mono-utils
+          npm install --no-save playwright-core@1.56.1 @electron/asar@3.2.10
+          PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers npx playwright-core install --with-deps chromium
+      - name: Build helper with BCL guard
+        run: sh app/build-helper.sh
+      - name: Native structure layouts
+        run: |
+          mcs -out:/tmp/header-test.exe test/headeritem.cs
+          mono /tmp/header-test.exe app/rc-tbind.exe
+      - name: Calculation and lifecycle
+        run: node test/arrangement.js
+      - name: Existing regressions
+        run: |
+          sh test/run.sh
+          node test/harness.js
+          NODE_PATH="$PWD/node_modules" node test/browser/live.js
+          NODE_PATH="$PWD/node_modules" node test/browser/movesfit.js
+      - name: Overlay rendering
+        run: NODE_PATH="$PWD/node_modules" node test/browser/arrangement.js
