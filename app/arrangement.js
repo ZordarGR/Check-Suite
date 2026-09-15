@@ -66,7 +66,7 @@ function evaluate(inv, refs){
   charges.sort((x,y)=>x.date-y.date);
   let rate=r && norm(r.currency)==="EUR" ? cents(r.price) : null;
   let reason="";
-  if(!(rate>0) && charges.length){
+  if(rate===0 && charges.length){
     // Checkout Price=0: the actual posted normal Arrangement remains the rate.
     rate=Math.min(...charges.map(c=>c.amount));
   }

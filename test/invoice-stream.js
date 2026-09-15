@@ -1,0 +1,11 @@
+const fs=require("fs"), assert=require("assert");
+const messages=fs.readFileSync(process.argv[2],"utf8").trim().split(/\r?\n/).filter(Boolean).map(s=>JSON.parse(s));
+const stable=messages.filter(m=>m.kind==="invoice"&&m.complete);
+assert(stable.some(m=>m.data.fields[0]==="TEST GUEST"),"first reservation was read completely");
+assert(stable.some(m=>m.data.fields[0]==="SECOND TEST GUEST"&&m.data.rows[1].amount==="-750,00"),"reused Invoice refreshes guest and payments");
+assert(stable.every(m=>m.data.rows.length===2&&!JSON.stringify(m).includes("IRRELEVANT A")),"reads B only");
+assert(stable.some(m=>m.data.rows[1].label==="UNFAMILIAR PAYMENT"),"any payment label is captured");
+const geometry=messages.filter(m=>m.kind==="geometry");
+assert(new Set(geometry.map(m=>JSON.stringify(m.rect))).size>=3,"move/maximise/restore changes are followed");
+assert(messages.some(m=>m.kind==="hide"),"minimised invoice hides overlay");
+console.log("Real Windows ListView capture, B isolation, geometry and reused guest passed");

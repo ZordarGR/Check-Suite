@@ -2866,15 +2866,14 @@ static class TBind {
   static string JR(RECT r){
     return "{\"x\":"+r.left+",\"y\":"+r.top+",\"width\":"+(r.right-r.left)+",\"height\":"+(r.bottom-r.top)+"}";
   }
-  static bool InvoiceDirty=true, InvoiceGridDirty=true;
+  static bool InvoiceGridDirty=true;
   static IntPtr invoiceHwnd=IntPtr.Zero;
   static void InvoiceEvent(IntPtr hook,uint ev,IntPtr hwnd,int obj,int child,uint tid,uint time){
     if(invoiceHwnd==IntPtr.Zero || hwnd==IntPtr.Zero) return;
     if(hwnd!=invoiceHwnd && GetAncestor(hwnd,GA_ROOT)!=invoiceHwnd) return;
     if(ev==0x800B) return; // location: geometry follows independently, no payment read
     int id=GetDlgCtrlID(hwnd);
-    if(id==24445){InvoiceGridDirty=true;InvoiceDirty=true;}
-    else if(id==202||id==206||id==208||id==209||id==211||id==214||id==224||id==1700||hwnd==invoiceHwnd) InvoiceDirty=true;
+    if(id==24445 && (ev==EVENT_OBJECT_SHOW||ev==0x8004||ev==EVENT_OBJECT_NAMECHANGE||ev==0x800E)) InvoiceGridDirty=true;
   }
   static int InvoiceTextWidth(IntPtr title,string caption){
     IntPtr font,dc=IntPtr.Zero,old=IntPtr.Zero;
@@ -2901,6 +2900,8 @@ static class TBind {
     complete=false;
     IntPtr lv=GetDlgItem(h,24445);
     if(lv==IntPtr.Zero||!IsWindowVisible(lv))return "[]";
+    StringBuilder lc=new StringBuilder(100);GetClassName(lv,lc,lc.Capacity);
+    if(lc.ToString()!="SysListView32")return "[]";
     IntPtr res;
     if(SendMessageTimeout(lv,LVM_GETITEMCOUNT,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,120,out res)==IntPtr.Zero)return "[]";
     int count=res.ToInt32();
@@ -2953,7 +2954,7 @@ static class TBind {
         }
         if(h!=invoiceHwnd){
           invoiceHwnd=h;signature=null;body=null;previous=null;
-          InvoiceDirty=true;InvoiceGridDirty=true;checkedAt=now-2000;readAt=now-2000;
+          InvoiceGridDirty=true;checkedAt=now-2000;readAt=now-2000;
           measuredW=-1;measuredH=-1;
           Say("{\"kind\":\"reset\",\"id\":"+J(Hex(h))+"}");
         }
@@ -2984,11 +2985,11 @@ static class TBind {
             Say("{\"kind\":\"reset\",\"id\":"+J(Hex(h))+"}");
           }
           if(sig!=null&&(InvoiceGridDirty||previous==null)&&now-readAt>=1000){
-            readAt=now;InvoiceDirty=false;InvoiceGridDirty=false;
+            readAt=now;InvoiceGridDirty=false;
             bool complete;string rows=ReadInvoiceRows(h,out complete);
             string after=InvoiceSignature(h);
             if(GetForegroundWindow()!=h || after!=sig){
-              body=null;previous=null;InvoiceDirty=true;
+              body=null;previous=null;
               Say("{\"kind\":\"reset\",\"id\":"+J(Hex(h))+"}");
             }else{
               string candidate="{\"fields\":["+sig+"],\"rows\":"+rows+"}";

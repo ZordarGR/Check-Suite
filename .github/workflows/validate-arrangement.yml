@@ -35,3 +35,29 @@ jobs:
           NODE_PATH="$PWD/node_modules" node test/browser/movesfit.js
       - name: Overlay rendering
         run: NODE_PATH="$PWD/node_modules" node test/browser/arrangement.js
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build native test fixture in the cloud
+        shell: pwsh
+        run: |
+          $compiler = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+          & $compiler /nologo /target:winexe /out:app/rc-tbind.exe app/tbind.cs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & $compiler /nologo /target:exe /r:System.Windows.Forms.dll /out:PROT32.exe test/invoice-window.cs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Read real Windows controls and follow window changes
+        shell: pwsh
+        run: |
+          & .\PROT32.exe "$PWD\app\rc-tbind.exe" "$PWD\invoice-stream.jsonl"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node test/invoice-stream.js invoice-stream.jsonl
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: synthetic-invoice-stream
+          path: invoice-stream.jsonl

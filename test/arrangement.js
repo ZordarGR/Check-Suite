@@ -56,7 +56,7 @@ test("any B payment label counts, while incomplete data never produces a verdict
 });
 test("dates, refunds, abnormal arrangements and currency fail honestly",()=>{
  for(const rows of [[row("*Arrangement","-150,00")],[row("*Arrangement","450,00")],[row("*Arrangement","150,00"),row("*Arrangement","300,00","15/09/26")],[row("Deposit Cash","150,00")]]){
-  const i=inv("INDIVIDUAL",rows);assert.equal(A.evaluate(i,[ref()]).state,"unknown");
+  const i=inv("INDIVIDUAL",rows.concat(row("Deposit Cash","-1,00")));assert.equal(A.evaluate(i,[ref()]).state,"unknown");
  }
  const i=inv();i.currency="USD";assert.equal(A.evaluate(i,[ref()]).state,"unknown");
 });
