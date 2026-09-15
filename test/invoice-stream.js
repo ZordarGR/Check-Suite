@@ -8,7 +8,7 @@ assert(stable.some(m=>m.data.rows[1].label==="UNFAMILIAR PAYMENT"),"any payment 
 const geometry=messages.filter(m=>m.kind==="geometry");
 const {layout}=require("../app/arrangement-live");
 for(const m of geometry){
- const l=layout(m,r=>r);assert(l,"real native geometry must be usable by the overlay");
+ const l=layout(m,r=>r);assert(l,"real native geometry must be usable by the overlay: "+JSON.stringify(m));
  assert.equal(l.grid.x,m.grid.x-m.rect.x);assert.equal(l.grid.y,m.grid.y-m.rect.y);
  assert.equal(l.grid.width,m.grid.width);assert.equal(l.grid.height,m.grid.height);
 }
