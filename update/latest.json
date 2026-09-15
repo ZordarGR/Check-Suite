@@ -1,11 +1,11 @@
 {
-  "version": "1.17.71",
+  "version": "1.17.72",
   "type": "full",
-  "engine": "1.17.71",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.71/Pro-Check-Setup.exe",
-  "setupSha256": "c8a4c20155d939f40d76dac4d730ce6860d0b40dfa3edf36e5d53be161fc6749",
+  "engine": "1.17.72",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.72/Pro-Check-Setup.exe",
+  "setupSha256": "7d64372e5ee9de671d85a1fe0e74c253ee3357677d57045c5814119bd873ab53",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "1c88c9cd76ff541931f5693e997aca9dc3ca55c344e3a96230bfe0f9b3ee3f58",
-  "notes": "Fix the live accommodation checker discarding daily prices for room identifiers with numeric suffixes, such as 101-2. The full room identifier and original stay dates are preserved."
+  "sha256": "4374e511a795b32a85085b69954114451c91aa6e979e7799b9741ecb293cb299",
+  "notes": "Keep the accommodation checkmark or X on Invoice B’s name tile when the window moves or resizes. Calculation details and explanations remain below the title."
 }

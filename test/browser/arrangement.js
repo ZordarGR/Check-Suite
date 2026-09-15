@@ -4,19 +4,52 @@ const {chromium}=require("playwright-core"), path=require("path"), fs=require("f
  const executablePath="/opt/pw-browsers/"+roots.at(-1)+"/chrome-linux/chrome";
  const fallback="/opt/pw-browsers/"+roots.at(-1)+"/chrome-linux64/chrome";
  const b=await chromium.launch({executablePath:fs.existsSync(executablePath)?executablePath:fallback,headless:true,args:["--no-sandbox"]});
- const p=await b.newPage({viewport:{width:1767,height:603}});
- await p.addInitScript(()=>{window.arrangement={onPaint:cb=>window.paint=cb,painted:x=>window.ack=x};});
- await p.goto("file://"+path.resolve("app/arrangement.html"));
- async function draw(state,textWidth,strip={x:610,y:110,width:370,height:18}){
-  const packet={result:{state,icon:state==="paid"?"✓":state==="unknown"?"🤔":"✕",text:"Under €150.00",tint:state==="unpaid"},textWidth,strip};
-  await p.evaluate(v=>window.paint(v),packet);
-  await p.waitForFunction(v=>window.ack===JSON.stringify(v),packet);
-  return await p.evaluate(()=>({icon:document.getElementById("icon").getBoundingClientRect().toJSON(),detail:getComputedStyle(document.getElementById("detail")).display,tint:getComputedStyle(document.getElementById("tint")).display,body:getComputedStyle(document.body).pointerEvents}));
- }
- let r=await draw("paid",120);assert.equal(r.icon.y,110);assert.equal(r.detail,"none");assert.equal(r.tint,"none");assert.equal(r.body,"none");
- r=await draw("unpaid",120);assert.equal(r.tint,"block");assert.equal(r.detail,"block");
- r=await draw("unknown",370);assert(r.icon.y>128);
- await p.setViewportSize({width:1920,height:1000});
- r=await draw("paid",220,{x:650,y:180,width:520,height:27});assert(r.icon.x>1100);assert(r.icon.y>=180&&r.icon.y<207);
- await b.close();console.log("Overlay paid/unpaid/uncertain, long title and resized positions passed");
+ try{
+  const p=await b.newPage({viewport:{width:1767,height:603}});
+  await p.addInitScript(()=>{window.arrangement={onPaint:cb=>window.paint=cb,painted:x=>window.ack=x};});
+  await p.goto("file://"+path.resolve("app/arrangement.html"));
+  const layouts=[
+   {viewport:{width:1767,height:603},strip:{x:610,y:110,width:370,height:18}},
+   {viewport:{width:1920,height:1000},strip:{x:650,y:180,width:520,height:27}},
+   {viewport:{width:1440,height:800},strip:{x:495.5,y:90.5,width:380.5,height:22}},
+   {viewport:{width:1767,height:603},strip:{x:620,y:120,width:370,height:18}}
+  ];
+  let checks=0;
+  for(const {viewport,strip:s} of layouts){
+   await p.setViewportSize(viewport);
+   for(const state of ["paid","difference","unpaid","unknown"]){
+    let firstPosition;
+    for(const textWidth of [120,348,370,900,-1,undefined]){
+     const packet={result:{state,icon:state==="paid"?"✓":state==="unknown"?"🤔":"✕",text:"€180.00 × 7 nights = €1,260.00. Paid €1,110.00. Under €150.00.",tint:state==="unpaid"},textWidth,strip:s};
+     await p.evaluate(v=>{window.ack=null;window.paint(v);},packet);
+     await p.waitForFunction(v=>window.ack===JSON.stringify(v),packet);
+     const r=await p.evaluate(()=>{
+      const icon=document.getElementById("icon"),detail=document.getElementById("detail"),tint=document.getElementById("tint");
+      return {icon:icon.getBoundingClientRect().toJSON(),iconText:icon.textContent,detailRect:detail.getBoundingClientRect().toJSON(),
+       detail:getComputedStyle(detail).display,detailText:detail.textContent,tint:getComputedStyle(tint).display,
+       tintColor:getComputedStyle(tint).backgroundColor,pointer:[document.body,icon,detail,tint].map(x=>getComputedStyle(x).pointerEvents)};
+     });
+     assert(r.icon.top>=s.y&&r.icon.bottom<=s.y+s.height,"status icon must remain inside the B name tile row");
+     assert(r.icon.left>=s.x&&r.icon.right<=s.x+s.width,"status icon must remain inside the B name tile width");
+     assert(s.x+s.width-r.icon.right<=5,"status icon belongs at the name tile's right edge");
+     assert(Math.abs(r.icon.y+r.icon.height/2-(s.y+s.height/2))<0.1,"status icon must be vertically centred on the title");
+     const position=[r.icon.x,r.icon.y];
+     if(firstPosition)assert.deepEqual(position,firstPosition,"text measurement must not move the status icon");
+     else firstPosition=position;
+     assert.equal(r.iconText,packet.result.icon);
+     assert.equal(r.detail,state==="paid"?"none":"block");
+     if(state!=="paid"){
+      assert(r.detailRect.top>=s.y+s.height+2,"calculation and explanations must remain below the title");
+      assert(r.detailRect.left>=0&&r.detailRect.right<=viewport.width,"explanation must remain readable within the window");
+      assert.equal(r.detailText,packet.result.text);
+     }
+     assert.equal(r.tint,state==="unpaid"?"block":"none");
+     assert.equal(r.tintColor,"rgba(255, 0, 0, 0.05)");
+     assert(r.pointer.every(x=>x==="none"),"overlay must remain click-through");
+     checks++;
+    }
+   }
+  }
+  console.log(checks+" overlay placement cases passed: title icons, explanations below, all states, missing/long measurements, move/maximise/restore and fractional coordinates.");
+ }finally{await b.close();}
 })().catch(e=>{console.error(e);process.exit(1);});
