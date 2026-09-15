@@ -76,6 +76,9 @@ cost us"*. Nothing merges on "it should be fine".
 
 **7. Do not compact. At ~70% of the context, write a handoff and let a new session take
 over.**
+
+**Applicability clarified by Dimitris, 15/09/2026:** this context-limit/stop-and-start-a-new-session rule was for Claude specifically, because of its behavior with too much context. It does **not** require Codex to stop at 70% or avoid its normal automatic compaction. The other project rules still apply to Codex.
+
 His instruction, 06/09: *"do not compact, ever, when nearing 70% context write a handoff
 for a new session to pick up"*.
 
