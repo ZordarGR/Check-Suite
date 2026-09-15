@@ -80,9 +80,8 @@ function evaluate(inv, refs){
     if(charges.some(c=>c.date<a || c.date>=d)) reason="Arrangement dates differ from the stay";
   }
   const noPayment=payments===0 && paid===0;
-  if(!charges.length) return noPayment
-    ? {state:"unpaid",icon:"✕",text:"No accommodation payment",tint:true}
-    : unsure("No Arrangement charge yet");
+  // Before the first posting, a verified positive list Price is sufficient.
+  // A late-arrival night is added only when the first double charge is present.
   if(reason){
     // A readable unpaid account remains red even if Price=0; no amount is invented.
     return noPayment ? {state:"unpaid",icon:"✕",text:"No accommodation payment · "+reason,tint:true} : unsure(reason);

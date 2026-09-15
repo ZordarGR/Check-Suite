@@ -1,11 +1,11 @@
 {
-  "version": "1.17.72",
+  "version": "1.17.73",
   "type": "full",
-  "engine": "1.17.72",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.72/Pro-Check-Setup.exe",
-  "setupSha256": "7d64372e5ee9de671d85a1fe0e74c253ee3357677d57045c5814119bd873ab53",
+  "engine": "1.17.73",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.73/Pro-Check-Setup.exe",
+  "setupSha256": "020ab23201c0b64c790b5f47c5dcbbd7c1fb72a0a2c06a4a55de06313d422aae",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "4374e511a795b32a85085b69954114451c91aa6e979e7799b9741ecb293cb299",
-  "notes": "Keep the accommodation checkmark or X on Invoice B’s name tile when the window moves or resizes. Calculation details and explanations remain below the title."
+  "sha256": "ef05b7fbb927732c9a414a9af494df92a5fcfef19070a4caa517d8fa26c2fcee",
+  "notes": "Check arrival payments against the list’s daily Price and full stay even before the first Arrangement charge posts in B. Missing or conflicting prices remain uncertain; late-arrival adjustments still require the double charge."
 }
