@@ -82,7 +82,7 @@ test("live state clears on a reused invoice and hides when geometry goes stale",
  s.accept({...g,id:"two"},250);assert.equal(s.display([],260).result.state,"unknown");
 });
 test("overlay coordinates follow resize, movement and DPI through parent mapping",()=>{
- const a=layout({rect:{x:2000,y:100,width:1800,height:900},strip:{x:2600,y:250,width:600,height:30}},r=>({x:1400,y:66,width:1200,height:600}));
+ const a=layout({rect:{x:2000,y:100,width:1800,height:900},strip:{x:2600,y:250,width:600,height:30},grid:{x:2600,y:290,width:800,height:650}},r=>({x:1400,y:66,width:1200,height:600}));
  assert.equal(a.strip.x,400);assert.equal(a.strip.y,100);assert.equal(a.strip.width,400);
  assert.equal(layout({rect:{x:0,y:0,width:100,height:100},strip:{x:200,y:5,width:20,height:10}},r=>r),null);
 });
@@ -199,6 +199,17 @@ test("live arrival updates on list capture and only adds a late night after a do
  x=s.display([ref()],170).result;assert.equal(x.state,"difference");assert.equal(x.nights,8);assert.equal(x.diff,-15000);
  s.accept(packet([...payments,row("*Arrangement","300,00"),row("*Arrangement","150,00","15/09/26")]),180);
  x=s.display([ref()],190).result;assert.equal(x.nights,8);assert.equal(x.diff,-15000);
+});
+
+
+test("B grid maps with its Invoice across DPI and rejects missing or escaped geometry",()=>{
+ const rect={x:2000,y:100,width:1800,height:900},strip={x:2600,y:250,width:600,height:30},grid={x:2600,y:290,width:780,height:600};
+ const x=layout({rect,strip,grid},()=>({x:1400,y:66,width:1200,height:600}));
+ assert.equal(x.grid.x,400);assert(Math.abs(x.grid.y-126.6666667)<0.000001);assert.equal(x.grid.width,520);assert.equal(x.grid.height,400);
+ assert.deepEqual(x.strip,{x:400,y:100,width:400,height:20});
+ for(const q of [undefined,null,{...grid,x:1999},{...grid,y:99},{...grid,width:1300},{...grid,height:800},{...grid,width:0},{...grid,y:NaN}]){
+  assert.equal(layout({rect,strip,grid:q},r=>r),null);
+ }
 });
 
 console.log(tests+" arrangement tests passed");
