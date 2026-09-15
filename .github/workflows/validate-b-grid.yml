@@ -25,6 +25,7 @@ jobs:
         run: sh app/build-helper.sh
       - name: Reproduce full Invoice tint and verify grid-only renderer
         run: |
+          git fetch --no-tags --depth=1 origin 07ffe5c09183c5f1565a8cc5c02f215b3214c3a7
           cp app/arrangement-view.js /tmp/fixed-arrangement-view.js
           cp app/arrangement.html /tmp/fixed-arrangement.html
           trap 'cp /tmp/fixed-arrangement-view.js app/arrangement-view.js; cp /tmp/fixed-arrangement.html app/arrangement.html' EXIT
