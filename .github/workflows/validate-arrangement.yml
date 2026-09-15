@@ -26,7 +26,9 @@ jobs:
           mcs -out:/tmp/header-test.exe test/headeritem.cs
           mono /tmp/header-test.exe app/rc-tbind.exe
       - name: Calculation and lifecycle
-        run: node test/arrangement.js
+        run: |
+          node test/arrangement.js
+          node test/arrangement-service.js
       - name: Existing regressions
         run: |
           sh test/run.sh

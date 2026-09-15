@@ -41,7 +41,7 @@ class InvoiceState {
     return {result:this.result,g:this.g,textWidth:this.textWidth,remarks:this.inv?.remarks||""};
   }
 }
-function start({electron,helperPath,captureDir,userData}){
+function start({electron,helperPath,captureDir,userData,spawnHelper=spawn}){
   const {app,BrowserWindow,screen,ipcMain}=electron;
   const state=new InvoiceState(), file=path.join(userData,"arrangement-rates-v1.json");
   let refs=[],child=null,overlay=null,ready=false,lastPaint="",lastBounds="",pending=null,closed=false,buffer="",stamps={},disabled=false;
@@ -70,6 +70,7 @@ function start({electron,helperPath,captureDir,userData}){
       overlay.setAlwaysOnTop(true,"pop-up-menu");
       overlay.webContents.setWindowOpenHandler(()=>({action:"deny"}));
       overlay.webContents.on("will-navigate",e=>e.preventDefault());
+      overlay.webContents.on("render-process-gone",()=>{disabled=true;state.reset();hide();});
       overlay.webContents.once("did-finish-load",()=>{ready=true;lastPaint="";paint();});
       overlay.on("closed",()=>{overlay=null;ready=false;lastPaint="";lastBounds="";});
       overlay.loadFile(path.join(__dirname,"arrangement.html"));
@@ -81,6 +82,7 @@ function start({electron,helperPath,captureDir,userData}){
     const p=JSON.stringify(packet);
     pending={p,id:state.id};
     if(p!==lastPaint){
+      overlay.hide(); // never leave an earlier verdict visible while a replacement is unpainted
       lastPaint=p;
       overlay.webContents.send("arrangement-paint",packet);
     }
@@ -114,7 +116,7 @@ function start({electron,helperPath,captureDir,userData}){
   const timer=setInterval(paint,100), refTimer=setInterval(scanRefs,1000);
   scanRefs();
   try{
-    child=spawn(helperPath,["invoice",String(process.pid)],{windowsHide:true,stdio:["ignore","pipe","ignore"]});
+    child=spawnHelper(helperPath,["invoice",String(process.pid)],{windowsHide:true,stdio:["ignore","pipe","ignore"]});
     child.stdout.setEncoding("utf8");
     child.stdout.on("data",chunk=>{
       buffer+=chunk;
