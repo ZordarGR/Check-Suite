@@ -36,6 +36,9 @@ jobs:
       - name: Overlay rendering
         run: NODE_PATH="$PWD/node_modules" node test/browser/arrangement.js
   windows:
+    strategy:
+      matrix:
+        target: [anycpu, x86]
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
@@ -48,7 +51,7 @@ jobs:
           $compiler = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
           & $compiler /nologo /target:winexe "/out:$PWD\app\rc-tbind.exe" "$PWD\app\tbind.cs"
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          & $compiler /nologo /target:exe /r:System.Windows.Forms.dll "/out:$PWD\PROT32.exe" "$PWD\test\invoice-window.cs"
+          & $compiler /nologo /target:exe /platform:${{ matrix.target }} /r:System.Windows.Forms.dll "/out:$PWD\PROT32.exe" "$PWD\test\invoice-window.cs"
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Read real Windows controls and follow window changes
         shell: pwsh
@@ -59,7 +62,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: synthetic-invoice-stream
+          name: synthetic-invoice-stream-${{ matrix.target }}
           path: invoice-stream.jsonl*
   package:
     if: contains(github.event.head_commit.message, '[package]')

@@ -94,4 +94,16 @@ test("missing list price cannot turn a first doubled charge into a false green",
  const i=inv("INDIVIDUAL",[row("*Arrangement","300,00"),row("Deposit Cash","-2.100,00")]);
  assert.equal(A.evaluate(i,[]).state,"unknown");
 });
+test("new list metadata changes an open Invoice verdict, and malformed rows are refused",()=>{
+ const s=new InvoiceState();
+ s.accept({kind:"geometry",id:"x",rect:{},strip:{}},100);
+ const m={kind:"invoice",id:"x",complete:true,data:{fields:["TEST GUEST","101","14/09/26","21/09/26","","INDIVIDUAL","","EUR","CI"],rows:[row("*Arrangement","150,00"),row("PAYMENT","-1.050,00")]}};
+ s.accept(m,110);assert.equal(s.display([],150).result.state,"unknown");
+ assert.equal(s.display([ref()],160).result.state,"paid");
+ s.accept({...m,data:{...m.data,rows:[null]}},170);assert.equal(s.display([ref()],180).result.state,"unknown");
+});
+test("four-digit invoice dates are preserved",()=>{
+ const i=inv("INDIVIDUAL",[row("*Arrangement","150,00","14/09/2026"),row("PAYMENT","-1.050,00","13/09/2026")]);
+ assert.equal(A.evaluate(i,[ref()]).state,"paid");
+});
 console.log(tests+" arrangement tests passed");

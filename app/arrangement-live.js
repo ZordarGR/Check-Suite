@@ -12,7 +12,7 @@ function layout(g, convert){
 }
 class InvoiceState {
   constructor(){this.reset();}
-  reset(id=null){this.id=id;this.g=null;this.inv=null;this.last=0;this.textWidth=-1;}
+  reset(id=null){this.id=id;this.g=null;this.inv=null;this.last=0;this.textWidth=-1;this.forInv=null;this.forRefs=null;this.result=null;}
   accept(m,now){
     if(m.kind==="hide"){this.reset();return;}
     if(m.kind==="reset"){
@@ -23,7 +23,7 @@ class InvoiceState {
     if(m.kind==="geometry"){this.g=m;this.last=now;if(Number.isFinite(m.textWidth))this.textWidth=m.textWidth;}
     if(m.kind==="invoice"){
       const d=m.data, f=d?.fields;
-      if(!Array.isArray(f)||f.length!==9||!f.every(s=>typeof s==="string")||!Array.isArray(d.rows)||d.rows.length>400){
+      if(!Array.isArray(f)||f.length!==9||!f.every(s=>typeof s==="string")||!Array.isArray(d.rows)||d.rows.length>400||!d.rows.every(r=>r&&["label","amount","date","currency"].every(k=>typeof r[k]==="string"))){
         this.inv=null;return;
       }
       const [name,room,arr,dep,remarks,title,balance,currency,status]=f;
@@ -33,16 +33,29 @@ class InvoiceState {
   }
   display(refs,now){
     if(!this.g||now-this.last>750) return null;
-    return {result:calc.evaluate(this.inv,refs),g:this.g,textWidth:this.textWidth,remarks:this.inv?.remarks||""};
+    // Geometry arrives ten times a second; reservation matching/calculation belongs
+    // only to a new invoice snapshot or a changed reference set.
+    if(this.forInv!==this.inv || this.forRefs!==refs || !this.result){
+      this.result=calc.evaluate(this.inv,refs);this.forInv=this.inv;this.forRefs=refs;
+    }
+    return {result:this.result,g:this.g,textWidth:this.textWidth,remarks:this.inv?.remarks||""};
   }
 }
 function start({electron,helperPath,captureDir,userData}){
   const {app,BrowserWindow,screen,ipcMain}=electron;
   const state=new InvoiceState(), file=path.join(userData,"arrangement-rates-v1.json");
-  let refs=[],child=null,overlay=null,ready=false,lastPaint="",lastBounds="",pending=null,closed=false,buffer="",stamps={};
+  let refs=[],child=null,overlay=null,ready=false,lastPaint="",lastBounds="",pending=null,closed=false,buffer="",stamps={},disabled=false;
   try{const r=JSON.parse(fs.readFileSync(file,"utf8"));if(Array.isArray(r))refs=calc.mergeRefs([],r);}catch(e){}
   function hide(){pending=null;lastPaint="";if(overlay&&!overlay.isDestroyed())overlay.hide();}
   function paint(){
+    if(disabled||closed)return;
+    try{paintNow();}catch(e){
+      disabled=true;state.reset();
+      try{hide();}catch(ignored){}
+      console.error("Arrangement overlay stopped:",e.message);
+    }
+  }
+  function paintNow(){
     if(closed)return;
     const d=state.display(refs,Date.now());
     if(!d||d.result.state==="outside"){hide();return;}
@@ -79,7 +92,7 @@ function start({electron,helperPath,captureDir,userData}){
     overlay.showInactive();
   });
   function scanRefs(){
-    if(closed)return;
+    if(closed||disabled)return;
     let changed=false;
     for(const tag of ["IH","AR","DP"]){
       try{

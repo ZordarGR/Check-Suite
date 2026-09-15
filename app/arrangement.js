@@ -49,7 +49,7 @@ function evaluate(inv, refs){
   let paid=0, payments=0;
   const charges=[];
   for(const row of inv.rows || []){
-    const n=cents(row.amount), label=norm(row.label), date=day(String(row.date || "").slice(0,8));
+    const n=cents(row.amount), label=norm(row.label), date=day(String(row.date || "").trim());
     if(n===null || norm(row.currency)!=="EUR" || date===null) return unsure("An entry could not be read");
     if(label==="*ARRANGEMENT" || label==="ARRANGEMENT"){
       if(n<=0) return unsure("Arrangement adjustment needs checking");
