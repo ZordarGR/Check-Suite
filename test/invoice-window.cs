@@ -30,6 +30,23 @@ class InvoiceWindow{
   var init=new Init{size=8,classes=1};InitCommonControlsEx(ref init);
   string folder=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"RecCheck");
   Directory.CreateDirectory(folder);File.WriteAllText(Path.Combine(folder,"rc-tbind-binds.txt"),"watch=PROT32\n");
+  // Verify optional list metadata through the production ReadTagged path first.
+  IntPtr ih=CreateWindowEx(0,"#32770","Guests inhouse: 15/09/26",unchecked((int)0x10CF0000),20,20,1000,500,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero);
+  IntPtr ihlv=CreateWindowEx(0,"SysListView32","",unchecked((int)0x50000001),10,10,960,400,ih,(IntPtr)22222,IntPtr.Zero,IntPtr.Zero);
+  string[] ihcols={"Name","VIP","Room no.","RT","Adlt.","Arrival","Departure","Curr.","Price","Rate code","Balance","Stat.","Group","Code","Travel Agency","Sharer"};
+  for(int i=0;i<ihcols.Length;i++)Column(ihlv,i,ihcols[i]);
+  Row(ihlv,0,new string[]{"TEST GUEST","","101","BSV","2/0/0/0","14/09/26","21/09/26","EUR","150,00","RATE","0,00","CI","","","WEBHOTELIER",""});
+  var readInfo=new ProcessStartInfo(args[0],"inhouse "+Process.GetCurrentProcess().Id+" 0 400"){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true};
+  var read=Process.Start(readInfo);
+  // Pump this UI thread while the OTHER process asks its getters.
+  string listResult=null;
+  read.OutputDataReceived+=(sender,e)=>{if(e.Data!=null)listResult=(listResult??"")+e.Data+"\n";};read.BeginOutputReadLine();
+  int waitAt=Environment.TickCount;
+  while(!read.HasExited && Environment.TickCount-waitAt<10000){Application.DoEvents();Thread.Sleep(10);}
+  if(!read.HasExited)throw new Exception("IH reader did not finish within its budget");
+  read.WaitForExit();
+  File.WriteAllText(args[1]+".list",listResult??"");
+  DestroyWindow(ih);
   IntPtr win=CreateWindowEx(0,"#32770","Invoice",unchecked((int)0x00CF0000),50,80,1000,600,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero);
   if(win==IntPtr.Zero)throw new Exception("fixture window failed");
   IntPtr name=Control(win,"Edit",202,"TEST GUEST",10,10,200,20);

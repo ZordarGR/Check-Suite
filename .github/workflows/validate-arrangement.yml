@@ -46,9 +46,9 @@ jobs:
         shell: pwsh
         run: |
           $compiler = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
-          & $compiler /nologo /target:winexe /out:app/rc-tbind.exe app/tbind.cs
+          & $compiler /nologo /target:winexe "/out:$PWD\app\rc-tbind.exe" "$PWD\app\tbind.cs"
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          & $compiler /nologo /target:exe /r:System.Windows.Forms.dll /out:PROT32.exe test/invoice-window.cs
+          & $compiler /nologo /target:exe /r:System.Windows.Forms.dll "/out:$PWD\PROT32.exe" "$PWD\test\invoice-window.cs"
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Read real Windows controls and follow window changes
         shell: pwsh
@@ -60,4 +60,4 @@ jobs:
         if: always()
         with:
           name: synthetic-invoice-stream
-          path: invoice-stream.jsonl
+          path: invoice-stream.jsonl*

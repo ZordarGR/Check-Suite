@@ -9,3 +9,8 @@ const geometry=messages.filter(m=>m.kind==="geometry");
 assert(new Set(geometry.map(m=>JSON.stringify(m.rect))).size>=3,"move/maximise/restore changes are followed");
 assert(messages.some(m=>m.kind==="hide"),"minimised invoice hides overlay");
 console.log("Real Windows ListView capture, B isolation, geometry and reused guest passed");
+
+const list=fs.readFileSync(process.argv[2]+".list","utf8");
+assert(list.includes("IH\tTEST GUEST\t101\t2/0/0/0\t14/09/26\t21/09/26\tCI"),"existing IH columns unchanged");
+assert(list.includes("RATE\tIH\tTEST GUEST\t101\t14/09/26\t21/09/26\t150,00\tWEBHOTELIER\tEUR\tCI"),"daily Price and agency reach tagged capture");
+console.log("Real Windows IH Price/agency capture passed");
