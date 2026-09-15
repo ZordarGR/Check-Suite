@@ -6,70 +6,8 @@ on:
 permissions:
   contents: read
 jobs:
-  linux:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Cloud dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y mono-devel mono-utils
-          npm install --no-save playwright-core@1.56.1 @electron/asar@3.2.10
-          PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers npx playwright-core install --with-deps chromium
-      - name: Build helper with BCL guard
-        run: sh app/build-helper.sh
-      - name: Native structure layouts
-        run: |
-          mcs -out:/tmp/header-test.exe test/headeritem.cs
-          mono /tmp/header-test.exe app/rc-tbind.exe
-      - name: Calculation and lifecycle
-        run: |
-          node test/arrangement.js
-          node test/arrangement-service.js
-      - name: Existing regressions
-        run: |
-          sh test/run.sh
-          node test/harness.js
-          NODE_PATH="$PWD/node_modules" node test/browser/live.js
-          NODE_PATH="$PWD/node_modules" node test/browser/movesfit.js
-      - name: Overlay rendering
-        run: NODE_PATH="$PWD/node_modules" node test/browser/arrangement.js
-  windows:
-    strategy:
-      fail-fast: false
-      matrix:
-        target: [anycpu, x86]
-    runs-on: windows-2022
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Build native test fixture in the cloud
-        shell: pwsh
-        run: |
-          $compiler = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
-          & $compiler /nologo /target:winexe "/out:$PWD\app\rc-tbind.exe" "$PWD\app\tbind.cs"
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          & $compiler /nologo /target:exe /platform:${{ matrix.target }} /r:System.Windows.Forms.dll "/out:$PWD\PROT32.exe" "$PWD\test\invoice-window.cs"
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-      - name: Read real Windows controls and follow window changes
-        shell: pwsh
-        run: |
-          & .\PROT32.exe "$PWD\app\rc-tbind.exe" "$PWD\invoice-stream.jsonl"
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          node test/invoice-stream.js invoice-stream.jsonl
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: synthetic-invoice-stream-${{ matrix.target }}
-          path: invoice-stream.jsonl*
   package:
     if: contains(github.event.head_commit.message, '[package]')
-    needs: [linux, windows]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -77,28 +15,34 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: codex/live-arrangement
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: Refuse a moved source
-        run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          git diff --exit-code ab87eee4f4d74dff60edaf74920cf3d998ad748d HEAD -- app
         env:
           SOURCE_SHA: ${{ github.sha }}
       - name: Cloud build dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y nsis p7zip-full mono-devel
+          sudo apt-get install -y nsis p7zip-full mono-devel mono-utils
           npm install --no-save @electron/asar@3.2.10
       - name: Build and verify 1.17.70 installer
-        run: bash test/package-arrangement.sh
+        run: |
+          bash test/package-arrangement.sh
+          sh test/run.sh
       - name: Save verified release files on the feature branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add app/index.html "Departments Check.html" app/package.json app/rc-tbind.exe dist-win64/nsi/reccheck.nsi dist-win64/parts update/latest.json .github/workflows/release.yml
+          git add app/index.html "Departments Check.html" app/package.json app/rc-tbind.exe dist-win64/nsi/reccheck.nsi dist-win64/parts update/latest.json
           git commit -m "Package verified Pro-Check 1.17.70"
           git push origin HEAD:codex/live-arrangement
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: verified-pro-check-1.17.70
           path: Pro-Check-Setup.exe

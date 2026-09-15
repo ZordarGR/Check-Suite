@@ -3,7 +3,7 @@
 set -e
 cd "$(dirname "$0")/.."
 fail=0
-for t in release scopecheck accounttax status movespanel pills0209 report poison names nighttest dst quiet stdout inhouse livenames roomsfile alerts feedstays moves helperline watchlog reports evflow; do
+for t in release scopecheck arrangement arrangement-service accounttax status movespanel pills0209 report poison names nighttest dst quiet stdout inhouse livenames roomsfile alerts feedstays moves helperline watchlog reports evflow; do
  printf '\n=== %s ===\n' "$t"
  if [ "$t" = dst ]; then TZ=Europe/Athens node "test/$t.js" || fail=1;
  else node "test/$t.js" || fail=1; fi
@@ -11,6 +11,8 @@ done
 printf '\n=== lvitem (C#, needs mono) ===\n'
 if command -v mcs >/dev/null 2>&1; then
  mcs -out:/tmp/lvtest.exe test/lvitem.cs 2>/dev/null && mono /tmp/lvtest.exe app/rc-tbind.exe || fail=1
+ printf '\n=== HDITEM geometry (C#) ===\n'
+ mcs -out:/tmp/header-test.exe test/headeritem.cs 2>/dev/null && mono /tmp/header-test.exe app/rc-tbind.exe || fail=1
  printf '\n=== splash geometry (C#) ===\n'
  mcs -out:/tmp/sptest.exe test/splash.cs 2>/dev/null && mono /tmp/sptest.exe app/rc-tbind.exe || fail=1
 else
