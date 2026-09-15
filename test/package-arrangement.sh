@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Cloud only. Rebuild from the last verified installer’s Electron payload, then unpack and compare.
 set -euo pipefail
-version=1.17.72
+version=1.17.73
 work="$(mktemp -d)"
 repo="$PWD"
 cat dist-win64/parts/RecCheck-Setup.exe.[0-9]* > "$work/previous.exe"
@@ -11,12 +11,12 @@ printf '%s  %s\n' "$oldsha" "$work/previous.exe" | sha256sum -c -
 rm -rf -- "$work/stage/\$PLUGINSDIR"
 node <<'NODE'
 const fs=require("fs"),crypto=require("crypto");
-const v="1.17.72",p=JSON.parse(fs.readFileSync("app/package.json"));p.version=v;
+const v="1.17.73",p=JSON.parse(fs.readFileSync("app/package.json"));p.version=v;
 fs.writeFileSync("app/package.json",JSON.stringify(p,null,2)+"\n");
-const html=fs.readFileSync("app/index.html","utf8").replace(/APP_VERSION\s*=\s*"1\.17\.71"/,'APP_VERSION = "'+v+'"');
+const html=fs.readFileSync("app/index.html","utf8").replace(/APP_VERSION\s*=\s*"1\.17\.72"/,'APP_VERSION = "'+v+'"');
 if(!html.includes('APP_VERSION = "'+v+'"'))throw Error("version not replaced");
 fs.writeFileSync("app/index.html",html);fs.writeFileSync("Departments Check.html",html);
-fs.writeFileSync("dist-win64/nsi/reccheck.nsi",fs.readFileSync("dist-win64/nsi/reccheck.nsi","utf8").replace('!define VERSION "1.17.71"','!define VERSION "'+v+'"'));
+fs.writeFileSync("dist-win64/nsi/reccheck.nsi",fs.readFileSync("dist-win64/nsi/reccheck.nsi","utf8").replace('!define VERSION "1.17.72"','!define VERSION "'+v+'"'));
 NODE
 # The helper is unchanged; preserve the verified v31 binary from the previous release.
 mkdir "$work/pack"
@@ -36,10 +36,10 @@ rm -f dist-win64/parts/RecCheck-Setup.exe.[0-9]*
 split -b 20971520 -d -a 3 "$work/Pro-Check-Setup.exe" dist-win64/parts/RecCheck-Setup.exe.
 node - "$work/Pro-Check-Setup.exe" <<'NODE'
 const fs=require("fs"),crypto=require("crypto"),sha=f=>crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
-const v="1.17.72",m=JSON.parse(fs.readFileSync("update/latest.json"));
+const v="1.17.73",m=JSON.parse(fs.readFileSync("update/latest.json"));
 Object.assign(m,{version:v,engine:v,type:"full",sha256:sha("app/index.html"),setupSha256:sha(process.argv[2]),
 setup:"https://github.com/ZordarGR/Check-Suite/releases/download/v"+v+"/Pro-Check-Setup.exe",
-notes:"Keep the accommodation checkmark or X on Invoice B’s name tile when the window moves or resizes. Calculation details and explanations remain below the title."});
+notes:"Check arrival payments against the list’s daily Price and full stay even before the first Arrangement charge posts in B. Missing or conflicting prices remain uncertain; late-arrival adjustments still require the double charge."});
 fs.writeFileSync("update/latest.json",JSON.stringify(m,null,2)+"\n");
 const w=fs.readFileSync(".github/workflows/release.yml","utf8").replace(/VERSION: v[\d.]+/,"VERSION: v"+v).replace(/SETUP_SHA256: [a-f0-9]+/,"SETUP_SHA256: "+m.setupSha256);
 fs.writeFileSync(".github/workflows/release.yml",w);

@@ -1,0 +1,62 @@
+name: Validate and package arrival list price
+on:
+  push:
+    branches: [codex/arrival-list-price]
+    paths:
+      - "app/arrangement.js"
+      - "test/arrangement.js"
+      - "test/package-arrangement.sh"
+      - ".github/workflows/validate-arrival-price.yml"
+permissions:
+  contents: write
+jobs:
+  validate-package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Cloud build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y nsis p7zip-full mono-devel mono-utils
+          npm install --no-save @electron/asar@3.2.10
+      - name: Reproduce released arrival block and verify correction
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          cp app/arrangement.js /tmp/fixed-arrangement.js
+          trap 'cp /tmp/fixed-arrangement.js app/arrangement.js' EXIT
+          git show 57b084c989e4fd46b7864cd3fdfbfae1d955bd1a:app/arrangement.js > app/arrangement.js
+          if node test/arrangement.js > /tmp/released-arrival.log 2>&1; then
+            cat /tmp/released-arrival.log
+            echo "Released evaluator unexpectedly passed the regression" >&2
+            exit 1
+          fi
+          cat /tmp/released-arrival.log
+          grep -F "arrival payments must compare before the first Arrangement posting" /tmp/released-arrival.log
+          cp /tmp/fixed-arrangement.js app/arrangement.js
+          git diff --exit-code -- app/arrangement.js
+          node test/arrangement.js
+      - name: Complete standard regression suite
+        run: sh test/run.sh
+      - name: Package and verify installer contents
+        run: bash test/package-arrangement.sh
+      - name: Save verified package outputs
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/index.html "Departments Check.html" app/package.json dist-win64/nsi/reccheck.nsi dist-win64/parts update/latest.json
+          git diff --cached --stat
+          git commit -m "Package verified Pro-Check 1.17.73"
+          git push origin HEAD:codex/arrival-list-price
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Pro-Check-1.17.73
+          path: Pro-Check-Setup.exe
+          if-no-files-found: ignore

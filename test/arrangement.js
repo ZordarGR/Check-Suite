@@ -145,4 +145,60 @@ test("rate capture accepts numeric room suffixes and rejects malformed identifie
  for(const room of ["101-","101-A","101--2","101-2-3","101/2","101-23456"])assert.equal(capture(room).length,0);
 });
 
+
+test("arrival list compares payments before the first Arrangement posting",()=>{
+ const text="TITLE\tArrival Report for the 14/09/26\nRATE\tAR\tTEST GUEST\t101\t\t21/09/26\t150,00\tWEBHOTELIER\tEUR\tRES\nDONE\t1\t1\t12\t5\tunicode\tcomplete\n";
+ const refs=A.mergeRefs([],A.capture(text,"AR",1),Date.UTC(2026,8,14));
+ for(const title of ["INDIVIDUAL","BOOKING.COM/R.Nr.12(1)","EXPEDIA LODGING PARTNER SERVICES SARL/R.Nr.13(1)","FICTIONAL AGENCY/R.Nr.14(1)"]){
+  const i=inv(title,[row("Deposit Cash","-300,00","01/09/26"),row("PAYMENT","-750,00")]);
+  const x=A.evaluate(i,refs);
+  assert.equal(x.state,"paid","arrival payments must compare before the first Arrangement posting");
+  assert.equal(x.expected,105000);assert.equal(x.paid,105000);assert.equal(x.nights,7);assert.equal(x.rate,15000);
+  assert.equal(i.arr,"14/09/26");assert.equal(i.dep,"21/09/26");
+ }
+});
+test("pre-posting comparisons retain cent differences and signed refunds",()=>{
+ for(const [rows,state,diff] of [
+  [[row("Deposit Cash","-1.049,99")],"difference",-1],
+  [[row("NATIONAL BANK","-1.050,01")],"difference",1],
+  [[row("PAYMENT","-1.100,00"),row("REFUND","50,00")],"paid",0]
+ ]){
+  const x=A.evaluate(inv("INDIVIDUAL",rows),[ref()]);
+  assert.equal(x.state,state);assert.equal(x.diff,diff);assert.equal(x.expected,105000);
+  if(diff)assert.match(x.text,diff<0?/Under €0.01/:/Over €0.01/);
+ }
+});
+test("pre-posting arrivals require an unambiguous positive matching list price",()=>{
+ const i=inv("INDIVIDUAL",[row("PAYMENT","-1.050,00")]);
+ const invalid=[[],[ref("0,00")],[ref("-150,00")],[ref("")],[ref("bad")],[{...ref(),currency:"USD"}],
+  [ref(),ref("200,00")],...[{name:"OTHER GUEST"},{room:"102"},{arr:"13/09/26"},{dep:"22/09/26"}].map(c=>[{...ref(),...c}])];
+ for(const refs of invalid){
+  const x=A.evaluate(i,refs);assert.equal(x.state,"unknown");assert.equal(x.expected,undefined);assert.equal(x.tint,false);
+ }
+ const agency=inv("FICTIONAL AGENCY",i.rows);
+ assert.equal(A.evaluate(agency,[ref("150,00","TOUR OPERATOR")]).state,"outside");
+ assert.equal(A.evaluate(agency,[]).state,"unknown");
+});
+test("empty B uses list price for the unpaid amount but incomplete reads stay uncertain",()=>{
+ const i=inv("INDIVIDUAL",[]);
+ let x=A.evaluate(i,[ref()]);assert.equal(x.state,"unpaid");assert.equal(x.expected,105000);assert.equal(x.diff,-105000);assert.equal(x.tint,true);assert.match(x.text,/under €1,050.00/);
+ x=A.evaluate(i,[ref("0,00")]);assert.equal(x.state,"unpaid");assert.equal(x.expected,undefined);
+ i.complete=false;x=A.evaluate(i,[ref()]);assert.equal(x.state,"unknown");assert.equal(x.tint,false);assert.equal(x.expected,undefined);
+});
+test("live arrival updates on list capture and only adds a late night after a double posting",()=>{
+ const s=new InvoiceState();
+ s.accept({kind:"geometry",id:"arrival",rect:{},strip:{}},100);
+ const packet=rows=>({kind:"invoice",id:"arrival",complete:true,data:{fields:["TEST GUEST","101","14/09/26","21/09/26","","INDIVIDUAL","","EUR","CI"],rows}});
+ const payments=[row("PAYMENT","-1.050,00")];
+ s.accept(packet(payments),110);
+ assert.equal(s.display([],120).result.state,"unknown");
+ let x=s.display([ref()],130).result;assert.equal(x.state,"paid");assert.equal(x.nights,7);
+ s.accept(packet([...payments,row("*Arrangement","150,00")]),140);
+ x=s.display([ref()],150).result;assert.equal(x.state,"paid");assert.equal(x.nights,7);
+ s.accept(packet([...payments,row("*Arrangement","300,00")]),160);
+ x=s.display([ref()],170).result;assert.equal(x.state,"difference");assert.equal(x.nights,8);assert.equal(x.diff,-15000);
+ s.accept(packet([...payments,row("*Arrangement","300,00"),row("*Arrangement","150,00","15/09/26")]),180);
+ x=s.display([ref()],190).result;assert.equal(x.nights,8);assert.equal(x.diff,-15000);
+});
+
 console.log(tests+" arrangement tests passed");
