@@ -105,7 +105,7 @@ function capture(txt, tag, at){
   for(const c of lines){
     if(c[0]!=="RATE" || c[1]!==tag || c.length!==10) continue;
     const [, , name, room, first, second, price, agency, currency, status]=c;
-    if(!name || !/^\d{2,4}$/.test(room) || !status || /void|reversal/i.test(status)) continue;
+    if(!name || !/^\d{2,4}(?:-\d{1,4})?$/.test(room) || !status || /void|reversal/i.test(status)) continue;
     const arr=tag==="AR"?reportDate:first, dep=tag==="DP"?reportDate:second;
     if(day(arr)===null || day(dep)===null) continue;
     out.push({tag,name,room,arr,dep,price,agency,currency,at});

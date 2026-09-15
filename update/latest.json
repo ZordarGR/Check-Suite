@@ -1,11 +1,11 @@
 {
-  "version": "1.17.70",
+  "version": "1.17.71",
   "type": "full",
-  "engine": "1.17.70",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.70/Pro-Check-Setup.exe",
-  "setupSha256": "f5d9acb516d2f304710cc7354071c3687d6237137fe58f125273c507fd0fe6bd",
+  "engine": "1.17.71",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.71/Pro-Check-Setup.exe",
+  "setupSha256": "c8a4c20155d939f40d76dac4d730ce6860d0b40dfa3edf36e5d53be161fc6749",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "791f6cf2c3aa8719016d95aaaea2e2be2fdd5a9890d8f863ec8152222f04c9b6",
-  "notes": "Live accommodation payment check in Invoice B: exact totals, over/under differences, and a faint red tint when unpaid. Uses list Price and agency, counts advance payments, handles the extra late-arrival night, and follows the Invoice as it moves or resizes. Original reservation dates and Department/Tax Check data are preserved."
+  "sha256": "1c88c9cd76ff541931f5693e997aca9dc3ca55c344e3a96230bfe0f9b3ee3f58",
+  "notes": "Fix the live accommodation checker discarding daily prices for room identifiers with numeric suffixes, such as 101-2. The full room identifier and original stay dates are preserved."
 }
