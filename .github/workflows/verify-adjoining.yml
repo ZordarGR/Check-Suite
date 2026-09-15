@@ -1,0 +1,54 @@
+name: Verify adjoining-room rate fix
+on:
+  push:
+    branches: ["codex/arrangement-adjoining"]
+permissions:
+  contents: read
+jobs:
+  verify-package:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/arrangement-adjoining
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Refuse a moved source
+        run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+      - name: Cloud dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y nsis p7zip-full mono-devel mono-utils
+          npm install --no-save @electron/asar@3.2.10
+      - name: Confirm regression against the released importer
+        run: |
+          git show 9efca8b83dc445b2725c3858d7900287e1c54443:app/arrangement.js > /tmp/released-arrangement.js
+          node <<'NODE'
+          const assert=require("assert"),old=require("/tmp/released-arrangement.js"),fixed=require("./app/arrangement");
+          const t="TITLE\tGuests inhouse: 15/09/26\nRATE\tIH\tTEST GUEST\t101-2\t14/09/26\t28/09/26\t150,00\tINDIVIDUAL\tEUR\tCI\nDONE\t1\t1\t12\t5\tunicode\tcomplete\n";
+          assert.equal(old.capture(t,"IH",1).length,0);
+          assert.equal(fixed.capture(t,"IH",1)[0].room,"101-2");
+          console.log("Released importer discards the adjoining rate; fixed importer preserves it.");
+          NODE
+      - name: Standard regression suite
+        run: sh test/run.sh
+      - name: Build and verify 1.17.71 installer
+        run: bash test/package-arrangement.sh
+      - name: Save verified release files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/index.html "Departments Check.html" app/package.json dist-win64/nsi/reccheck.nsi dist-win64/parts update/latest.json
+          git commit -m "Package verified Pro-Check 1.17.71"
+          git push origin HEAD:codex/arrangement-adjoining
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verified-pro-check-1.17.71
+          path: Pro-Check-Setup.exe

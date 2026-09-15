@@ -110,4 +110,39 @@ test("a completely read empty B is unpaid; an incomplete empty B stays uncertain
  const i=inv("INDIVIDUAL",[]);assert.equal(A.evaluate(i,[ref()]).tint,true);
  i.complete=false;assert.equal(A.evaluate(i,[ref()]).state,"unknown");
 });
+
+test("hyphenated room rates survive IH, AR and DP with their full identifier",()=>{
+ const samples=[
+  ["IH","Guests inhouse: 15/09/26","14/09/26","28/09/26"],
+  ["AR","Arrival Report for the 14/09/26","","28/09/26"],
+  ["DP","Departure Report for the 28/09/26","14/09/26",""]
+ ];
+ for(const [tag,title,arr,dep] of samples){
+  const text="TITLE\t"+title+"\nRATE\t"+tag+"\tTEST GUEST\t101-2\t"+arr+"\t"+dep+"\t150,00\tINDIVIDUAL\tEUR\tCI\nDONE\t1\t1\t12\t5\tunicode\tcomplete\n";
+  const captured=A.capture(text,tag,1);
+  assert.equal(captured.length,1);assert.equal(captured[0].room,"101-2");
+  assert.equal(captured[0].arr,"14/09/26");assert.equal(captured[0].dep,"28/09/26");
+  const stored=A.mergeRefs([],captured,Date.UTC(2026,8,15));
+  const i={...inv("INDIVIDUAL",[row("PAYMENT","-2.100,00"),...Array.from({length:11},(_,n)=>row("*Arrangement","150,00",String(14+n)+"/09/26"))]),room:"101-2",dep:"28/09/26"};
+  const x=A.evaluate(i,stored);
+  assert.equal(x.state,"paid");assert.equal(x.rate,15000);assert.equal(x.expected,210000);assert.equal(x.nights,14);
+  assert.equal(A.reference({...i,room:"101"},stored),null);
+  assert.equal(A.reference({...i,room:"101-3"},stored),null);
+  assert.equal(A.reference({...i,name:"OTHER GUEST"},stored),null);
+  assert.equal(A.reference({...i,arr:"13/09/26"},stored),null);
+ }
+});
+test("different room suffixes remain separate reservation references",()=>{
+ const a={...ref(),tag:"IH",room:"101-2"},b={...ref("200,00"),tag:"IH",room:"101-3"};
+ const stored=A.mergeRefs([],[a,b],Date.UTC(2026,8,15));
+ assert.equal(stored.length,2);
+ assert.equal(A.reference({...inv(),room:"101-2"},stored).price,"150,00");
+ assert.equal(A.reference({...inv(),room:"101-3"},stored).price,"200,00");
+});
+test("rate capture accepts numeric room suffixes and rejects malformed identifiers",()=>{
+ const capture=room=>A.capture("TITLE\tGuests inhouse: 15/09/26\nRATE\tIH\tTEST GUEST\t"+room+"\t14/09/26\t21/09/26\t150,00\tINDIVIDUAL\tEUR\tCI\nDONE\t1\t1\t12\t5\tunicode\tcomplete\n","IH",1);
+ for(const room of ["51","101-2","414-15","9017-2"])assert.equal(capture(room)[0].room,room);
+ for(const room of ["101-","101-A","101--2","101-2-3","101/2","101-23456"])assert.equal(capture(room).length,0);
+});
+
 console.log(tests+" arrangement tests passed");
