@@ -1,11 +1,11 @@
 {
-  "version": "1.17.73",
+  "version": "1.17.74",
   "type": "full",
-  "engine": "1.17.73",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.73/Pro-Check-Setup.exe",
-  "setupSha256": "020ab23201c0b64c790b5f47c5dcbbd7c1fb72a0a2c06a4a55de06313d422aae",
+  "engine": "1.17.74",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.74/Pro-Check-Setup.exe",
+  "setupSha256": "dcaa32d0e5cd694e43d8223de45248320a6ad4b61438331c691fab760e03b017",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "ef05b7fbb927732c9a414a9af494df92a5fcfef19070a4caa517d8fa26c2fcee",
-  "notes": "Check arrival payments against the list’s daily Price and full stay even before the first Arrangement charge posts in B. Missing or conflicting prices remain uncertain; late-arrival adjustments still require the double charge."
+  "sha256": "a11cd831b5884d902496456d109baff843d73d2e07ab210208972e50f0ed555e",
+  "notes": "Limit the unpaid accommodation tint to B’s entries grid, following its actual bounds during moves and resizing. The title, balance and other Invoice panes remain clear."
 }
