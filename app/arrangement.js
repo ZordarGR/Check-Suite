@@ -79,12 +79,14 @@ function evaluate(inv, refs){
     if(new Set(charges.map(c=>c.date)).size!==charges.length) reason="Multiple Arrangement entries on one date";
     if(charges.some(c=>c.date<a || c.date>=d)) reason="Arrangement dates differ from the stay";
   }
-  const noPayment=payments===0 && paid===0 && charges.length>0;
+  const noPayment=payments===0 && paid===0;
+  if(!charges.length) return noPayment
+    ? {state:"unpaid",icon:"✕",text:"No accommodation payment",tint:true}
+    : unsure("No Arrangement charge yet");
   if(reason){
     // A readable unpaid account remains red even if Price=0; no amount is invented.
     return noPayment ? {state:"unpaid",icon:"✕",text:"No accommodation payment · "+reason,tint:true} : unsure(reason);
   }
-  if(!charges.length) return unsure("No Arrangement charge yet");
   const nights=d-a+extra, expected=rate*nights, diff=paid-expected;
   const detail=extra ? " · +1 late-arrival night" : "";
   if(noPayment) return {state:"unpaid",icon:"✕",text:"No accommodation payment · under €"+money(expected)+detail,tint:true,paid,expected,nights,rate,diff};

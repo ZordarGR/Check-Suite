@@ -106,4 +106,8 @@ test("four-digit invoice dates are preserved",()=>{
  const i=inv("INDIVIDUAL",[row("*Arrangement","150,00","14/09/2026"),row("PAYMENT","-1.050,00","13/09/2026")]);
  assert.equal(A.evaluate(i,[ref()]).state,"paid");
 });
+test("a completely read empty B is unpaid; an incomplete empty B stays uncertain",()=>{
+ const i=inv("INDIVIDUAL",[]);assert.equal(A.evaluate(i,[ref()]).tint,true);
+ i.complete=false;assert.equal(A.evaluate(i,[ref()]).state,"unknown");
+});
 console.log(tests+" arrangement tests passed");
