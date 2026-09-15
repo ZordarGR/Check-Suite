@@ -37,6 +37,7 @@ jobs:
         run: NODE_PATH="$PWD/node_modules" node test/browser/arrangement.js
   windows:
     strategy:
+      fail-fast: false
       matrix:
         target: [anycpu, x86]
     runs-on: windows-2022
