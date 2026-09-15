@@ -83,3 +83,11 @@ because a stale copy passed three times in one night while proving nothing.
 
 **Regenerate `h-sweep.html` after every change to `index.html`** — it is a copy, and a
 stale one tests the wrong page.
+
+## Live Arrangement check
+
+`arrangement.js` exercises exact-cent totals, advance payments with any B label, the four eligibility cases (WEBHOTELIER from list agency), checkout Price 0, late-arrival +1 night, missing/conflicting data and original dates. `arrangement-service.js` drives the real overlay service with fake Electron/transport boundaries: click-through, no focus, acknowledgement before showing, stale acknowledgement refusal and renderer failure. Both run in `test/run.sh`.
+
+`headeritem.cs` checks the target-specific HDITEM layouts alongside the LVITEM tests. `browser/arrangement.js` checks the actual overlay page at ordinary and resized bounds, including a long title and the 5% unpaid tint.
+
+The cloud-only `invoice-window.cs` fixture creates its own Windows dialog and real ListViews, pumps a normal Windows message loop, and runs the real helper. `invoice-stream.js` verifies B isolation, IH Price/agency capture, guest reuse, movement/maximise/restore and minimise. Run both x86 and AnyCPU targets. These are synthetic Windows controls, not a claim that protel's owner-drawn rows or the hotel's display/DPI layout have been exercised.

@@ -2,14 +2,15 @@ name: Publish Pro-Check release
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     paths:
       - "dist-win64/parts/**"
       - ".github/workflows/release.yml"
 permissions:
   contents: write
 env:
-  VERSION: v1.17.63
-  SETUP_SHA256: 028e988e6ebde55cb30777795bd6be99edf93bd858744d60b5d514b5e4554019
+  VERSION: v1.17.70
+  SETUP_SHA256: f5d9acb516d2f304710cc7354071c3687d6237137fe58f125273c507fd0fe6bd
 jobs:
   release:
     runs-on: ubuntu-latest

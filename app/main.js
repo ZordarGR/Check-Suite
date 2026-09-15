@@ -491,6 +491,13 @@ app.whenReady().then(() => {
      standalone up. It is spawned detached, so it outlives us. */
   tauKillStrays(() => {
     tauStart();
+    if(process.platform==="win32"){
+      try{
+        const local=process.env.LOCALAPPDATA||app.getPath("userData");
+        require("./arrangement-live").start({electron:require("electron"),helperPath:tauPath(),
+          captureDir:path.join(local,"RecCheck"),userData:app.getPath("userData")});
+      }catch(e){ console.error("Arrangement overlay unavailable:",e.message); }
+    }
     /* 1.17.10 drew the Caps Lock icon inside this app and shipped with it ON. 1.17.11
        moved it into the helper, which only survives RecCheck closing if it starts at
        login. Carry that setting across exactly ONCE, so a feature he already had does
