@@ -39,10 +39,11 @@ function eligible(inv, ref){
   return null;
 }
 function evaluate(inv, refs){
-  if(!inv || !inv.complete) return unsure("Reading accommodation entries");
+  if(!inv) return unsure("Reading accommodation entries");
   const r=reference(inv,refs || []), scope=eligible(inv,r);
   if(scope===false) return {state:"outside",tint:false};
   if(scope===null) return unsure("Open this reservation’s guest list to check the agency");
+  if(!inv.complete) return unsure("Reading accommodation entries");
   if(norm(inv.currency)!=="EUR") return unsure("Currency could not be verified");
   const a=day(inv.arr), d=day(inv.dep);
   if(a===null || d===null || d<=a || d-a>366) return unsure("Stay dates could not be verified");

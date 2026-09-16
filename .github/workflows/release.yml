@@ -9,8 +9,8 @@ on:
 permissions:
   contents: write
 env:
-  VERSION: v1.17.75
-  SETUP_SHA256: ccf54cefe49e77ad5805e37d40fe4e70c380207921c3083c3905dba8f4c185a2
+  VERSION: v1.17.76
+  SETUP_SHA256: e329ab9589afda28cfc14423b06e2b78fe895243edb9ad6464c3ed76e3a4f26e
 jobs:
   release:
     runs-on: ubuntu-latest

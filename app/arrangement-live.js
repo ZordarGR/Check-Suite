@@ -14,41 +14,68 @@ function layout(g, convert){
   const grid={x:(q.x-r.x)*scale,y:(q.y-r.y)*scale,width:q.width*scale,height:q.height*scale};
   return {bounds,strip,grid,scale};
 }
+function invoiceFields(f){
+  if(!Array.isArray(f)||f.length!==9||!f.every(s=>typeof s==="string"))return null;
+  const [name,room,arr,dep,remarks,title,balance,currency,status]=f;
+  return {name,room,arr,dep,remarks,title,balance,currency,status,rows:[],complete:false};
+}
 class InvoiceState {
   constructor(){this.reset();}
-  reset(id=null){this.id=id;this.g=null;this.inv=null;this.last=0;this.textWidth=-1;this.forInv=null;this.forRefs=null;this.result=null;}
+  reset(id=null){
+    this.id=id;this.g=null;this.inv=null;this.meta=null;this.fields=null;this.epoch=null;this.last=0;this.textWidth=-1;
+    this.forInv=null;this.forRefs=null;this.result=null;this.scopeMeta=null;this.scopeRefs=null;this.scopeValue=null;
+  }
   accept(m,now){
     if(m.kind==="hide"){this.reset();return;}
     if(m.kind==="reset"){
       if(m.id!==this.id)this.reset(m.id);
-      this.inv=null;return;
+      this.inv=null;this.meta=null;this.fields=null;this.epoch=null;return;
     }
     if(m.id!==this.id)this.reset(m.id);
     if(m.kind==="geometry"){this.g=m;this.last=now;if(Number.isFinite(m.textWidth))this.textWidth=m.textWidth;}
-    if(m.kind==="invoice"){
-      const d=m.data, f=d?.fields;
-      if(!Array.isArray(f)||f.length!==9||!f.every(s=>typeof s==="string")||!Array.isArray(d.rows)||d.rows.length>400||!d.rows.every(r=>r&&["label","amount","date","currency"].every(k=>typeof r[k]==="string"))){
-        this.inv=null;return;
+    if(m.kind==="metadata"){
+      if(!Number.isSafeInteger(m.epoch)||m.epoch<1||!invoiceFields(m.fields)){
+        this.inv=null;this.meta=null;this.fields=null;this.epoch=null;return;
       }
-      const [name,room,arr,dep,remarks,title,balance,currency,status]=f;
-      this.inv={name,room,arr,dep,remarks,title,balance,currency,status,rows:d.rows,complete:m.complete===true};
+      if(this.epoch!==null&&m.epoch<this.epoch)return;
+      this.epoch=m.epoch;this.fields=JSON.stringify(m.fields);
+      this.meta=invoiceFields(m.fields);this.inv=this.meta;
+    }
+    if(m.kind==="invoice"){
+      // A row read is usable only with the exact metadata generation that requested it.
+      if(!this.meta||m.epoch!==this.epoch)return;
+      const d=m.data;
+      if(!d||JSON.stringify(d.fields)!==this.fields||!Array.isArray(d.rows)||d.rows.length>400||!d.rows.every(r=>r&&["label","amount","date","currency"].every(k=>typeof r[k]==="string"))){
+        this.inv=this.meta;return;
+      }
+      this.inv={...this.meta,rows:d.rows,complete:m.complete===true};
       this.textWidth=Number.isFinite(m.textWidth)?m.textWidth:-1;
     }
   }
+  readScope(refs){
+    if(!this.meta)return null;
+    if(this.scopeMeta!==this.meta||this.scopeRefs!==refs){
+      const value=calc.eligible(this.meta,calc.reference(this.meta,refs));
+      // Re-enabling must obtain fresh rows: entries may have changed while paused.
+      if(value!==true||(this.scopeMeta===this.meta&&this.scopeValue!==true))this.inv=this.meta;
+      this.scopeValue=value;this.scopeMeta=this.meta;this.scopeRefs=refs;
+    }
+    return this.scopeValue;
+  }
   display(refs,now){
-    if(!this.g||now-this.last>750) return null;
-    // Geometry arrives ten times a second; reservation matching/calculation belongs
-    // only to a new invoice snapshot or a changed reference set.
+    if(!this.g||!this.meta||!this.inv||now-this.last>750)return null;
+    this.readScope(refs);
+    // Geometry arrives ten times a second; matching belongs only to new data.
     if(this.forInv!==this.inv || this.forRefs!==refs || !this.result){
       this.result=calc.evaluate(this.inv,refs);this.forInv=this.inv;this.forRefs=refs;
     }
-    return {result:this.result,g:this.g,textWidth:this.textWidth,remarks:this.inv?.remarks||""};
+    return {result:this.result,g:this.g,textWidth:this.textWidth,remarks:this.inv.remarks||""};
   }
 }
 function start({electron,helperPath,captureDir,userData,spawnHelper=spawn}){
   const {app,BrowserWindow,screen,ipcMain}=electron;
   const state=new InvoiceState(), file=path.join(userData,"arrangement-rates-v1.json");
-  let refs=[],child=null,overlay=null,ready=false,lastPaint="",lastBounds="",pending=null,closed=false,buffer="",stamps={},disabled=false;
+  let refs=[],child=null,overlay=null,ready=false,lastPaint="",lastBounds="",pending=null,closed=false,buffer="",stamps={},disabled=false,lastScope="";
   try{const r=JSON.parse(fs.readFileSync(file,"utf8"));if(Array.isArray(r))refs=calc.mergeRefs([],r);}catch(e){}
   function hide(){pending=null;lastPaint="";if(overlay&&!overlay.isDestroyed())overlay.hide();}
   function paint(){
@@ -61,6 +88,10 @@ function start({electron,helperPath,captureDir,userData,spawnHelper=spawn}){
   }
   function paintNow(){
     if(closed)return;
+    if(child&&state.meta){
+      const command="scope "+state.epoch+" "+(state.readScope(refs)===true?"read":"skip")+"\n";
+      if(command!==lastScope){child.stdin.write(command);lastScope=command;}
+    }
     const d=state.display(refs,Date.now());
     if(!d||d.result.state==="outside"){hide();return;}
     const l=layout(d.g,r=>screen.screenToDipRect(null,r));
@@ -120,7 +151,8 @@ function start({electron,helperPath,captureDir,userData,spawnHelper=spawn}){
   const timer=setInterval(paint,100), refTimer=setInterval(scanRefs,1000);
   scanRefs();
   try{
-    child=spawnHelper(helperPath,["invoice",String(process.pid)],{windowsHide:true,stdio:["ignore","pipe","ignore"]});
+    child=spawnHelper(helperPath,["invoice",String(process.pid)],{windowsHide:true,stdio:["pipe","pipe","ignore"]});
+    child.stdin.on("error",()=>{disabled=true;state.reset();hide();});
     child.stdout.setEncoding("utf8");
     child.stdout.on("data",chunk=>{
       buffer+=chunk;

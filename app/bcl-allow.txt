@@ -920,3 +920,50 @@ window
 GC
 KeepAlive
 ToUInt64
+
+# v33: eligibility gate. Own method/parameter names and kernel32 P/Invokes.
+# Math.Min(UInt32,UInt32) and Encoding.ASCII are .NET Framework members:
+# the Framework compiler and native runner in run 35041661942 exercised this path.
+GetStdHandle
+InvoiceReadScope
+Min
+PeekNamedPipe
+ReadFile
+allowed
+available
+buffer
+epoch
+file
+get_ASCII
+input
+overlapped
+pending
+pipe
+which
+
+# v33: Invoice getter completion tracking, native P/Invoke and our own names.
+AwaitGetter
+ListReply
+OnReply
+ReleaseBuffers
+SendListCallback
+SendMessageCallbackW
+data
+keepReply
+message
+pendingReply
+recover
+recoverable
+reply
+replyResult
+result
+retired
+dest
+wp
+# Message-queue wait: Win32 API; remaining names are its own parameters.
+MsgWaitForMultipleObjectsEx
+count
+handles
+milliseconds
+wakeMask
+flags
