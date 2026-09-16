@@ -1,0 +1,59 @@
+name: Validate and package missing-data message placement
+on:
+  push:
+    branches: [codex/missing-message-above]
+    paths-ignore: ["dist-win64/parts/**"]
+permissions:
+  contents: write
+jobs:
+  validate-package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Cloud build and browser dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y nsis p7zip-full mono-devel mono-utils
+          npm install --no-save @electron/asar@3.2.10 playwright-core@1.56.1
+          PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers npx playwright-core install --with-deps chromium
+      - name: Reproduce released placement and verify message above emoji
+        run: |
+          git fetch --no-tags --depth=1 origin e5a78ae3043ce7171581dd33fec1cf5df40f0183
+          cp app/arrangement-view.js /tmp/fixed-arrangement-view.js
+          trap 'cp /tmp/fixed-arrangement-view.js app/arrangement-view.js' EXIT
+          git show e5a78ae3043ce7171581dd33fec1cf5df40f0183:app/arrangement-view.js > app/arrangement-view.js
+          if node test/browser/arrangement.js > /tmp/released-placement.log 2>&1; then
+            cat /tmp/released-placement.log
+            echo "Released below-icon message unexpectedly passed" >&2
+            exit 1
+          fi
+          cat /tmp/released-placement.log
+          grep -F "missing-data explanation must sit above the status icon" /tmp/released-placement.log
+          cp /tmp/fixed-arrangement-view.js app/arrangement-view.js
+          git diff --exit-code -- app/arrangement-view.js
+          node test/browser/arrangement.js
+      - name: Complete standard regression suite
+        run: sh test/run.sh
+      - name: Package and unpack-verify 1.17.75
+        run: |
+          bash test/package-arrangement.sh
+          git diff --exit-code -- app/rc-tbind.exe
+          stat -c 'SETUP_SIZE=%s' Pro-Check-Setup.exe
+      - name: Save verified package outputs
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/index.html "Departments Check.html" app/package.json dist-win64/nsi/reccheck.nsi dist-win64/parts update/latest.json
+          git commit -m "Package verified Pro-Check 1.17.75"
+          git push origin HEAD:codex/missing-message-above
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Pro-Check-1.17.75
+          path: Pro-Check-Setup.exe
+          if-no-files-found: ignore

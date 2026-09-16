@@ -39,7 +39,10 @@ const {chromium}=require("playwright-core"), path=require("path"), fs=require("f
      assert.equal(r.iconText,packet.result.icon);
      assert.equal(r.detail,state==="paid"?"none":"block");
      if(state!=="paid"){
-      assert(r.detailRect.top>=s.y+s.height+2,"calculation and explanations must remain below the title");
+      if(state==="unknown"){
+       assert(r.detailRect.bottom<=r.icon.top-2,"missing-data explanation must sit above the status icon");
+       assert(r.detailRect.top>=0,"missing-data explanation must stay inside the Invoice");
+      }else assert(r.detailRect.top>=s.y+s.height+2,"payment calculation and explanations must remain below the title");
       assert(r.detailRect.left>=0&&r.detailRect.right<=viewport.width,"explanation must remain readable within the window");
       assert.equal(r.detailText,packet.result.text);
      }
@@ -56,6 +59,30 @@ const {chromium}=require("playwright-core"), path=require("path"), fs=require("f
     }
    }
   }
+  // Reusing the same overlay must remeasure changed text and wrap width on every paint.
+  let messageChecks=0;
+  for(const width of [210,370,520,210]){
+   const strip={x:610,y:110,width,height:18}, grid={x:610,y:142,width:550,height:380};
+   for(const message of [
+    "Daily price could not be established",
+    "Payment entries are incomplete or unreadable. Open the matching reservation list to establish the daily price and try again.",
+    "Reading accommodation…"
+   ]){
+    const packet={result:{state:"unknown",icon:"🤔",text:message,tint:false},strip,grid};
+    await p.evaluate(v=>{window.ack=null;window.paint(v);},packet);
+    await p.waitForFunction(v=>window.ack===JSON.stringify(v),packet);
+    const r=await p.evaluate(()=>({
+     icon:document.getElementById("icon").getBoundingClientRect().toJSON(),
+     detail:document.getElementById("detail").getBoundingClientRect().toJSON()
+    }));
+    assert(r.detail.bottom<=r.icon.top-2,"wrapped missing-data explanation must remain entirely above the emoji");
+    assert(r.detail.top>=0&&r.detail.right<=1767,"wrapped missing-data explanation must remain inside the Invoice");
+    assert(r.detail.bottom<grid.y,"missing-data message must not cover B entries");
+    assert(Math.abs(r.icon.y-strip.y)<0.02,"message height must not move the emoji");
+    if(width===210&&message.length>100)assert(r.detail.height>45,"fixture must exercise multiline wrapping");
+    messageChecks++;
+   }
+  }
   // A missing or invalid rectangle must clear even a previously visible tint.
   for(const grid of [undefined,null,{x:-1,y:150,width:500,height:300},{x:600,y:150,width:1500,height:300},{x:600,y:150,width:0,height:300},{x:600,y:NaN,width:500,height:300}]){
    const base={result:{state:"unpaid",icon:"✕",text:"No accommodation payment",tint:true},strip:layouts[3].strip,grid:layouts[3].grid};
@@ -66,6 +93,6 @@ const {chromium}=require("playwright-core"), path=require("path"), fs=require("f
    await p.waitForFunction(v=>window.ack===JSON.stringify(v),invalid);
    assert.equal(await p.$eval("#tint",el=>getComputedStyle(el).display),"none","invalid geometry must not retain or expand tint");
   }
-  console.log(checks+" overlay placement cases plus 6 invalid-grid cases passed: B-grid-only tint, title icons, explanations below, all states and moved/resized/restored geometry.");
+  console.log(checks+" overlay placement cases, "+messageChecks+" wrapped-message cases and 6 invalid-grid cases passed: missing-data messages above, payment details below, B-grid-only tint and title icons.");
  }finally{await b.close();}
 })().catch(e=>{console.error(e);process.exit(1);});
