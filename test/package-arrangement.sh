@@ -40,7 +40,7 @@ const fs=require("fs"),crypto=require("crypto"),sha=f=>crypto.createHash("sha256
 const v="1.17.76",m=JSON.parse(fs.readFileSync("update/latest.json"));
 Object.assign(m,{version:v,engine:v,type:"full",sha256:sha("app/index.html"),setupSha256:sha(process.argv[2]),
 setup:"https://github.com/ZordarGR/Check-Suite/releases/download/v"+v+"/Pro-Check-Setup.exe",
-notes:"Check reservation eligibility before reading accommodation entries. Excluded invoices stay quiet during checkout; matching bookings retain live payment updates."});
+notes:"Check reservation eligibility before reading accommodation entries. Excluded invoices stay quiet during checkout; matching bookings retain live payment updates. Recover safely after a delayed accommodation read."});
 fs.writeFileSync("update/latest.json",JSON.stringify(m,null,2)+"\n");
 const w=fs.readFileSync(".github/workflows/release.yml","utf8").replace(/VERSION: v[\d.]+/,"VERSION: v"+v).replace(/SETUP_SHA256: [a-f0-9]+/,"SETUP_SHA256: "+m.setupSha256);
 fs.writeFileSync(".github/workflows/release.yml",w);

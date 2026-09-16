@@ -2772,16 +2772,24 @@ static class TBind {
     return b;
   }
   /* A timed-out pointer-bearing getter may still be executing in the target.
-     Never free/reuse that buffer. Keep at most ONE blocked reader, refuse further
-     allocation, and release only the process handle once that process exits. */
+     Never free/reuse its buffers. Keep at most ONE blocked reader. The Invoice
+     reader uses a completion callback to retire that scratch safely and recover;
+     the separate one-shot list modes keep their existing conservative lifetime. */
   static SafeListRead blockedRead = null;
+  delegate void ListReply(IntPtr hwnd,uint message,UIntPtr data,IntPtr result);
+  [DllImport("user32.dll",EntryPoint="SendMessageCallbackW",SetLastError=true)]
+  static extern bool SendListCallback(IntPtr hwnd,uint message,IntPtr wp,IntPtr lp,ListReply reply,UIntPtr data);
   sealed class SafeListRead : IDisposable {
     public IntPtr proc=IntPtr.Zero, text=IntPtr.Zero, item=IntPtr.Zero, lv;
     public bool target64, ok=true, timedOut=false;
     public int started=Environment.TickCount, messages=0;
+    bool recoverable,pendingReply,retired;
+    IntPtr replyResult;
+    ListReply keepReply;
     public const int CCH=1024;
-    public SafeListRead(IntPtr window){
-      lv=window;
+    public SafeListRead(IntPtr window):this(window,false){}
+    public SafeListRead(IntPtr window,bool recover){
+      lv=window;recoverable=recover;keepReply=OnReply;
       if(blockedRead!=null){ ok=false; return; }
       uint pid; GetWindowThreadProcessId(lv,out pid);
       proc=OpenProcess(PROCESS_VM_OPERATION|PROCESS_VM_READ|PROCESS_VM_WRITE|PROCESS_QUERY_LIMITED_INFORMATION,false,pid);
@@ -2792,6 +2800,25 @@ static class TBind {
       text=VirtualAllocEx(proc,IntPtr.Zero,(UIntPtr)(CCH*2),MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);
       item=VirtualAllocEx(proc,IntPtr.Zero,(UIntPtr)80,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);
       if(text==IntPtr.Zero||item==IntPtr.Zero) ok=false;
+    }
+    void OnReply(IntPtr hwnd,uint message,UIntPtr data,IntPtr result){
+      replyResult=result;pendingReply=false;
+      // Windows calls this only after the getter returns. Until then neither
+      // remote buffer may be freed, reused, nor followed by another row read.
+      if(retired){timedOut=false;ReleaseBuffers();if(blockedRead==this)blockedRead=null;}
+    }
+    bool AwaitGetter(IntPtr dest,uint message,IntPtr wp,out IntPtr result){
+      pendingReply=true;replyResult=IntPtr.Zero;
+      if(!SendListCallback(dest,message,wp,item,keepReply,UIntPtr.Zero)){
+        pendingReply=false;result=IntPtr.Zero;return false;
+      }
+      int since=Environment.TickCount;MSG m;
+      while(pendingReply&&Environment.TickCount-since<250){
+        // Peek dispatches sent-message callbacks on this reader thread.
+        PeekMessage(out m,IntPtr.Zero,0,0,0);
+        if(pendingReply)Thread.Sleep(1);
+      }
+      result=replyResult;return !pendingReply;
     }
     public string Get(int row,int col,bool header){
       if(!ok || Environment.TickCount-started>READ_BUDGET_MS){ok=false;return "";}
@@ -2806,10 +2833,11 @@ static class TBind {
            ||dest==IntPtr.Zero){ok=false;return "";}
       }
       messages++;
-      if(SendMessageTimeout(dest,header?0x120B:LVM_GETITEMTEXTW,(IntPtr)(header?col:row),item,
-                            SMTO_ABORTIFHUNG,250,out res)==IntPtr.Zero){
-        ok=false;timedOut=true;return "";
-      }
+      uint message=header?0x120Bu:LVM_GETITEMTEXTW;
+      bool answered=recoverable
+        ? AwaitGetter(dest,message,(IntPtr)(header?col:row),out res)
+        : SendMessageTimeout(dest,message,(IntPtr)(header?col:row),item,SMTO_ABORTIFHUNG,250,out res)!=IntPtr.Zero;
+      if(!answered){ok=false;timedOut=recoverable?pendingReply:true;return "";}
       if(header && res==IntPtr.Zero){ok=false;return "";}
       if(!ReadProcessMemory(proc,text,z,(UIntPtr)z.Length,out n)||n.ToUInt64()!=(ulong)z.Length){ok=false;return "";}
       string s=System.Text.Encoding.Unicode.GetString(z);
@@ -2831,7 +2859,10 @@ static class TBind {
       return hs;
     }
     public void Dispose(){
-      if(timedOut){blockedRead=this;return;}
+      if(timedOut){retired=true;blockedRead=this;return;}
+      ReleaseBuffers();
+    }
+    void ReleaseBuffers(){
       if(text!=IntPtr.Zero) VirtualFreeEx(proc,text,UIntPtr.Zero,MEM_RELEASE);
       if(item!=IntPtr.Zero) VirtualFreeEx(proc,item,UIntPtr.Zero,MEM_RELEASE);
       if(proc!=IntPtr.Zero) CloseHandle(proc);
@@ -2906,7 +2937,7 @@ static class TBind {
     if(SendMessageTimeout(lv,LVM_GETITEMCOUNT,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,250,out res)==IntPtr.Zero)return "[]";
     int count=res.ToInt32();
     if(count<0||count>400)return "[]";
-    using(SafeListRead read=new SafeListRead(lv)){
+    using(SafeListRead read=new SafeListRead(lv,true)){
       string[] hs=read.Headers();
       int label=HeaderAt(hs,"TEXT"), price=HeaderAt(hs,"PRICE"), date=HeaderAt(hs,"INVDATE"), curr=HeaderAt(hs,"CURRENCY");
       if(label<0||price<0||date<0||curr<0||!read.ok)return "[]";

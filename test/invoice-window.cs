@@ -30,10 +30,21 @@ class InvoiceWindow{
   return CreateWindowEx(0,cls,text,unchecked((int)0x50000000),x,y,w,h,parent,(IntPtr)id,IntPtr.Zero,IntPtr.Zero);
  }
  sealed class ListSpy:NativeWindow{
-  public int Reads;
+  public int Reads, Delays;
+  public bool SlowNext;
   public ListSpy(IntPtr h){AssignHandle(h);}
   protected override void WndProc(ref Message m){
-   if(m.Msg==0x1073||m.Msg==0x102D)Reads++;
+   if(m.Msg==0x1073||m.Msg==0x102D){
+    Reads++;
+    if(SlowNext){
+     SlowNext=false;Delays++;
+     byte[] before=new byte[40],after=new byte[40];
+     Marshal.Copy(m.LParam,before,0,before.Length);
+     Thread.Sleep(650); // exceed the helper's 250ms deadline while owning its pointer
+     Marshal.Copy(m.LParam,after,0,after.Length);
+     if(BitConverter.ToString(before)!=BitConverter.ToString(after))throw new Exception("Pending getter's scratch was reused");
+    }
+   }
    base.WndProc(ref m);
   }
  }
@@ -126,7 +137,7 @@ class InvoiceWindow{
   };
   Console.WriteLine("Fixture StreamWriter preamble (bypassed for ASCII protocol): "+BitConverter.ToString(helper.StandardInput.Encoding.GetPreamble()));
   helper.BeginOutputReadLine();
-  int start=Environment.TickCount,phase=0,readsBefore=0,readsAfterCheckout=0,readsAfterStale=0,readsAfterResume=0;
+  int start=Environment.TickCount,phase=0,readsBefore=0,readsAfterCheckout=0,readsAfterStale=0,readsAfterResume=0,rapid=0;
   PumpUntil(()=>{
    int elapsed=Environment.TickCount-start;
    if(elapsed>6000&&phase==0){SetWindowPos(win,IntPtr.Zero,150,130,1100,650,0);PlaceGrid(win,b,350,130,700,390);RecordGrid(b,expectedGrid);phase++;}
@@ -164,13 +175,27 @@ class InvoiceWindow{
     ShowWindow(b,0);phase++;
    }
    if(elapsed>41000&&phase==9){ShowWindow(b,5);SetForegroundWindow(win);phase++;}
-   if(elapsed>46000&&phase==10){ShowWindow(win,6);phase++;}
-   return elapsed>=49000;
-  },52000);
+   if(elapsed>46000&&phase==10){
+    SetWindowText(name,"DELAYED TEST GUEST");Cell(b,1,4,"-650,00",false);
+    spy.SlowNext=true;NotifyWinEvent(0x800E,b,-4,0);phase++;
+   }
+   if(elapsed>53000&&phase==11){
+    phase++;
+   }
+   if(elapsed>53000&&phase==12&&rapid<8&&elapsed>53000+rapid*150){
+    SetWindowText(name,"RAPID TEST GUEST "+rapid);Cell(b,1,4,"-"+(600+rapid)+",00",false);rapid++;
+   }
+   if(elapsed>55000&&phase==12){
+    SetWindowText(name,"FINAL TEST GUEST");Cell(b,1,4,"-600,00",false);phase++;
+   }
+   if(elapsed>61000&&phase==13){ShowWindow(win,6);phase++;}
+   return elapsed>=64000;
+  },67000);
   DestroyWindow(win);Application.DoEvents();Thread.Sleep(400);
   lock(gate)File.WriteAllText(args[1],output.ToString());
   File.WriteAllText(args[1]+".grid",expectedGrid.ToString());
   File.WriteAllText(args[1]+".scope","{\"before\":"+readsBefore+",\"checkout\":"+readsAfterCheckout+",\"stale\":"+readsAfterStale+",\"resumed\":"+readsAfterResume+",\"epoch\":"+resumeEpoch+"}");
+  File.WriteAllText(args[1]+".recovery","{\"delays\":"+spy.Delays+",\"rapid\":"+rapid+"}");
   GC.KeepAlive(spy);
   Console.WriteLine("Cloud fixture emitted "+output.Length+" characters");
   return 0;

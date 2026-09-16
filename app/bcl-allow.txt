@@ -940,3 +940,21 @@ overlapped
 pending
 pipe
 which
+
+# v33: Invoice getter completion tracking, native P/Invoke and our own names.
+AwaitGetter
+ListReply
+OnReply
+ReleaseBuffers
+SendListCallback
+SendMessageCallbackW
+data
+keepReply
+message
+pendingReply
+recover
+recoverable
+reply
+replyResult
+result
+retired

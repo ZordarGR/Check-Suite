@@ -50,3 +50,14 @@ assert(outsideEpochs.length>0);
 assert(!messages.some(m=>m.kind==="invoice"&&outsideEpochs.includes(m.epoch)),"confirmed excluded generations have no B snapshots");
 assert(stable.some(m=>m.epoch>scope.epoch&&m.data.fields[5]==="INDIVIDUAL"),"restoring hidden B restarts metadata and reads");
 console.log("Scope gate verified with actual getter counts: "+JSON.stringify(scope));
+
+const recovery=JSON.parse(fs.readFileSync(process.argv[2]+".recovery","utf8"));
+assert.equal(recovery.delays,1,"fixture exercised one getter beyond the deadline");
+assert.equal(recovery.rapid,8,"fixture switched through eight guests rapidly");
+assert(stable.some(m=>m.data.fields[0]==="DELAYED TEST GUEST"&&m.data.rows[1].amount==="-650,00"),
+ "a timed-out B getter must recover without reopening Invoice or restarting the reader");
+assert(stable.some(m=>m.data.fields[0]==="FINAL TEST GUEST"&&m.data.rows[1].amount==="-600,00"),
+ "rapid switching must settle on the final guest and fresh payment");
+assert(!stable.some(m=>m.data.fields[0]==="FINAL TEST GUEST"&&m.data.rows[1].amount!=="-600,00"),
+ "final guest must never inherit a previous payment");
+console.log("Timeout recovery and rapid switching passed: "+JSON.stringify(recovery));
