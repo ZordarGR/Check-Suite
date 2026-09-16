@@ -108,7 +108,7 @@ class InvoiceWindow{
   var spy=new ListSpy(b);
   ShowWindow(win,5);SetForegroundWindow(win);
   var expectedGrid=new StringBuilder();RecordGrid(b,expectedGrid);
-  var si=new ProcessStartInfo(args[0],"invoice "+Process.GetCurrentProcess().Id){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardInput=true};
+  var si=new ProcessStartInfo("node","\""+Path.GetFullPath("test/invoice-pipe.js")+"\" \""+args[0]+"\" "+Process.GetCurrentProcess().Id){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardInput=true};
   var helper=Process.Start(si);var output=new StringBuilder();object gate=new object();
   long currentEpoch=0,excludedEpoch=0,resumeEpoch=0;
   helper.OutputDataReceived+=(sender,e)=>{
