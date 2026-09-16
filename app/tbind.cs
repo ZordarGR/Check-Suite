@@ -3047,7 +3047,11 @@ static class TBind {
             if(sig==null)Say("{\"kind\":\"reset\",\"id\":"+J(Hex(h))+"}");
             else Say("{\"kind\":\"metadata\",\"id\":"+J(Hex(h))+",\"epoch\":"+epoch+",\"fields\":["+sig+"]}");
           }
-          if(readAllowed&&sig!=null&&(InvoiceGridDirty||previous==null)&&now-readAt>=1000){
+        }
+        // A new read permission can arrive between the one-second metadata checks.
+        // Start promptly; the after-read signature still rejects a changed guest.
+        if(readAllowed&&signature!=null&&(InvoiceGridDirty||previous==null)&&now-readAt>=1000){
+            string sig=signature;
             readAt=now;InvoiceGridDirty=false;
             bool complete;string rows=ReadInvoiceRows(h,out complete);
             string after=InvoiceSignature(h);
@@ -3065,7 +3069,6 @@ static class TBind {
                   ",\"textWidth\":"+width+",\"data\":"+body+"}");
               if(!stable)InvoiceGridDirty=true;
             }
-          }
         }
         Thread.Sleep(100);
       }

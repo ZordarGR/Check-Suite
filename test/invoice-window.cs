@@ -122,13 +122,16 @@ class InvoiceWindow{
   var si=new ProcessStartInfo("node","\""+Path.GetFullPath("test/invoice-pipe.js")+"\" \""+args[0]+"\" "+Process.GetCurrentProcess().Id){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardInput=true};
   var helper=Process.Start(si);var output=new StringBuilder();object gate=new object();
   long currentEpoch=0,excludedEpoch=0,resumeEpoch=0;
+  int firstMetadataAt=0,firstStableMs=-1;
   helper.OutputDataReceived+=(sender,e)=>{
    if(e.Data==null)return;
    lock(gate){
     output.AppendLine(e.Data);
+    if(firstStableMs<0&&firstMetadataAt!=0&&e.Data.Contains("\"complete\":true")&&e.Data.Contains("TEST GUEST"))firstStableMs=Environment.TickCount-firstMetadataAt;
     if(e.Data.Contains("\"kind\":\"metadata\"")){
      var match=System.Text.RegularExpressions.Regex.Match(e.Data,"\"epoch\":([0-9]+)");
      currentEpoch=long.Parse(match.Groups[1].Value);
+     if(firstMetadataAt==0)firstMetadataAt=Environment.TickCount;
      bool outside=e.Data.Contains("FICTIONAL AGENCY");
      if(outside)excludedEpoch=currentEpoch;
      Scope(helper,currentEpoch,outside?"skip":"read");
@@ -201,6 +204,7 @@ class InvoiceWindow{
   File.WriteAllText(args[1]+".grid",expectedGrid.ToString());
   File.WriteAllText(args[1]+".scope","{\"before\":"+readsBefore+",\"checkout\":"+readsAfterCheckout+",\"stale\":"+readsAfterStale+",\"resumed\":"+readsAfterResume+",\"epoch\":"+resumeEpoch+"}");
   File.WriteAllText(args[1]+".recovery","{\"delays\":"+spy.Delays+",\"rapid\":"+rapid+"}");
+  Console.WriteLine("FIRST_VERDICT_MS="+firstStableMs);
   GC.KeepAlive(spy);
   Console.WriteLine("Cloud fixture emitted "+output.Length+" characters");
   return 0;
