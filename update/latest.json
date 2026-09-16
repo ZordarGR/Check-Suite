@@ -1,11 +1,11 @@
 {
-  "version": "1.17.75",
+  "version": "1.17.76",
   "type": "full",
-  "engine": "1.17.75",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.75/Pro-Check-Setup.exe",
-  "setupSha256": "ccf54cefe49e77ad5805e37d40fe4e70c380207921c3083c3905dba8f4c185a2",
+  "engine": "1.17.76",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.76/Pro-Check-Setup.exe",
+  "setupSha256": "4bc88f78dc7dd8cb88ab61a627d6a3e7b3d4a6398cbe757082204c4d68ccda8a",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "310d3d8a79b2a2a8fa2c0c1eb9c6fcdc5e16684df0b9d353989b6641f2529a43",
-  "notes": "Show missing-data explanations above the thinking icon on B’s name tile, keeping the entries grid clear."
+  "sha256": "d77143fe616642b44104eeb5677dfd57d7ec478c52e2a13d938b92281493db93",
+  "notes": "Check reservation eligibility before reading accommodation entries. Excluded invoices stay quiet during checkout; matching bookings retain live payment updates."
 }
