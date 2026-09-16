@@ -2751,7 +2751,7 @@ static class TBind {
     }catch(Exception){}
   }
 
-  const string VER = "v32";
+  const string VER = "v33";
 
 
   /* Live accommodation reader. Separate child mode: no keyboard hooks, no protel writes.
@@ -2923,13 +2923,38 @@ static class TBind {
       return b.Append("]").ToString();
     }
   }
+  // Commands concern our own child-process pipe, never a protel control.
+  [DllImport("kernel32.dll")] static extern IntPtr GetStdHandle(int which);
+  [DllImport("kernel32.dll")] static extern bool PeekNamedPipe(IntPtr pipe,IntPtr buffer,uint size,IntPtr read,out uint available,IntPtr left);
+  [DllImport("kernel32.dll")] static extern bool ReadFile(IntPtr file,byte[] buffer,uint size,out uint read,IntPtr overlapped);
+  static bool InvoiceReadScope(IntPtr input,long epoch,ref bool allowed,ref string pending){
+    uint available;
+    if(!PeekNamedPipe(input,IntPtr.Zero,0,IntPtr.Zero,out available,IntPtr.Zero)){allowed=false;return false;}
+    if(available==0)return false;
+    byte[] bytes=new byte[Math.Min(available,4096u)];uint count;
+    if(!ReadFile(input,bytes,(uint)bytes.Length,out count,IntPtr.Zero)){allowed=false;return false;}
+    pending+=Encoding.ASCII.GetString(bytes,0,(int)count);
+    if(pending.Length>4096){pending="";allowed=false;return false;}
+    bool resumed=false;int end;
+    while((end=pending.IndexOf('\n'))>=0){
+      string line=pending.Substring(0,end).Trim();pending=pending.Substring(end+1);
+      string[] parts=line.Split(new char[]{' '});long requested;
+      if(parts.Length==3&&parts[0]=="scope"&&long.TryParse(parts[1],out requested)&&requested==epoch&&epoch>0){
+        if(parts[2]=="read"){if(!allowed)resumed=true;allowed=true;}
+        else if(parts[2]=="skip")allowed=false;
+      }
+    }
+    return resumed;
+  }
   static int RunInvoice(int parentPid){
     // This mode has its own process, so its DPI context cannot change the shortcuts.
     try{if(!SetProcessDpiAwarenessContext(new IntPtr(-4)))return 6;}catch(Exception){return 6;}
     LoadBinds();
     IntPtr hook=IntPtr.Zero; uint hookedPid=0;
     WinEventProc keep=InvoiceEvent;
-    string signature=null, body=null, previous=null;
+    string signature=null, body=null, previous=null, commands="";
+    long epoch=0;bool readAllowed=false;
+    IntPtr input=GetStdHandle(-10);
     int measuredW=-1, measuredH=-1, measuredText=-1;
     int checkedAt=Environment.TickCount-2000, readAt=Environment.TickCount-2000, pidAt=Environment.TickCount-5000;
     uint[] pids=new uint[0];
@@ -2949,11 +2974,11 @@ static class TBind {
         bool visible=h!=IntPtr.Zero && InArray(pids,pid) && cls.ToString()=="#32770"
           && title.ToString()=="Invoice" && IsWindowVisible(h) && !IsIconic(h);
         if(!visible){
-          if(invoiceHwnd!=IntPtr.Zero){Say("{\"kind\":\"hide\"}");invoiceHwnd=IntPtr.Zero;signature=null;body=null;previous=null;}
+          if(invoiceHwnd!=IntPtr.Zero){Say("{\"kind\":\"hide\"}");invoiceHwnd=IntPtr.Zero;signature=null;body=null;previous=null;readAllowed=false;}
           Thread.Sleep(100);continue;
         }
         if(h!=invoiceHwnd){
-          invoiceHwnd=h;signature=null;body=null;previous=null;
+          invoiceHwnd=h;signature=null;body=null;previous=null;readAllowed=false;
           InvoiceGridDirty=true;checkedAt=now-2000;readAt=now-2000;
           measuredW=-1;measuredH=-1;
           Say("{\"kind\":\"reset\",\"id\":"+J(Hex(h))+"}");
@@ -2967,7 +2992,7 @@ static class TBind {
         IntPtr bt=GetDlgItem(h,214), bg=GetDlgItem(h,24445);
         if(bt==IntPtr.Zero||bg==IntPtr.Zero||!IsWindowVisible(bt)||!IsWindowVisible(bg)
             ||!GetWindowRect(h,out rect)||!GetWindowRect(bt,out strip)||!GetWindowRect(bg,out grid)){
-          Say("{\"kind\":\"hide\"}");Thread.Sleep(100);continue;
+          Say("{\"kind\":\"hide\"}");invoiceHwnd=IntPtr.Zero;signature=null;previous=null;readAllowed=false;Thread.Sleep(100);continue;
         }
         RECT frame;
         try{if(DwmGetWindowAttribute(h,9,out frame,16)==0)rect=frame;}catch(Exception){}
@@ -2977,20 +3002,23 @@ static class TBind {
           measuredText=caption==null?-1:InvoiceTextWidth(bt,caption);
         }
         Say("{\"kind\":\"geometry\",\"id\":"+J(Hex(h))+",\"rect\":"+JR(rect)+",\"strip\":"+JR(strip)+",\"grid\":"+JR(grid)+",\"textWidth\":"+measuredText+"}");
+        if(InvoiceReadScope(input,epoch,ref readAllowed,ref commands)){previous=null;InvoiceGridDirty=true;}
+        if(!readAllowed){previous=null;InvoiceGridDirty=true;}
         // Text-only verification catches reused Invoice windows, even if an event was lost.
         if(now-checkedAt>=1000){
           checkedAt=now;
           string sig=InvoiceSignature(h);
           if(sig!=signature){
-            signature=sig;body=null;previous=null;InvoiceGridDirty=true;measuredW=-1;
-            Say("{\"kind\":\"reset\",\"id\":"+J(Hex(h))+"}");
+            signature=sig;body=null;previous=null;InvoiceGridDirty=true;measuredW=-1;readAllowed=false;epoch++;
+            if(sig==null)Say("{\"kind\":\"reset\",\"id\":"+J(Hex(h))+"}");
+            else Say("{\"kind\":\"metadata\",\"id\":"+J(Hex(h))+",\"epoch\":"+epoch+",\"fields\":["+sig+"]}");
           }
-          if(sig!=null&&(InvoiceGridDirty||previous==null)&&now-readAt>=1000){
+          if(readAllowed&&sig!=null&&(InvoiceGridDirty||previous==null)&&now-readAt>=1000){
             readAt=now;InvoiceGridDirty=false;
             bool complete;string rows=ReadInvoiceRows(h,out complete);
             string after=InvoiceSignature(h);
             if(GetForegroundWindow()!=h || after!=sig){
-              body=null;previous=null;
+              body=null;previous=null;signature=null;readAllowed=false;epoch++;
               Say("{\"kind\":\"reset\",\"id\":"+J(Hex(h))+"}");
             }else{
               string candidate="{\"fields\":["+sig+"],\"rows\":"+rows+"}";
@@ -2999,7 +3027,7 @@ static class TBind {
               body=candidate;
               string btitle=InvoiceText(bt);
               int width=btitle==null?-1:InvoiceTextWidth(bt,btitle);
-              Say("{\"kind\":\"invoice\",\"id\":"+J(Hex(h))+",\"complete\":"+(stable?"true":"false")+
+              Say("{\"kind\":\"invoice\",\"id\":"+J(Hex(h))+",\"epoch\":"+epoch+",\"complete\":"+(stable?"true":"false")+
                   ",\"textWidth\":"+width+",\"data\":"+body+"}");
               if(!stable)InvoiceGridDirty=true;
             }

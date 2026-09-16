@@ -3,6 +3,10 @@ let tests=0;
 const test=(name,fn)=>{fn();tests++;console.log("ok "+name);};
 const row=(label,amount,date="14/09/26")=>({label,amount,date,currency:"EUR"});
 const inv=(title="INDIVIDUAL",rows=[row("*Arrangement","150,00")])=>({complete:true,name:"TEST GUEST",room:"101",arr:"14/09/26",dep:"21/09/26",currency:"EUR",title,rows});
+const acceptInvoice=(s,m,now)=>{
+ if(!s.meta)s.accept({kind:"metadata",id:m.id,epoch:1,fields:m.data.fields},now);
+ s.accept({...m,epoch:s.epoch},now);
+};
 const ref=(price="150,00",agency="DIRECT")=>({name:"GUEST TEST",room:"101",arr:"14/09/26",dep:"21/09/26",price,agency,currency:"EUR",at:1});
 test("cent parser accepts Greek display, refuses ambiguous formats",()=>{
  assert.equal(A.cents("-1.167,25"),-116725);assert.equal(A.cents("259,25"),25925);
@@ -75,11 +79,11 @@ test("RATE protocol keeps original dates and leaves unrelated records alone",()=
 });
 test("live state clears on a reused invoice and hides when geometry goes stale",()=>{
  const s=new InvoiceState(), g={kind:"geometry",id:"one",rect:{x:80,y:300,width:1767,height:603},strip:{x:688,y:420,width:370,height:18}};
- s.accept(g,100);s.accept({kind:"invoice",id:"one",complete:true,data:{fields:["TEST GUEST","101","14/09/26","21/09/26","","INDIVIDUAL","","EUR","CI"],rows:[row("*Arrangement","150,00")]}},110);
+ s.accept(g,100);acceptInvoice(s,{kind:"invoice",id:"one",complete:true,data:{fields:["TEST GUEST","101","14/09/26","21/09/26","","INDIVIDUAL","","EUR","CI"],rows:[row("*Arrangement","150,00")]}},110);
  assert.equal(s.display([ref()],200).result.state,"unpaid");assert.equal(s.display([],1000),null);
- s.accept({kind:"reset",id:"one"},210);assert.equal(s.display([],220).result.state,"unknown");
+ s.accept({kind:"reset",id:"one"},210);assert.equal(s.display([],220),null);
  s.accept({kind:"hide"},230);assert.equal(s.display([],240),null);
- s.accept({...g,id:"two"},250);assert.equal(s.display([],260).result.state,"unknown");
+ s.accept({...g,id:"two"},250);assert.equal(s.display([],260),null);
 });
 test("overlay coordinates follow resize, movement and DPI through parent mapping",()=>{
  const a=layout({rect:{x:2000,y:100,width:1800,height:900},strip:{x:2600,y:250,width:600,height:30},grid:{x:2600,y:290,width:800,height:650}},r=>({x:1400,y:66,width:1200,height:600}));
@@ -98,9 +102,9 @@ test("new list metadata changes an open Invoice verdict, and malformed rows are 
  const s=new InvoiceState();
  s.accept({kind:"geometry",id:"x",rect:{},strip:{}},100);
  const m={kind:"invoice",id:"x",complete:true,data:{fields:["TEST GUEST","101","14/09/26","21/09/26","","INDIVIDUAL","","EUR","CI"],rows:[row("*Arrangement","150,00"),row("PAYMENT","-1.050,00")]}};
- s.accept(m,110);assert.equal(s.display([],150).result.state,"unknown");
+ acceptInvoice(s,m,110);assert.equal(s.display([],150).result.state,"unknown");
  assert.equal(s.display([ref()],160).result.state,"paid");
- s.accept({...m,data:{...m.data,rows:[null]}},170);assert.equal(s.display([ref()],180).result.state,"unknown");
+ acceptInvoice(s,{...m,data:{...m.data,rows:[null]}},170);assert.equal(s.display([ref()],180).result.state,"unknown");
 });
 test("four-digit invoice dates are preserved",()=>{
  const i=inv("INDIVIDUAL",[row("*Arrangement","150,00","14/09/2026"),row("PAYMENT","-1.050,00","13/09/2026")]);
@@ -190,14 +194,14 @@ test("live arrival updates on list capture and only adds a late night after a do
  s.accept({kind:"geometry",id:"arrival",rect:{},strip:{}},100);
  const packet=rows=>({kind:"invoice",id:"arrival",complete:true,data:{fields:["TEST GUEST","101","14/09/26","21/09/26","","INDIVIDUAL","","EUR","CI"],rows}});
  const payments=[row("PAYMENT","-1.050,00")];
- s.accept(packet(payments),110);
+ acceptInvoice(s,packet(payments),110);
  assert.equal(s.display([],120).result.state,"unknown");
  let x=s.display([ref()],130).result;assert.equal(x.state,"paid");assert.equal(x.nights,7);
- s.accept(packet([...payments,row("*Arrangement","150,00")]),140);
+ acceptInvoice(s,packet([...payments,row("*Arrangement","150,00")]),140);
  x=s.display([ref()],150).result;assert.equal(x.state,"paid");assert.equal(x.nights,7);
- s.accept(packet([...payments,row("*Arrangement","300,00")]),160);
+ acceptInvoice(s,packet([...payments,row("*Arrangement","300,00")]),160);
  x=s.display([ref()],170).result;assert.equal(x.state,"difference");assert.equal(x.nights,8);assert.equal(x.diff,-15000);
- s.accept(packet([...payments,row("*Arrangement","300,00"),row("*Arrangement","150,00","15/09/26")]),180);
+ acceptInvoice(s,packet([...payments,row("*Arrangement","300,00"),row("*Arrangement","150,00","15/09/26")]),180);
  x=s.display([ref()],190).result;assert.equal(x.nights,8);assert.equal(x.diff,-15000);
 });
 
@@ -210,6 +214,38 @@ test("B grid maps with its Invoice across DPI and rejects missing or escaped geo
  for(const q of [undefined,null,{...grid,x:1999},{...grid,y:99},{...grid,width:1300},{...grid,height:800},{...grid,width:0},{...grid,y:NaN}]){
   assert.equal(layout({rect,strip,grid:q},r=>r),null);
  }
+});
+
+
+test("excluded metadata stays outside even before B rows are read",()=>{
+ const i={...inv("FICTIONAL AGENCY"),complete:false,rows:[]};
+ assert.equal(A.evaluate(i,[ref("150,00","TOUR OPERATOR")]).state,"outside","excluded incomplete metadata must remain outside");
+ assert.equal(A.evaluate(i,[]).state,"unknown","missing eligibility is not a confirmed exclusion");
+ assert.equal(A.evaluate(i,[ref("150,00","WEBHOTELIER")]).state,"unknown","eligible incomplete B cannot become paid");
+});
+test("metadata gates rows and invalidates old generations on reused invoices",()=>{
+ const s=new InvoiceState(), refs=[ref("150,00","TOUR OPERATOR")];
+ const fields=["TEST GUEST","101","14/09/26","21/09/26","","FICTIONAL AGENCY","0,00","EUR","CI"];
+ s.accept({kind:"geometry",id:"same",rect:{},strip:{}},100);
+ assert.equal(s.display(refs,110),null,"no emoji before eligibility metadata");
+ const meta={kind:"metadata",id:"same",epoch:1,fields};
+ s.accept(meta,120);assert.equal(s.readScope(refs),false);
+ assert.equal(s.display(refs,130).result.state,"outside");
+ s.accept({...meta,epoch:2,fields:fields.map((v,i)=>i===6?"-50,00":i===8?"CO":v)},140);
+ assert.equal(s.display(refs,150).result.state,"outside","checkout must not flash unknown");
+ const qualifying=[ref("150,00","WEBHOTELIER")];
+ assert.equal(s.readScope(qualifying),true,"later list agency can activate B reads");
+ assert.equal(s.display(qualifying,160).result.state,"unknown");
+ const paid={kind:"invoice",id:"same",epoch:2,complete:true,data:{fields:s.meta?JSON.parse(s.fields):[],rows:[row("PAYMENT","-1.050,00")]}};
+ s.accept(paid,170);assert.equal(s.display(qualifying,180).result.state,"paid");
+ assert.equal(s.readScope(refs),false);assert.equal(s.display(refs,190).result.state,"outside");
+ s.accept(paid,200); // in-flight rows cannot keep their value after re-enabling
+ assert.equal(s.readScope(qualifying),true);
+ assert.equal(s.display(qualifying,210).result.state,"unknown","resume needs fresh rows");
+ s.accept({...meta,epoch:3,fields:fields.map((v,i)=>i===0?"OTHER GUEST":v)},220);
+ s.accept(paid,230);
+ assert.equal(s.inv.complete,false,"stale prior-generation rows are ignored");
+ assert.equal(s.display(qualifying,240).result.state,"unknown");
 });
 
 console.log(tests+" arrangement tests passed");

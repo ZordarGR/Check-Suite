@@ -31,3 +31,21 @@ const list=fs.readFileSync(process.argv[2]+".list","utf8");
 assert(list.includes("IH\tTEST GUEST\t101\t2/0/0/0\t14/09/26\t21/09/26\tCI"),"existing IH columns unchanged: "+JSON.stringify(list));
 assert(list.includes("RATE\tIH\tTEST GUEST\t101\t14/09/26\t21/09/26\t150,00\tWEBHOTELIER\tEUR\tCI"),"daily Price and agency reach tagged capture");
 console.log("Real Windows IH Price/agency capture passed");
+
+
+const metadata=messages.filter(m=>m.kind==="metadata");
+assert(metadata.length>=4,"metadata precedes row scanning and updates during checkout");
+for(const m of stable){
+ const index=messages.indexOf(m);
+ assert(messages.slice(0,index).some(x=>x.kind==="metadata"&&x.id===m.id&&x.epoch===m.epoch&&JSON.stringify(x.fields)===JSON.stringify(m.data.fields)),
+  "stable rows require matching earlier metadata");
+}
+const scope=JSON.parse(fs.readFileSync(process.argv[2]+".scope","utf8"));
+assert(scope.before>0&&scope.checkout===scope.before&&scope.stale===scope.before,"excluded B receives zero cell getters through checkout and a stale command");
+assert(scope.resumed>scope.before,"fresh permission resumes B getters");
+assert(stable.some(m=>m.epoch===scope.epoch&&m.data.rows[1].amount==="-800,00"),"resumed same-metadata invoice obtains fresh stable rows");
+const outsideEpochs=metadata.filter(m=>m.fields[5]==="FICTIONAL AGENCY"&&m.epoch<scope.epoch).map(m=>m.epoch);
+assert(outsideEpochs.length>0);
+assert(!messages.some(m=>m.kind==="invoice"&&outsideEpochs.includes(m.epoch)),"confirmed excluded generations have no B snapshots");
+assert(stable.some(m=>m.epoch>scope.epoch&&m.data.fields[5]==="INDIVIDUAL"),"restoring hidden B restarts metadata and reads");
+console.log("Scope gate verified with actual getter counts: "+JSON.stringify(scope));
