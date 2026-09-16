@@ -2779,6 +2779,8 @@ static class TBind {
   delegate void ListReply(IntPtr hwnd,uint message,UIntPtr data,IntPtr result);
   [DllImport("user32.dll",EntryPoint="SendMessageCallbackW",SetLastError=true)]
   static extern bool SendListCallback(IntPtr hwnd,uint message,IntPtr wp,IntPtr lp,ListReply reply,UIntPtr data);
+  [DllImport("user32.dll")]
+  static extern uint MsgWaitForMultipleObjectsEx(uint count,IntPtr handles,uint milliseconds,uint wakeMask,uint flags);
   sealed class SafeListRead : IDisposable {
     public IntPtr proc=IntPtr.Zero, text=IntPtr.Zero, item=IntPtr.Zero, lv;
     public bool target64, ok=true, timedOut=false;
@@ -2815,8 +2817,9 @@ static class TBind {
       int since=Environment.TickCount;MSG m;
       while(pendingReply&&Environment.TickCount-since<250){
         // Peek dispatches sent-message callbacks on this reader thread.
-        PeekMessage(out m,IntPtr.Zero,0,0,0);
-        if(pendingReply)Thread.Sleep(1);
+        if(PeekMessage(out m,IntPtr.Zero,0,0,PM_REMOVE)){TranslateMessage(ref m);DispatchMessage(ref m);}
+        int remaining=250-(Environment.TickCount-since);
+        if(pendingReply&&remaining>0)MsgWaitForMultipleObjectsEx(0,IntPtr.Zero,(uint)remaining,0x04FF,0x0004);
       }
       result=replyResult;return !pendingReply;
     }

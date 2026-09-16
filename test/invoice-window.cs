@@ -188,9 +188,14 @@ class InvoiceWindow{
    if(elapsed>55000&&phase==12){
     SetWindowText(name,"FINAL TEST GUEST");Cell(b,1,4,"-600,00",false);phase++;
    }
-   if(elapsed>61000&&phase==13){ShowWindow(win,6);phase++;}
-   return elapsed>=64000;
-  },67000);
+   if(elapsed>61000&&phase==13){
+    SetWindowText(name,"LONG TEST GUEST");
+    for(int i=2;i<400;i++)Row(b,i,new string[]{"15/09/26","15/09/26","1","*Arrangement","150,00","","EUR"});
+    NotifyWinEvent(0x800E,b,-4,0);phase++;
+   }
+   if(elapsed>71000&&phase==14){ShowWindow(win,6);phase++;}
+   return elapsed>=74000;
+  },77000);
   DestroyWindow(win);Application.DoEvents();Thread.Sleep(400);
   lock(gate)File.WriteAllText(args[1],output.ToString());
   File.WriteAllText(args[1]+".grid",expectedGrid.ToString());

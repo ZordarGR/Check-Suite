@@ -4,7 +4,7 @@ console.log("Native scope snapshots: "+JSON.stringify(messages.filter(m=>m.kind=
 const stable=messages.filter(m=>m.kind==="invoice"&&m.complete);
 assert(stable.some(m=>m.data.fields[0]==="TEST GUEST"),"first reservation was read completely");
 assert(stable.some(m=>m.data.fields[0]==="SECOND TEST GUEST"&&m.data.rows[1].amount==="-750,00"),"reused Invoice refreshes guest and payments");
-assert(stable.every(m=>m.data.rows.length===2&&!JSON.stringify(m).includes("IRRELEVANT A")),"reads B only");
+assert(stable.every(m=>m.data.rows.length===(m.data.fields[0]==="LONG TEST GUEST"?400:2)&&!JSON.stringify(m).includes("IRRELEVANT A")),"reads B only");
 assert(stable.some(m=>m.data.rows[1].label==="UNFAMILIAR PAYMENT"),"any payment label is captured");
 const geometry=messages.filter(m=>m.kind==="geometry");
 const {layout}=require("../app/arrangement-live");
@@ -61,3 +61,7 @@ assert(stable.some(m=>m.data.fields[0]==="FINAL TEST GUEST"&&m.data.rows[1].amou
 assert(!stable.some(m=>m.data.fields[0]==="FINAL TEST GUEST"&&m.data.rows[1].amount!=="-600,00"),
  "final guest must never inherit a previous payment");
 console.log("Timeout recovery and rapid switching passed: "+JSON.stringify(recovery));
+
+assert(stable.some(m=>m.data.fields[0]==="LONG TEST GUEST"&&m.data.rows.length===400),
+ "the maximum 400-entry invoice must complete within the existing read budget");
+console.log("Maximum-length invoice passed within the unchanged read budget");

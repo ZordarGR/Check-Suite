@@ -960,3 +960,10 @@ result
 retired
 dest
 wp
+# Message-queue wait: Win32 API; remaining names are its own parameters.
+MsgWaitForMultipleObjectsEx
+count
+handles
+milliseconds
+wakeMask
+flags
