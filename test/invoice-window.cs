@@ -38,6 +38,12 @@ class InvoiceWindow{
   }
  }
  [DllImport("user32.dll")]static extern void NotifyWinEvent(uint ev,IntPtr hwnd,int obj,int child);
+ static void Scope(Process helper,long epoch,string mode){
+  // Match Node's ASCII command bytes; StreamWriter may prepend an encoding BOM.
+  byte[] bytes=Encoding.ASCII.GetBytes("scope "+epoch+" "+mode+"\n");
+  helper.StandardInput.BaseStream.Write(bytes,0,bytes.Length);
+  helper.StandardInput.BaseStream.Flush();
+ }
  static void Column(IntPtr lv,int index,string title){
   var c=new Col{mask=0xF,width=95,text=Marshal.StringToHGlobalUni(title),len=title.Length,sub=index};
   IntPtr p=Marshal.AllocHGlobal(Marshal.SizeOf(c));
@@ -114,11 +120,11 @@ class InvoiceWindow{
      currentEpoch=long.Parse(match.Groups[1].Value);
      bool outside=e.Data.Contains("FICTIONAL AGENCY");
      if(outside)excludedEpoch=currentEpoch;
-     helper.StandardInput.WriteLine("scope "+currentEpoch+" "+(outside?"skip":"read"));
-     helper.StandardInput.Flush();
+     Scope(helper,currentEpoch,outside?"skip":"read");
     }
    }
   };
+  Console.WriteLine("Fixture StreamWriter preamble (bypassed for ASCII protocol): "+BitConverter.ToString(helper.StandardInput.Encoding.GetPreamble()));
   helper.BeginOutputReadLine();
   int start=Environment.TickCount,phase=0,readsBefore=0,readsAfterCheckout=0,readsAfterStale=0,readsAfterResume=0;
   PumpUntil(()=>{
@@ -141,14 +147,14 @@ class InvoiceWindow{
    if(elapsed>31000&&phase==6){
     readsAfterCheckout=spy.Reads;
     if(readsAfterCheckout!=readsBefore)throw new Exception("Excluded checkout scanned B entries");
-    lock(gate){helper.StandardInput.WriteLine("scope "+(currentEpoch-1)+" read");helper.StandardInput.Flush();}
+    lock(gate){Scope(helper,currentEpoch-1,"read");}
     NotifyWinEvent(0x800E,b,-4,0);phase++;
    }
    if(elapsed>34000&&phase==7){
     readsAfterStale=spy.Reads;
     if(readsAfterStale!=readsBefore)throw new Exception("A stale scope command restarted B scans");
     // Simulate a newly captured qualifying list without changing any Invoice metadata.
-    lock(gate){resumeEpoch=currentEpoch;helper.StandardInput.WriteLine("scope "+currentEpoch+" read");helper.StandardInput.Flush();}
+    lock(gate){resumeEpoch=currentEpoch;Scope(helper,currentEpoch,"read");}
     phase++;
    }
    if(elapsed>39000&&phase==8){

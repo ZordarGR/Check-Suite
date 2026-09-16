@@ -1,5 +1,6 @@
 const fs=require("fs"), assert=require("assert");
 const messages=fs.readFileSync(process.argv[2],"utf8").trim().split(/\r?\n/).filter(Boolean).map(s=>JSON.parse(s));
+console.log("Native scope snapshots: "+JSON.stringify(messages.filter(m=>m.kind==="metadata"||m.kind==="invoice")));
 const stable=messages.filter(m=>m.kind==="invoice"&&m.complete);
 assert(stable.some(m=>m.data.fields[0]==="TEST GUEST"),"first reservation was read completely");
 assert(stable.some(m=>m.data.fields[0]==="SECOND TEST GUEST"&&m.data.rows[1].amount==="-750,00"),"reused Invoice refreshes guest and payments");
