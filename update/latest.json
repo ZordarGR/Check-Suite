@@ -1,11 +1,11 @@
 {
-  "version": "1.17.74",
+  "version": "1.17.75",
   "type": "full",
-  "engine": "1.17.74",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.74/Pro-Check-Setup.exe",
-  "setupSha256": "dcaa32d0e5cd694e43d8223de45248320a6ad4b61438331c691fab760e03b017",
+  "engine": "1.17.75",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.75/Pro-Check-Setup.exe",
+  "setupSha256": "ccf54cefe49e77ad5805e37d40fe4e70c380207921c3083c3905dba8f4c185a2",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
-  "sha256": "a11cd831b5884d902496456d109baff843d73d2e07ab210208972e50f0ed555e",
-  "notes": "Limit the unpaid accommodation tint to B’s entries grid, following its actual bounds during moves and resizing. The title, balance and other Invoice panes remain clear."
+  "sha256": "310d3d8a79b2a2a8fa2c0c1eb9c6fcdc5e16684df0b9d353989b6641f2529a43",
+  "notes": "Show missing-data explanations above the thinking icon on B’s name tile, keeping the entries grid clear."
 }

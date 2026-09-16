@@ -18,7 +18,8 @@ window.arrangement.onPaint(p=>{
   detail.style.display=r.state==="paid"?"none":"block";
   detail.style.maxWidth=Math.min(460,s.width)+"px";
   detail.style.left=Math.max(2,s.x+s.width-Math.min(460,s.width))+"px";
-  detail.style.top=(s.y+s.height+3)+"px";
+  // Measure after setting text and width so wrapped missing-data messages sit above the icon.
+  detail.style.top=(r.state==="unknown"?Math.max(2,y-detail.getBoundingClientRect().height-3):s.y+s.height+3)+"px";
   // Two frames replace the old guest’s paint before main reveals the click-through window.
   requestAnimationFrame(()=>requestAnimationFrame(()=>window.arrangement.painted(JSON.stringify(p))));
 });

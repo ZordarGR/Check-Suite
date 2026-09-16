@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Cloud only. Rebuild from the last verified installer’s Electron payload, then unpack and compare.
 set -euo pipefail
-version=1.17.74
+version=1.17.75
 work="$(mktemp -d)"
 repo="$PWD"
 cat dist-win64/parts/RecCheck-Setup.exe.[0-9]* > "$work/previous.exe"
@@ -11,15 +11,14 @@ printf '%s  %s\n' "$oldsha" "$work/previous.exe" | sha256sum -c -
 rm -rf -- "$work/stage/\$PLUGINSDIR"
 node <<'NODE'
 const fs=require("fs"),crypto=require("crypto");
-const v="1.17.74",p=JSON.parse(fs.readFileSync("app/package.json"));p.version=v;
+const v="1.17.75",p=JSON.parse(fs.readFileSync("app/package.json"));p.version=v;
 fs.writeFileSync("app/package.json",JSON.stringify(p,null,2)+"\n");
-const html=fs.readFileSync("app/index.html","utf8").replace(/APP_VERSION\s*=\s*"1\.17\.73"/,'APP_VERSION = "'+v+'"');
+const html=fs.readFileSync("app/index.html","utf8").replace(/APP_VERSION\s*=\s*"1\.17\.74"/,'APP_VERSION = "'+v+'"');
 if(!html.includes('APP_VERSION = "'+v+'"'))throw Error("version not replaced");
 fs.writeFileSync("app/index.html",html);fs.writeFileSync("Departments Check.html",html);
-fs.writeFileSync("dist-win64/nsi/reccheck.nsi",fs.readFileSync("dist-win64/nsi/reccheck.nsi","utf8").replace('!define VERSION "1.17.73"','!define VERSION "'+v+'"'));
+fs.writeFileSync("dist-win64/nsi/reccheck.nsi",fs.readFileSync("dist-win64/nsi/reccheck.nsi","utf8").replace('!define VERSION "1.17.74"','!define VERSION "'+v+'"'));
 NODE
-# Build the v32 helper in the cloud with the .NET Framework BCL guard.
-sh app/build-helper.sh
+# Renderer-only update: preserve the verified v32 helper byte for byte.
 mkdir "$work/pack"
 files=(files.js index.html main.js overlay.html overlay-preload.js package.json preload.js tray.ico updater.js arrangement.js arrangement-live.js arrangement-preload.js arrangement.html arrangement-view.js)
 for f in "${files[@]}"; do cp "app/$f" "$work/pack/$f"; done
@@ -37,10 +36,10 @@ rm -f dist-win64/parts/RecCheck-Setup.exe.[0-9]*
 split -b 20971520 -d -a 3 "$work/Pro-Check-Setup.exe" dist-win64/parts/RecCheck-Setup.exe.
 node - "$work/Pro-Check-Setup.exe" <<'NODE'
 const fs=require("fs"),crypto=require("crypto"),sha=f=>crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
-const v="1.17.74",m=JSON.parse(fs.readFileSync("update/latest.json"));
+const v="1.17.75",m=JSON.parse(fs.readFileSync("update/latest.json"));
 Object.assign(m,{version:v,engine:v,type:"full",sha256:sha("app/index.html"),setupSha256:sha(process.argv[2]),
 setup:"https://github.com/ZordarGR/Check-Suite/releases/download/v"+v+"/Pro-Check-Setup.exe",
-notes:"Limit the unpaid accommodation tint to B’s entries grid, following its actual bounds during moves and resizing. The title, balance and other Invoice panes remain clear."});
+notes:"Show missing-data explanations above the thinking icon on B’s name tile, keeping the entries grid clear."});
 fs.writeFileSync("update/latest.json",JSON.stringify(m,null,2)+"\n");
 const w=fs.readFileSync(".github/workflows/release.yml","utf8").replace(/VERSION: v[\d.]+/,"VERSION: v"+v).replace(/SETUP_SHA256: [a-f0-9]+/,"SETUP_SHA256: "+m.setupSha256);
 fs.writeFileSync(".github/workflows/release.yml",w);
