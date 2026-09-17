@@ -73,6 +73,7 @@ jobs:
             test/browser/*.png
             test/browser/*.pdf
             /tmp/*.pdf
+            ./*.pdf
       - name: Require successful checks
         if: always()
         env:
@@ -101,7 +102,9 @@ jobs:
           $compiler = 'C:/Windows/Microsoft.NET/Framework64/v4.0.30319/csc.exe'
           $failed = $false
           foreach ($target in @('x86', 'anycpu')) {
-            & $compiler /nologo /target:exe /platform:$target /r:System.Windows.Forms.dll /r:System.Drawing.dll /out:audit-results/invoice-$target.exe test/invoice-window.cs
+            $fixture = (Resolve-Path 'test/invoice-window.cs').Path
+            $fixtureExe = Join-Path (Get-Location) "audit-results/invoice-$target.exe"
+            & $compiler /nologo /target:exe "/platform:$target" /r:System.Windows.Forms.dll /r:System.Drawing.dll "/out:$fixtureExe" $fixture
             if ($LASTEXITCODE -ne 0) { throw 'fixture compilation failed' }
             & ./audit-results/invoice-$target.exe (Resolve-Path app/rc-tbind.exe).Path "audit-results/invoice-$target.jsonl"
             if ($LASTEXITCODE -ne 0) { $failed = $true }
