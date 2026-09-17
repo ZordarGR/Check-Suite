@@ -234,6 +234,7 @@ body.onMenu #clList{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
    since 1.17.51 — so a row here was as wide as its own text (145px in a 430px column) and
    the rows shared borders with no gap between them. Named by the PLACE, so a row added
    later is sized by being here (7l). */
+#departureReportBtn{width:100%;margin:0 0 12px}.depDateTable{width:100%;border-collapse:collapse}.depDateTable th,.depDateTable td{padding:8px 12px;text-align:left;border-bottom:1px solid #aaa}.depDateTable thead{display:table-header-group}.depDateTable tr{break-inside:avoid}
 #repList{display:flex;flex-direction:column;gap:10px;width:100%}
 #repList > .mItem{width:100%;margin:0}
 /* and a folder name protel or he can make arbitrarily long must not push the row past the
@@ -995,6 +996,7 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
 
   <div id="reportsScreen" style="display:none">
     <div class="mNav">
+      <button class="mItem primary" id="departureReportBtn"><span class="mLabel">DEPARTURE REPORT</span><span class="mSub">Choose departure dates · rooms, stay dates and extras · print</span></button>
       <div id="repList"></div>
       <button class="btn small" id="repBack" style="margin-top:6px"></button>
     </div>
@@ -1946,7 +1948,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.76";
+const APP_VERSION = "1.17.77";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -6543,6 +6545,116 @@ $("#drop").ondrop = e => {
    fragments left out — everything else exactly as protel printed it — prints it through
    the same sheet the corrections use, and deletes the file to the Recycle Bin. Nothing
    here touches protel; nothing is installed. */
+
+/* On-demand departure-date report. Reads saved facts; never writes dates or stays. */
+function depReportKey(value){
+  const s=String(value||"").trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)){
+    const p=s.split("-"); return depReportKey(p[2]+"/"+p[1]+"/"+p[0]);
+  }
+  const k=/^\d{8}$/.test(s)?+s:dateNum2(s);
+  const y=Math.floor(k/10000),m=Math.floor(k/100)%100,d=k%100,dt=new Date(Date.UTC(y,m-1,d));
+  return y>=2000&&dt.getUTCFullYear()===y&&dt.getUTCMonth()===m-1&&dt.getUTCDate()===d?k:0;
+}
+function depReportDate(k){return String(k%100).padStart(2,"0")+"/"+String(Math.floor(k/100)%100).padStart(2,"0")+"/"+Math.floor(k/10000);}
+function depReportRows(ledger,status,history,from,to){
+  const all=[], by=new Map();
+  for(const room of Object.keys(ledger||{})) for(const ak of Object.keys(ledger[room]||{})){
+    const r=ledger[room][ak],a=depReportKey(ak),d=depReportKey(r.d);
+    if(!a||!d||d<a||!pillRoom(room,r.n)||!r.n)continue;
+    const row={room,base:pillRoom(room,r.n),arr:a,dep:d,name:r.n,seen:r.seen||0,mv:!!r.mv,from:r.from||""};
+    all.push(row);by.set(row.base+"|"+a,row);
+  }
+  const cap=status&&status.IH;
+  for(const r of (cap&&cap.rows)||[]){
+    const room=pillRoom(r.room,r.name),a=depReportKey(r.arr),d=depReportKey(r.dep),key=room+"|"+a,old=by.get(key);
+    if(!room||!a||!d||d<a||!r.name||/void|reversal/i.test(r.status||""))continue;
+    if(old&&(old.mv||(old.seen||0)>(cap.key||0)))continue;
+    const row={room:String(r.room),base:room,arr:a,dep:d,name:r.name,seen:cap.key||0,mv:false,from:old?old.from:""};
+    if(old)all.splice(all.indexOf(old),1);
+    all.push(row);by.set(key,row);
+  }
+  const moves=[];
+  for(const k of Object.keys((status&&status.MV)||{})) for(const r of statusRows(status,"MV",+k)){
+    if(String(r.x||"").trim())moves.push({...r,night:+k});
+  }
+  return all.filter(r=>!r.mv&&r.dep>=from&&r.dep<=to).map(r=>{
+    const rooms=new Set([r.base]);if(r.from)rooms.add(String(r.from));
+    let grew=true;
+    while(grew){
+      grew=false;
+      for(const m of moves){
+        if(m.night<r.arr||m.night>r.dep||depReportKey(m.arr)!==r.arr||depReportKey(m.dep)!==r.dep||!nameLike(m.name,r.name))continue;
+        const src=pillRoom(m.from,m.name),dst=pillRoom(m.to,m.name);
+        if(src&&dst&&rooms.has(dst)&&!rooms.has(src)){rooms.add(src);grew=true;}
+      }
+    }
+    let extras=false;
+    for(const k of Object.keys(history||{})){
+      const day=depReportKey(k);if(day<r.arr||day>r.dep)continue;
+      for(const pair of Array.isArray(history[k])?history[k]:[]){
+        const room=pillRoom(pair[0],pair[1]);if(!rooms.has(room))continue;
+        const others=all.filter(o=>o.base===room&&o.arr<=day&&o.dep>=day&&!(o.arr===r.arr&&o.dep===r.dep&&nameLike(o.name,r.name))).map(o=>o.name);
+        if(nameHit(pair[1],r.name,others)){extras=true;break;}
+      }
+      if(extras)break;
+    }
+    return {room:r.room,arr:r.arr,dep:r.dep,extras};
+  }).sort((a,b)=>a.dep-b.dep||a.room.localeCompare(b.room,undefined,{numeric:true})||a.arr-b.arr);
+}
+function depReportHistory(){
+  const history=loadNightReceipts();
+  // Manual receipts are retained in each checked night's existing saved state.
+  for(let i=0;i<localStorage.length;i++){
+    const key=localStorage.key(i),match=/^reccheck_(\d{1,2}\/\d{1,2}\/\d{4})$/.exec(key||"");
+    if(!match)continue;
+    try{
+      const state=JSON.parse(localStorage.getItem(key)),day=depReportKey(match[1]);
+      if(day)for(const x of (state&&state.extras)||[])if(x.room&&x.guest)(history[day]=history[day]||[]).push([String(x.room),x.guest]);
+    }catch(e){}
+  }
+  if(MODEL){
+    const day=depReportKey(MODEL.reportDate);
+    if(day){
+      history[day]=checkableList().map(r=>[String(effRoom(r)||""),receiptName(r)]);
+      for(const x of (STATE&&STATE.extras)||[])if(x.room&&x.guest)history[day].push([String(x.room),x.guest]);
+    }
+  }
+  return history;
+}
+function depReportTable(rows){
+  return '<table class="depDateTable"><thead><tr><th>Room</th><th>Arrival</th><th>Departure</th><th>Extras</th></tr></thead><tbody>'+
+    rows.map(r=>'<tr><td>'+esc(r.room)+'</td><td>'+depReportDate(r.arr)+'</td><td>'+depReportDate(r.dep)+'</td><td>'+(r.extras?'Yes':'No recorded extras')+'</td></tr>').join("")+'</tbody></table>';
+}
+function depReportSheet(job){
+  const html='<h1>Departures · '+depReportDate(job.from)+' – '+depReportDate(job.to)+'</h1><p>'+job.rows.length+' reservations</p>'+depReportTable(job.rows)+
+    '<p style="font-size:10px;margin-top:14px">Extras: matching receipts recorded in the tool across the stay, including previous rooms. No recorded extras does not confirm that none occurred; unloaded or expired receipt history is unavailable.</p>';
+  $("#printSheet").innerHTML=html;return html;
+}
+function openDepartureReport(){
+  clearPrintJob();
+  const today=new Date(),iso=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+  openModal('<h2>Departure report</h2><div style="display:flex;gap:16px;flex-wrap:wrap;margin:16px 0"><label>Departure from <input id="drFrom" type="date"></label><label>through <input id="drTo" type="date"></label><button class="btn" id="drBuild">Create report</button></div><p id="drNote" class="stNote"></p><div id="drResults" style="max-height:55vh;overflow:auto"></div><div class="actions"><button class="btn" id="drClose">Close</button><button class="btn amber" id="drPrint" disabled>Print</button></div>');
+  $("#modal").classList.add("wide");
+  $("#drFrom").value=iso(today);$("#drTo").value=iso(today);
+  let job=null;
+  const invalidate=()=>{job=null;$("#drPrint").disabled=true;$("#drResults").innerHTML="";$("#drNote").textContent="Choose departure dates, then create the report.";};
+  $("#drFrom").onchange=invalidate;$("#drTo").onchange=invalidate;
+  $("#drBuild").onclick=()=>{
+    const from=depReportKey($("#drFrom").value),to=depReportKey($("#drTo").value);
+    if(!from||!to||from>to){invalidate();$("#drNote").textContent="Choose valid departure dates; From must be on or before Through.";return;}
+    const rows=depReportRows(loadMoves(),loadStatus(),depReportHistory(),from,to);
+    job={kind:"departureDates",from,to,rows};
+    $("#drResults").innerHTML=depReportTable(rows);
+    $("#drNote").textContent=rows.length+" reservations · Extras across the stay from receipts recorded in the tool. "+(rows.length?"No recorded extras means no match in available history.":"Open the relevant in-house, arrival or departure list in protel to capture its reservations.");
+    $("#drPrint").disabled=!rows.length;
+  };
+  $("#drClose").onclick=()=>{clearPrintJob();closeModal();};
+  $("#drPrint").onclick=()=>{if(!job)return;PRINT_JOB=job;closeModal();setPrintLandscape(false);window.print();};
+  invalidate();
+}
+$("#departureReportBtn").onclick=openDepartureReport;
+
 let REP_CACHE = {};          // path + mtime -> {ok, parsed} — a file is unzipped once per session
 const REP_KEY = f => f.path + "@" + Math.round(f.mtimeMs || 0);
 async function repParse(f){
@@ -6947,6 +7059,7 @@ $("#printBtn").onclick = printCorrections;
    on the REPORTS screen, which is the harmless direction of the two. */
 window.addEventListener("beforeprint", () => {
   if(document.body.classList.contains("taxPrint")){ setPrintLandscape(false); return; }   // the tax half prints its own mount, portrait
+  if(PRINT_JOB && PRINT_JOB.kind === "departureDates"){ setPrintLandscape(false); depReportSheet(PRINT_JOB); return; }
   if(PRINT_JOB && PRINT_JOB.kind === "board"){ setPrintLandscape(false); buildBoardingSheet(PRINT_JOB.p, PRINT_JOB.fname); return; }
   if(PRINT_JOB && PRINT_JOB.kind === "dep"){
     if(PRINT_JOB.names){ setPrintLandscape(true); buildDepSheet(PRINT_JOB.p, PRINT_JOB.fname, true); }
@@ -8190,9 +8303,15 @@ function statusIngest(tag, p, at){
                        .filter(r => r.name || r.room);
     const cut = !!(p.done && p.done.cut);
     const cap = {at: at, date: date, key: key, cut: cut, rows: rows};
-    if(!st.IH || st.IH.at !== at){ st.IH = cap; changed = true; }
+    if(!st.IH || at > st.IH.at){
+      const keep=st.IH&&st.IH.key===key?st.IH.rows:[];
+      const merged=new Map(keep.map(r=>[stKey(r.name,r.room),r]));
+      for(const r of rows)if(r.name&&r.room)merged.set(stKey(r.name,r.room),r);
+      // Keep the day's captured rows; latest snapshot remains separate for status marks.
+      st.IHL=cap;st.IH=Object.assign({},cap,{rows:[...merged.values()]});changed=true;
+    }
     /* absence is argued from a COMPLETE list only, so the last complete one is kept apart */
-    if(!cut && (!st.IHC || st.IHC.at !== at)){ st.IHC = cap; changed = true; }
+    if(!cut && (!st.IHC || at > st.IHC.at)){ st.IHC = cap; changed = true; }
   }else{
     const date = inhouseDate(p.title), key = dkey(date);
     if(!key) return false;
@@ -8233,13 +8352,13 @@ function ihFind(cap, name, room){
 function statusMark(st, tag, row, dayKey){
   const fresh = c => (c && (!dayKey || (c.key || 0) >= dayKey)) ? c : null;
   if(tag === "AR"){
-    const ih = st.IH;
+    const ih = st.IHL || st.IH;
     const m = ihFind(ih, row.name, row.room);
     if(m && /^C[IO]\b/i.test(m.status)) return {cls: "mIn", text: t('st_markIn', hhmm(ih.at) || "?")};
     return {cls: "mNone", text: t('st_markExpected')};
   }
   if(tag === "DP"){
-    const ih = fresh(st.IH), ihc = fresh(st.IHC);
+    const ih = fresh(st.IHL || st.IH), ihc = fresh(st.IHC);
     const m = ihFind(ih, row.name, row.room);
     if(m && /^CO\b/i.test(m.status)) return {cls: "mOut", text: t('st_markOutCO', hhmm(ih.at) || "?")};
     if(m) return {cls: "mStay", text: t('st_markStay', hhmm(ih.at) || "?")};
