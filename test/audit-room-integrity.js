@@ -50,9 +50,9 @@ function makeEnv(seed = {}) {
     'dkey', 'dfmt', 'leadRoom', 'bnk', 'hhmm', 'pillRoom', 'loadLedger',
     'mvSameName', 'mvPrevNight', 'detectMoves', 'saveMoves', 'movesApplied', 'recordMoves',
     'inhouseToRate', 'isInhouseTitle', 'inhouseDate', 'parseInhouse', 'parseTagged',
-    'statusLoad', 'statusSave', 'stName', 'stRoom', 'stKey', 'stSameRoom', 'stDayKey',
+    'statusLoad', 'loadStatus', 'statusSave', 'stName', 'stRoom', 'stKey', 'stSameRoom', 'stDayKey',
     'statusPrune', 'statusIngest', 'ihFind', 'statusMark', 'liveNameOf', 'ingestLiveNames',
-    'feedStays', 'applyInhouse', 'dateNum', 'sameName', 'isCutOf', 'prevNightKey', 'syncRooms'
+    'feedStays', 'taxCaptureRate', 'applyInhouse', 'dateNum', 'sameName', 'isCutOf', 'prevNightKey', 'syncRooms'
   ];
   const body = [
     ...['IH', 'AR', 'DP', 'MV'].map(declaration),
@@ -184,7 +184,7 @@ test('R13 got fewer rows than total cannot create a complete census', () => {
   e.statusIngest('IH',e.parseInhouse(ihText([row('102','BETA GUEST')],{total:600})),2000);
   assert.notEqual(e.statusMark(e.readStatus(),'DP',row('101'),20260918).cls,'mOut');
 });
-test('R14 a nameless failed cell cannot erase the saved in-house departure', () => {
+test('R14 failed cells cannot erase the saved in-house departure', () => {
   const e=makeEnv();
   e.statusIngest('IH',e.parseInhouse(ihText([row('101')])),1000);
   e.statusIngest('IH',e.parseInhouse(ihText([row('101','ALPHA GUEST','10/09/26','','')])),2000);
@@ -193,7 +193,7 @@ test('R14 a nameless failed cell cannot erase the saved in-house departure', () 
 });
 test('R15 late delivery of an older report cannot revert its newer status row', () => {
   const e=makeEnv();
-  const report=status=>({title:'Departure Report for 18/09/26',rows:[['ALPHA GUEST','101','1/0/0/0/0','10/09/26',status]],done:{cut:false}});
+  const report=status=>({title:'Departure Report for 18/09/26',rows:[['ALPHA GUEST','101','1/0/0/0/0','10/09/26',status]],done:{cut:false,got:1,rows:1}});
   e.statusIngest('DP',report('CO'),2000);
   e.statusIngest('DP',report('CI'),1000);
   const day=e.readStatus().DP['20260918'];
@@ -236,6 +236,80 @@ test('R21 one nickname cannot be consumed by two ambiguous destination rooms', (
   e.sync(rooms,model);
   assert.equal(rooms['101'].nick,'Family label','Two possible destinations must leave the source label in place');
   assert.ok(!rooms['102'].nick && !rooms['103'].nick);
+});
+test('R22 repeated conflict observations deduplicate and update only that guest', () => {
+  const e=makeEnv();
+  e.saveMoves(rate([row('101','ALPHA GUEST'),row('101','BETA GUEST')]));
+  e.saveMoves(rate([row('101','BETA GUEST','10/09/26','26/09/26')]));
+  const saved=e.readLedger()['101']['20260910'];
+  assert.equal(saved.n,'ALPHA GUEST');assert.equal(saved.d,20260925);
+  assert.equal(saved.conflicts.length,1);assert.equal(saved.conflicts[0].n,'BETA GUEST');
+  assert.equal(saved.conflicts[0].d,20260926);
+});
+test('R23 report-fed identity conflicts preserve both names and primary move history', () => {
+  const e=makeEnv({[KEY]:{'101':{'20260910':entry('ALPHA GUEST',20260917,{from:'99'})}}});
+  e.feedStays([{room:'101',name:'BETA GUEST',arr:'10/09/26',dep:'26/09/26'}],20260918);
+  const saved=e.readLedger()['101']['20260910'];
+  assert.equal(saved.n,'ALPHA GUEST');assert.equal(saved.from,'99');
+  assert.equal(saved.conflicts[0].n,'BETA GUEST');
+});
+test('R24 equally ranked conflicting in-house names preserve current room identity', () => {
+  const e=makeEnv();e.setRooms({'101':{guest:'KNOWN GUEST',liveKey:20260918}});
+  e.ingestLiveNames(rate([row('101','ALPHA GUEST'),row('101','BETA GUEST')]));
+  assert.equal(e.getRooms()['101'].guest,'KNOWN GUEST');
+});
+test('R25 a missing receipt is insufficient evidence to transfer a nickname', () => {
+  const e=makeEnv(),rooms={'101':{guest:'ALPHA GUEST',seen:'17/9/2026',nick:'Label'}};
+  e.sync(rooms,{reportDate:'18/9/2026',receipts:[{roomMain:'102',guest:'ALPHA GUEST'}]});
+  assert.equal(rooms['101'].nick,'Label');assert.ok(!rooms['102'].nick);
+});
+test('CONTROL an explicit uniquely matched move still transfers the nickname', () => {
+  const e=makeEnv({[STATUS]:{MV:{'20260918':{rows:{m:{from:'101',to:'102',name:'ALPHA GUEST',x:'X',arr:'10/09/26'}}}}}});
+  const rooms={'101':{guest:'ALPHA GUEST',seen:'17/9/2026',nick:'Label'}};
+  e.sync(rooms,{reportDate:'18/9/2026',receipts:[{roomMain:'102',guest:'ALPHA GUEST'}]});
+  assert.equal(rooms['102'].nick,'Label');assert.ok(!rooms['101'].nick);
+});
+test('CONTROL explicit CO still confirms departure', () => {
+  const e=makeEnv();
+  e.statusIngest('IH',e.parseInhouse(ihText([row('101','ALPHA GUEST','10/09/26','18/09/26','CO')])),1000);
+  assert.equal(e.statusMark(e.readStatus(),'DP',row('101'),20260918).cls,'mOut');
+});
+test('R26 historical census does not replace newer captured status', () => {
+  const e=makeEnv();
+  e.statusIngest('IH',e.parseInhouse(ihText([row('101')])),1000);
+  e.statusIngest('IH',e.parseInhouse(ihText([row('101','PREVIOUS GUEST')],{date:'17/09/26'})),2000);
+  assert.equal(e.readStatus().IH.key,20260918);assert.equal(e.readStatus().IH.rows[0].name,'ALPHA GUEST');
+});
+test('R27 wrong-caption report cannot populate the saved arrivals list', () => {
+  const e=makeEnv();
+  e.statusIngest('AR',{title:'Departure Report for 18/09/26',rows:[['ALPHA GUEST','101','','25/09/26','CI']],done:{got:1,rows:1,cut:false}},1000);
+  assert.equal(e.readStatus().AR,undefined);
+});
+test('R28 imported partial rate reports cannot fabricate moves either', () => {
+  const e=makeEnv({[KEY]:{'101':{'20260910':entry('FAMILY GUEST',20260917)}}});
+  const capture=rate([row('102','FAMILY GUEST','18/09/26')]);capture.live=false;
+  e.saveMoves(capture);
+  assert.ok(!e.readLedger()['101']['20260910'].mv && !e.readLedger()['102']['20260918'].from);
+});
+test('R29 a same-name different stay cannot confirm this departure', () => {
+  const e=makeEnv();
+  e.statusIngest('IH',e.parseInhouse(ihText([row('101','ALPHA GUEST','17/09/26','18/09/26','CO')])),1000);
+  assert.notEqual(e.statusMark(e.readStatus(),'DP',row('101','ALPHA GUEST','10/09/26'),20260918).cls,'mOut');
+});
+test('R30 differing adjoining identifiers cannot confirm each other', () => {
+  const e=makeEnv();
+  e.statusIngest('IH',e.parseInhouse(ihText([row('101-3','ALPHA GUEST','10/09/26','18/09/26','CO')])),1000);
+  assert.notEqual(e.statusMark(e.readStatus(),'DP',row('101-2'),20260918).cls,'mOut');
+});
+test('R31 ambiguous base-room matches cannot select one of two statuses', () => {
+  const e=makeEnv();
+  e.statusIngest('IH',e.parseInhouse(ihText([row('101-2','ALPHA GUEST','10/09/26','18/09/26','CO'),row('101-3')])),1000);
+  assert.equal(e.statusMark(e.readStatus(),'DP',row('101'),20260918).cls,'mNone');
+});
+test('R32 conflicting move provenance cannot partly vacate another source', () => {
+  const e=makeEnv({[KEY]:{'101':{'20260910':entry()},'102':{'20260910':entry('ALPHA GUEST',20260918,{from:'99'})}}});
+  const before=copy(e.readLedger());e.recordMoves([move()],20260918);
+  assert.deepEqual(e.readLedger(),before);
 });
 
 const failed=results.filter(r=>!r.passed);

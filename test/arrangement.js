@@ -34,8 +34,12 @@ test("Webhotelier lists qualify a different B agency",()=>{
  assert.equal(A.evaluate(i,[ref("308,00","TOUR OPERATOR")]).state,"outside");
 });
 test("checkout Price 0 uses B normal charge; unpaid tint ignores A/C and notes",()=>{
- const i=inv();i.remarks="FULLY PREPAID!!!";i.overallPayments=36000;i.a=[row("Deposit Cash","-270,00")];i.c=[row("Deposit Cash","-90,00")];
+ const i=inv("INDIVIDUAL",[row("*Arrangement","150,00"),row("*Arrangement","150,00","15/09/26")]);i.remarks="FULLY PREPAID!!!";i.overallPayments=36000;i.a=[row("Deposit Cash","-270,00")];i.c=[row("Deposit Cash","-90,00")];
  const x=A.evaluate(i,[ref("0,00")]);assert.equal(x.state,"unpaid");assert.equal(x.expected,105000);assert.equal(x.tint,true);
+});
+test("checkout zero Price and only one posting cannot establish an ordinary rate",()=>{
+ const x=A.evaluate(inv("INDIVIDUAL",[row("*Arrangement","300,00"),row("PAYMENT","-2.100,00")]),[ref("0,00")]);
+ assert.equal(x.state,"unknown");assert.equal(x.expected,undefined);
 });
 test("late arrival first-night double uses positive list rate and +1 exactly once",()=>{
  const i=inv("INDIVIDUAL",[row("Deposit Cash","-1.200,00"),row("*Arrangement","300,00")]);

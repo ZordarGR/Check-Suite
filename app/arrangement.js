@@ -2,7 +2,7 @@
 /* Accommodation only. Integer cents, original dates, and explicitly identified payments.
    List metadata is separate from the tax/department ledger: it never changes stay dates. */
 const norm = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim().replace(/\s+/g," ");
-const guest = s => norm(s).replace(/[^A-Z0-9\u0370-\u03ff]+/g," ").trim().split(/\s+/).sort().join(" ");
+const guest = s => norm(s).replace(/[^\p{L}\p{N}]+/gu," ").trim().split(/\s+/).sort().join(" ");
 function cents(s){
   s = String(s ?? "").trim().replace(/\u00a0/g," ");
   if(!/^-?(?:\d+|\d{1,3}(?:\.\d{3})+),\d{2}$/.test(s)) return null;
@@ -29,7 +29,16 @@ function reference(inv, refs){
   const latest=Math.max(...found.map(r=>r.at));
   const same=found.filter(r=>r.at===latest);
   if(new Set(same.map(r=>JSON.stringify([r.price,norm(r.agency),r.currency]))).size!==1) return null;
-  return same[0];
+  const result={...same[0]};
+  // Checkout may explicitly reset Price to zero. Keep the most recent earlier
+  // positive price as evidence; a lone doubled B posting is not a daily rate.
+  if(cents(result.price)===0){
+    const prior=found.filter(r=>r.at<latest&&norm(r.currency)==="EUR"&&cents(r.price)>0);
+    const at=Math.max(...prior.map(r=>r.at));
+    const prices=[...new Set(prior.filter(r=>r.at===at).map(r=>cents(r.price)))];
+    if(prices.length===1)result.priorRate=prices[0];
+  }
+  return result;
 }
 function eligible(inv, ref){
   if(["INDIVIDUAL","BOOKING.COM","EXPEDIA LODGING PARTNER SERVICES SARL"].includes(allocation(inv.title))) return true;
@@ -68,8 +77,9 @@ function evaluate(inv, refs){
   let rate=r && norm(r.currency)==="EUR" ? cents(r.price) : null;
   let reason="";
   if(rate===0 && charges.length){
-    // Checkout Price=0: the actual posted normal Arrangement remains the rate.
-    rate=Math.min(...charges.map(c=>c.amount));
+    // An earlier explicit list price wins. Otherwise at least two postings are needed
+    // to distinguish an ordinary rate from a lone doubled late-arrival charge.
+    rate=r.priorRate>0?r.priorRate:charges.length>1?Math.min(...charges.map(c=>c.amount)):null;
   }
   if(!(rate>0)) reason="Daily price could not be established";
   let extra=0;
@@ -117,10 +127,20 @@ function mergeRefs(old, fresh, now=Date.now()){
   const m=new Map();
   for(const r of old.concat(fresh)){
     if(!r || !["IH","AR","DP"].includes(r.tag) || !Number.isFinite(r.at) || day(r.dep)===null || day(r.dep)<now/86400000-60) continue;
-    const k=key(r), prev=m.get(k);
-    if(!prev || r.at>prev[0].at) m.set(k,[r]);
-    else if(r.at===prev[0].at && !prev.some(x=>JSON.stringify(x)===JSON.stringify(r))) prev.push(r);
+    const k=key(r), prev=m.get(k)||[];
+    if(!prev.some(x=>JSON.stringify(x)===JSON.stringify(r)))prev.push(r);
+    m.set(k,prev);
   }
-  return [...m.values()].flat().sort((a,b)=>b.at-a.at).slice(0,10000);
+  const kept=[];
+  for(const records of m.values()){
+    const latest=Math.max(...records.map(r=>r.at)),top=records.filter(r=>r.at===latest);
+    kept.push(...top);
+    if(top.some(r=>cents(r.price)===0)){
+      const prior=records.filter(r=>r.at<latest&&norm(r.currency)==="EUR"&&cents(r.price)>0);
+      const at=Math.max(...prior.map(r=>r.at));
+      kept.push(...prior.filter(r=>r.at===at));
+    }
+  }
+  return kept.sort((a,b)=>b.at-a.at).slice(0,10000);
 }
 module.exports={norm,guest,cents,day,allocation,reference,eligible,evaluate,capture,mergeRefs};

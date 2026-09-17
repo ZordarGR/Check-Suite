@@ -2134,35 +2134,13 @@ static class TBind {
     if(SendMessageTimeout(lv, LVM_GETITEMCOUNT, IntPtr.Zero, IntPtr.Zero, SMTO_ABORTIFHUNG, 250, out res) != IntPtr.Zero)
       rows = res.ToInt32();
     if(rows <= 0){ READ.Append("ERR\tthe list is empty\n"); return; }
-    uint pid;
-    GetWindowThreadProcessId(lv, out pid);
-    IntPtr proc = OpenProcess(PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE
-                              | PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
-    if(proc == IntPtr.Zero){ READ.Append("ERR\tprotel would not let this process read it\n"); return; }
-    bool selfWow = false, targetWow = false, okSelf = false, okTarget = false;
-    try{ okSelf = IsWow64Process(GetCurrentProcess(), out selfWow); }catch(Exception){}
-    try{ okTarget = IsWow64Process(proc, out targetWow); }catch(Exception){}
-    if(!okSelf || !okTarget){
-      READ.Append("ERR\tcould not establish whether protel is 32-bit or 64-bit\n");
-      CloseHandle(proc); return;
-    }
-    bool target64 = TargetIs64((IntPtr.Size == 8) || selfWow, targetWow);
-    const int CCH = 512;
-    IntPtr text = VirtualAllocEx(proc, IntPtr.Zero, (UIntPtr)(CCH * 2), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-    IntPtr item = VirtualAllocEx(proc, IntPtr.Zero, (UIntPtr)64, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-    if(text == IntPtr.Zero || item == IntPtr.Zero){
-      READ.Append("ERR\tno scratch page in protel\n");
-      if(text != IntPtr.Zero) VirtualFreeEx(proc, text, UIntPtr.Zero, MEM_RELEASE);
-      if(item != IntPtr.Zero) VirtualFreeEx(proc, item, UIntPtr.Zero, MEM_RELEASE);
-      CloseHandle(proc); return;
-    }
     int show = rows < maxRows ? rows : maxRows, got = 0;
-    SafeListRead rates = null;
+    SafeListRead rates = new SafeListRead(lv, true);
     int rateCol=-1, agencyCol=-1, currencyCol=-1;
     bool wide = true, ranOut = false;
     try{
+      if(!rates.ok){ READ.Append("ERR\tcould not safely read the list\n"); ranOut=true; }
       if(tag!="MV"){
-        rates=new SafeListRead(lv);
         string[] headers=rates.Headers();
         rateCol=HeaderAt(headers,"PRICE"); agencyCol=HeaderAt(headers,"TRAVELAGENCY"); currencyCol=HeaderAt(headers,"CURRENCY");
       }
@@ -2172,19 +2150,23 @@ static class TBind {
          column 0 — probing there reads nothing, and "nothing came back as Unicode" is
          exactly how this decides the control is ANSI. It would have flipped the whole
          read to the wrong encoding on the one list whose name is not first. */
-      string probe0 = ReadCell(proc, lv, target64, 0, cols[0], text, item, CCH, true);
+      string probe0 = rates.GetText(0, cols[0], false, true);
       if(probe0.Length == 0){
-        string alt = ReadCell(proc, lv, target64, 0, cols[0], text, item, CCH, false);
+        string alt = rates.GetText(0, cols[0], false, false);
         if(alt.Length > 0) wide = false;
       }
       for(int r = 0; r < show; r++){
-        if(Environment.TickCount - t0 > READ_BUDGET_MS){ ranOut = true; break; }
+        if(!rates.ok || Environment.TickCount - t0 > READ_BUDGET_MS){ ranOut = true; break; }
         StringBuilder line = new StringBuilder(tag);
         string[] cells=new string[cols.Length];
         for(int c = 0; c < cols.Length; c++){
-          cells[c]=ReadCell(proc,lv,target64,r,cols[c],text,item,CCH,wide);
+          cells[c]=rates.GetText(r,cols[c],false,wide);
           line.Append("\t"+cells[c]);
         }
+        // A filter/sort can change the control while its cells are being read.
+        // Re-read the identity cells before accepting this row, within the same budget.
+        if(!rates.ok || cells[0]!=rates.GetText(r,cols[0],false,wide)
+           || cells[1]!=rates.GetText(r,cols[1],false,wide) || !rates.ok){ ranOut=true; break; }
         READ.Append(line.ToString() + "\n");
         if(rates!=null && rates.ok && rateCol>=0 && agencyCol>=0 && currencyCol>=0){
           string price=rates.Get(r,rateCol,false), agency=rates.Get(r,agencyCol,false), currency=rates.Get(r,currencyCol,false);
@@ -2197,12 +2179,12 @@ static class TBind {
         }
         got++;
       }
-    }catch(Exception e){ READ.Append("ERR\t" + e.Message + "\n"); }
+      readMsgs++;
+      if(!rates.ok || got!=rows || SendMessageTimeout(lv,LVM_GETITEMCOUNT,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,250,out res)==IntPtr.Zero
+         || res.ToInt32()!=rows) ranOut=true;
+    }catch(Exception e){ ranOut=true; READ.Append("ERR\t" + e.Message + "\n"); }
     finally{
       if(rates!=null){ readMsgs+=rates.messages; rates.Dispose(); }
-      VirtualFreeEx(proc, text, UIntPtr.Zero, MEM_RELEASE);
-      VirtualFreeEx(proc, item, UIntPtr.Zero, MEM_RELEASE);
-      CloseHandle(proc);
     }
     READ.Append("DONE\t" + got + "\t" + rows + "\t" + readMsgs + "\t"
                 + (Environment.TickCount - t0) + "\t" + (wide ? "unicode" : "ansi")
@@ -2751,7 +2733,7 @@ static class TBind {
     }catch(Exception){}
   }
 
-  const string VER = "v33";
+  const string VER = "v34";
 
 
   /* Live accommodation reader. Separate child mode: no keyboard hooks, no protel writes.
@@ -2824,6 +2806,9 @@ static class TBind {
       result=replyResult;return !pendingReply;
     }
     public string Get(int row,int col,bool header){
+      return GetText(row,col,header,true);
+    }
+    public string GetText(int row,int col,bool header,bool wide){
       if(!ok || Environment.TickCount-started>READ_BUDGET_MS){ok=false;return "";}
       UIntPtr n;
       byte[] z=new byte[CCH*2], b=header?BuildHeaderItem(target64,text,CCH):BuildLvItem(target64,row,col,text,CCH);
@@ -2836,14 +2821,14 @@ static class TBind {
            ||dest==IntPtr.Zero){ok=false;return "";}
       }
       messages++;
-      uint message=header?0x120Bu:LVM_GETITEMTEXTW;
+      uint message=header?0x120Bu:(wide?LVM_GETITEMTEXTW:LVM_GETITEMTEXTA);
       bool answered=recoverable
         ? AwaitGetter(dest,message,(IntPtr)(header?col:row),out res)
         : SendMessageTimeout(dest,message,(IntPtr)(header?col:row),item,SMTO_ABORTIFHUNG,250,out res)!=IntPtr.Zero;
       if(!answered){ok=false;timedOut=recoverable?pendingReply:true;return "";}
       if(header && res==IntPtr.Zero){ok=false;return "";}
       if(!ReadProcessMemory(proc,text,z,(UIntPtr)z.Length,out n)||n.ToUInt64()!=(ulong)z.Length){ok=false;return "";}
-      string s=System.Text.Encoding.Unicode.GetString(z);
+      string s=wide?System.Text.Encoding.Unicode.GetString(z):System.Text.Encoding.Default.GetString(z);
       int end=s.IndexOf('\0');
       if(end<0 || end>=CCH-1){ok=false;return "";}
       return s.Substring(0,end).Replace("\t"," ").Replace("\r"," ").Replace("\n"," ");

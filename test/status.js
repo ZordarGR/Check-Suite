@@ -60,7 +60,7 @@ function pillsFor(reportDate, receipts, rooms){
   const MODEL = {reportDate, receipts: receipts || []};
   const STATE = {receipts: {}};
   const t = k => k;
-  const body = [line(/^const el = \(tag, cls, txt\) =>.*$/m), lift("dateNum"), lift("dShort"), lift("rKey"), lift("rState"),
+  const body = [line(/^const el = \(tag, cls, txt\) =>.*$/m), lift("dateNum"), lift("dShort"), lift("rKey"), lift("receiptFingerprint"), lift("rState"),
     "const effRoom = (r) => { " + line(/^function effRoom\(r\)\{.*$/m).replace(/^function effRoom\(r\)\{/, "").replace(/\}$/, "") + " };",
     lift("checkableList"), lift("sameName"), lift("isCutOf"), lift("receiptName"),
     "const STATUS_KEY = \"reccheck_status_v1\";", lift("loadStatus"), lift("statusRows"), lift("pillRoom"),
@@ -139,14 +139,14 @@ ck("and absence from it proves nothing — it says the read was cut short", /st_
 ih(IHTXT("Guests inhouse: 04/09/26", [["ARKINSTALL PHILIP/CAROL ", "426", "2/0/0/0/0", "02/09/26", "05/09/26", "CI"],
                                        ["MUELLER HANS", "414-15", "1/0/0/0/0", "30/08/26", "04/09/26", "CI"]]), T(11));
 st = TAX.load();
-ck("absent from a complete in-house list captured afterwards: checked out, with that capture's time",
-   /st_markOut\(11:00\)/.test(TAX.mark(st, "DP", bur).text) && TAX.mark(st, "DP", bur).cls === "mOut");
+ck("absent from all visible rows is still unconfirmed: the list may be filtered",
+   /st_markAbsent\(11:00\)/.test(TAX.mark(st, "DP", bur).text) && TAX.mark(st, "DP", bur).cls === "mNone");
 ck("still on it with CI — as 414-15 for a departure listed as 414 — still in house", /st_markStay\(11:00\)/.test(TAX.mark(st, "DP", mue).text) && TAX.mark(st, "DP", mue).cls === "mStay");
 /* a later cut-short read does not undo what the complete one showed */
 ih(IHTXT("Guests inhouse: 04/09/26", [["ARKINSTALL PHILIP/CAROL ", "426", "2/0/0/0/0", "02/09/26", "05/09/26", "CI"]], true), T(12));
 st = TAX.load();
 ck("a later cut-short read keeps the last complete one for absence", st.IHC.at === T(11) && st.IH.at === T(12));
-ck("so the checked-out departure stays checked out", /st_markOut\(11:00\)/.test(TAX.mark(st, "DP", bur).text));
+ck("the later cut-short read cannot turn absence into checkout", /st_markCut\(12:00\)/.test(TAX.mark(st, "DP", bur).text));
 ck("and the one the cut read does not show is NOT called out by it", /st_markCut\(12:00\)/.test(TAX.mark(st, "DP", mue).text));
 /* CO on the in-house list itself is the other way to be checked out */
 ih(IHTXT("Guests inhouse: 04/09/26", [["MUELLER HANS", "414-15", "1/0/0/0/0", "30/08/26", "04/09/26", "CO"]]), T(15));
@@ -162,9 +162,9 @@ ck("a complete census from the day before, taken before the guest arrived, does 
    /st_markNoIH/.test(TAX.mark(st, "DP", rows[0], 20260904).text) && TAX.mark(st, "DP", rows[0], 20260904).cls === "mNone");
 ih(IHTXT("Guests inhouse: 04/09/26", [["SOMEONE ELSE", "300", "1/0/0/0/0", "01/09/26", "05/09/26", "CI"]]), T(6));
 st = TAX.load();
-ck("a complete census dated the departure's day does — even one captured before the departure list was",
-   /st_markOut\(06:00\)/.test(TAX.mark(st, "DP", rows[0], 20260904).text));
-ck("and without the day, the marks read as before", /st_markOut\(06:00\)/.test(TAX.mark(st, "DP", rows[0]).text));
+ck("a list dated the departure's day still cannot prove absence without filter evidence",
+   /st_markAbsent\(06:00\)/.test(TAX.mark(st, "DP", rows[0], 20260904).text));
+ck("and without the day, absence remains unconfirmed", /st_markAbsent\(06:00\)/.test(TAX.mark(st, "DP", rows[0]).text));
 
 console.log("--- 3. what is not a row, and what the store does not keep");
 for(const k of Object.keys(store)) delete store[k]; store["reccheck_legacy"] = "0";
@@ -233,11 +233,12 @@ console.log("--- 5b. the dot over the whole stay — his word: \"any of the days
    of the stay carried a receipt on 110 under his name; tonight's report carries none. */
 const nights = JSON.parse(store["reccheck_receipts_v1"] || "{}");
 ck("each night's report leaves its room+name pairs behind, keyed by the night", Array.isArray(nights["20260904"]) && nights["20260904"].some(p => p[0] === "111" && p[1] === "MUELLER HANS"));
-ck("and no amounts or serials", nights["20260904"].every(p => p.length === 2));
-nights["20260901"] = [["110", "MUELLER HANS"]];                         // an earlier night of the stay
-nights["20260825"] = [["116", "SCHAFERL"]];                              // the night BEFORE SCHAFERL arrived (26/08)
-nights["20260902"] = [["116", "SOMEONE ELSE"]];                          // another name on 116
-nights["20260903"] = [["505", "VASSILIEV"]];                             // the moved guest, the night he arrived (03/09), on the room he took
+ck("receipt provenance is retained without amounts", nights["20260904"].every(p => p[2] && typeof p[2].live === "boolean"));
+const knownPair=(room,name)=>[room,name,{id:"fixture|"+room,live:true,uncertain:false}];
+nights["20260901"] = [knownPair("110", "MUELLER HANS")];                // an earlier night of the stay
+nights["20260825"] = [knownPair("116", "SCHAFERL")];                   // the night BEFORE SCHAFERL arrived (26/08)
+nights["20260902"] = [knownPair("116", "SOMEONE ELSE")];               // another name on 116
+nights["20260903"] = [knownPair("505", "VASSILIEV")];                  // the moved guest, the night he arrived (03/09), on the room he took
 store["reccheck_receipts_v1"] = JSON.stringify(nights);
 P = pillsFor(NIGHT, []);
 ck("a receipt on an earlier night of the stay, under the departing name, dots the departure", P.dot("110"));
@@ -245,7 +246,7 @@ ck("a receipt the night before the stay began does not",                        
 ck("a receipt under another name during the stay does not",                                !P.dot("116"));
 ck("the moved reservation's receipt on an earlier night dots the move",                   P.dot("505"));
 ck("an arrival is still never dotted",                                                     !P.dot("337"));
-ck("tonight's pairs were rewritten from tonight's report — the old 111 pair is gone",      !(JSON.parse(store["reccheck_receipts_v1"])["20260904"] || []).length);
+ck("an omitted receipt remains stored as uncertain, not erased", (JSON.parse(store["reccheck_receipts_v1"])["20260904"] || []).some(p=>p[0]==="111"&&p[2].uncertain));
 /* a night whose report was never loaded is unknown, not empty: only loaded nights are keys */
 ck("nights never loaded here are simply absent",                                           !("20260830" in JSON.parse(store["reccheck_receipts_v1"])));
 /* the memory is bounded */
@@ -342,11 +343,11 @@ for(const k of Object.keys(store)) delete store[k];
 store["reccheck_legacy"] = "0";
 rpt("DP", RPT("DP", "Departure Report for 04/09/26", [["QUINK ", "56", "2/0/1/1/0", "30/08/26", "CI"]]), T(11));
 rpt("MV", "TITLE\tPerform Move for Date 02/09/26\nMV\t72\tBGV\t56\tMVFAM\tQUINK\tX\t30/08/26\t04/09/26\nDONE\t1\t1\t9\t5\tunicode\tcomplete\n", Date.UTC(2026, 8, 2, 9));
-store["reccheck_receipts_v1"] = JSON.stringify({"20260901": [["72", "QUINK FREDERICK"]]});
+store["reccheck_receipts_v1"] = JSON.stringify({"20260901": [knownPair("72", "QUINK FREDERICK")]});
 ck("a receipt written in the room protel moved the guest out of dots the departure from the new room", pillsFor(NIGHT, []).dot("56"));
-store["reccheck_receipts_v1"] = JSON.stringify({"20260829": [["72", "QUINK FREDERICK"]]});
+store["reccheck_receipts_v1"] = JSON.stringify({"20260829": [knownPair("72", "QUINK FREDERICK")]});
 ck("... not one from before the reservation arrived",                                     !pillsFor(NIGHT, []).dot("56"));
-store["reccheck_receipts_v1"] = JSON.stringify({"20260901": [["72", "QUINK FREDERICK"]]});
+store["reccheck_receipts_v1"] = JSON.stringify({"20260901": [knownPair("72", "QUINK FREDERICK")]});
 rpt("MV", "TITLE\tPerform Move for Date 02/09/26\nMV\t72\tBGV\t56\tMVFAM\tQUINK\t\t30/08/26\t04/09/26\nDONE\t1\t1\t9\t5\tunicode\tcomplete\n", Date.UTC(2026, 8, 2, 10));
 ck("... nor through a move protel has not marked",                                        !pillsFor(NIGHT, []).dot("56"));
 /* one reservation on two lists: moved 72 → 56 on the night it departs from 56 — a departure
@@ -385,7 +386,7 @@ function bridgeFixture(){
 }
 function bridgePills(st, pairs, census){
   store["reccheck_status_v1"] = JSON.stringify(st);
-  store["reccheck_receipts_v1"] = JSON.stringify({"20260901": pairs || [["163", RECEIPT_FIRST]]});
+  store["reccheck_receipts_v1"] = JSON.stringify({"20260901": (pairs || [["163", RECEIPT_FIRST]]).map(p=>knownPair(p[0],p[1]))});
   return pillsFor(NIGHT, [], census || {});
 }
 let bridge = bridgeFixture();
@@ -468,7 +469,7 @@ ck("house accounts never become pills or departure marks", ["9000", "9604", "904
 {
 console.log("--- same-day in-house row preservation");
 for(const k of Object.keys(store)) delete store[k];store["reccheck_legacy"]="0";
-const capRows=(date,rows,at)=>TAX.ingest("IH",{title:"Guests Inhouse: "+date,rows:rows,done:{cut:false}},at);
+const capRows=(date,rows,at)=>TAX.ingest("IH",{title:"Guests Inhouse: "+date,rows:rows,done:{cut:false,got:rows.length,rows:rows.length}},at);
 const ihCols=src.match(/^const IH = (\{.*\});/m);
 const ix=new Function("return "+ihCols[1])();
 const item=(name,room,dep)=>{const row=[];row[ix.NAME]=name;row[ix.ROOM]=room;row[ix.ARR]="01/09/26";row[ix.DEP]=dep;row[ix.STATUS]="CI";return row;};

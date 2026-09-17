@@ -41,7 +41,9 @@ async function runCheck(manual){
       if(manual) showMain();
     }else if(manual && tray){
       const L = TRAY_TXT[TRAYLANG] || TRAY_TXT.en;
-      try{ tray.displayBalloon({title: "Pro-Check", content: L.uptodate + updater.effective().version, iconType: "info"}); }catch(e){}
+      const content = updater.lastCheckCurrent ? L.uptodate + updater.effective().version
+        : (TRAYLANG === "gr" ? "Δεν ήταν δυνατή η επαλήθευση ενημερώσεων. Δοκιμάστε ξανά." : "Could not verify updates. Please try again.");
+      try{ tray.displayBalloon({title: "Pro-Check", content, iconType: updater.lastCheckCurrent ? "info" : "warning"}); }catch(e){}
     }
   }catch(e){}
   finally{ CHECKING = false; }   // the pending early-return used to skip this and wedge every later check

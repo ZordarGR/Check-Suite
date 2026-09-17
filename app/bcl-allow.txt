@@ -244,6 +244,8 @@ fIncUpdate
 FindTaggedList
 FindWindow
 flags
+# Helper-owned safe ANSI/Unicode list getter; no new .NET API.
+GetText
 Flush
 fn
 FocusedOf

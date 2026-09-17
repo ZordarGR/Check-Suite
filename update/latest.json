@@ -6,6 +6,6 @@
   "setupSha256": "e329ab9589afda28cfc14423b06e2b78fe895243edb9ad6464c3ed76e3a4f26e",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/fc9abbafe08a7b7c2d1cc975089490d7aaab8015/Departments%20Check.html",
-  "sha256": "b32b7c4ca295152696b740193fa41dd2c658ca7212aefccab5835481303126d4",
+  "sha256": "9d72283afc81adfa9ea124b0deb23cf0a2ee2cde67691da33b30dcbe505954b6",
   "notes": "Resolve duplicate arrival-date versions from saved captures. Show unresolved date conflicts once without changing stored reservation dates."
 }

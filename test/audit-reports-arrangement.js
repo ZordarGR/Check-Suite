@@ -72,6 +72,19 @@ test("DR-11 dates accept valid leap day and reject impossible days",()=>{
   for(const d of ["29/02/2027","31/04/2026","00/09/2026","18/00/2026"])assert.equal(D.key(d),0);
   assert.equal(D.key("29/02/2028"),20280229);assert.equal(D.key("2026-09-18"),20260918);
 });
+test("DR-12 one physical-room receipt cannot settle two explicit same-name reservation suffixes",()=>{
+  const result=rows({"101-2":{"20260910":stay()},"101-3":{"20260910":stay()}},{},{20260917:[["101","ALPHA GUEST"]]});
+  assert.equal(result.length,2);assert(result.every(r=>!r.extras));
+});
+test("DR-13 a shared surname cannot attach another guest's move and source-room receipt",()=>{
+  const status={MV:{20260912:{rows:{one:{from:"101",to:"102",arr:"10/09/26",dep:"18/09/26",name:"BETA SMITH",x:"X"}}}}};
+  const result=rows({"102":{"20260910":stay("ALPHA SMITH")}},status,{20260911:[["101","BETA SMITH"]]});
+  assert.equal(result[0].extras,false);
+});
+test("DR-14 retained ledger identity conflicts all reach the offline report",()=>{
+  const result=rows({"101":{"20260910":stay("ALPHA GUEST",{conflicts:[stay("BETA PERSON")]})}});
+  assert.deepStrictEqual(result.map(r=>r.name).sort(),["ALPHA GUEST","BETA PERSON"]);
+});
 
 const G=(x,y,s)=>'<Glyphs OriginX="'+x+'" OriginY="'+y+'" FontRenderingEmSize="10" UnicodeString="'+String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;")+'" />';
 const heading=(offset=0)=>G(64+offset,100,"Δωμάτιο")+G(224+offset,100,"Πελάτης")+G(448+offset,100,"Άφιξη");
@@ -98,8 +111,14 @@ test("REP-04 incomplete page parsing must be detectable before producing the nam
 test("REP-05 unsupported render elements cannot be called an exact complete printable sheet",()=>{
   const r=exact([first.replace("</FixedPage>",'<Image Source="omitted.png" /></FixedPage>')]);
   assert(r.ex.unknown.length>0,"Renderer should record an unsupported element");
-  const preview=lift("openDepPreview");
-  assert(/\.disabled\s*=.*unknown|throw.*unknown|if\([^\n]*unknown[^\n]*\)[^\n]*(return|throw)/.test(preview),"Print remains enabled with unsupported content omitted");
+  const elements={};const $=id=>elements[id]||(elements[id]={innerHTML:"",disabled:false,classList:{add(){}}});
+  const dependencies={$,
+    t:k=>k,openModal(){},closeModal(){},clearPrintJob(){},buildDepSheet(){},buildBoardingSheet(){},
+    buildDepExact(){return r.ex;},buildDepExactSheet(){return r.ex;},window:{reccheckFiles:{}},confirm(){return false;},toast(){},renderReports(){}};
+  let refused=false;
+  try{new Function("deps","p","xps","const {"+Object.keys(dependencies).join(",")+"}=deps;"+lift("esc")+lift("openDepPreview")+";openDepPreview({name:'fixture.oxps',path:'fixture.oxps'},p,'dep',xps);")(dependencies,r.p,{pages:[first],fonts:{}});}
+  catch(e){assert.match(e.message,/unsupported|unsafe|incomplete|render/i);refused=true;}
+  assert(refused||$("#pvGo").disabled||!$("#pvGo").onclick,"Print remains enabled with unsupported content omitted");
 });
 
 const charge=(label,amount,date="10/09/26")=>({label,amount,date,currency:"EUR"});
@@ -145,6 +164,46 @@ test("ARR-08 refunds, reversed amounts and malformed numbers never create a fals
   assert.equal(A.evaluate(invoice({rows:[charge("*Arrangement","100,00"),charge("PAYMENT","-900,00"),charge("REFUND","100,00")]}),[rate()]).state,"paid");
   for(const amount of ["1,00 EUR","800.00","1.00,00","NaN","", "999999999999999999999,00"])
     assert.equal(A.evaluate(invoice({rows:[charge("PAYMENT",amount)]}),[rate()]).state,"unknown");
+});
+const storeData={},memory={getItem:k=>storeData[k]||null,setItem:(k,v)=>{storeData[k]=String(v);}};
+const historyAPI=new Function("localStorage",'const RECEIPTS_KEY="audit-receipts",RECEIPTS_KEEP=15;'+["prevNightKey","loadNightReceipts","saveNightReceipts"].map(lift).join("\n")+';return {load:loadNightReceipts,save:saveNightReceipts};')(memory);
+const evidence=(room,name,id,live=true)=>[room,name,{id,live,uncertain:false}];
+test("HIST-01 an omitted source identity stays in history as uncertain",()=>{
+ historyAPI.save(20260918,[evidence("101","ALPHA GUEST","1|101"),evidence("102","BETA PERSON","2|102")]);
+ historyAPI.save(20260918,[evidence("101","ALPHA GUEST","1|101")]);
+ const r=historyAPI.load()[20260918];assert.equal(r.length,2);assert.equal(r.find(p=>p[0]==="102")[2].uncertain,true);
+ assert.equal(r.find(p=>p[0]==="101")[2].uncertain,false);
+});
+test("HIST-02 explicit void replaces its known identity and preserves prior evidence",()=>{
+ historyAPI.save(20260918,[evidence("101","ALPHA GUEST","1|101",false)]);
+ const r=historyAPI.load()[20260918].find(p=>p[2].id==="1|101");
+ assert.equal(r[2].live,false);assert(r[2].versions.some(v=>v[0]==="101"&&v[2]===true));
+ assert.equal(rows({"101":{"20260910":stay()}},{},{20260918:[r]})[0].extras,false);
+});
+test("HIST-03 explicit room correction updates the same identity without deleting its original room fact",()=>{
+ historyAPI.save(20260918,[evidence("103","BETA PERSON","2|102")]);
+ const r=historyAPI.load()[20260918].find(p=>p[2].id==="2|102");
+ assert.equal(r[0],"103");assert.equal(r[2].uncertain,false);assert(r[2].versions.some(v=>v[0]==="102"));
+});
+test("HIST-04 reloading an active receipt after a known void cannot silently restore certainty",()=>{
+ historyAPI.save(20260918,[evidence("101","ALPHA GUEST","1|101")]);
+ const r=historyAPI.load()[20260918].find(p=>p[2].id==="1|101");
+ assert.equal(r[2].uncertain,true);
+ const report=rows({"101":{"20260910":stay()}},{},{20260918:[r]})[0];
+ assert.equal(report.extras,false);assert.equal(report.extrasUncertain,true);assert.equal(report.extrasReason,"history");
+});
+test("HIST-05 legacy pairs survive migration as uncertainty without a storage rewrite",()=>{
+ storeData["audit-receipts"]=JSON.stringify({20260917:[["101","ALPHA GUEST"]]});
+ const before=storeData["audit-receipts"],r=historyAPI.load()[20260917][0];
+ assert.equal(r[2].uncertain,true);assert.equal(storeData["audit-receipts"],before);
+ assert.equal(rows({"101":{"20260910":stay()}},{},{20260917:[r]})[0].extrasUncertain,true);
+});
+test("HIST-06 reports without movement pills are still saved under the source report day",()=>{
+ const model={reportDate:"18/09/2026",receipts:[{sn:"9",roomMain:"101",guest:"ALPHA GUEST"}]};
+ const code='const RECEIPTS_KEY="audit-no-moves",RECEIPTS_KEEP=15;const roomMoves=()=>({}),effRoom=r=>r.roomMain,receiptName=r=>r.guest;'+
+  ["dateNum","prevNightKey","loadNightReceipts","saveNightReceipts","renderMovesFor"].map(lift).join("\n")+';renderMovesFor({},20260917);return loadNightReceipts();';
+ const r=new Function("localStorage","MODEL",code)(memory,model);
+ assert.equal(r[20260918][0][0],"101");assert.equal(r[20260917],undefined);
 });
 console.log(JSON.stringify({suite:"audit-reports-arrangement",passed,failed}));
 process.exitCode=failed?1:0;

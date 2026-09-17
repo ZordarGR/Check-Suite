@@ -22,6 +22,7 @@ class Updater {
     // opts: {userDataDir, packagedDir, pkgVersion, updateUrl, fallbackReleaseUrl, onProgress}
     this.o = opts;
     this.pending = null;
+    this.lastCheckCurrent = false;
   }
   emit(p){ try{ this.o.onProgress && this.o.onProgress(p); }catch(e){} }
   paths(){
@@ -46,6 +47,15 @@ class Updater {
     }
   }
   readJson(p){ try{ return JSON.parse(fs.readFileSync(p, "utf8")); }catch(e){ return null; } }
+  validPayload(file, meta, installer){
+    try{
+      if(!meta || !/^[a-f0-9]{64}$/i.test(String(meta.sha256 || ""))) return false;
+      const buf = fs.readFileSync(file);
+      if(crypto.createHash("sha256").update(buf).digest("hex").toLowerCase() !== meta.sha256.toLowerCase()) return false;
+      return installer ? buf.length >= 1048576 && buf.slice(0, 2).toString("latin1") === "MZ"
+        : buf.length >= 10000 && buf.slice(0, 200).toString("utf8").includes("<!DOCTYPE html");
+    }catch(e){ return false; }
+  }
 
   /* which html/version actually runs: a promoted update if it beats the packaged
      one, else the packaged index.html (also cleans stale leftovers after the user
@@ -53,7 +63,7 @@ class Updater {
   effective(){
     const P = this.paths();
     const m = this.readJson(P.curMeta);
-    if(m && m.version && fs.existsSync(P.curHtml) && vNewer(m.version, this.o.pkgVersion))
+    if(m && m.version && this.validPayload(P.curHtml, m, false) && vNewer(m.version, this.o.pkgVersion))
       return {version: m.version, file: P.curHtml};
     if(m){
       try{ fs.unlinkSync(P.curHtml); }catch(e){}
@@ -64,6 +74,7 @@ class Updater {
 
   /* background check + download; resolves to pending info or null; never throws */
   async check(){
+    this.lastCheckCurrent = false;
     try{
       this.cleanupSetup();
       const eff = this.effective();
@@ -76,7 +87,7 @@ class Updater {
       if(!r.ok) return null;
       const latest = await r.json();
       if(!latest || !latest.version) return null;
-      if(!vNewer(latest.version, eff.version)) return null;
+      if(!vNewer(latest.version, eff.version)){ this.lastCheckCurrent = true; return null; }
 
       /* safeguard: any manifest may declare the minimum engine it needs ("engine").
          If this install's engine is older, take the full-installer path even for a
@@ -94,7 +105,7 @@ class Updater {
         }
         const P = this.paths();
         const have = this.readJson(P.setupMeta);
-        if(!(have && have.version === tv && fs.existsSync(P.setupExe))){
+        if(!(have && have.version === tv && this.validPayload(P.setupExe, have, true))){
           /* If the installer keeps vanishing between checks — Defender quarantining an
              unsigned 90 MB setup in %APPDATA% is the usual cause — re-fetching it on
              every launch forever helps nobody. Count attempts and, past the limit, hand
@@ -142,7 +153,8 @@ class Updater {
       }
       const P = this.paths();
       const have = this.readJson(P.pendMeta);
-      if(!(have && have.version === latest.version && fs.existsSync(P.pendHtml))){
+      if(!(have && have.version === latest.version && this.validPayload(P.pendHtml, have, false)
+           && (!latest.sha256 || have.sha256.toLowerCase() === String(latest.sha256).toLowerCase()))){
         const hr = await fetch(latest.html, {cache: "no-store"});
         if(!hr.ok) return null;
         const buf = Buffer.from(await hr.arrayBuffer());
@@ -163,9 +175,15 @@ class Updater {
     if(!this.pending || this.pending.full) return false;
     const P = this.paths();
     const pm = this.readJson(P.pendMeta);
-    if(!pm || !fs.existsSync(P.pendHtml)) return false;
-    fs.copyFileSync(P.pendHtml, P.curHtml);
-    fs.writeFileSync(P.curMeta, JSON.stringify(pm));
+    if(!pm || !this.validPayload(P.pendHtml, pm, false)) return false;
+    // Stage both files before replacing either. A failed copy cannot truncate the
+    // working page; effective() also checks its digest if a crash splits the renames.
+    try{
+      fs.copyFileSync(P.pendHtml, P.curHtml + ".tmp");
+      fs.writeFileSync(P.curMeta + ".tmp", JSON.stringify(pm));
+      fs.renameSync(P.curHtml + ".tmp", P.curHtml);
+      fs.renameSync(P.curMeta + ".tmp", P.curMeta);
+    }catch(e){ return false; }
     try{ fs.unlinkSync(P.pendHtml); fs.unlinkSync(P.pendMeta); }catch(e){}
     this.pending = null;
     return true;

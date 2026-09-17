@@ -74,7 +74,13 @@ class InvoiceWindow{
    timer.Start();Application.Run();
   }
  }
+ [DllImport("kernel32.dll")]static extern uint SetErrorMode(uint mode);
  [STAThread]static int Main(string[] args){
+  SetErrorMode(0x0002|0x8000);
+  Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException);
+  try{return Run(args);}catch(Exception e){Console.Error.WriteLine(e);return 1;}
+ }
+ static int Run(string[] args){
   SetProcessDpiAwarenessContext(new IntPtr(-4));
   var init=new Init{size=8,classes=1};InitCommonControlsEx(ref init);
   string folder=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"RecCheck");
