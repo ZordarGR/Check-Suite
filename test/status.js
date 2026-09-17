@@ -464,5 +464,25 @@ ck("guest-account departure and move both retain their dots", P.kinds("9017") ==
 ck("guest-account departure is included in the department red mark", !!P.leaving["9017"]);
 ck("house accounts never become pills or departure marks", ["9000", "9604", "9040"].every(room => !P.has(room) && !P.leaving[room]));
 
+
+{
+console.log("--- same-day in-house row preservation");
+for(const k of Object.keys(store)) delete store[k];store["reccheck_legacy"]="0";
+const capRows=(date,rows,at)=>TAX.ingest("IH",{title:"Guests Inhouse: "+date,rows:rows,done:{cut:false}},at);
+const ihCols=src.match(/^const IH = (\{.*\});/m);
+const ix=new Function("return "+ihCols[1])();
+const item=(name,room,dep)=>{const row=[];row[ix.NAME]=name;row[ix.ROOM]=room;row[ix.ARR]="01/09/26";row[ix.DEP]=dep;row[ix.STATUS]="CI";return row;};
+capRows("04/09/26",[item("ALPHA TEST","101","18/09/26"),item("BETA TEST","102","19/09/26")],T(8));
+capRows("04/09/26",[item("ALPHA TEST","101","20/09/26")],T(9));
+let kept=TAX.load();
+ck("smaller same-day list preserves omitted room",kept.IH.rows.length===2&&kept.IH.rows.some(r=>r.room==="102"));
+ck("recaptured row updates its actual dates",kept.IH.rows.find(r=>r.room==="101").dep==="20/09/26");
+ck("latest actual snapshot remains separate",kept.IHL.rows.length===1&&kept.IHC.rows.length===1);
+capRows("04/09/26",[item("ALPHA TEST","101","10/09/26")],T(7));
+ck("older capture cannot replace newer dates",TAX.load().IH.rows.find(r=>r.room==="101").dep==="20/09/26");
+capRows("05/09/26",[item("GAMMA TEST","103","21/09/26")],T(10));
+ck("a new business day starts a new union",TAX.load().IH.rows.length===1&&TAX.load().IH.rows[0].room==="103");
+
+}
 console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");
 process.exit(bad ? 1 : 0);
