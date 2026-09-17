@@ -23,7 +23,7 @@ const NAME = `
 function resolve(receipts, rooms, r, state){
   const MODEL = {reportDate:"3/9/2026", receipts};
   const STATE = state || {receipts:{}};
-  const body = [lift("rKey"), lift("rState"), nickForLine, lift("dateNum"), lift("sameName"), lift("isCutOf"), lift("guestFor"),
+  const body = [lift("rKey"), lift("rState"), nickForLine, lift("dateNum"), lift("sameName"), lift("isCutOf"), lift("nameTextIn"), lift("guestFor"),
     "const effRoom = (r) => { " + effRoomLine.replace(/^function effRoom\(r\)\{/,"").replace(/\}$/,"") + " };",
     NAME].join("\n");
   const fn = new Function("MODEL","ROOMS","STATE","r","Object","String", body);
@@ -58,8 +58,8 @@ ck("a shorter cut of the same guest still takes the room's fuller name", resolve
 // 1. an ordinary charge, room known from the report
 let recs = [R("1","112","JAROLIMEK"), R("2","112","J.")];
 let a = resolve(recs, {}, recs[1]);
-ck("a charge shows the ROOM's name, not its own abbreviation", a.shown === "JAROLIMEK");
-ck("and the printed name is kept on the tooltip", /back: J\./.test(a.tip));
+ck("an abbreviation that is not in the captured name remains as printed", a.shown === "J.");
+ck("no unsupported full name is substituted", !/back:/.test(a.tip));
 
 // 2. a nickname still wins
 let b = resolve(recs, {"112":{guest:"JAROLIMEK", nick:"THE GERMANS"}}, recs[0]);

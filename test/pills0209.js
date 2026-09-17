@@ -55,7 +55,7 @@ function run(localStorage, ROOMS, receipts, reportDate){
     "const STATUS_KEY = \"reccheck_status_v1\";", lift("loadStatus"), lift("statusRows"), lift("pillRoom"),
     "const LEGACY_KEY = \"reccheck_legacy\";", lift("legacyOn"), line(/^const MOVES_KEY = .*$/m), lift("loadMoves"), lift("ledgerMoves"), 
     lift("dateNum2"), lift("prevNightKey"), "const RECEIPTS_KEY = \"reccheck_receipts_v1\"; const RECEIPTS_KEEP = 60;", lift("loadNightReceipts"), lift("saveNightReceipts"), lift("leavingIndex"), "let LEAVING = {};", lift("isLeaving"),
-    lift("roomMoves"), lift("renderMovesFor"), lift("renderMoves"),
+    lift("departureRows"), lift("capturedGuestName"), lift("sameGuestLabel"), lift("nameTextIn"), lift("roomMoves"), lift("renderMovesFor"), lift("renderMoves"),
     "renderMoves(); return {classes:[...classes], root:moves};"].join("\n");
   const fn = new Function("document","$","localStorage","MODEL","ROOMS","STATE","t","classes","moves", body);
   const out = fn(document,$,localStorage,MODEL,ROOMS,STATE,t,classes,moves);

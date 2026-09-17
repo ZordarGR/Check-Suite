@@ -1948,7 +1948,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.79";
+const APP_VERSION = "1.17.80";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -2915,7 +2915,7 @@ function isCutOf(short, full){
 function receiptName(r){
   const own = String((r && r.guest) || "").trim();
   const live = ROOMS[String(effRoom(r))];
-  if(own && live && live.guest && live.liveKey && isCutOf(own, live.guest)) return live.guest;
+  if(own && live && live.guest && live.liveKey && nameTextIn(own, live.guest)) return live.guest;
   return own;
 }
 function guestFor(room, r){
@@ -2931,8 +2931,9 @@ function guestFor(room, r){
      So it asks about the NAMES instead. If the receipt's name is the opening of the
      stored one, it is the same guest truncated and the whole name wins. If the room has
      turned over, the new guest's name is not the opening of the old one and the receipt
-     wins, which is the case the date was there to protect. The date is still accepted
-     when it does match, for a name protel words differently rather than merely cuts. */
+     wins. A same-day capture alone cannot establish whose receipt it is. The old
+     date fallback below remains only for a room lookup, an unnamed/very short receipt,
+     or a room explicitly corrected by the user. */
   const live = ROOMS[String(room)];
   const onReceipt = (() => {
     if(!MODEL) return null;
@@ -2947,17 +2948,18 @@ function guestFor(room, r){
      above is its FIRST receipt's guest, and on a changeover day a room has two: his
      example, 06/09 — dimitris leaves on the 10th and filippis takes the room; a receipt
      under filippis is filippis's, whatever the room's first receipt said. So a receipt
-     whose own name the census completes takes that; one whose own name is a different
-     guest's — four characters at least, and neither the opening of the room's name nor
-     opened by it — keeps its own. A charge printed with too little of a name to say
-     whose it is ("J.") still takes the room's, as since 1.17.23. */
+     whose entire printed text occurs in the census or first receipt's fuller name takes
+     that; otherwise it keeps its own. A short abbreviation is not expanded by guess. */
   /* Not for a receipt whose ROOM he corrected by hand: it was printed under the wrong
      room, so its printed name is the wrong room's guest, and the corrected room's name
      is the one that is true of it. */
   if(r && !(rState(r).corr && rState(r).corr.room)){
     const own = String(r.guest || "").trim();
-    if(own && live && live.guest && live.liveKey && isCutOf(own, live.guest)) return live.guest;
-    if(own.length >= 4 && onReceipt && !sameName(own, onReceipt) && !isCutOf(own, onReceipt) && !isCutOf(onReceipt, own)) return own;
+    if(own && live && live.guest && live.liveKey && nameTextIn(own, live.guest)) return live.guest;
+    if(own){
+      if(onReceipt && nameTextIn(own, onReceipt)) return onReceipt;
+      return own; // a same-day room cache cannot rename this receipt after turnover
+    }
   }
   if(live && live.guest && live.liveKey){
     if(!onReceipt) return live.guest;                          // nothing to disagree with
@@ -5462,9 +5464,13 @@ function leavingIndex(){
     return out;
   }
   const st = loadStatus();
-  for(const r of statusRows(st, "DP", night)){
+  for(const r of departureRows(st, night)){
     const room = pillRoom(r.room, r.name);
-    if(room) (out[room] = out[room] || []).push(r.name || "");
+    if(room){
+      (out[room] = out[room] || []).push(r.name || "");
+      const full = capturedGuestName(st, r.name, [room], dateNum2(r.arr), night);
+      if(full) out[room].push(full);
+    }
   }
   for(const r of statusRows(st, "AR", night)){
     const room = pillRoom(r.room, r.name);
@@ -5473,7 +5479,11 @@ function leavingIndex(){
   for(const r of statusRows(st, "MV", night)){
     if(!String(r.x || "").trim()) continue;
     const to = pillRoom(r.to, r.name);
-    if(to) (arr[to] = arr[to] || []).push(r.name || "");
+    if(to){
+      (arr[to] = arr[to] || []).push(r.name || "");
+      const full = capturedGuestName(st, r.name, [pillRoom(r.from, r.name), to], dateNum2(r.arr), dateNum2(r.dep));
+      if(full) arr[to].push(full);
+    }
   }
   ARRIVING = arr;
   return out;
@@ -5515,14 +5525,22 @@ function nameLike(a, b){
    05/09: "the pills should get marked because the departing name has a receipt, not the
    arriving". An arrival printed with the very same name as the departure is another
    reservation and blocks too — the safe direction. */
-function nameHit(guest, target, others){
-  if(!guest || !target) return false;
-  /* the whole name, equal: that reservation, unless another carries the very same name —
-     a shared word elsewhere does not unsettle an exact name */
-  if(sameName(guest, target)) return !(others || []).some(o => o && sameName(guest, o));
-  if(!nameLike(guest, target)) return false;
-  return !(others || []).some(o => o && nameLike(guest, o));
+/* Use every character actually read from the receipt. Whitespace and case are
+   normalised; words are not dropped, reordered or compared independently. */
+function nameTextIn(part, full){
+  const norm = s => String(s || "").trim().replace(/\s+/g, " ").toUpperCase();
+  const a = norm(part), b = norm(full);
+  return !!a && !!b && b.includes(a);
 }
+/* A list/census label may be a continuous shortened part of a fuller name. */
+function sameGuestLabel(a, b){
+  return nameTextIn(a, b) || nameTextIn(b, a);
+}
+function nameHit(guest, target, others){
+  if(!nameTextIn(guest, target)) return false;
+  return !(others || []).some(o => nameTextIn(guest, o));
+}
+
 function censusNameOf(room){
   const e = ROOMS[String(room)];
   return (e && e.liveKey && e.guest) ? String(e.guest) : "";
@@ -5534,18 +5552,18 @@ function censusNameOf(room){
    guest once the room has turned over. */
 function otherNames(m, room, kind){
   const N = (m && m.names) || {};
-  const targets = kind === "move" ? (N.move || []) : (N.dep || []);
-  const same = o => o && targets.some(t => t && nameLike(o, t));
+  const targets = kind === "move" ? (N.move || []).concat(N.moveFull || []) : (N.dep || []).concat(N.depFull || []);
+  const same = o => o && targets.some(t => t && sameGuestLabel(o, t));
   /* ONE RESERVATION CAN BE ON TWO OF THE LISTS — moved into the room and departing from it
      the same day carries a departure pill AND a move pill under the same name. The other
      pill's name is a rival only when it is not this pill's own; 1.17.60 blocked a move pill
      with its own departure name and the dot went (his report, 08/09). The arrival list is
      always another reservation. */
-  const n = [].concat(N.arr || [], (kind === "move" ? (N.dep || []) : (N.move || [])).filter(o => !same(o)));
+  const n = [].concat(N.arr || [], (kind === "move" ? (N.dep || []).concat(N.depFull || []) : (N.move || []).concat(N.moveFull || [])).filter(o => !same(o)));
   const c = censusNameOf(room);
   /* A full captured move name can identify its own first-name-only census entry.
      Arrival/departure competitors above still use the original list names. */
-  const ownMove = kind === "move" && (N.moveFull || []).some(t => nameLike(c, t));
+  const ownMove = kind === "move" && (N.moveFull || []).some(t => sameGuestLabel(c, t));
   if(c && !same(c) && !ownMove) n.push(c);
   return n;
 }
@@ -5554,7 +5572,7 @@ function isLeaving(room, name){
   if(!names) return false;
   const others = (ARRIVING[room] || []).slice();
   const c = censusNameOf(room);
-  if(c && !names.some(t => t && nameLike(c, t))) others.push(c);
+  if(c && !names.some(t => t && sameGuestLabel(c, t))) others.push(c);
   for(const n of names) if(n && nameHit(name, n, others)) return true;
   return false;
 }
@@ -5827,6 +5845,56 @@ function pillRoom(cell, name){
   if((m[1].length === 4 && !n) || ["ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ", "MAISON", "CREDIT CARDS", "LOST CHARGES", "IRIS"].includes(n)) return "";
   return m[1];
 }
+/* Complete a list label only from one full name captured for these exact rooms and
+   recorded stay dates. An absent/conflicting capture cannot supply missing characters. */
+function capturedGuestName(st, label, rooms, arrival, departure){
+  if(!label || !arrival || !departure) return "";
+  const names = [];
+  const add = (row, knownDeparture = 0) => {
+    if(!row || !rooms.includes(pillRoom(row.room, row.name)) || (knownDeparture || dateNum2(row.dep)) !== departure ||
+       !nameTextIn(label, row.name)) return;
+    const full = String(row.name || "").trim();
+    if(sameName(full, label)) return;
+    if(!names.some(n => sameName(n, full))) names.push(full);
+  };
+  for(const row of statusRows(st, "AR", arrival)) add(row);
+  for(const row of statusRows(st, "DP", departure)) if(dateNum2(row.arr) === arrival) add(row, departure);
+  for(const capture of [st && st.IH, st && st.IHC]){
+    for(const row of (capture && capture.rows) || []) if(dateNum2(row.arr) === arrival) add(row);
+  }
+  return names.length === 1 && !sameName(names[0], label) ? names[0] : "";
+}
+/* Preserve captured rows, but do not display an obsolete departure room when a
+   marked move AND a newer departure capture explicitly locate that same stay elsewhere.
+   Missing/ambiguous evidence leaves the row visible; no dates or records are changed. */
+function departureRows(st, night){
+  const rows = statusRows(st, "DP", night);
+  const moves = [];
+  for(const k of Object.keys((st && st.MV) || {})){
+    if(+k > night) continue;
+    for(const r of statusRows(st, "MV", +k)){
+      const from = pillRoom(r.from, r.name), to = pillRoom(r.to, r.name);
+      const arr = dateNum2(r.arr);
+      if(!String(r.x || "").trim() || !from || !to || from === to ||
+         !arr || +k < arr || dateNum2(r.dep) !== night) continue;
+      moves.push({from, to, arr, day: +k, name: r.name});
+    }
+  }
+  moves.sort((a, b) => a.day - b.day);
+  return rows.filter(row => {
+    const room = pillRoom(row.room, row.name), arr = dateNum2(row.arr);
+    if(!room || !arr || !row.last) return true;
+    const newer = rows.filter(r => r !== row && r.last > row.last &&
+      sameName(r.name, row.name) && dateNum2(r.arr) === arr && pillRoom(r.room, r.name) !== room);
+    if(!newer.length) return true;
+    const reached = new Set([room]);
+    for(const move of moves){
+      if(move.arr !== arr || !sameGuestLabel(move.name, row.name) || !reached.has(move.from)) continue;
+      reached.add(move.to);
+    }
+    return !newer.some(r => reached.has(pillRoom(r.room, r.name)));
+  });
+}
 function roomMoves(nightArg){
   const out = {};
   const night = nightArg || (MODEL ? dateNum(MODEL.reportDate) : 0);
@@ -5839,32 +5907,19 @@ function roomMoves(nightArg){
   /* Moves may print surnames only while checkcharge prints first names only. Connect
      them through a full name protel actually captured for this room and this stay.
      Never guess across rooms/dates, or choose between conflicting full names. */
-  const fullMoveName = r => {
-    const short = String(r.name || "").trim(), words = nameWordSet(short);
-    const arrival = dateNum2(r.arr), departure = dateNum2(r.dep);
-    const from = pillRoom(r.from, r.name), to = pillRoom(r.to, r.name), names = [];
-    if(!words.size || !arrival || !departure || !from || !to) return "";
-    const add = row => {
-      if(!row || ![from, to].includes(pillRoom(row.room, row.name)) || dateNum2(row.dep) !== departure) return;
-      const full = String(row.name || "").trim(), whole = nameWordSet(full);
-      if(!full || ![...words].every(w => whole.has(w))) return;
-      if(!names.some(n => sameName(n, full))) names.push(full);
-    };
-    for(const row of statusRows(st, "AR", arrival)) add(row);
-    for(const cap of [st.IH, st.IHC]){
-      for(const row of (cap && cap.rows) || []) if(dateNum2(row.arr) === arrival) add(row);
-    }
-    return names.length === 1 && !sameName(names[0], short) ? names[0] : "";
-  };
+  const fullMoveName = r => capturedGuestName(st, r.name,
+    [pillRoom(r.from, r.name), pillRoom(r.to, r.name)], dateNum2(r.arr), dateNum2(r.dep));
   /* THREE FACTS PER ROOM, each its own pill — his word, 05/09: "remove the turnover tab,
      keep it simple, arrivals, departures, moves". A room on the departure list AND the
      arrival list is on both, as protel shows it; nothing is folded into a louder fact. */
   const slot = room => (acc[room] = acc[room] || {arr: false, dep: false, move: null, names: {dep: [], arr: [], move: []}, since: 0});
   /* the reservation's own arrival, so the dot can look back over the whole stay */
   const sinceOf = (o, cell) => { const k = dateNum2(cell); if(k && (!o.since || k < o.since)) o.since = k; };
-  for(const r of statusRows(st, "DP", night)){
+  for(const r of departureRows(st, night)){
     const room = pillRoom(r.room, r.name); if(!room) continue;
     const o = slot(room); o.dep = true; o.names.dep.push(r.name || ""); sinceOf(o, r.arr);
+    const full = capturedGuestName(st, r.name, [room], dateNum2(r.arr), night);
+    if(full) (o.names.depFull = o.names.depFull || []).push(full);
   }
   for(const r of statusRows(st, "AR", night)){
     const room = pillRoom(r.room, r.name); if(!room) continue;
@@ -5993,7 +6048,10 @@ function renderMovesFor(box, night){
      pill's room while the name matches the pill's; the pill's own movedFrom always. */
   const st = legacyOn() ? null : loadStatus();
   const roomsBefore = (room, names) => {
-    const out = new Set(); if(mv[room].movedFrom) out.add(String(mv[room].movedFrom));
+    const out = new Set();
+    const movedNames = mv[room].names.move.concat(mv[room].names.moveFull || []);
+    if(mv[room].movedFrom && names.some(n => movedNames.some(m => sameGuestLabel(n, m))))
+      out.add(String(mv[room].movedFrom));
     if(!st || !st.MV || !names.length) return out;
     const seen = new Set([room].concat([...out]));
     let grew = true;
@@ -6004,7 +6062,7 @@ function renderMovesFor(box, night){
           if(!String(r.x || "").trim()) continue;
           const to = pillRoom(r.to, r.name), from = pillRoom(r.from, r.name);
           if(!to || !from || !seen.has(to) || seen.has(from)) continue;
-          if(!names.some(n => n && nameLike(r.name, n))) continue;
+          if(+k > night || !names.some(n => n && sameGuestLabel(r.name, n))) continue;
           seen.add(from); out.add(from); grew = true;
         }
       }
@@ -6012,9 +6070,9 @@ function renderMovesFor(box, night){
     return out;
   };
   const BEFORE = {};
-  for(const room of rooms) BEFORE[room] = {dep: roomsBefore(room, mv[room].names.dep), move: roomsBefore(room, mv[room].names.move)};
+  for(const room of rooms) BEFORE[room] = {dep: roomsBefore(room, mv[room].names.dep.concat(mv[room].names.depFull || [])), move: roomsBefore(room, mv[room].names.move)};
   const hit = (m, room, rm, guest) => {
-    if(m.dep && (rm === room || BEFORE[room].dep.has(rm)) && m.names.dep.some(n => nameHit(guest, n, otherNames(m, room, "dep")))) depRec.add(room);
+    if(m.dep && (rm === room || BEFORE[room].dep.has(rm)) && m.names.dep.concat(m.names.depFull || []).some(n => nameHit(guest, n, otherNames(m, room, "dep")))) depRec.add(room);
     if(m.movedFrom && (rm === room || BEFORE[room].move.has(rm)) && m.names.move.concat(m.names.moveFull || []).some(n => nameHit(guest, n, otherNames(m, room, "move")))) moveRec.add(room);
   };
   const found = room => (!mv[room].dep || depRec.has(room)) && (!mv[room].movedFrom || moveRec.has(room));
@@ -7289,10 +7347,10 @@ const I18N={
   st_taken:"taken", st_takenAt:"taken at {0}",
   st_room:"Room", st_name:"Name", st_arr:"Arrival", st_dep:"Departure", st_status:"Status", st_from:"From", st_to:"To", st_x:"X",
   st_arrNote:"Rows leave this list as guests check in and appear in the in-house list. Every arrival captured today is kept here; a row being gone is read as nothing until the in-house list shows the same name and room checked in.",
-  st_depNote:"A row leaving this list proves nothing on its own \u2014 the departure date can be wrong. A departure is checked out only when a complete in-house list captured afterwards does not show that name and room.",
+  st_depNote:"Smaller in-house lists retain previously captured guests. Checkout requires an explicit CO status in the departure list.",
   st_mark:"Mark", st_gone:"gone from the list since {0}",
   st_markIn:"checked in \u2014 on the in-house list at {0}", st_markExpected:"expected \u2014 not checked in on the in-house list yet",
-  st_markOut:"checked out \u2014 absent from the in-house list at {0}", st_markOutCO:"checked out \u2014 CO on the in-house list at {0}",
+  st_markOut:"checked out \u2014 absent from the in-house list at {0}", st_markOutCO:"checked out — CO on the departure list at {0}",
   st_markStay:"still in house at {0}", st_markNoIH:"no in-house list captured for this day yet", st_markCut:"in-house read at {0} was cut short \u2014 absence proves nothing",
   st_complete:"complete", st_cutShort:"read cut short", st_legacyShort:"legacy mode is on \u2014 nothing is captured",
   live_kept:" {0} kept as the census had them.",
@@ -7384,10 +7442,10 @@ const I18N={
   st_taken:"καταχωρήθηκε", st_takenAt:"λήψη {0}",
   st_room:"Δωμάτιο", st_name:"Όνομα", st_arr:"Άφιξη", st_dep:"Αναχώρηση", st_status:"Κατάσταση", st_from:"Από", st_to:"Σε", st_x:"X",
   st_arrNote:"Οι γραμμές φεύγουν από αυτή τη λίστα καθώς οι επισκέπτες κάνουν check-in και εμφανίζονται στις παραμονές. Κάθε άφιξη που λήφθηκε σήμερα κρατιέται εδώ· μια γραμμή που έφυγε δεν σημαίνει τίποτα μέχρι η λίστα παραμονών να δείξει το ίδιο όνομα και δωμάτιο με check-in.",
-  st_depNote:"Μια γραμμή που φεύγει από αυτή τη λίστα δεν αποδεικνύει τίποτα από μόνη της — η ημερομηνία αναχώρησης μπορεί να είναι λάθος. Μια αναχώρηση θεωρείται check-out μόνο όταν μια πλήρης λίστα παραμονών, ληφθείσα αργότερα, δεν δείχνει αυτό το όνομα και δωμάτιο.",
+  st_depNote:"Οι μικρότερες λίστες παραμονών διατηρούν τους επισκέπτες που έχουν ήδη καταγραφεί. Το check-out επιβεβαιώνεται μόνο με ένδειξη CO στη λίστα αναχωρήσεων.",
   st_mark:"Σήμανση", st_gone:"εκτός λίστας από {0}",
   st_markIn:"check-in — στη λίστα παραμονών στις {0}", st_markExpected:"αναμένεται — δεν έχει check-in στη λίστα παραμονών ακόμη",
-  st_markOut:"check-out — απουσιάζει από τη λίστα παραμονών στις {0}", st_markOutCO:"check-out — CO στη λίστα παραμονών στις {0}",
+  st_markOut:"check-out — απουσιάζει από τη λίστα παραμονών στις {0}", st_markOutCO:"check-out — CO στη λίστα αναχωρήσεων στις {0}",
   st_markStay:"ακόμη στο ξενοδοχείο στις {0}", st_markNoIH:"δεν έχει ληφθεί ακόμη λίστα παραμονών για αυτή την ημέρα", st_markCut:"η ανάγνωση παραμονών στις {0} κόπηκε νωρίς — η απουσία δεν αποδεικνύει τίποτα",
   st_complete:"πλήρης", st_cutShort:"ανάγνωση κομμένη νωρίς", st_legacyShort:"η παλαιά λειτουργία είναι ενεργή — δεν λαμβάνεται τίποτα",
   live_kept:" {0} έμειναν όπως τις είχε η λίστα παραμονών.",
@@ -8256,6 +8314,13 @@ async function autoReadInhouse(){
     const h = LIVE_HELD[g.tag];
     if(h && h.at === g.at) h.why = (r === "ok") ? "" : r;
   }
+  if(stChanged && RATE && RATE.live){
+    const held = statusLoad();
+    if(held.IH && held.IH.key === RATE.dateKey){
+      setLiveRate(consolidatedInhouseRate(held));
+      if(TAX_SCREEN === "tax") render();
+    }
+  }
   if(taxMovesChanged){
     if(TAX_SCREEN === "tax" && RATE && TAX) render();
     else TAX_MOVES_STALE = true;
@@ -8318,25 +8383,26 @@ function statusIngest(tag, p, at){
     const date = inhouseDate(p.title), key = dkey(date);
     if(!key) return false;
     const rows = p.rows.map(r => ({name: String(r[IH.NAME] || "").trim(), room: stRoom(r[IH.ROOM]), arr: String(r[IH.ARR] || "").trim(),
-                                   dep: String(r[IH.DEP] || "").trim(), status: String(r[IH.STATUS] || "").trim()}))
+                                   dep: String(r[IH.DEP] || "").trim(), status: String(r[IH.STATUS] || "").trim(),
+                                   readAt: at, cells: r.slice()}))
                        .filter(r => r.name || r.room);
     const cut = !!(p.done && p.done.cut);
     const cap = {at: at, date: date, key: key, cut: cut, rows: rows};
     if(!st.IH || at > st.IH.at){
-      const keep=st.IH&&st.IH.key===key?st.IH.rows:[];
+      const keep=st.IH&&st.IH.key===key?st.IH.rows.map(r=>Object.assign({readAt:st.IH.at},r)):[];
       const merged=new Map(keep.map(r=>[stKey(r.name,r.room),r]));
       for(const r of rows)if(r.name&&r.room)merged.set(stKey(r.name,r.room),r);
-      // Keep the day's captured rows; latest snapshot remains separate for status marks.
+      // Same-day filtered captures add/update; omitted rows remain captured.
       st.IHL=cap;st.IH=Object.assign({},cap,{rows:[...merged.values()]});changed=true;
     }
-    /* absence is argued from a COMPLETE list only, so the last complete one is kept apart */
+    /* Keep the last complete capture as evidence; absence never confirms checkout. */
     if(!cut && (!st.IHC || at > st.IHC.at)){ st.IHC = cap; changed = true; }
   }else{
     const date = inhouseDate(p.title), key = dkey(date);
     if(!key) return false;
     const days = st[tag] = st[tag] || {};
     const day = days[String(key)] = days[String(key)] || {title: p.title, date: date, at: 0, rows: {}};
-    if(day.at !== at){ day.at = at; day.title = p.title; day.cut = !!(p.done && p.done.cut); changed = true; }
+    if(at > day.at){ day.at = at; day.title = p.title; day.cut = !!(p.done && p.done.cut); changed = true; }
     for(const c of p.rows){
       let row;
       if(tag === "AR") row = {name: String(c[AR.NAME] || "").trim(), room: stRoom(c[AR.ROOM]), dep: String(c[AR.DEP] || "").trim(), status: String(c[AR.STATUS] || "").trim()};
@@ -8349,13 +8415,43 @@ function statusIngest(tag, p, at){
       const k = tag === "MV" ? row.from + "|" + row.to + "|" + stName(row.name) + "|" + row.arr : stKey(row.name, row.room);
       const had = day.rows[k];
       if(!had){ row.first = at; row.last = at; day.rows[k] = row; changed = true; }
-      else{ had.last = at; for(const f of Object.keys(row)) if(row[f] !== undefined && had[f] !== row[f]){ had[f] = row[f]; changed = true; } }
+      else if(at >= had.last){ had.last = at; for(const f of Object.keys(row)) if(row[f] !== undefined && had[f] !== row[f]){ had[f] = row[f]; changed = true; } }
     }
   }
   if(changed){ statusPrune(st); statusSave(st); STATUS_TICK++; }
   return changed;
 }
 /* the in-house row matching a reservation exactly, or null */
+/* An omitted census row is still held. Only an explicit CO departure for this room,
+   name and original stay, captured after its last in-house sighting, retires it. */
+function inhouseCheckedOut(st, row){
+  const day = st.DP && st.DP[String(dkey(row.dep))];
+  return !!(day && Object.values(day.rows || {}).some(r =>
+    /^CO\b/i.test(r.status || "") && stName(r.name) === stName(row.name) &&
+    stSameRoom(r.room, row.room) && dkey(r.arr) === dkey(row.arr) &&
+    r.last >= (row.readAt || (st.IH && st.IH.at) || 0)));
+}
+function consolidatedInhouseRows(st){
+  return ((st.IH && st.IH.rows) || []).filter(r => !inhouseCheckedOut(st, r));
+}
+function consolidatedInhouseRate(st){
+  const capture = st.IH;
+  if(!capture) return null;
+  const rows = consolidatedInhouseRows(st).map(r => {
+    const c = Array.isArray(r.cells) ? r.cells.slice() : [];
+    c[IH.NAME]=r.name; c[IH.ROOM]=r.room; c[IH.ARR]=r.arr; c[IH.DEP]=r.dep; c[IH.STATUS]=r.status;
+    return c;
+  });
+  return inhouseToRate(rows, capture.date);
+}
+function setLiveRate(rate){
+  // Guest accounts remain Department-only, including in the consolidated census.
+  const rooms = {}, all = {};
+  for(const room of Object.keys(rate.rooms)) if(/^\d{2,3}$/.test(room)){
+    rooms[room] = rate.rooms[room]; all[room] = rate.all[room];
+  }
+  RATE = Object.assign({}, rate, {rooms, all, count: Object.keys(rooms).length});
+}
 function ihFind(cap, name, room){
   if(!cap || !cap.rows) return null;
   const n = stName(name);
@@ -8371,24 +8467,20 @@ function ihFind(cap, name, room){
 function statusMark(st, tag, row, dayKey){
   const fresh = c => (c && (!dayKey || (c.key || 0) >= dayKey)) ? c : null;
   if(tag === "AR"){
-    const ih = st.IHL || st.IH;
-    const m = ihFind(ih, row.name, row.room);
-    if(m && /^C[IO]\b/i.test(m.status)) return {cls: "mIn", text: t('st_markIn', hhmm(ih.at) || "?")};
+    const ih = st.IH, m = ihFind(ih, row.name, row.room);
+    if(m && /^C[IO]\b/i.test(m.status)) return {cls: "mIn", text: t('st_markIn', hhmm(m.readAt || ih.at) || "?")};
     return {cls: "mNone", text: t('st_markExpected')};
   }
   if(tag === "DP"){
-    const ih = fresh(st.IHL || st.IH), ihc = fresh(st.IHC);
-    const m = ihFind(ih, row.name, row.room);
-    if(m && /^CO\b/i.test(m.status)) return {cls: "mOut", text: t('st_markOutCO', hhmm(ih.at) || "?")};
-    if(m) return {cls: "mStay", text: t('st_markStay', hhmm(ih.at) || "?")};
-    if(ihc && !ihFind(ihc, row.name, row.room)) return {cls: "mOut", text: t('st_markOut', hhmm(ihc.at) || "?")};
+    if(/^CO\b/i.test(row.status || "")) return {cls: "mOut", text: t('st_markOutCO', hhmm(row.last) || "?")};
+    const ih = fresh(st.IH), m = ihFind(ih, row.name, row.room);
+    if(m && /^CI\b/i.test(m.status)) return {cls: "mStay", text: t('st_markStay', hhmm(m.readAt || ih.at) || "?")};
     if(ih && ih.cut) return {cls: "mNone", text: t('st_markCut', hhmm(ih.at) || "?")};
     return {cls: "mNone", text: t('st_markNoIH')};
   }
   return null;
 }
-function stEsc(x){ return escHtml(String(x == null ? "" : x)); }
-/* the day a list is shown for: the latest capture's date, else the census's night */
+
 function statusDay(st, tag){
   const held = LIVE_HELD[tag];
   const k = held && held.date ? dkey(held.date) : 0;
@@ -8444,7 +8536,7 @@ function renderStatusList(){
   if(tag === "IH"){
     const c = st.IH;
     if(!c){ h += '<span class="stMeta">' + stEsc(LIVE_ERR.IH ? t('held_unread', t('held_IH'), LIVE_ERR.IH) : t('st_none')) + '</span></div></div>'; box.innerHTML = h; return; }
-    rows = c.rows.slice();
+    rows = consolidatedInhouseRows(st);
     h += '<span class="stMeta">' + stEsc((c.date || "?") + " \u00b7 " + t('held_rows', rows.length) + (hhmm(c.at) ? " \u00b7 " + t('st_takenAt', hhmm(c.at)) : "")) + '</span>';
     h += '<span class="stState ' + (c.cut ? "bad" : "good") + '">' + stEsc(c.cut ? t('st_cutShort') : t('st_complete')) + '</span></div>';
   }else{
@@ -8885,12 +8977,8 @@ function applyInhouse(p, auto){
   if(auto && p.done && p.done.cut){ quiet(t('live_rcut', t('rpt_IH'), p.title || '?')); return "cut"; }
   const sig = p.title + "\u0000" + p.rows.length + "\u0000" + p.rows.map(r => r.join("\u0001")).join("\u0002");
   if(auto && sig === LIVE_SIG){ say.textContent = t('live_same', rate.count, biz || '?'); return "ok"; }
-  // Guest accounts feed Department Check only; Tax Check keeps its physical-room census.
-  const taxRooms = {}, taxAll = {};
-  for(const room of Object.keys(rate.rooms)) if(/^\d{2,3}$/.test(room)){
-    taxRooms[room] = rate.rooms[room]; taxAll[room] = rate.all[room];
-  }
-  RATE = Object.assign({}, rate, {rooms: taxRooms, all: taxAll, count: Object.keys(taxRooms).length});
+  const held = statusLoad();
+  setLiveRate(held.IH && held.IH.key === rate.dateKey ? consolidatedInhouseRate(held) : rate);
   const saved = saveMoves(rate);
   /* A move can only be written onto a stay that exists, and the in-house list is what
      creates them. So the last moves capture is offered again here — the applied set makes
