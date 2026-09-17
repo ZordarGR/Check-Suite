@@ -5,7 +5,7 @@
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.76/Pro-Check-Setup.exe",
   "setupSha256": "e329ab9589afda28cfc14423b06e2b78fe895243edb9ad6464c3ed76e3a4f26e",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main/Departments%20Check.html",
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/897a9c0f381002317823878d5dd2ae6f5066f014/Departments%20Check.html",
   "sha256": "837f35c7e8e00af0f5d7942ab9ce01dd0c0c39ce2b524d48c0a6d43e1e0fdc79",
   "notes": "Print an on-demand report by departure date with rooms, stay dates and recorded extras across the stay. Preserve captured in-house rows when smaller lists open on the same day."
 }
