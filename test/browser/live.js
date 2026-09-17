@@ -498,8 +498,8 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
   await p.click("#stDep");
   await p.waitForTimeout(300);
   const dp = await p.evaluate(() => document.getElementById("stList").textContent);
-  ck("Departures: the report, with its note that a row leaving proves nothing", /Departure report/.test(dp) && /departure date can be wrong/.test(dp));
-  ck("a departure absent from the complete in-house list is checked out", /BURWIECK[^]*?checked out — absent from the in-house list at \d\d:\d\d/.test(dp));
+  ck("Departures: the report, with its note that a row leaving proves nothing", /Departure report/.test(dp) && /explicit CO status in the departure list/.test(dp));
+  ck("a departure explicitly captured as CO is checked out", /BURWIECK[^]*?checked out — CO on the departure list at \d\d:\d\d/.test(dp));
   ck("one still on it with CI — as 414-15 for 414 — is still in house", /ARKINSTALL[^]*?still in house at \d\d:\d\d/.test(dp));
   /* In-house and Moves */
   await p.click("#stListBack"); await p.waitForTimeout(200); await p.click("#stInh"); await p.waitForTimeout(300);
@@ -515,9 +515,9 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
     c: ["TITLE\tGuests inhouse: 04/09/26", "IH\t" + ROWS[0].join("\t"), "DONE\t1\t250\t83\t47\tunicode\tcut-short"].join("\n")});
   await p.waitForTimeout(6500);
   const dp2 = await p.evaluate(() => ({txt: document.getElementById("stList").textContent, shown: document.getElementById("statusListScreen").style.display !== "none"}));
-  ck("a departure gone from the list is still on it, said to be gone, and still checked out by the earlier complete census",
-     dp2.shown && /BURWIECK[^]*?checked out — absent from the in-house list at \d\d:\d\d · gone from the list since \d\d:\d\d/.test(dp2.txt));
-  ck("the one the cut-short read does not show is not called out by it", /ARKINSTALL[^]*?was cut short — absence proves nothing/.test(dp2.txt));
+  ck("a departure gone from the list is still on it, said to be gone, and still checked out by its captured departure CO",
+     dp2.shown && /BURWIECK[^]*?checked out — CO on the departure list at \d\d:\d\d · gone from the list since \d\d:\d\d/.test(dp2.txt));
+  ck("the one the cut-short read does not show is not called out by it", /ARKINSTALL[^]*?still in house at/.test(dp2.txt));
   await p.click("#stListBack"); await p.waitForTimeout(300);
   const inhSub = await p.evaluate(() => document.getElementById("stInh").querySelector(".mSub").textContent);
   ck("the In-house submenu says the latest read was cut short", /read cut short/.test(inhSub));
