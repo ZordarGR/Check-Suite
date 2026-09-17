@@ -1,11 +1,11 @@
 {
-  "version": "1.17.78",
+  "version": "1.17.79",
   "type": "html",
   "engine": "1.17.76",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.76/Pro-Check-Setup.exe",
   "setupSha256": "e329ab9589afda28cfc14423b06e2b78fe895243edb9ad6464c3ed76e3a4f26e",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/152384be7ae49371ed526af6604ce9402838f916/Departments%20Check.html",
-  "sha256": "8b0d5fb2b754088aa84c4f44eb2669d3c0e1b34014a4f411ff2a320198d72026",
-  "notes": "Departure report now includes full guest names in preview and print. Date filters use DD/MM/YYYY regardless of locale."
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/fc9abbafe08a7b7c2d1cc975089490d7aaab8015/Departments%20Check.html",
+  "sha256": "b32b7c4ca295152696b740193fa41dd2c658ca7212aefccab5835481303126d4",
+  "notes": "Resolve duplicate arrival-date versions from saved captures. Show unresolved date conflicts once without changing stored reservation dates."
 }

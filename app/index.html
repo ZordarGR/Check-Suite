@@ -1948,7 +1948,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.78";
+const APP_VERSION = "1.17.79";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -6570,7 +6570,7 @@ function depReportRows(ledger,status,history,from,to){
     const room=pillRoom(r.room,r.name),a=depReportKey(r.arr),d=depReportKey(r.dep),key=room+"|"+a,old=by.get(key);
     if(!room||!a||!d||d<a||!r.name||/void|reversal/i.test(r.status||""))continue;
     if(old&&(old.mv||(old.seen||0)>(cap.key||0)))continue;
-    const row={room:String(r.room),base:room,arr:a,dep:d,name:r.name,seen:cap.key||0,mv:false,from:old?old.from:""};
+    const row={room:String(r.room),base:room,arr:a,dep:d,name:r.name,seen:cap.key||0,mv:false,from:old?old.from:"",ih:true};
     if(old)all.splice(all.indexOf(old),1);
     all.push(row);by.set(key,row);
   }
@@ -6578,28 +6578,45 @@ function depReportRows(ledger,status,history,from,to){
   for(const k of Object.keys((status&&status.MV)||{})) for(const r of statusRows(status,"MV",+k)){
     if(String(r.x||"").trim())moves.push({...r,night:+k});
   }
-  return all.filter(r=>!r.mv&&r.dep>=from&&r.dep<=to).map(r=>{
-    const rooms=new Set([r.base]);if(r.from)rooms.add(String(r.from));
+  // Arrival is a historical ledger key, not a reservation identity. Reconcile only
+  // exact guest/room/departure matches, without changing any stored dates.
+  const groups=[];
+  for(const row of all.filter(r=>!r.mv)){
+    let group=groups.find(g=>g[0].base===row.base&&g[0].dep===row.dep&&sameName(g[0].name,row.name));
+    if(!group){group=[];groups.push(group);}group.push(row);
+  }
+  const current=groups.map(versions=>{
+    const newest=Math.max(...versions.map(r=>r.seen||0));
+    let top=versions.filter(r=>(r.seen||0)===newest);
+    if(top.some(r=>r.ih))top=top.filter(r=>r.ih); // same-day census has explicit arrival
+    const arrivals=[...new Set(top.map(r=>r.arr))].sort((a,b)=>a-b);
+    return {...top[0],arr:arrivals[0],arrivals,versions};
+  });
+  return current.filter(r=>r.dep>=from&&r.dep<=to).map(r=>{
+    const rooms=new Set([r.base]);for(const v of r.versions)if(v.from)rooms.add(String(v.from));
     let grew=true;
     while(grew){
       grew=false;
       for(const m of moves){
-        if(m.night<r.arr||m.night>r.dep||depReportKey(m.arr)!==r.arr||depReportKey(m.dep)!==r.dep||!nameLike(m.name,r.name))continue;
+        if(m.night<r.arr||m.night>r.dep||!r.arrivals.includes(depReportKey(m.arr))||depReportKey(m.dep)!==r.dep||!nameLike(m.name,r.name))continue;
         const src=pillRoom(m.from,m.name),dst=pillRoom(m.to,m.name);
         if(src&&dst&&rooms.has(dst)&&!rooms.has(src)){rooms.add(src);grew=true;}
       }
     }
-    let extras=false;
+    let extras=false,extrasUncertain=false;
     for(const k of Object.keys(history||{})){
       const day=depReportKey(k);if(day<r.arr||day>r.dep)continue;
       for(const pair of Array.isArray(history[k])?history[k]:[]){
         const room=pillRoom(pair[0],pair[1]);if(!rooms.has(room))continue;
-        const others=all.filter(o=>o.base===room&&o.arr<=day&&o.dep>=day&&!(o.arr===r.arr&&o.dep===r.dep&&nameLike(o.name,r.name))).map(o=>o.name);
-        if(nameHit(pair[1],r.name,others)){extras=true;break;}
+        const others=all.filter(o=>o.base===room&&o.arr<=day&&o.dep>=day&&!r.versions.includes(o)&&!(r.arrivals.includes(o.arr)&&o.dep===r.dep&&nameLike(o.name,r.name))).map(o=>o.name);
+        if(nameHit(pair[1],r.name,others)){
+          if(day<Math.max(...r.arrivals))extrasUncertain=true;
+          else{extras=true;break;}
+        }
       }
       if(extras)break;
     }
-    return {room:r.room,name:r.name,arr:r.arr,dep:r.dep,extras};
+    return {room:r.room,name:r.name,arr:r.arr,arrivals:r.arrivals,dep:r.dep,extras,extrasUncertain:!extras&&extrasUncertain};
   }).sort((a,b)=>a.dep-b.dep||a.room.localeCompare(b.room,undefined,{numeric:true})||a.arr-b.arr);
 }
 function depReportHistory(){
@@ -6624,7 +6641,7 @@ function depReportHistory(){
 }
 function depReportTable(rows){
   return '<table class="depDateTable"><colgroup><col style="width:10%"><col style="width:38%"><col style="width:16%"><col style="width:16%"><col style="width:20%"></colgroup><thead><tr><th>Room</th><th>Guest name</th><th>Arrival</th><th>Departure</th><th>Extras</th></tr></thead><tbody>'+
-    rows.map(r=>'<tr><td>'+esc(r.room)+'</td><td>'+esc(r.name)+'</td><td>'+depReportDate(r.arr)+'</td><td>'+depReportDate(r.dep)+'</td><td>'+(r.extras?'Yes':'No recorded extras')+'</td></tr>').join("")+'</tbody></table>';
+    rows.map(r=>'<tr><td>'+esc(r.room)+'</td><td>'+esc(r.name)+'</td><td>'+(r.arrivals&&r.arrivals.length>1?r.arrivals.map(depReportDate).join('<br>')+'<br><small>Conflicting saved dates</small>':depReportDate(r.arr))+'</td><td>'+depReportDate(r.dep)+'</td><td>'+(r.extras?'Yes':r.extrasUncertain?'Uncertain (arrival date)':'No recorded extras')+'</td></tr>').join("")+'</tbody></table>';
 }
 function depReportSheet(job){
   const html='<h1>Departures · '+depReportDate(job.from)+' – '+depReportDate(job.to)+'</h1><p>'+job.rows.length+' reservations</p>'+depReportTable(job.rows)+
