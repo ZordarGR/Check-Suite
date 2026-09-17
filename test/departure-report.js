@@ -17,6 +17,7 @@ const history={"20260902":[["101","TEST ALPHA"]],"20260917":[["403-2","DELTA PER
 const snapshot=JSON.stringify({ledger,status,history});
 let rows=api.rows(ledger,status,history,20260918,20260919);
 assert.deepEqual(rows.map(r=>r.room),["102","403-2","9017","201"]);
+assert.deepEqual(rows.map(r=>r.name),["TEST ALPHA","DELTA PERSON","EPSILON GUEST","BETA PERSON"]);
 assert.deepEqual(rows.map(r=>r.extras),[true,true,false,false]);
 assert.equal(JSON.stringify({ledger,status,history}),snapshot);
 assert.equal(api.rows(ledger,status,history,20260921,20260922).length,0);
