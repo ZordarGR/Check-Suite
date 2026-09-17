@@ -465,6 +465,7 @@ ck("guest-account departure is included in the department red mark", !!P.leaving
 ck("house accounts never become pills or departure marks", ["9000", "9604", "9040"].every(room => !P.has(room) && !P.leaving[room]));
 
 
+{
 console.log("--- same-day in-house row preservation");
 for(const k of Object.keys(store)) delete store[k];store["reccheck_legacy"]="0";
 const capRows=(date,rows,at)=>TAX.ingest("IH",{title:"Guests Inhouse: "+date,rows:rows,done:{cut:false}},at);
@@ -482,5 +483,6 @@ ck("older capture cannot replace newer dates",TAX.load().IH.rows.find(r=>r.room=
 capRows("05/09/26",[item("GAMMA TEST","103","21/09/26")],T(10));
 ck("a new business day starts a new union",TAX.load().IH.rows.length===1&&TAX.load().IH.rows[0].room==="103");
 
+}
 console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");
 process.exit(bad ? 1 : 0);
