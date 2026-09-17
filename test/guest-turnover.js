@@ -26,5 +26,6 @@ check("a fragment matching two guests is ambiguous",!api.nameHit("MORGAN",old,[f
 const partial={sn:"2",roomMain:"120",guest:"ANNA/MORG"};
 check("middle-of-name text expands to the in-house full name",api.guestFor("120",partial)===fresh&&api.receiptName(partial)===fresh);
 check("unmatched characters are never discarded",api.guestFor("120",{...partial,guest:"ANNA/MORT"})==="ANNA/MORT");
+check("a fragment shared with the captured departure is not expanded to the new guest",api.receiptName({sn:"3",roomMain:"120",guest:"MORGAN"})==="MORGAN");
 check("the original departing guest still matches",api.isLeaving("120",old));
 process.exitCode=bad?1:0;

@@ -284,10 +284,10 @@ ck("a longer continuous fragment unique to the departure matches it", pillsFor(N
 ck("a receipt with the whole word of one alone decides",                                   pillsFor(NIGHT, [rc("110", "ANNELIESE")]).dot("110") && !pillsFor(NIGHT, [rc("110", "ANNA")]).dot("110"));
 ck("the red mark follows the same rule",                                                 !pillsFor(NIGHT, [rc("110", CUTN)]).isLeaving("110", CUTN) && pillsFor(NIGHT, []).isLeaving("110", "ANNELIESE") && !pillsFor(NIGHT, []).isLeaving("110", "ANNA"));
 P = pillsFor(NIGHT, [rc("110", CUTN)], {"110": {guest: WHOLEN, liveKey: 20260905}});
-ck("with the census holding the whole name, the receipt's truncation is completed",     P.name(rc("110", CUTN)) === WHOLEN);
-ck("and the dot lands on the departure — the whole name, equal, is that reservation whatever words the arrival shares", P.dot("110"));
+ck("a fragment fitting a captured arrival too remains unexpanded", P.name(rc("110", CUTN)) === CUTN);
+ck("census completion cannot turn an ambiguous fragment into a departure dot", !P.dot("110"));
 ck("an arriving guest's receipt on the same room keeps its own name",                    P.name(rc("110", "NEUMANN PETRA")) === "NEUMANN PETRA");
-ck("all three available characters can be completed when present continuously", P.name(rc("110","MUE")) === WHOLEN);
+ck("a short fragment fitting both known stays stays unexpanded", P.name(rc("110","MUE")) === "MUE");
 P = pillsFor(NIGHT, [rc("110", "NEUMANN PETRA")], {"110": {guest: WHOLEN, liveKey: 20260905}});
 ck("... and it does not dot the departure",                                              !P.dot("110"));
 P = pillsFor(NIGHT, [rc("110", CUTN)], {"110": {guest: "NEUMANN PETRA/KLAUS", liveKey: 20260905}});
@@ -295,7 +295,7 @@ ck("a census naming the NEW guest completes nothing for the old guest's receipt"
 ck("a stored name with no liveKey — the .oxps's own — completes nothing either",         pillsFor(NIGHT, [rc("110", CUTN)], {"110": {guest: WHOLEN}}).name(rc("110", CUTN)) === CUTN);
 ck("the completed name is what the night's index remembers",                             (JSON.parse(store["reccheck_receipts_v1"])["20260904"] || []).some(p => p[0] === "110" && p[1] === CUTN));
 P = pillsFor(NIGHT, [rc("110", CUTN)], {"110": {guest: WHOLEN, liveKey: 20260905}});
-ck("... whole when the census had it",                                                   (JSON.parse(store["reccheck_receipts_v1"])["20260904"] || []).some(p => p[0] === "110" && p[1] === WHOLEN));
+ck("receipt memory also retains the ambiguous original fragment", (JSON.parse(store["reccheck_receipts_v1"])["20260904"] || []).some(p => p[0] === "110" && p[1] === CUTN));
 
 
 console.log("--- 5d. whole receipt text must occur continuously in the reference name");

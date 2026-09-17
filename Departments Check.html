@@ -2919,8 +2919,18 @@ function receiptFullName(room, own){
   if(!own || !live || !live.liveKey || !nameTextIn(own, live.guest)) return "";
   const full = String(live.guest || "").trim();
   if(sameName(own, full)) return full;
-  const ambiguous = MODEL && (MODEL.receipts || []).some(r => String(r.roomMain) === String(room) &&
-    r.guest && nameTextIn(r.guest, full) && !sameGuestLabel(own, r.guest));
+  const rivals = [].concat(typeof LEAVING === "undefined" ? [] : (LEAVING[room] || []),
+                           typeof ARRIVING === "undefined" ? [] : (ARRIVING[room] || []));
+  if(rivals.some(n => nameTextIn(own, n) && !sameGuestLabel(n, full))) return "";
+  if(MODEL && !MODEL._nameFragments){
+    const byRoom = {};
+    for(const r of MODEL.receipts || []) if(r.roomMain && r.guest && !r.cancelled && !r.voided){
+      (byRoom[String(r.roomMain)] = byRoom[String(r.roomMain)] || new Set()).add(r.guest);
+    }
+    MODEL._nameFragments = byRoom;
+  }
+  const fragments = MODEL && MODEL._nameFragments[String(room)];
+  const ambiguous = fragments && [...fragments].some(n => nameTextIn(n, full) && !sameGuestLabel(own, n));
   return ambiguous ? "" : full;
 }
 function receiptName(r){
