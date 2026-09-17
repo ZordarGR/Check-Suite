@@ -7,7 +7,7 @@ function lift(n){
  for(let j=start;j<src.length;j++){if(src[j]==="{")d++;else if(src[j]==="}"&&!--d)return src.slice(at+1,j+1);}
  throw Error(n);
 }
-const names=["sameName","nameWordSet","nameLike","isCutOf","nameTextIn","sameGuestLabel","nameHit","receiptFullName","receiptName","guestFor","dateNum","dateNum2","pillRoom","statusRows","departureRows","capturedGuestName","censusNameOf","otherNames","isLeaving"];
+const names=["sameName","nameWordSet","nameLike","isCutOf","nameTextIn","sameGuestLabel","nameHit","expandReceiptName","receiptFullName","receiptName","guestFor","dateNum","dateNum2","pillRoom","statusRows","departureRows","capturedGuestName","censusNameOf","otherNames","isLeaving"];
 const old="MORGAN/BRIGGS DAVID/ELENA", fresh="KELLER/STONE ANNA/MORGAN";
 const run=(rooms,receipts)=>new Function("ROOMS","MODEL","STATE",
  names.map(lift).join("\n")+ '\nconst rState=r=>STATE[r.sn]||{}; const effRoom=r=>r.roomMain; let LEAVING={"120":["MORGAN/BRIGGS DAVID/ELENA"]}, ARRIVING={}; return {guestFor,receiptName,nameHit,isLeaving,otherNames};'
@@ -28,4 +28,7 @@ check("middle-of-name text expands to the in-house full name",api.guestFor("120"
 check("unmatched characters are never discarded",api.guestFor("120",{...partial,guest:"ANNA/MORT"})==="ANNA/MORT");
 check("a fragment shared with the captured departure is not expanded to the new guest",api.receiptName({sn:"3",roomMain:"120",guest:"MORGAN"})==="MORGAN");
 check("the original departing guest still matches",api.isLeaving("120",old));
+const oldPaper={sn:"4",roomMain:"120",guest:old}, shortPaper={sn:"5",roomMain:"120",guest:"MORGAN"};
+api=run({"120":{guest:fresh,liveKey:20260904}},[oldPaper,shortPaper]);
+check("the first receipt fallback cannot assign an ambiguous fragment to the previous guest",api.guestFor("120",shortPaper)==="MORGAN");
 process.exitCode=bad?1:0;

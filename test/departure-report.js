@@ -1,7 +1,7 @@
 const fs=require("fs"),assert=require("assert");
 const src=fs.readFileSync("app/index.html","utf8");
 function lift(n){const at=src.indexOf("\nfunction "+n+"(");assert(at>=0,n);let d=0,b=src.indexOf("{",at);for(let j=b;j<src.length;j++){if(src[j]==="{")d++;if(src[j]==="}"&&!--d)return src.slice(at+1,j+1);}}
-const api=new Function(["dateNum2","pillRoom","sameName","nameWordSet","nameLike","nameHit","statusRows","depReportKey","depReportDate","depReportRows"].map(lift).join("\n")+";return {key:depReportKey,rows:depReportRows};")();
+const api=new Function(["dateNum2","pillRoom","sameName","nameWordSet","nameLike","nameTextIn","nameHit","statusRows","depReportKey","depReportDate","depReportRows"].map(lift).join("\n")+";return {key:depReportKey,rows:depReportRows};")();
 assert.equal(api.key("2026-09-18"),20260918);assert.equal(api.key("31/09/26"),0);
 const ledger={
  "101":{"20260901":{d:20260918,n:"TEST ALPHA",seen:20260917,mv:true}},

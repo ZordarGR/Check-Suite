@@ -2914,13 +2914,13 @@ function isCutOf(short, full){
    receipts (i rip those and throw them, so please, careful)". */
 /* Never expand a fragment when this report also contains a different, non-overlapping
    guest fragment for the room that fits the same full name. Keep the printed evidence. */
-function receiptFullName(room, own){
-  const live = ROOMS[String(room)];
-  if(!own || !live || !live.liveKey || !nameTextIn(own, live.guest)) return "";
-  const full = String(live.guest || "").trim();
+function expandReceiptName(room, own, candidate){
+  const full = String(candidate || "").trim(), live = ROOMS[String(room)];
+  if(!own || !nameTextIn(own, full)) return "";
   if(sameName(own, full)) return full;
   const rivals = [].concat(typeof LEAVING === "undefined" ? [] : (LEAVING[room] || []),
-                           typeof ARRIVING === "undefined" ? [] : (ARRIVING[room] || []));
+                           typeof ARRIVING === "undefined" ? [] : (ARRIVING[room] || []),
+                           live && live.liveKey && live.guest ? [live.guest] : []);
   if(rivals.some(n => nameTextIn(own, n) && !sameGuestLabel(n, full))) return "";
   if(MODEL && !MODEL._nameFragments){
     const byRoom = {};
@@ -2930,9 +2930,16 @@ function receiptFullName(room, own){
     MODEL._nameFragments = byRoom;
   }
   const fragments = MODEL && MODEL._nameFragments[String(room)];
-  const ambiguous = fragments && [...fragments].some(n => nameTextIn(n, full) && !sameGuestLabel(own, n));
+  const ambiguous = fragments && [...fragments].some(n =>
+    (nameTextIn(n, full) && !sameGuestLabel(own, n)) ||
+    (nameTextIn(own, n) && !sameGuestLabel(n, full)));
   return ambiguous ? "" : full;
 }
+function receiptFullName(room, own){
+  const live = ROOMS[String(room)];
+  return live && live.liveKey ? expandReceiptName(room, own, live.guest) : "";
+}
+
 function receiptName(r){
   const own = String((r && r.guest) || "").trim();
   return receiptFullName(effRoom(r), own) || own;
@@ -2965,7 +2972,7 @@ function guestFor(room, r){
     const full = receiptFullName(room, own);
     if(full) return full;
     if(own){
-      if(onReceipt && nameTextIn(own, onReceipt)) return onReceipt;
+      if(onReceipt) return expandReceiptName(room, own, onReceipt) || own;
       return own; // a same-day room cache cannot rename this receipt after turnover
     }
   }
@@ -8477,6 +8484,8 @@ function statusMark(st, tag, row, dayKey){
   return null;
 }
 
+function stEsc(x){ return escHtml(String(x == null ? "" : x)); }
+/* The latest captured day for each list. */
 function statusDay(st, tag){
   const held = LIVE_HELD[tag];
   const k = held && held.date ? dkey(held.date) : 0;

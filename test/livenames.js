@@ -40,7 +40,7 @@ function runSync(rooms, receipts, reportDate, watch){
 
 /* --- guestFor: which name reaches the card --- */
 const guestFor = (rooms, model) => new Function("ROOMS","MODEL","String","Object","RegExp",
-  lift("dateNum") + "\n" + lift("isCutOf") + "\n" + lift("nameTextIn") + "\n" + lift("sameName") + "\n" + lift("sameGuestLabel") + "\n" + lift("receiptFullName") + "\n" + lift("guestFor") + "\nreturn guestFor;")(
+  lift("dateNum") + "\n" + lift("isCutOf") + "\n" + lift("nameTextIn") + "\n" + lift("sameName") + "\n" + lift("sameGuestLabel") + "\n" + lift("expandReceiptName") + "\n" + lift("receiptFullName") + "\n" + lift("guestFor") + "\nreturn guestFor;")(
     rooms, model, String, Object, RegExp);
 
 const R = () => ({"426": {guest: FULL, seen: null, liveKey: 20260904}});
