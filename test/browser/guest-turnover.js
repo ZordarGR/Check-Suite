@@ -12,6 +12,7 @@ const {chromium}=require("playwright-core"), path=require("path"), assert=requir
    listFile:tag=>Promise.resolve(window.__files[tag]?{tag,text:window.__files[tag],at:window.__times[tag]}:null)};
  });
  await p.goto("file://"+path.resolve(__dirname,"h-sweep.html"));
+ await p.waitForTimeout(300);
  await p.evaluate(()=>{
   const old="MORGAN/BRIGGS DAVID/ELENA";
   localStorage.setItem("reccheck_status_v1",JSON.stringify({
@@ -19,7 +20,8 @@ const {chromium}=require("playwright-core"), path=require("path"), assert=requir
    MV:{"20260903":{rows:{move:{name:"MORGAN/BRIGGS",from:"90",to:"120",arr:"01/09/26",dep:"04/09/26",x:"X"}}}}
   }));
   const r={sn:"80001",roomMain:"120",room:"120",guest:"KELLER/STONE ANNA/MORGAN",dept:"REST",total:10,cancelled:false,voided:false,rates:{"24%":10,"13%":0,"6%":0,base:10},time:"21:14"};
-  window.__t.setModel({reportDate:"4/9/2026",receipts:[r]});window.__t.setState({receipts:{},extras:[]});window.__t.setStateKey("20260904");window.__t.showScreen("app");window.__rcMovesChanged();
+  const depts={};for(const d of ["REST","RESTAURANT","CAFETERIA","TAVERNAKI","KAFENIO","BAR"])depts[d]={list:d==="REST"?[r]:[],other:[]};
+  window.__t.setModel({reportDate:"4/9/2026",receipts:[r],depts});window.__t.setState({receipts:{},extras:[]});window.__t.setStateKey("20260904");window.__t.showScreen("app");document.getElementById("searchWrap").style.display="block";window.__rcMovesChanged();
   const input=document.getElementById("snInput");input.value="80001";input.dispatchEvent(new Event("input"));
  });
  await p.waitForSelector("#matches .match");

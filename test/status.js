@@ -62,7 +62,7 @@ function pillsFor(reportDate, receipts, rooms){
   const t = k => k;
   const body = [line(/^const el = \(tag, cls, txt\) =>.*$/m), lift("dateNum"), lift("dShort"), lift("rKey"), lift("rState"),
     "const effRoom = (r) => { " + line(/^function effRoom\(r\)\{.*$/m).replace(/^function effRoom\(r\)\{/, "").replace(/\}$/, "") + " };",
-    lift("checkableList"), lift("sameName"), lift("isCutOf"), lift("receiptName"),
+    lift("checkableList"), lift("sameName"), lift("isCutOf"), lift("receiptFullName"), lift("receiptName"),
     "const STATUS_KEY = \"reccheck_status_v1\";", lift("loadStatus"), lift("statusRows"), lift("pillRoom"),
     "const LEGACY_KEY = \"reccheck_legacy\";", lift("legacyOn"), line(/^const MOVES_KEY = .*$/m), lift("loadMoves"), lift("ledgerMoves"), 
     lift("dateNum2"), lift("prevNightKey"), "const RECEIPTS_KEY = \"reccheck_receipts_v1\"; const RECEIPTS_KEEP = 15;", lift("loadNightReceipts"), lift("saveNightReceipts"),
@@ -117,7 +117,7 @@ ck("the one still on the arrival list stays expected", /st_markExpected/.test(TA
 /* same name, another room: not a match — an exact match of reservation name AND room */
 ih(IHTXT("Guests inhouse: 04/09/26", [["AMANN ANJA/BERND", "338", "2/0/0/0/0", "04/09/26", "14/09/26", "CI"]]), T(14));
 st = TAX.load();
-ck("the same name in another room is not that arrival checked in", /st_markExpected/.test(TAX.mark(st, "AR", amann).text));
+ck("a smaller capture retains the earlier exact room arrival sighting", /st_markIn/.test(TAX.mark(st, "AR", amann).text));
 
 console.log("--- 2. departures: gone from the list proves nothing; absent from a complete in-house list does");
 for(const k of Object.keys(store)) delete store[k]; store["reccheck_legacy"] = "0";
@@ -387,7 +387,7 @@ bridge.MV["20260904"].rows.move.name = "MORGAN/OTHER";
 ck("every word of the move-list name must occur in the full name", !bridgePills(bridge).dot("164"));
 bridge = bridgeFixture();
 bridge.AR["20260904"] = {rows: {rival: {name: "NEWFAMILY ALICE", room: "164", dep: "10/09/26"}}};
-ck("a competing arrival sharing the receipt's word still blocks the move dot", !bridgePills(bridge).dot("164"));
+ck("a competing arrival sharing only one word does not block the complete unique fragment", bridgePills(bridge).dot("164"));
 bridge = bridgeFixture();
 delete bridge.AR;
 bridge.IH = {rows: [{name: MOVE_FULL, room: "164", arr: "01/09/26", dep: "10/09/26"}]};

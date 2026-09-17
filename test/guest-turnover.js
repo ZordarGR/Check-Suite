@@ -7,7 +7,7 @@ function lift(n){
  for(let j=start;j<src.length;j++){if(src[j]==="{")d++;else if(src[j]==="}"&&!--d)return src.slice(at+1,j+1);}
  throw Error(n);
 }
-const names=["sameName","nameWordSet","nameLike","isCutOf","nameTextIn","sameGuestLabel","nameHit","receiptName","guestFor","dateNum","dateNum2","pillRoom","statusRows","departureRows","capturedGuestName","censusNameOf","otherNames","isLeaving"];
+const names=["sameName","nameWordSet","nameLike","isCutOf","nameTextIn","sameGuestLabel","nameHit","receiptFullName","receiptName","guestFor","dateNum","dateNum2","pillRoom","statusRows","departureRows","capturedGuestName","censusNameOf","otherNames","isLeaving"];
 const old="MORGAN/BRIGGS DAVID/ELENA", fresh="KELLER/STONE ANNA/MORGAN";
 const run=(rooms,receipts)=>new Function("ROOMS","MODEL","STATE",
  names.map(lift).join("\n")+ '\nconst rState=r=>STATE[r.sn]||{}; const effRoom=r=>r.roomMain; let LEAVING={"120":["MORGAN/BRIGGS DAVID/ELENA"]}, ARRIVING={}; return {guestFor,receiptName,nameHit,isLeaving,otherNames};'

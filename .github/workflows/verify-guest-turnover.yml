@@ -11,12 +11,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - name: Reproduce released name defects
         run: |
+          git fetch --depth=1 origin 1e74ad81c3386dd8b44e5ac32029250c15c3dd66
           cp app/index.html /tmp/turnover-candidate.html
           git show 1e74ad81c3386dd8b44e5ac32029250c15c3dd66:app/index.html > app/index.html
           if node test/guest-turnover.js; then

@@ -2912,28 +2912,25 @@ function isCutOf(short, full){
    LEAVING mark and the receipts dot are built on this, and marking the arriving guest's
    paper is the one thing they must not do: his words, "dont accidentally mark the arrival
    receipts (i rip those and throw them, so please, careful)". */
+/* Never expand a fragment when this report also contains a different, non-overlapping
+   guest fragment for the room that fits the same full name. Keep the printed evidence. */
+function receiptFullName(room, own){
+  const live = ROOMS[String(room)];
+  if(!own || !live || !live.liveKey || !nameTextIn(own, live.guest)) return "";
+  const full = String(live.guest || "").trim();
+  if(sameName(own, full)) return full;
+  const ambiguous = MODEL && (MODEL.receipts || []).some(r => String(r.roomMain) === String(room) &&
+    r.guest && nameTextIn(r.guest, full) && !sameGuestLabel(own, r.guest));
+  return ambiguous ? "" : full;
+}
 function receiptName(r){
   const own = String((r && r.guest) || "").trim();
-  const live = ROOMS[String(effRoom(r))];
-  if(own && live && live.guest && live.liveKey && nameTextIn(own, live.guest)) return live.guest;
-  return own;
+  return receiptFullName(effRoom(r), own) || own;
 }
 function guestFor(room, r){
-  /* A name read live from protel BEATS the one on the receipt. It is the same guest —
-     the .oxps simply truncates it, and that truncation is the entire reason this exists.
-
-     THE FIRST VERSION OF THIS ASKED THE WRONG QUESTION. It preferred the live name only
-     when the in-house list's date equalled the report's night, and he found what that
-     costs: he audits the night that has just ended, while protel's in-house list always
-     says TODAY. At one in the morning those are different days and every name fell back
-     to the cut one — the fix looked like it had done nothing.
-
-     So it asks about the NAMES instead. If the receipt's name is the opening of the
-     stored one, it is the same guest truncated and the whole name wins. If the room has
-     turned over, the new guest's name is not the opening of the old one and the receipt
-     wins. A same-day capture alone cannot establish whose receipt it is. The old
-     date fallback below remains only for a room lookup, an unnamed/very short receipt,
-     or a room explicitly corrected by the user. */
+  /* Expand only the complete printed name fragment, wherever it appears continuously
+     inside the same room's captured full name. A same-day cache is not proof of identity
+     after turnover. A manually corrected room retains its explicit override below. */
   const live = ROOMS[String(room)];
   const onReceipt = (() => {
     if(!MODEL) return null;
@@ -2955,7 +2952,8 @@ function guestFor(room, r){
      is the one that is true of it. */
   if(r && !(rState(r).corr && rState(r).corr.room)){
     const own = String(r.guest || "").trim();
-    if(own && live && live.guest && live.liveKey && nameTextIn(own, live.guest)) return live.guest;
+    const full = receiptFullName(room, own);
+    if(full) return full;
     if(own){
       if(onReceipt && nameTextIn(own, onReceipt)) return onReceipt;
       return own; // a same-day room cache cannot rename this receipt after turnover
@@ -5489,21 +5487,9 @@ function leavingIndex(){
   return out;
 }
 let LEAVING = {};
-/* Is `guest` (a receipt's name, as the .oxps printed it, possibly cut) the reservation
-   `target` (a name from protel's list, whole)? Equal, or its opening — the .oxps cuts at
-   the column and protel does not — unless one of the OTHER names protel shows for that
-   room opens the same way, or is that very name; then the receipt cannot say whose it is
-   and the answer is no. His words, 1.17.12: "dont accidentally mark the arrival receipts";
-   and 05/09: "the pills should get marked because the departing name has a receipt, not
-   the arriving". */
-/* HIS RULE, 08/09 (1.17.60, restated the same night, 1.17.61): "we're looking for a match
-   in WORDS regardless of how its typed in". Room first; then two names are the same guest
-   when they share a whole word — case, order and separators aside. The .oxps cuts the
-   receipt's name at the column and protel's lists print what the reservation holds, often
-   the surname alone: room 56's list said QUINK, the receipt QUINK frederick; a pair's list
-   says KOVACS/MEYER and a receipt KOVACS PETER. A word is a run of letters or digits of two
-   or more; a name cut inside its only word shares nothing and matches nothing. QUINK and
-   QUINKE are different words — the character rule of 1.17.60 opened one with the other. */
+/* Token matching remains available to unrelated legacy/report logic below. Department
+   receipt identity now uses nameTextIn: the user's 18/09 clarification requires every
+   printed character, continuously and in order, rather than a shared name word. */
 function nameWordSet(s){
   const out = new Set();
   /* accents off (NFD) and upper case — "regardless of how its typed in"; letters and digits
@@ -5517,14 +5503,6 @@ function nameLike(a, b){
   for(const w of A) if(B.has(w)) return true;
   return false;
 }
-/* Is `guest` (a receipt's name) the reservation `target` (a name from protel's list)?
-   The same guest by nameLike — unless one of the OTHER reservations' names on that room
-   (`others`: the arrival list, a move-in, the census when it is not this reservation)
-   is the same guest by the same rule; then the receipt cannot say whose it is and the
-   answer is no. His words, 1.17.12: "dont accidentally mark the arrival receipts"; and
-   05/09: "the pills should get marked because the departing name has a receipt, not the
-   arriving". An arrival printed with the very same name as the departure is another
-   reservation and blocks too — the safe direction. */
 /* Use every character actually read from the receipt. Whitespace and case are
    normalised; words are not dropped, reordered or compared independently. */
 function nameTextIn(part, full){
@@ -7351,7 +7329,8 @@ const I18N={
   st_mark:"Mark", st_gone:"gone from the list since {0}",
   st_markIn:"checked in \u2014 on the in-house list at {0}", st_markExpected:"expected \u2014 not checked in on the in-house list yet",
   st_markOut:"checked out \u2014 absent from the in-house list at {0}", st_markOutCO:"checked out — CO on the departure list at {0}",
-  st_markStay:"still in house at {0}", st_markNoIH:"no in-house list captured for this day yet", st_markCut:"in-house read at {0} was cut short \u2014 absence proves nothing",
+  st_markStay:"still in house at {0}", st_markUnconfirmed:"checkout not confirmed — no departure CO",
+  st_markNoIH:"no in-house list captured for this day yet", st_markCut:"in-house read at {0} was cut short \u2014 absence proves nothing",
   st_complete:"complete", st_cutShort:"read cut short", st_legacyShort:"legacy mode is on \u2014 nothing is captured",
   live_kept:" {0} kept as the census had them.",
   live_rnone:"{0} \u201c{1}\u201d: no rows came back.",
@@ -7446,7 +7425,8 @@ const I18N={
   st_mark:"Σήμανση", st_gone:"εκτός λίστας από {0}",
   st_markIn:"check-in — στη λίστα παραμονών στις {0}", st_markExpected:"αναμένεται — δεν έχει check-in στη λίστα παραμονών ακόμη",
   st_markOut:"check-out — απουσιάζει από τη λίστα παραμονών στις {0}", st_markOutCO:"check-out — CO στη λίστα αναχωρήσεων στις {0}",
-  st_markStay:"ακόμη στο ξενοδοχείο στις {0}", st_markNoIH:"δεν έχει ληφθεί ακόμη λίστα παραμονών για αυτή την ημέρα", st_markCut:"η ανάγνωση παραμονών στις {0} κόπηκε νωρίς — η απουσία δεν αποδεικνύει τίποτα",
+  st_markStay:"ακόμη στο ξενοδοχείο στις {0}", st_markUnconfirmed:"το check-out δεν έχει επιβεβαιωθεί — δεν υπάρχει CO στις αναχωρήσεις",
+  st_markNoIH:"δεν έχει ληφθεί ακόμη λίστα παραμονών για αυτή την ημέρα", st_markCut:"η ανάγνωση παραμονών στις {0} κόπηκε νωρίς — η απουσία δεν αποδεικνύει τίποτα",
   st_complete:"πλήρης", st_cutShort:"ανάγνωση κομμένη νωρίς", st_legacyShort:"η παλαιά λειτουργία είναι ενεργή — δεν λαμβάνεται τίποτα",
   live_kept:" {0} έμειναν όπως τις είχε η λίστα παραμονών.",
   live_rnone:"{0} «{1}»: δεν ήρθαν γραμμές.",
@@ -8425,7 +8405,9 @@ function statusIngest(tag, p, at){
 /* An omitted census row is still held. Only an explicit CO departure for this room,
    name and original stay, captured after its last in-house sighting, retires it. */
 function inhouseCheckedOut(st, row){
-  const day = st.DP && st.DP[String(dkey(row.dep))];
+  const arrival = dkey(row.arr), departure = dkey(row.dep);
+  if(!arrival || !departure) return false;
+  const day = st.DP && st.DP[String(departure)];
   return !!(day && Object.values(day.rows || {}).some(r =>
     /^CO\b/i.test(r.status || "") && stName(r.name) === stName(row.name) &&
     stSameRoom(r.room, row.room) && dkey(r.arr) === dkey(row.arr) &&
@@ -8458,7 +8440,10 @@ function ihFind(cap, name, room){
   for(const r of cap.rows) if(stName(r.name) === n && stSameRoom(r.room, room)) return r;
   return null;
 }
-/* {cls, text} for an arrival or departure row, from the latest in-house captures.
+/* {cls, text} from explicit captured statuses. Absence never establishes checkout.
+   Arrival sightings survive smaller same-day captures. Only departure CO confirms out.
+   Latest same-stay CI evidence can supersede an older CO.
+   Historical note about capture freshness:
    dayKey is the day the list is for. An in-house list dated BEFORE that day says nothing
    about a departure on it: a guest who arrived after that capture and departs today is
    absent from it without ever having left, and a stale complete census — every later read
@@ -8472,11 +8457,12 @@ function statusMark(st, tag, row, dayKey){
     return {cls: "mNone", text: t('st_markExpected')};
   }
   if(tag === "DP"){
-    if(/^CO\b/i.test(row.status || "")) return {cls: "mOut", text: t('st_markOutCO', hhmm(row.last) || "?")};
     const ih = fresh(st.IH), m = ihFind(ih, row.name, row.room);
+    if(/^CO\b/i.test(row.status || "") && (!m || !/^CI\b/i.test(m.status) || row.last >= (m.readAt || ih.at)))
+      return {cls: "mOut", text: t('st_markOutCO', hhmm(row.last) || "?")};
     if(m && /^CI\b/i.test(m.status)) return {cls: "mStay", text: t('st_markStay', hhmm(m.readAt || ih.at) || "?")};
     if(ih && ih.cut) return {cls: "mNone", text: t('st_markCut', hhmm(ih.at) || "?")};
-    return {cls: "mNone", text: t('st_markNoIH')};
+    return {cls: "mNone", text: t(ih ? 'st_markUnconfirmed' : 'st_markNoIH')};
   }
   return null;
 }
@@ -8494,7 +8480,7 @@ function statusSub(st, tag){
   if(tag === "IH"){
     const c = st.IH;
     if(!c) return t('st_none');
-    return (c.date || "?") + " \u00b7 " + t('held_rows', c.rows.length) + (c.cut ? " \u00b7 " + t('st_cutShort') : "") + (hhmm(c.at) ? " \u00b7 " + t('st_takenAt', hhmm(c.at)) : "");
+    return (c.date || "?") + " \u00b7 " + t('held_rows', consolidatedInhouseRows(st).length) + (c.cut ? " \u00b7 " + t('st_cutShort') : "") + (hhmm(c.at) ? " \u00b7 " + t('st_takenAt', hhmm(c.at)) : "");
   }
   const k = statusDay(st, tag);
   const day = k && st[tag] ? st[tag][String(k)] : null;

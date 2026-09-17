@@ -23,7 +23,7 @@ const NAME = `
 function resolve(receipts, rooms, r, state){
   const MODEL = {reportDate:"3/9/2026", receipts};
   const STATE = state || {receipts:{}};
-  const body = [lift("rKey"), lift("rState"), nickForLine, lift("dateNum"), lift("sameName"), lift("isCutOf"), lift("nameTextIn"), lift("guestFor"),
+  const body = [lift("rKey"), lift("rState"), nickForLine, lift("dateNum"), lift("sameName"), lift("isCutOf"), lift("nameTextIn"), lift("sameGuestLabel"), lift("receiptFullName"), lift("guestFor"),
     "const effRoom = (r) => { " + effRoomLine.replace(/^function effRoom\(r\)\{/,"").replace(/\}$/,"") + " };",
     NAME].join("\n");
   const fn = new Function("MODEL","ROOMS","STATE","r","Object","String", body);
@@ -50,7 +50,7 @@ let recsX = [R("11","110","DIMITRIS"), R("12","110","FILIPPIS")];
 ck("the first guest's receipt carries his name",           resolve(recsX, {}, recsX[0]).shown === "DIMITRIS");
 ck("the next guest's receipt carries HIS, not the room's first", resolve(recsX, {}, recsX[1]).shown === "FILIPPIS");
 let live = {"110": {guest: "FILIPPIS DIMITRIS/ANNA", liveKey: 20260910}};
-ck("with the census naming the new guest, his receipt is completed",  resolve(recsX, live, recsX[1]).shown === "FILIPPIS DIMITRIS/ANNA");
+ck("two different printed fragments fitting one census name stay unexpanded", resolve(recsX, live, recsX[1]).shown === "FILIPPIS");
 ck("and the departed guest's receipt keeps his own name",             resolve(recsX, live, recsX[0]).shown === "DIMITRIS");
 let recsY = [R("13","110","DIMITRIS PAPADOPOULOS/M"), R("14","110","DIMITRIS PAP")];
 ck("a shorter cut of the same guest still takes the room's fuller name", resolve(recsY, {}, recsY[1]).shown === "DIMITRIS PAPADOPOULOS/M");
