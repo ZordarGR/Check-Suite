@@ -60,7 +60,7 @@ jobs:
           set -o pipefail
           node test/harness.js
           fail=0
-          for t in sweep taxsweep legacy ledger live alerts movesfit reports exact orient dbgshot optshot departure-report arrangement audit-reports; do
+          for t in sweep taxsweep legacy ledger live alerts movesfit reports exact orient dbgshot optshot departure-report arrangement audit-reports guest-turnover; do
             timeout 420 node "test/browser/$t.js" > "audit-results/browser-$t.log" 2>&1 || fail=1
             cat "audit-results/browser-$t.log"
           done

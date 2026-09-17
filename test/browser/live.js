@@ -452,8 +452,8 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
   /* 18. STATUS: four submenus — Arrivals, Departures, In-house, Moves — his specification
          of 05/09. Each list is kept for the day as the union of its captures; an arrival is
          checked in only when the in-house list shows the same name and room with CI; a
-         departure is checked out only when a complete in-house list captured afterwards
-         does not show it. Read-only, and it asks protel nothing. */
+         departure is checked out only when its own captured departure status is CO.
+         Read-only, and it asks protel nothing. */
   p = await b.newPage();
   await p.addInitScript(bridgeFor(null, false));
   await p.setViewportSize({width: 1280, height: 720});
@@ -471,7 +471,7 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
                             window.__files.DP = o.d; window.__at.DP = 1756944060000;
                             window.__files.MV = o.m; window.__at.MV = 1756944120000;
                             window.__files.AR = o.a; window.__at.AR = 1756944180000; }, {
-    h: IH("Guests inhouse: 04/09/26", ROWS),
+    h: IH("Guests inhouse: 04/09/26", ROWS.map(r => r[0].startsWith("ABBUSHI") ? r.map((c,i) => i===3 ? "04/09/26" : c) : r)),
     d: RPT("DP", "Departure Report for 04/09/26", [["BURWIECK/GRUBE TAREK/KATHARINA ", "125", "2/0/0/0/0", "28/08/26", "CO"],
                                                     ["ARKINSTALL PHILIP/CAROL ", "414", "2/0/0/0/0", "02/09/26", "CI"]]),
     a: RPT("AR", "Arrival Report for the 04/09/26", [["AMANN ANJA/BERND ", "337", "2/0/0/0/0", "14/09/26", "CI"],
@@ -498,8 +498,8 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
   await p.click("#stDep");
   await p.waitForTimeout(300);
   const dp = await p.evaluate(() => document.getElementById("stList").textContent);
-  ck("Departures: the report, with its note that a row leaving proves nothing", /Departure report/.test(dp) && /departure date can be wrong/.test(dp));
-  ck("a departure absent from visible rows remains unconfirmed because the list may be filtered", /BURWIECK[^]*?not visible in the capture at \d\d:\d\d — checkout unconfirmed/.test(dp));
+  ck("Departures: the report, with its note that a row leaving proves nothing", /Departure report/.test(dp) && /explicit CO status in the departure list/.test(dp));
+  ck("a departure explicitly captured as CO is checked out", /BURWIECK[^]*?checked out — CO on the departure list at \d\d:\d\d/.test(dp));
   ck("one still on it with CI — as 414-15 for 414 — is still in house", /ARKINSTALL[^]*?still in house at \d\d:\d\d/.test(dp));
   /* In-house and Moves */
   await p.click("#stListBack"); await p.waitForTimeout(200); await p.click("#stInh"); await p.waitForTimeout(300);
@@ -515,9 +515,9 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
     c: ["TITLE\tGuests inhouse: 04/09/26", "IH\t" + ROWS[0].join("\t"), "DONE\t1\t250\t83\t47\tunicode\tcut-short"].join("\n")});
   await p.waitForTimeout(6500);
   const dp2 = await p.evaluate(() => ({txt: document.getElementById("stList").textContent, shown: document.getElementById("statusListScreen").style.display !== "none"}));
-  ck("a departure gone from the list is retained, and a partial capture cannot establish checkout",
-     dp2.shown && /BURWIECK[^]*?was cut short — absence proves nothing · gone from the list since \d\d:\d\d/.test(dp2.txt));
-  ck("the one the cut-short read does not show is not called out by it", /ARKINSTALL[^]*?was cut short — absence proves nothing/.test(dp2.txt));
+  ck("a departure gone from the list is still on it, said to be gone, and still checked out by its captured departure CO",
+     dp2.shown && /BURWIECK[^]*?checked out — CO on the departure list at \d\d:\d\d · gone from the list since \d\d:\d\d/.test(dp2.txt));
+  ck("the one the cut-short read does not show is not called out by it", /ARKINSTALL[^]*?still in house at/.test(dp2.txt));
   await p.click("#stListBack"); await p.waitForTimeout(300);
   const inhSub = await p.evaluate(() => document.getElementById("stInh").querySelector(".mSub").textContent);
   ck("the In-house submenu says the latest read was cut short", /read cut short/.test(inhSub));

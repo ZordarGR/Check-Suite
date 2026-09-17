@@ -31,6 +31,8 @@ class Updater {
     return {
       curHtml:  path.join(d, "current.html"),
       curMeta:  path.join(d, "current.json"),
+      prevHtml: path.join(d, "previous.html"),
+      prevMeta: path.join(d, "previous.json"),
       pendHtml: path.join(d, "pending.html"),
       pendMeta: path.join(d, "pending.json"),
       setupExe: path.join(d, "pending-setup.exe"),
@@ -62,7 +64,19 @@ class Updater {
      installs a newer full package) */
   effective(){
     const P = this.paths();
-    const m = this.readJson(P.curMeta);
+    let m = this.readJson(P.curMeta);
+    if(!this.validPayload(P.curHtml,m,false)){
+      const prior=this.readJson(P.prevMeta);
+      if(this.validPayload(P.prevHtml,prior,false)){
+        try{
+          fs.copyFileSync(P.prevHtml,P.curHtml+".tmp");
+          fs.writeFileSync(P.curMeta+".tmp",JSON.stringify(prior));
+          fs.renameSync(P.curHtml+".tmp",P.curHtml);
+          fs.renameSync(P.curMeta+".tmp",P.curMeta);
+          m=prior;
+        }catch(e){}
+      }
+    }
     if(m && m.version && this.validPayload(P.curHtml, m, false) && vNewer(m.version, this.o.pkgVersion))
       return {version: m.version, file: P.curHtml};
     if(m){
@@ -105,7 +119,8 @@ class Updater {
         }
         const P = this.paths();
         const have = this.readJson(P.setupMeta);
-        if(!(have && have.version === tv && this.validPayload(P.setupExe, have, true))){
+        if(!(have && have.version === tv && this.validPayload(P.setupExe, have, true)
+             && (!latest.setupSha256 || have.sha256.toLowerCase()===String(latest.setupSha256).toLowerCase()))){
           /* If the installer keeps vanishing between checks — Defender quarantining an
              unsigned 90 MB setup in %APPDATA% is the usual cause — re-fetching it on
              every launch forever helps nobody. Count attempts and, past the limit, hand
@@ -179,6 +194,13 @@ class Updater {
     // Stage both files before replacing either. A failed copy cannot truncate the
     // working page; effective() also checks its digest if a crash splits the renames.
     try{
+      const current=this.readJson(P.curMeta);
+      if(this.validPayload(P.curHtml,current,false)){
+        fs.copyFileSync(P.curHtml,P.prevHtml+".tmp");
+        fs.writeFileSync(P.prevMeta+".tmp",JSON.stringify(current));
+        fs.renameSync(P.prevHtml+".tmp",P.prevHtml);
+        fs.renameSync(P.prevMeta+".tmp",P.prevMeta);
+      }
       fs.copyFileSync(P.pendHtml, P.curHtml + ".tmp");
       fs.writeFileSync(P.curMeta + ".tmp", JSON.stringify(pm));
       fs.renameSync(P.curHtml + ".tmp", P.curHtml);

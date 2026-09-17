@@ -1,11 +1,11 @@
 {
-  "version": "1.17.79",
+  "version": "1.17.80",
   "type": "html",
   "engine": "1.17.76",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.76/Pro-Check-Setup.exe",
   "setupSha256": "e329ab9589afda28cfc14423b06e2b78fe895243edb9ad6464c3ed76e3a4f26e",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/fc9abbafe08a7b7c2d1cc975089490d7aaab8015/Departments%20Check.html",
-  "sha256": "9d72283afc81adfa9ea124b0deb23cf0a2ee2cde67691da33b30dcbe505954b6",
-  "notes": "Resolve duplicate arrival-date versions from saved captures. Show unresolved date conflicts once without changing stored reservation dates."
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/6efbdd7d8519a7d38839fc027a2023f2dc561aed/Departments%20Check.html",
+  "sha256": "d2fa8156ae6a6e92c507059e8d586993e28f2201cd908635016e7258a34500ce",
+  "notes": "Match all printed guest-name characters; follow confirmed departure room moves; retain same-day in-house rows until explicit departure CO."
 }

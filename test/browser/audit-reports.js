@@ -23,7 +23,8 @@ const first=page(glyph(500,50,"Departure List by Time")+head()+row("101","ALPHAS
   await p.goto("file://"+path.resolve(__dirname,"h-sweep.html"));
   await p.waitForFunction(()=>!!window.__t);
   const open=pages=>p.evaluate(({parsed,pages})=>window.__t.openDepPreview({name:"synthetic.oxps",path:"synthetic.oxps"},parsed,"dep",{pages,fonts:{}}),{parsed:parse(pages),pages});
-  for(const pages of [[first,page(row("102","UNPARSEDSECRET"))],[first.replace("</FixedPage>",'<Image Source="omitted.png" /></FixedPage>')]]){
+  for(const pages of [[first,page(row("102","UNPARSEDSECRET"))],[first.replace("</FixedPage>",'<Image Source="omitted.png" /></FixedPage>')],
+   [first.replace('OriginX="232"','RenderTransform="1,0,0,1,240,0" OriginX="232"')]]){
    await open(pages);
    assert(await p.locator("#pvGo").isDisabled());
    assert.match(await p.locator("#pvPaper").innerText(),/Cannot print safely/);

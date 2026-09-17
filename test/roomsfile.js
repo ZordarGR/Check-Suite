@@ -78,6 +78,10 @@ const F = path.join(DIR, "rooms.dat");
   fs.writeFileSync(F, Buffer.from("RCR", "latin1"));
   ck("a truncated file reads as null",        (await handlers["rooms-read"]()) === null);
 
+  ck("a failed read cannot be overwritten by a partial room mirror", (await handlers["rooms-write"](null, ROOMS)) === false);
+  ck("the original damaged bytes remain available for recovery", fs.readFileSync(F).toString("latin1") === "RCR");
+  fs.unlinkSync(F); // remove only this synthetic fixture's intentionally damaged file
+
   ck("an array is refused",                   (await handlers["rooms-write"](null, [1,2])) === false);
   ck("null is refused",                       (await handlers["rooms-write"](null, null)) === false);
 

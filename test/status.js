@@ -4,7 +4,7 @@
    leaving the arrival list means nothing until the in-house list shows the same name and
    room checked in; a departure leaving the departure list means nothing either — "there
    are rare cases where we have the departure date wrong" — and is checked out only when
-   a COMPLETE in-house list captured afterwards does not show it; the pills of the
+   its own matching departure capture explicitly shows CO; the pills of the
    department check come from this store and nothing else, with a dot on a departed or
    moved pill when a receipt in the loaded report carries that reservation's name.
 
@@ -44,8 +44,8 @@ const taxBody = [
   lift("dkey"), lift("dfmt"), lift("leadRoom"), lift("bnk"), lift("hhmm"), lift("isInhouseTitle"), lift("inhouseDate"),
   lift("parseInhouse"), lift("parseTagged"),
   lift("statusLoad"), lift("statusSave"), lift("stName"), lift("stRoom"), lift("stKey"), lift("stSameRoom"), lift("stDayKey"),
-  lift("statusPrune"), lift("statusIngest"), lift("ihFind"), lift("statusMark"), lift("statusDay"),
-  "return {ingest: statusIngest, mark: statusMark, load: statusLoad, parseInhouse: parseInhouse, parseTagged: parseTagged, tick: () => STATUS_TICK, day: statusDay};"
+  lift("statusPrune"), lift("statusIngest"), lift("ihFind"), lift("inhouseCheckedOut"), lift("consolidatedInhouseRows"), lift("statusMark"), lift("statusDay"),
+  "return {ingest: statusIngest, mark: statusMark, load: statusLoad, parseInhouse: parseInhouse, parseTagged: parseTagged, tick: () => STATUS_TICK, day: statusDay, active: () => consolidatedInhouseRows(statusLoad())};"
 ].join("\n");
 const TAX = new Function("localStorage", "t", "I18N", taxBody)(localStorage, tT, I18N);
 
@@ -62,12 +62,12 @@ function pillsFor(reportDate, receipts, rooms){
   const t = k => k;
   const body = [line(/^const el = \(tag, cls, txt\) =>.*$/m), lift("dateNum"), lift("dShort"), lift("rKey"), lift("receiptFingerprint"), lift("rState"),
     "const effRoom = (r) => { " + line(/^function effRoom\(r\)\{.*$/m).replace(/^function effRoom\(r\)\{/, "").replace(/\}$/, "") + " };",
-    lift("checkableList"), lift("sameName"), lift("isCutOf"), lift("receiptName"),
+    lift("checkableList"), lift("sameName"), lift("isCutOf"), lift("expandReceiptName"), lift("receiptFullName"), lift("receiptName"),
     "const STATUS_KEY = \"reccheck_status_v1\";", lift("loadStatus"), lift("statusRows"), lift("pillRoom"),
     "const LEGACY_KEY = \"reccheck_legacy\";", lift("legacyOn"), line(/^const MOVES_KEY = .*$/m), lift("loadMoves"), lift("ledgerMoves"), 
     lift("dateNum2"), lift("prevNightKey"), "const RECEIPTS_KEY = \"reccheck_receipts_v1\"; const RECEIPTS_KEEP = 15;", lift("loadNightReceipts"), lift("saveNightReceipts"),
     "let ARRIVING = {};", lift("leavingIndex"), "let LEAVING = {};", lift("nameHit"), lift("censusNameOf"), lift("nameWordSet"), lift("nameLike"), lift("otherNames"), lift("isLeaving"),
-    lift("roomMoves"), lift("renderMovesFor"), lift("renderMoves"),
+    lift("departureRows"), lift("capturedGuestName"), lift("sameGuestLabel"), lift("nameTextIn"), lift("roomMoves"), lift("renderMovesFor"), lift("renderMoves"),
     "renderMoves(); return {classes: [...classes], root: moves, leaving: leavingIndex(), isLeaving: isLeaving, LEAVING: LEAVING, receiptName: receiptName};"].join("\n");
   const fn = new Function("document", "$", "localStorage", "MODEL", "STATE", "ROOMS", "t", "classes", "moves", body);
   const out = fn(document, $, localStorage, MODEL, STATE, rooms || {}, t, classes, moves);
@@ -117,7 +117,7 @@ ck("the one still on the arrival list stays expected", /st_markExpected/.test(TA
 /* same name, another room: not a match — an exact match of reservation name AND room */
 ih(IHTXT("Guests inhouse: 04/09/26", [["AMANN ANJA/BERND", "338", "2/0/0/0/0", "04/09/26", "14/09/26", "CI"]]), T(14));
 st = TAX.load();
-ck("the same name in another room is not that arrival checked in", /st_markExpected/.test(TAX.mark(st, "AR", amann).text));
+ck("a smaller capture retains the earlier exact room arrival sighting", /st_markIn/.test(TAX.mark(st, "AR", amann).text));
 
 console.log("--- 2. departures: gone from the list proves nothing; absent from a complete in-house list does");
 for(const k of Object.keys(store)) delete store[k]; store["reccheck_legacy"] = "0";
@@ -139,19 +139,19 @@ ck("and absence from it proves nothing — it says the read was cut short", /st_
 ih(IHTXT("Guests inhouse: 04/09/26", [["ARKINSTALL PHILIP/CAROL ", "426", "2/0/0/0/0", "02/09/26", "05/09/26", "CI"],
                                        ["MUELLER HANS", "414-15", "1/0/0/0/0", "30/08/26", "04/09/26", "CI"]]), T(11));
 st = TAX.load();
-ck("absent from all visible rows is still unconfirmed: the list may be filtered",
-   /st_markAbsent\(11:00\)/.test(TAX.mark(st, "DP", bur).text) && TAX.mark(st, "DP", bur).cls === "mNone");
+ck("absence from even a complete capture does not confirm checkout",
+   TAX.mark(st, "DP", bur).cls === "mNone");
 ck("still on it with CI — as 414-15 for a departure listed as 414 — still in house", /st_markStay\(11:00\)/.test(TAX.mark(st, "DP", mue).text) && TAX.mark(st, "DP", mue).cls === "mStay");
 /* a later cut-short read does not undo what the complete one showed */
 ih(IHTXT("Guests inhouse: 04/09/26", [["ARKINSTALL PHILIP/CAROL ", "426", "2/0/0/0/0", "02/09/26", "05/09/26", "CI"]], true), T(12));
 st = TAX.load();
 ck("a later cut-short read keeps the last complete one for absence", st.IHC.at === T(11) && st.IH.at === T(12));
-ck("the later cut-short read cannot turn absence into checkout", /st_markCut\(12:00\)/.test(TAX.mark(st, "DP", bur).text));
-ck("and the one the cut read does not show is NOT called out by it", /st_markCut\(12:00\)/.test(TAX.mark(st, "DP", mue).text));
+ck("a missing departure remains unconfirmed", TAX.mark(st, "DP", bur).cls === "mNone");
+ck("and the one the cut read does not show is NOT called out by it", /st_markStay\(11:00\)/.test(TAX.mark(st, "DP", mue).text));
 /* CO on the in-house list itself is the other way to be checked out */
 ih(IHTXT("Guests inhouse: 04/09/26", [["MUELLER HANS", "414-15", "1/0/0/0/0", "30/08/26", "04/09/26", "CO"]]), T(15));
 st = TAX.load();
-ck("CO on the in-house list is checked out too", /st_markOutCO\(15:00\)/.test(TAX.mark(st, "DP", mue).text) && TAX.mark(st, "DP", mue).cls === "mOut");
+ck("IH CO alone waits for the explicit departure CO", TAX.mark(st, "DP", mue).cls === "mNone");
 
 /* a census dated BEFORE the departure's day says nothing about it */
 for(const k of Object.keys(store)) delete store[k]; store["reccheck_legacy"] = "0";
@@ -162,9 +162,9 @@ ck("a complete census from the day before, taken before the guest arrived, does 
    /st_markNoIH/.test(TAX.mark(st, "DP", rows[0], 20260904).text) && TAX.mark(st, "DP", rows[0], 20260904).cls === "mNone");
 ih(IHTXT("Guests inhouse: 04/09/26", [["SOMEONE ELSE", "300", "1/0/0/0/0", "01/09/26", "05/09/26", "CI"]]), T(6));
 st = TAX.load();
-ck("a list dated the departure's day still cannot prove absence without filter evidence",
-   /st_markAbsent\(06:00\)/.test(TAX.mark(st, "DP", rows[0], 20260904).text));
-ck("and without the day, absence remains unconfirmed", /st_markAbsent\(06:00\)/.test(TAX.mark(st, "DP", rows[0]).text));
+ck("a same-day complete census still cannot prove checkout by absence",
+   TAX.mark(st, "DP", rows[0], 20260904).cls === "mNone");
+ck("omitting the day cannot enable absence-based checkout", TAX.mark(st, "DP", rows[0]).cls === "mNone");
 
 console.log("--- 3. what is not a row, and what the store does not keep");
 for(const k of Object.keys(store)) delete store[k]; store["reccheck_legacy"] = "0";
@@ -281,14 +281,14 @@ ck("a receipt that IS the arriving name marks nothing either, though it opens th
 /* under the WORD rule (1.17.61) the two reservations share MUELLER, HANS and JOACHIM, so
    a receipt sharing those is either of them — nothing is marked; only a whole word of one
    and not the other decides */
-ck("a longer cut sharing words with both still marks nothing",                            !pillsFor(NIGHT, [rc("110", "MUELLER HANS-JOACHIM/ANNEL")]).dot("110"));
-ck("a receipt with the whole word of one alone decides",                                   pillsFor(NIGHT, [rc("110", "ANNELIESE M")]).dot("110") && !pillsFor(NIGHT, [rc("110", "ANNA M")]).dot("110"));
-ck("the red mark follows the same rule",                                                 !pillsFor(NIGHT, [rc("110", CUTN)]).isLeaving("110", CUTN) && pillsFor(NIGHT, []).isLeaving("110", "ANNELIESE M") && !pillsFor(NIGHT, []).isLeaving("110", "ANNA M"));
+ck("a longer continuous fragment unique to the departure matches it", pillsFor(NIGHT, [rc("110", "MUELLER HANS-JOACHIM/ANNEL")]).dot("110"));
+ck("a receipt with the whole word of one alone decides",                                   pillsFor(NIGHT, [rc("110", "ANNELIESE")]).dot("110") && !pillsFor(NIGHT, [rc("110", "ANNA")]).dot("110"));
+ck("the red mark follows the same rule",                                                 !pillsFor(NIGHT, [rc("110", CUTN)]).isLeaving("110", CUTN) && pillsFor(NIGHT, []).isLeaving("110", "ANNELIESE") && !pillsFor(NIGHT, []).isLeaving("110", "ANNA"));
 P = pillsFor(NIGHT, [rc("110", CUTN)], {"110": {guest: WHOLEN, liveKey: 20260905}});
-ck("with the census holding the whole name, the receipt's truncation is completed",     P.name(rc("110", CUTN)) === WHOLEN);
-ck("and the dot lands on the departure — the whole name, equal, is that reservation whatever words the arrival shares", P.dot("110"));
+ck("a fragment fitting a captured arrival too remains unexpanded", P.name(rc("110", CUTN)) === CUTN);
+ck("census completion cannot turn an ambiguous fragment into a departure dot", !P.dot("110"));
 ck("an arriving guest's receipt on the same room keeps its own name",                    P.name(rc("110", "NEUMANN PETRA")) === "NEUMANN PETRA");
-ck("three letters never complete",                                                       P.name(rc("110", "MUE")) === "MUE");
+ck("a short fragment fitting both known stays stays unexpanded", P.name(rc("110","MUE")) === "MUE");
 P = pillsFor(NIGHT, [rc("110", "NEUMANN PETRA")], {"110": {guest: WHOLEN, liveKey: 20260905}});
 ck("... and it does not dot the departure",                                              !P.dot("110"));
 P = pillsFor(NIGHT, [rc("110", CUTN)], {"110": {guest: "NEUMANN PETRA/KLAUS", liveKey: 20260905}});
@@ -296,52 +296,25 @@ ck("a census naming the NEW guest completes nothing for the old guest's receipt"
 ck("a stored name with no liveKey — the .oxps's own — completes nothing either",         pillsFor(NIGHT, [rc("110", CUTN)], {"110": {guest: WHOLEN}}).name(rc("110", CUTN)) === CUTN);
 ck("the completed name is what the night's index remembers",                             (JSON.parse(store["reccheck_receipts_v1"])["20260904"] || []).some(p => p[0] === "110" && p[1] === CUTN));
 P = pillsFor(NIGHT, [rc("110", CUTN)], {"110": {guest: WHOLEN, liveKey: 20260905}});
-ck("... whole when the census had it",                                                   (JSON.parse(store["reccheck_receipts_v1"])["20260904"] || []).some(p => p[0] === "110" && p[1] === WHOLEN));
+ck("receipt memory also retains the ambiguous original fragment", (JSON.parse(store["reccheck_receipts_v1"])["20260904"] || []).some(p => p[0] === "110" && p[1] === CUTN));
 
-console.log("--- 5d. HIS RULE, 08/09 (1.17.60): the list prints what the reservation holds, often the surname alone");
-/* Room 56 on his 08/09 departure list printed QUINK; the receipt printed QUINK frederick;
-   the one-way rule (receipt = a cut of the list's name) never dotted it. His rule: room
-   first, then the shorter name must be the opening of the longer, either way round. The
-   safety condition stays: another reservation's name on that room that matches the
-   receipt the same way blocks; the census is the guest in the room now — the departing
-   reservation itself on the night it leaves, so its whole name is no rival to the list's
-   surname. And a receipt written in the room protel moved the guest OUT of, earlier in
-   the stay, belongs to the same stay (his word: "the last known room, in case of a
-   previous room change"). */
-for(const k of Object.keys(store)) delete store[k];
-store["reccheck_legacy"] = "0";
-rpt("DP", RPT("DP", "Departure Report for 04/09/26", [["QUINK ", "56", "2/0/1/1/0", "30/08/26", "CI"]]), T(11));
-P = pillsFor(NIGHT, [rc("56", "QUINK frederick")]);
-ck("the list says QUINK, the receipt QUINK frederick — the dot lands (room 56, 08/09)",      P.dot("56") && P.kind("56") === "dep");
-ck("the red mark follows",                                                                P.isLeaving("56", "QUINK frederick"));
-ck("a receipt whose words are all different does not — QUINT is not QUINK",               !pillsFor(NIGHT, [rc("56", "QUINT frederick")]).dot("56"));
-ck("nor QUINKE — a word, not its characters (the hole in the character rule of 1.17.60)", !pillsFor(NIGHT, [rc("56", "QUINKE frederick")]).dot("56"));
-ck("nor a cut inside the only word",                                                      !pillsFor(NIGHT, [rc("56", "QUI")]).dot("56"));
-ck("the order and the separators do not matter — his word: regardless of how its typed in", pillsFor(NIGHT, [rc("56", "Frederick, quink")]).dot("56") && pillsFor(NIGHT, [rc("56", "QUÍNK frédérick")]).dot("56"));
-ck("a two-letter surname is a word",                                                       (() => { rpt("DP", RPT("DP", "Departure Report for 04/09/26", [["WU ", "77", "1/0/0/0/0", "01/09/26", "CI"]]), T(11)); return pillsFor(NIGHT, [rc("77", "WU MING")]).dot("77") && !pillsFor(NIGHT, [rc("77", "W MING")]).dot("77"); })());
-rpt("DP", RPT("DP", "Departure Report for 04/09/26", [["KOVACS/MEYER ", "88", "2/0/0/0/0", "01/09/26", "CI"]]), T(11));
-ck("a pair on the list, one of them on the receipt — his second example",                 pillsFor(NIGHT, [rc("88", "KOVACS PETER")]).dot("88") && pillsFor(NIGHT, [rc("88", "MEYER ANNA/KOVACS")]).dot("88") && !pillsFor(NIGHT, [rc("88", "MEIER ANNA")]).dot("88"));
-P = pillsFor(NIGHT, [rc("56", "QUINK frederick")], {"56": {guest: "QUINK FREDERICK/ANNA", liveKey: 20260904}});
-ck("the census holding the reservation's whole name is no rival — still dots, the receipt completed", P.dot("56") && P.name(rc("56", "QUINK frederick")) === "QUINK FREDERICK/ANNA");
-P = pillsFor(NIGHT, [rc("56", "QUINK frederick")], {"56": {guest: "NEUMANN PETRA", liveKey: 20260904}});
-ck("a census naming another guest is not a rival for a receipt it does not match — still dots", P.dot("56"));
-ck("... and that other guest's receipt does not dot the departure",                       !pillsFor(NIGHT, [rc("56", "NEUMANN PETRA")], {"56": {guest: "NEUMANN PETRA", liveKey: 20260904}}).dot("56"));
-rpt("AR", RPT("AR", "Arrival Report for the 04/09/26", [["QUINK ", "56", "2/0/0/0/0", "10/09/26", ""]]), T(12));
-P = pillsFor(NIGHT, [rc("56", "QUINK frederick")]);
-ck("an arrival printed with the same name is another reservation: nothing is marked",     !P.dot("56") && P.kinds("56") === "arr+dep" && !P.isLeaving("56", "QUINK frederick"));
-/* a night's arrival list is the union of its captures, so the QUINK arrival above would
-   stay on the room — a fresh store for the arrival that does not match */
-for(const k of Object.keys(store)) delete store[k];
-store["reccheck_legacy"] = "0";
-rpt("DP", RPT("DP", "Departure Report for 04/09/26", [["QUINK ", "56", "2/0/1/1/0", "30/08/26", "CI"]]), T(11));
-rpt("AR", RPT("AR", "Arrival Report for the 04/09/26", [["QUINKE MARIA ", "56", "2/0/0/0/0", "10/09/26", ""]]), T(13));
-ck("an arrival whose name does not match the receipt does not block",                     pillsFor(NIGHT, [rc("56", "QUINK frederick")]).dot("56"));
-ck("... and that arrival's own receipt marks nothing",                                     !pillsFor(NIGHT, [rc("56", "QUINKE MARIA")]).dot("56"));
+
+console.log("--- 5d. whole receipt text must occur continuously in the reference name");
+for(const k of Object.keys(store)) delete store[k]; store.reccheck_legacy="0";
+rpt("DP", RPT("DP", "Departure Report for 04/09/26", [["QUINK", "56", "2/0/0/0/0", "30/08/26", "CI"]]), T(11));
+ck("a surname alone cannot validate extra unmatched receipt characters", !pillsFor(NIGHT,[rc("56","QUINK FREDERICK")]).dot("56"));
+ck("nor may characters be dropped, reordered or changed", !pillsFor(NIGHT,[rc("56","FREDERICK QUINK")]).dot("56") && !pillsFor(NIGHT,[rc("56","QUINKE")]).dot("56"));
+ih(IHTXT("Guests inhouse: 04/09/26", [["QUINK FREDERICK/ANNA","56","2/0/0/0/0","30/08/26","04/09/26","CI"]]),T(11));
+P=pillsFor(NIGHT,[rc("56","FREDERICK/ANN")]);
+ck("a full capture for the exact stay completes the short departure reference", P.dot("56") && P.isLeaving("56","FREDERICK/ANN"));
+ck("every character must match even with a full capture", !pillsFor(NIGHT,[rc("56","QUINK FREDERICA")]).dot("56") && !pillsFor(NIGHT,[rc("56","ANNA/FREDERICK")]).dot("56"));
+rpt("AR", RPT("AR","Arrival Report for the 04/09/26",[["QUINK FREDERICK/ANNE","56","2/0/0/0/0","10/09/26","CI"]]),T(12));
+ck("a complete printed fragment fitting two reservations remains ambiguous", !pillsFor(NIGHT,[rc("56","FREDERICK/ANN")]).dot("56"));
 /* the previous room: protel moved QUINK from 72 to 56 on 02/09 (its X); the receipt of
    01/09 was written on 72 */
 for(const k of Object.keys(store)) delete store[k];
 store["reccheck_legacy"] = "0";
-rpt("DP", RPT("DP", "Departure Report for 04/09/26", [["QUINK ", "56", "2/0/1/1/0", "30/08/26", "CI"]]), T(11));
+rpt("DP", RPT("DP", "Departure Report for 04/09/26", [["QUINK FREDERICK/ANNA", "56", "2/0/1/1/0", "30/08/26", "CI"]]), T(11));
 rpt("MV", "TITLE\tPerform Move for Date 02/09/26\nMV\t72\tBGV\t56\tMVFAM\tQUINK\tX\t30/08/26\t04/09/26\nDONE\t1\t1\t9\t5\tunicode\tcomplete\n", Date.UTC(2026, 8, 2, 9));
 store["reccheck_receipts_v1"] = JSON.stringify({"20260901": [knownPair("72", "QUINK FREDERICK")]});
 ck("a receipt written in the room protel moved the guest out of dots the departure from the new room", pillsFor(NIGHT, []).dot("56"));
@@ -355,7 +328,7 @@ ck("... nor through a move protel has not marked",                              
    the departure's own name block the move pill) */
 for(const k of Object.keys(store)) delete store[k];
 store["reccheck_legacy"] = "0";
-rpt("DP", RPT("DP", "Departure Report for 04/09/26", [["QUINK ", "56", "2/0/1/1/0", "30/08/26", "CI"]]), T(11));
+rpt("DP", RPT("DP", "Departure Report for 04/09/26", [["QUINK FREDERICK/ANNA", "56", "2/0/1/1/0", "30/08/26", "CI"]]), T(11));
 rpt("MV", "TITLE\tPerform Move for Date 04/09/26\nMV\t72\tBGV\t56\tMVFAM\tQUINK\tX\t30/08/26\t04/09/26\nDONE\t1\t1\t9\t5\tunicode\tcomplete\n", T(9));
 P = pillsFor(NIGHT, [rc("56", "QUINK frederick")]);
 ck("the same reservation departing and moved carries two pills, and the receipt dots both", P.kinds("56") === "dep+move" && P.pills.filter(p => p.room === "56" && p.dot).length === 2);
@@ -363,8 +336,8 @@ ck("... a receipt on the room it left dots both too",                           
 /* a different guest moved in on the departing guest's room: each pill its own name */
 for(const k of Object.keys(store)) delete store[k];
 store["reccheck_legacy"] = "0";
-rpt("DP", RPT("DP", "Departure Report for 04/09/26", [["QUINK ", "56", "2/0/1/1/0", "30/08/26", "CI"]]), T(11));
-rpt("MV", "TITLE\tPerform Move for Date 04/09/26\nMV\t72\tBGV\t56\tMVFAM\tNEUMANN\tX\t02/09/26\t10/09/26\nDONE\t1\t1\t9\t5\tunicode\tcomplete\n", T(9));
+rpt("DP", RPT("DP", "Departure Report for 04/09/26", [["QUINK FREDERICK/ANNA", "56", "2/0/1/1/0", "30/08/26", "CI"]]), T(11));
+rpt("MV", "TITLE\tPerform Move for Date 04/09/26\nMV\t72\tBGV\t56\tMVFAM\tNEUMANN PETRA\tX\t02/09/26\t10/09/26\nDONE\t1\t1\t9\t5\tunicode\tcomplete\n", T(9));
 P = pillsFor(NIGHT, [rc("56", "QUINK frederick"), rc("56", "NEUMANN PETRA")]);
 ck("another guest moved in: the departure dots on QUINK's receipt, the move on NEUMANN's, each alone", P.pills.filter(p => p.room === "56" && p.dot).map(p => p.kind).sort().join("+") === "dep+move" && !pillsFor(NIGHT, [rc("56", "NEUMANN PETRA")]).pills.some(p => p.kind === "dep" && p.dot) && !pillsFor(NIGHT, [rc("56", "QUINK frederick")]).pills.some(p => p.kind === "move" && p.dot));
 ck("the memory and the store keep fifteen nights — his word",                              /^const RECEIPTS_KEEP = 15;/m.test(src) && /^const STATUS_KEEP_DAYS = 15;/m.test(src));
@@ -415,7 +388,7 @@ bridge.MV["20260904"].rows.move.name = "MORGAN/OTHER";
 ck("every word of the move-list name must occur in the full name", !bridgePills(bridge).dot("164"));
 bridge = bridgeFixture();
 bridge.AR["20260904"] = {rows: {rival: {name: "NEWFAMILY ALICE", room: "164", dep: "10/09/26"}}};
-ck("a competing arrival sharing the receipt's word still blocks the move dot", !bridgePills(bridge).dot("164"));
+ck("a competing arrival sharing only one word does not block the complete unique fragment", bridgePills(bridge).dot("164"));
 bridge = bridgeFixture();
 delete bridge.AR;
 bridge.IH = {rows: [{name: MOVE_FULL, room: "164", arr: "01/09/26", dep: "10/09/26"}]};
@@ -485,5 +458,82 @@ capRows("05/09/26",[item("GAMMA TEST","103","21/09/26")],T(10));
 ck("a new business day starts a new union",TAX.load().IH.rows.length===1&&TAX.load().IH.rows[0].room==="103");
 
 }
+
+
+console.log("--- explicit departures retire only the matching retained in-house stay");
+{
+ for(const k of Object.keys(store)) delete store[k]; store.reccheck_legacy="0";
+ ih(IHTXT("Guests inhouse: 04/09/26", [
+ ["ALPHA TEST","101","2/0/0/0/0","01/09/26","04/09/26","CI"],
+ ["BETA TEST","102","1/0/0/0/0","02/09/26","08/09/26","CI"]]),T(8));
+ ih(IHTXT("Guests inhouse: 04/09/26",[["BETA TEST","102","1/0/0/0/0","02/09/26","08/09/26","CI"]]),T(9));
+ ck("a smaller capture retains both active stays", TAX.active().length===2);
+ ih(IHTXT("Guests inhouse: 04/09/26",[["ALPHA TEST","101","","","",""]],true),T(9)+1800000);
+ const heldAlpha=TAX.load().IH.rows.find(r=>r.room==="101");
+ ck("an interrupted row cannot erase the retained stay dates or status",heldAlpha.arr==="01/09/26"&&heldAlpha.dep==="04/09/26"&&heldAlpha.status==="CI");
+ ck("the interrupted capture still reports that it was cut short",TAX.load().IHL.cut);
+ rpt("DP",RPT("DP","Departure Report for 04/09/26",[["ALPHA TEST","101","2/0/0/0/0","01/09/26","CI"]]),T(10));
+ ck("departure CI does not retire a retained guest",TAX.active().length===2);
+ rpt("DP",RPT("DP","Departure Report for 04/09/26",[["ALPHA TEST","101","2/0/0/0/0","01/09/26","CO"]]),T(11));
+ ck("departure CO retires exactly that stay",TAX.active().length===1&&TAX.active()[0].room==="102");
+ ck("original in-house facts are still stored",TAX.load().IH.rows.length===2);
+ const out=Object.values(TAX.load().DP["20260904"].rows)[0];
+ ck("explicit departure CO drives its checked-out status",TAX.mark(TAX.load(),"DP",out,20260904).cls==="mOut");
+ rpt("DP",RPT("DP","Departure Report for 04/09/26",[["ALPHA TEST","101","2/0/0/0/0","01/09/26","CI"]]),T(10));
+ ck("an older capture cannot erase the later CO",Object.values(TAX.load().DP["20260904"].rows)[0].status==="CO");
+ ih(IHTXT("Guests inhouse: 04/09/26",[["ALPHA TEST","101","2/0/0/0/0","01/09/26","04/09/26","CI"]]),T(12));
+ ck("newer explicit in-house evidence is retained",TAX.active().length===2);
+}
+console.log("--- confirmed room moves supersede old departure locations without deleting captures");
+{
+  const name = "MORGAN/BRIGGS DAVID/ELENA";
+  const make = () => ({
+    DP: {"20260904": {rows: {
+      old: {name, room:"110", arr:"01/09/26", last:100},
+      current: {name, room:"120", arr:"01/09/26", last:300}
+    }}},
+    MV: {"20260903": {rows: {
+      moved: {name:"MORGAN/BRIGGS", from:"110", to:"120", arr:"01/09/26", dep:"04/09/26", x:"X"}
+    }}}
+  });
+  const draw = data => {
+    for(const k of Object.keys(store)) delete store[k];
+    store.reccheck_legacy = "0";
+    store.reccheck_status_v1 = JSON.stringify(data);
+    return pillsFor(NIGHT, []);
+  };
+  let data = make(), saved = JSON.stringify(data), p = draw(data);
+  ck("only the newer captured departure room is displayed after a recorded move", !p.has("110") && p.kind("120") === "dep");
+  ck("the old room is removed from LEFT TODAY too", !p.leaving["110"] && !!p.leaving["120"]);
+  ck("the stored departure history remains unchanged", store.reccheck_status_v1 === saved);
+  data=make();delete data.MV;
+  ck("same name in two rooms is insufficient without a captured move", draw(data).has("110"));
+  data=make();data.MV["20260903"].rows.moved.x="";
+  ck("an unmarked move cannot hide the original departure", draw(data).has("110"));
+  data=make();data.MV["20260903"].rows.moved.x="?";
+  ck("an unreadable move mark cannot hide the original departure", draw(data).has("110"));
+  data=make();data.MV["20260903"].rows.moved.arr="02/09/26";
+  ck("a move from a different arrival cannot hide it", draw(data).has("110"));
+  data=make();data.MV["20260903"].rows.moved.dep="05/09/26";
+  ck("a move from a different departure cannot hide it", draw(data).has("110"));
+  data=make();data.MV["20260903"].rows.moved.name="STONE DAVID";
+  ck("one shared first name does not link a different reservation's move", draw(data).has("110"));
+  data=make();data.DP["20260904"].rows.current.last=100;
+  ck("equal capture times leave both rooms visible", draw(data).has("110"));
+  data=make();delete data.DP["20260904"].rows.current.last;
+  ck("missing capture times leave both rooms visible", draw(data).has("110"));
+  data=make();data.DP["20260904"].rows.current.name="MORGAN/BRIGGS DAVID/ANNA";
+  ck("a different full departure name cannot replace the earlier row", draw(data).has("110"));
+  data=make();delete data.DP["20260904"].rows.current;
+  ck("without a newer destination departure, no departure is invented", draw(data).has("110") && !draw(data).has("120"));
+  data=make();data.MV["20260905"]=data.MV["20260903"];delete data.MV["20260903"];
+  ck("a move after the departure night cannot remove it", draw(data).has("110"));
+  data=make();data.MV["20260903"].rows.moved.to="115";
+  data.MV["20260904"]={rows:{next:{name:"MORGAN/BRIGGS",from:"115",to:"120",arr:"01/09/26",dep:"04/09/26",x:"X"}}};
+  ck("two recorded moves are followed in date order", !draw(data).has("110") && draw(data).has("120"));
+  data.MV["20260902"]=data.MV["20260904"];delete data.MV["20260904"];
+  ck("a reverse-date chain is not treated as a completed move", draw(data).has("110"));
+}
+
 console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");
 process.exit(bad ? 1 : 0);

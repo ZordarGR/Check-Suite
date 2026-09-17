@@ -568,6 +568,14 @@ ipcMain.handle("rooms-write", (_e, obj) => {
     const fs = require("fs"), path2 = require("path");
     const p = roomsPath();
     fs.mkdirSync(path2.dirname(p), {recursive: true});
+    // A failed read is not an empty database. Leave the original bytes available
+    // for recovery instead of replacing the only disk copy with a partial census.
+    if(fs.existsSync(p)){
+      const old = fs.readFileSync(p);
+      if(old.length < 4 || old.slice(0,4).toString("latin1") !== ROOMS_MAGIC) return false;
+      const value = JSON.parse(roomsMask(old.slice(4)).toString("utf8"));
+      if(!value || typeof value !== "object" || Array.isArray(value)) return false;
+    }
     const body = roomsMask(Buffer.from(JSON.stringify(obj), "utf8"));
     /* written beside and renamed, so a crash mid-write cannot leave half a database */
     const tmp = p + ".tmp";

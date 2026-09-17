@@ -51,7 +51,8 @@ function makeEnv(seed = {}) {
     'mvSameName', 'mvPrevNight', 'detectMoves', 'saveMoves', 'movesApplied', 'recordMoves',
     'inhouseToRate', 'isInhouseTitle', 'inhouseDate', 'parseInhouse', 'parseTagged',
     'statusLoad', 'loadStatus', 'statusSave', 'stName', 'stRoom', 'stKey', 'stSameRoom', 'stDayKey',
-    'statusPrune', 'statusIngest', 'ihFind', 'statusMark', 'liveNameOf', 'ingestLiveNames',
+    'statusPrune', 'statusIngest', 'ihFind', 'statusMark', 'inhouseCheckedOut',
+    'consolidatedInhouseRows', 'consolidatedInhouseRate', 'setLiveRate', 'liveNameOf', 'ingestLiveNames',
     'feedStays', 'taxCaptureRate', 'applyInhouse', 'dateNum', 'sameName', 'isCutOf', 'prevNightKey', 'syncRooms'
   ];
   const body = [
@@ -63,11 +64,11 @@ function makeEnv(seed = {}) {
     'const elements={}; function el(id){ return elements[id] || (elements[id]={textContent:""}); }',
     'function t(key,...rest){return key+"("+rest.join(",")+")";} function render(){} function saveRooms(){}',
     'function showMoveSave(){} function toast(){} function setTimeout(){} function openWatchChangePrompt(){}',
-    'const window={};',
+    'const storageFaults=[]; const window={__rcStorageFault:(where,error)=>storageFaults.push({where,message:String(error)})};',
     ...functions.map(lift),
     'return {saveMoves,recordMoves,inhouseToRate,applyInhouse,parseInhouse,parseTagged,statusIngest,statusMark,',
-    'feedStays,ingestLiveNames,readLedger:loadLedger,readStatus:statusLoad,',
-    'setRooms:r=>{ROOMS=r;},getRooms:()=>ROOMS,getRate:()=>RATE,',
+    'feedStays,ingestLiveNames,readLedger:loadLedger,readStatus:statusLoad,active:()=>consolidatedInhouseRows(statusLoad()),',
+    'setRooms:r=>{ROOMS=r;},getRooms:()=>ROOMS,getRate:()=>RATE,storageFaults,',
     'sync:(r,model)=>{ROOMS=r;MODEL=model;syncRooms();return ROOMS;}};'
   ].join('\n');
   const api = new Function('localStorage', 'Date', body)(localStorage, AuditDate);
@@ -269,10 +270,11 @@ test('CONTROL an explicit uniquely matched move still transfers the nickname', (
   e.sync(rooms,{reportDate:'18/9/2026',receipts:[{roomMain:'102',guest:'ALPHA GUEST'}]});
   assert.equal(rooms['102'].nick,'Label');assert.ok(!rooms['101'].nick);
 });
-test('CONTROL explicit CO still confirms departure', () => {
+test('CONTROL explicit departure CO still confirms departure', () => {
   const e=makeEnv();
-  e.statusIngest('IH',e.parseInhouse(ihText([row('101','ALPHA GUEST','10/09/26','18/09/26','CO')])),1000);
-  assert.equal(e.statusMark(e.readStatus(),'DP',row('101'),20260918).cls,'mOut');
+  e.statusIngest('IH',e.parseInhouse(ihText([row('101','ALPHA GUEST','10/09/26','18/09/26','CI')])),1000);
+  const departure={...row('101','ALPHA GUEST','10/09/26','18/09/26','CO'),last:2000};
+  assert.equal(e.statusMark(e.readStatus(),'DP',departure,20260918).cls,'mOut');
 });
 test('R26 historical census does not replace newer captured status', () => {
   const e=makeEnv();
@@ -310,6 +312,121 @@ test('R32 conflicting move provenance cannot partly vacate another source', () =
   const e=makeEnv({[KEY]:{'101':{'20260910':entry()},'102':{'20260910':entry('ALPHA GUEST',20260918,{from:'99'})}}});
   const before=copy(e.readLedger());e.recordMoves([move()],20260918);
   assert.deepEqual(e.readLedger(),before);
+});
+test('R33 a departure without a verified arrival cannot match a different stay', () => {
+  const e=makeEnv();
+  e.statusIngest('IH',e.parseInhouse(ihText([row('101','ALPHA GUEST','17/09/26','18/09/26','CO')])),1000);
+  assert.notEqual(e.statusMark(e.readStatus(),'DP',row('101','ALPHA GUEST',''),20260918).cls,'mOut');
+});
+test('R34 every ledger writer preserves malformed stored bytes and surfaces the failure', () => {
+  const invalid=['{broken','[]','null','{"101":[]}','{"101":{"20260910":null}}',
+    '{"101":{"20260910":{"n":"ALPHA GUEST","d":"20260925"}}}',
+    '{"101":{"20260910":{"n":"ALPHA GUEST","conflicts":{}}}}'];
+  for(const raw of invalid)for(const writer of ['census','report','move']){
+    const e=makeEnv({[KEY]:raw});
+    if(writer==='census')assert.equal(e.saveMoves(rate([row('101')])),null);
+    else if(writer==='report')assert.equal(e.feedStays([row('101')],20260918).failed,true);
+    else assert.equal(e.recordMoves([move()],20260918),0);
+    assert.equal(e.store[KEY],raw,writer+' must not replace invalid source '+raw);
+    assert.ok(e.storageFaults.length,writer+' must surface unreadable saved data');
+  }
+});
+test('R35 invalid legacy storage cannot silently be superseded by a new empty ledger', () => {
+  const e=makeEnv({'reccheck_moves_v1':'[]'});
+  assert.equal(e.saveMoves(rate([row('101')])),null);
+  assert.equal(e.store.reccheck_moves_v1,'[]');assert.equal(e.store[KEY],undefined);
+});
+test('CONTROL valid legacy migration preserves conflicting guest observations', () => {
+  const e=makeEnv({'reccheck_moves_v1':{'20260917':{'101':[{a:20260910,d:20260925,n:'ALPHA GUEST'}]},
+    '20260918':{'101':[{a:20260910,d:20260926,n:'BETA GUEST'}]}}});
+  const saved=e.readLedger()['101']['20260910'];
+  assert.equal(saved.n,'ALPHA GUEST');assert.equal(saved.conflicts[0].n,'BETA GUEST');
+});
+test('R36 deterministic event permutations retain every stay, date, and recorded move', () => {
+  for(let seed=1;seed<=24;seed++){
+    let state=seed;const random=()=>{state=(Math.imul(state,1664525)+1013904223)>>>0;return state;};
+    const ledger={},all=[],moved=new Set();
+    for(let i=0;i<8;i++)for(const room of [String(101+i),String(201+i)]){
+      ledger[room]={'20260910':entry('GUEST '+i)};all.push(row(room,'GUEST '+i));
+    }
+    const e=makeEnv({[KEY]:ledger});
+    e.statusIngest('IH',e.parseInhouse(ihText(all)),1);
+    for(let step=0;step<80;step++){
+      const choice=random()%6,i=random()%8,from=String(101+i),to=String(201+i),name='GUEST '+i;
+      if(choice===0){
+        const subset=all.filter(()=>random()%3===0);if(subset.length)e.saveMoves(rate(subset));
+      }else if(choice===1){
+        e.recordMoves([[from,'STD',to,'STD',name,'X','10/09/26','25/09/26']],20260918);moved.add(i);
+      }else if(choice===2)e.feedStays([row(to,name,'10/09/26',random()%2?'':'25/09/26')],20260918);
+      else if(choice===3)e.recordMoves([[from,'STD',to,'STD','UNRELATED GUEST','X','10/09/26','25/09/26']],20260918);
+      else if(choice===4){
+        const before=e.store[KEY];e.failures.add(KEY);e.saveMoves(rate([row(to,name)]));e.failures.delete(KEY);
+        assert.equal(e.store[KEY],before,'failed write seed '+seed+' step '+step);
+      }else{
+        const subset=all.filter(()=>random()%4===0);
+        e.statusIngest('IH',e.parseInhouse(ihText(subset,{cut:true,total:100})),step+2);
+      }
+      const now=e.readLedger();
+      for(let j=0;j<8;j++)for(const room of [String(101+j),String(201+j)]){
+        assert.equal(now[room]['20260910'].n,'GUEST '+j,'identity seed '+seed+' step '+step);
+        assert.equal(now[room]['20260910'].d,20260925,'date seed '+seed+' step '+step);
+      }
+      for(const j of moved){assert.equal(now[String(101+j)]['20260910'].mv,20260918);assert.equal(now[String(201+j)]['20260910'].from,String(101+j));}
+      assert.equal(e.readStatus().IH.rows.length,16,'union seed '+seed+' step '+step);
+    }
+  }
+});
+test('R37 a complete captured removal of X clears a prior move approval', () => {
+  const e=makeEnv();
+  const capture=x=>({title:'Perform Move for Date 18/09/26',rows:[move('ALPHA GUEST',x)],done:{got:1,rows:1,cut:false}});
+  e.statusIngest('MV',capture('X'),1000);e.statusIngest('MV',capture(''),2000);
+  assert.equal(Object.values(e.readStatus().MV['20260918'].rows)[0].x,'');
+});
+
+test('R38 repeated names in a room preserve each explicitly captured original arrival', () => {
+  const e=makeEnv();
+  e.statusIngest('IH',e.parseInhouse(ihText([row('101','ALPHA GUEST','10/09/26')])),1000);
+  e.statusIngest('IH',e.parseInhouse(ihText([row('101','ALPHA GUEST','17/09/26')])),2000);
+  assert.deepEqual(e.readStatus().IH.rows.map(r=>r.arr).sort(),['10/09/26','17/09/26']);
+  const capture=arr=>({title:'Departure Report for 18/09/26',rows:[['ALPHA GUEST','101','1/0/0/0/0',arr,'CI']],done:{got:1,rows:1,cut:false}});
+  e.statusIngest('DP',capture('10/09/26'),1000);e.statusIngest('DP',capture('17/09/26'),2000);
+  assert.deepEqual(Object.values(e.readStatus().DP['20260918'].rows).map(r=>r.arr).sort(),['10/09/26','17/09/26']);
+});
+
+test('R39 a base-room checkout cannot retire two distinct adjoining identifiers', () => {
+  const e=makeEnv();
+  e.statusIngest('IH',e.parseInhouse(ihText([row('101-2','ALPHA GUEST','10/09/26','18/09/26'),row('101-3','ALPHA GUEST','10/09/26','18/09/26')])),1000);
+  e.statusIngest('DP',{title:'Departure Report for 18/09/26',rows:[['ALPHA GUEST','101','1/0/0/0/0','10/09/26','CO']],done:{got:1,rows:1,cut:false}},2000);
+  assert.equal(e.active().length,2);
+});
+
+test('R40 interrupted captures preserve the last complete row and its original read time', () => {
+  const e=makeEnv();
+  e.statusIngest('IH',e.parseInhouse(ihText([row('101')])),1000);
+  e.statusIngest('IH',e.parseInhouse(ihText([row('101','ALPHA GUEST','10/09/26','19/09/26','CO')],{cut:true,total:100})),2000);
+  const held=e.readStatus().IH.rows[0];
+  assert.equal(held.dep,'25/09/26');assert.equal(held.status,'CI');assert.equal(held.readAt,1000);assert.equal(held.cells[4],'25/09/26');
+});
+
+test('R41 a cut-short blank move cell cannot revoke previously captured X', () => {
+  const e=makeEnv();
+  e.statusIngest('MV',{title:'Perform Move for Date 18/09/26',rows:[move()],done:{got:1,rows:1,cut:false}},1000);
+  e.statusIngest('MV',{title:'Perform Move for Date 18/09/26',rows:[move('ALPHA GUEST','')],done:{got:1,rows:100,cut:true}},2000);
+  assert.equal(Object.values(e.readStatus().MV['20260918'].rows)[0].x,'X');
+});
+
+test('R42 malformed saved status blocks ingestion and preserves the original bytes', () => {
+  for(const raw of ['{broken','[]','null','{"IH":{"rows":{}}}','{"DP":{"20260918":{"rows":[]}}}','{"IH":{"rows":[null]}}']){
+    const e=makeEnv({[STATUS]:raw});
+    assert.throws(()=>e.statusIngest('IH',e.parseInhouse(ihText([row('101')])),1000));
+    assert.equal(e.store[STATUS],raw);assert.ok(e.storageFaults.length);
+  }
+});
+
+test('R43 a checkout without a capture time cannot retire a saved reservation', () => {
+  const saved={IH:{at:1000,key:20260918,rows:[{...row('101','ALPHA GUEST','10/09/26','18/09/26'),readAt:1000}]},
+    DP:{'20260918':{rows:{a:{...row('101','ALPHA GUEST','10/09/26','18/09/26','CO')}}}}};
+  const e=makeEnv({[STATUS]:saved});assert.equal(e.active().length,1);
 });
 
 const failed=results.filter(r=>!r.passed);

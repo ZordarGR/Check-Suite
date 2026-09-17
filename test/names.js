@@ -23,7 +23,7 @@ const NAME = `
 function resolve(receipts, rooms, r, state){
   const MODEL = {reportDate:"3/9/2026", receipts};
   const STATE = state || {receipts:{}};
-  const body = [lift("rKey"), lift("receiptFingerprint"), lift("rState"), nickForLine, lift("dateNum"), lift("sameName"), lift("isCutOf"), lift("guestFor"),
+  const body = [lift("rKey"), lift("receiptFingerprint"), lift("rState"), nickForLine, lift("dateNum"), lift("sameName"), lift("isCutOf"), lift("nameTextIn"), lift("sameGuestLabel"), lift("expandReceiptName"), lift("receiptFullName"), lift("guestFor"),
     "const effRoom = (r) => { " + effRoomLine.replace(/^function effRoom\(r\)\{/,"").replace(/\}$/,"") + " };",
     NAME].join("\n");
   const fn = new Function("MODEL","ROOMS","STATE","r","Object","String", body);
@@ -50,7 +50,7 @@ let recsX = [R("11","110","DIMITRIS"), R("12","110","FILIPPIS")];
 ck("the first guest's receipt carries his name",           resolve(recsX, {}, recsX[0]).shown === "DIMITRIS");
 ck("the next guest's receipt carries HIS, not the room's first", resolve(recsX, {}, recsX[1]).shown === "FILIPPIS");
 let live = {"110": {guest: "FILIPPIS DIMITRIS/ANNA", liveKey: 20260910}};
-ck("with the census naming the new guest, his receipt is completed",  resolve(recsX, live, recsX[1]).shown === "FILIPPIS DIMITRIS/ANNA");
+ck("two different printed fragments fitting one census name stay unexpanded", resolve(recsX, live, recsX[1]).shown === "FILIPPIS");
 ck("and the departed guest's receipt keeps his own name",             resolve(recsX, live, recsX[0]).shown === "DIMITRIS");
 let recsY = [R("13","110","DIMITRIS PAPADOPOULOS/M"), R("14","110","DIMITRIS PAP")];
 ck("a shorter cut of the same guest still takes the room's fuller name", resolve(recsY, {}, recsY[1]).shown === "DIMITRIS PAPADOPOULOS/M");
@@ -58,8 +58,8 @@ ck("a shorter cut of the same guest still takes the room's fuller name", resolve
 // 1. an ordinary charge, room known from the report
 let recs = [R("1","112","JAROLIMEK"), R("2","112","J.")];
 let a = resolve(recs, {}, recs[1]);
-ck("a charge shows the ROOM's name, not its own abbreviation", a.shown === "JAROLIMEK");
-ck("and the printed name is kept on the tooltip", /back: J\./.test(a.tip));
+ck("an abbreviation that is not in the captured name remains as printed", a.shown === "J.");
+ck("no unsupported full name is substituted", !/back:/.test(a.tip));
 
 // 2. a nickname still wins
 let b = resolve(recs, {"112":{guest:"JAROLIMEK", nick:"THE GERMANS"}}, recs[0]);
@@ -80,7 +80,8 @@ ck("a room named only in ROOMS still resolves", d.shown === "FROM THE LEDGER");
 let recs5 = [R("7","111","OLD ROOM GUEST"), R("8","263","PFUENDL")];
 let st = {receipts:{}};
 const rk = new Function("r", lift("rKey") + "\nreturn rKey(r);");
-st.receipts[rk(recs5[0])] = {status:"pending", corr:{room:"263"}};
+const fingerprint = new Function("r", lift("receiptFingerprint") + "\nreturn receiptFingerprint(r);");
+st.receipts[rk(recs5[0])] = {status:"pending", corr:{room:"263"}, source:fingerprint(recs5[0])};
 let e = resolve(recs5, {}, recs5[0], st);
 ck("a charge whose room was corrected takes the new room's name", e.shown === "PFUENDL");
 console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");

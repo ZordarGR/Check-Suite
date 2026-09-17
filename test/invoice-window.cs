@@ -1,6 +1,16 @@
 // CLOUD WINDOWS FIXTURE ONLY. Own test windows, invented guests, no vendor process.
-using System;using System.Text;using System.Diagnostics;using System.Runtime.InteropServices;using System.Threading;using System.IO;using System.Windows.Forms;
+using System;using System.Text;using System.Diagnostics;using System.Runtime.InteropServices;using System.Threading;using System.IO;using System.Windows.Forms;using System.Collections.Concurrent;
 class InvoiceWindow{
+ static volatile string LastAction="starting",ScopeFailure=null;
+ static int UiHeartbeat,OutputLines;
+ static readonly ConcurrentQueue<string> ScopeCommands=new ConcurrentQueue<string>();
+ static readonly AutoResetEvent ScopeReady=new AutoResetEvent(false);
+ static void Trace(string message){LastAction=message;Console.Error.WriteLine("FIXTURE "+Environment.TickCount+" "+message);}
+ [StructLayout(LayoutKind.Sequential)]struct NativeMessage{public IntPtr hwnd;public uint message;public UIntPtr wParam;public IntPtr lParam;public uint time;public int x,y;public uint privateData;}
+ [DllImport("user32.dll",CharSet=CharSet.Unicode)]static extern bool PeekMessage(out NativeMessage msg,IntPtr window,uint min,uint max,uint remove);
+ [DllImport("user32.dll")]static extern bool TranslateMessage(ref NativeMessage msg);
+ [DllImport("user32.dll",CharSet=CharSet.Unicode)]static extern IntPtr DispatchMessage(ref NativeMessage msg);
+ [DllImport("user32.dll")]static extern uint MsgWaitForMultipleObjectsEx(uint count,IntPtr handles,uint milliseconds,uint mask,uint flags);
  [StructLayout(LayoutKind.Sequential)]struct Init{public int size;public int classes;}
  [DllImport("comctl32.dll")]static extern bool InitCommonControlsEx(ref Init init);
  [DllImport("user32.dll",CharSet=CharSet.Unicode)]static extern IntPtr CreateWindowEx(int ex,string cls,string title,int style,int x,int y,int w,int h,IntPtr parent,IntPtr id,IntPtr inst,IntPtr param);
@@ -50,10 +60,24 @@ class InvoiceWindow{
  }
  [DllImport("user32.dll")]static extern void NotifyWinEvent(uint ev,IntPtr hwnd,int obj,int child);
  static void Scope(Process helper,long epoch,string mode){
-  // Match Node's ASCII command bytes; StreamWriter may prepend an encoding BOM.
-  byte[] bytes=Encoding.ASCII.GetBytes("scope "+epoch+" "+mode+"\n");
-  helper.StandardInput.BaseStream.Write(bytes,0,bytes.Length);
-  helper.StandardInput.BaseStream.Flush();
+  // Never block the target UI thread or stdout reader on another process's pipe.
+  ScopeCommands.Enqueue("scope "+epoch+" "+mode+"\n");ScopeReady.Set();
+ }
+ static void StartScopeWriter(Process helper){
+  var writer=new Thread(()=>{
+   try{
+    for(;;){
+     string command;
+     while(ScopeCommands.TryDequeue(out command)){
+      byte[] bytes=Encoding.ASCII.GetBytes(command);
+      helper.StandardInput.BaseStream.Write(bytes,0,bytes.Length);helper.StandardInput.BaseStream.Flush();
+     }
+     if(helper.HasExited)return;
+     ScopeReady.WaitOne(100);
+    }
+   }catch(Exception e){ScopeFailure=e.ToString();Console.Error.WriteLine("FIXTURE scope writer failed: "+e);}
+  });
+  writer.IsBackground=true;writer.Start();
  }
  static void Column(IntPtr lv,int index,string title){
   var c=new Col{mask=0xF,width=95,text=Marshal.StringToHGlobalUni(title),len=title.Length,sub=index};
@@ -67,24 +91,41 @@ class InvoiceWindow{
  }
  static void Row(IntPtr lv,int row,string[] cells){for(int c=0;c<cells.Length;c++)Cell(lv,row,c,cells[c],c==0);}
  static void PumpUntil(Func<bool> done,int timeout){
-  int start=Environment.TickCount;
-  using(var timer=new System.Windows.Forms.Timer()){
-   timer.Interval=25;
-   timer.Tick+=(sender,e)=>{if(done()||Environment.TickCount-start>=timeout)Application.ExitThread();};
-   timer.Start();Application.Run();
+  // WM_TIMER has low queue priority. Do not put the fixture's only deadline on the
+  // same timer/message loop whose responsiveness the other process is exercising.
+  var clock=Stopwatch.StartNew();NativeMessage msg;
+  while(clock.ElapsedMilliseconds<timeout){
+   UiHeartbeat=Environment.TickCount;
+   if(ScopeFailure!=null)throw new Exception("Scope pipe failed: "+ScopeFailure);
+   if(done())return;
+   for(int count=0;count<64&&PeekMessage(out msg,IntPtr.Zero,0,0,1);count++){
+    if(msg.message==0x0012)throw new Exception("Unexpected WM_QUIT in fixture pump");
+    TranslateMessage(ref msg);DispatchMessage(ref msg);
+   }
+   MsgWaitForMultipleObjectsEx(0,IntPtr.Zero,20,0x04FF,0x0004);
   }
+  throw new Exception("Fixture pump exceeded "+timeout+"ms; last action="+LastAction+", output lines="+OutputLines);
  }
  [DllImport("kernel32.dll")]static extern uint SetErrorMode(uint mode);
  [STAThread]static int Main(string[] args){
   SetErrorMode(0x0002|0x8000);
   Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException);
-  try{return Run(args);}catch(Exception e){Console.Error.WriteLine(e);return 1;}
+  UiHeartbeat=Environment.TickCount;
+  using(var watchdog=new System.Threading.Timer(state=>{
+   Console.Error.WriteLine("FIXTURE HARD TIMEOUT: last action="+LastAction+", UI heartbeat age="+(Environment.TickCount-UiHeartbeat)+"ms, output lines="+OutputLines);
+   Environment.Exit(124);
+  },null,120000,Timeout.Infinite)){
+   try{return Run(args);}catch(Exception e){Console.Error.WriteLine(e);return 1;}
+  }
  }
  static int Run(string[] args){
+  Trace("native setup");
   SetProcessDpiAwarenessContext(new IntPtr(-4));
   var init=new Init{size=8,classes=1};InitCommonControlsEx(ref init);
   string folder=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"RecCheck");
-  Directory.CreateDirectory(folder);File.WriteAllText(Path.Combine(folder,"rc-tbind-binds.txt"),"watch=PROT32\n");
+  string fixtureName=Process.GetCurrentProcess().ProcessName;
+  Directory.CreateDirectory(folder);File.WriteAllText(Path.Combine(folder,"rc-tbind-binds.txt"),"watch="+fixtureName+"\n");
+  Trace("fixture-only watch target="+fixtureName);
   // Verify optional list metadata through the production ReadTagged path first.
   IntPtr ih=CreateWindowEx(0,"#32770","Guests inhouse: 15/09/26",unchecked((int)0x10CF0000),20,20,1000,500,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero);
   IntPtr ihlv=CreateWindowEx(0,"SysListView32","",unchecked((int)0x50000001),10,10,960,400,ih,(IntPtr)22222,IntPtr.Zero,IntPtr.Zero);
@@ -96,6 +137,7 @@ class InvoiceWindow{
   PumpUntil(()=>Environment.TickCount-warmAt>=700,2000);
   var readInfo=new ProcessStartInfo(args[0],"inhouse "+Process.GetCurrentProcess().Id+" 0 400"){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true};
   var read=Process.Start(readInfo);
+  Trace("IH helper started pid="+read.Id);
   // Pump this UI thread while the OTHER process asks its getters.
   string listResult=null;
   read.OutputDataReceived+=(sender,e)=>{if(e.Data!=null)listResult=(listResult??"")+e.Data+"\n";};read.BeginOutputReadLine();
@@ -105,6 +147,7 @@ class InvoiceWindow{
   read.WaitForExit();
   File.WriteAllText(args[1]+".list",listResult??"");
   Console.WriteLine("Synthetic IH capture:\n"+listResult);
+  Trace("IH capture complete; constructing Invoice");
   DestroyWindow(ih);
   IntPtr win=CreateWindowEx(0,"#32770","Invoice",unchecked((int)0x00CF0000),50,80,1000,600,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero);
   if(win==IntPtr.Zero)throw new Exception("fixture window failed");
@@ -127,16 +170,22 @@ class InvoiceWindow{
   var expectedGrid=new StringBuilder();RecordGrid(b,expectedGrid);
   var si=new ProcessStartInfo("node","\""+Path.GetFullPath("test/invoice-pipe.js")+"\" \""+args[0]+"\" "+Process.GetCurrentProcess().Id){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardInput=true};
   var helper=Process.Start(si);var output=new StringBuilder();object gate=new object();
+  // Flush each line to the artifact before assertions: a hang must leave evidence.
+  var streamEvidence=new StreamWriter(args[1],false,new UTF8Encoding(false));streamEvidence.AutoFlush=true;
+  bool evidenceClosed=false;
+  Trace("Invoice pipe process started pid="+helper.Id);StartScopeWriter(helper);
   long currentEpoch=0,excludedEpoch=0,resumeEpoch=0;
   int firstMetadataAt=0,firstStableMs=-1;
   helper.OutputDataReceived+=(sender,e)=>{
    if(e.Data==null)return;
    lock(gate){
     output.AppendLine(e.Data);
+    if(!evidenceClosed)streamEvidence.WriteLine(e.Data);Interlocked.Increment(ref OutputLines);
     if(firstStableMs<0&&firstMetadataAt!=0&&e.Data.Contains("\"complete\":true")&&e.Data.Contains("TEST GUEST"))firstStableMs=Environment.TickCount-firstMetadataAt;
     if(e.Data.Contains("\"kind\":\"metadata\"")){
      var match=System.Text.RegularExpressions.Regex.Match(e.Data,"\"epoch\":([0-9]+)");
      currentEpoch=long.Parse(match.Groups[1].Value);
+     Trace("metadata epoch="+currentEpoch);
      if(firstMetadataAt==0)firstMetadataAt=Environment.TickCount;
      bool outside=e.Data.Contains("FICTIONAL AGENCY");
      if(outside)excludedEpoch=currentEpoch;
@@ -147,8 +196,12 @@ class InvoiceWindow{
   Console.WriteLine("Fixture StreamWriter preamble (bypassed for ASCII protocol): "+BitConverter.ToString(helper.StandardInput.Encoding.GetPreamble()));
   helper.BeginOutputReadLine();
   int start=Environment.TickCount,phase=0,readsBefore=0,readsAfterCheckout=0,readsAfterStale=0,readsAfterResume=0,rapid=0;
+  int loggedPhase=-1;
+  Trace("starting Invoice exercise pump");
   PumpUntil(()=>{
    int elapsed=Environment.TickCount-start;
+   if(helper.HasExited)throw new Exception("Invoice pipe exited early, code="+helper.ExitCode);
+   if(phase!=loggedPhase){Trace("phase="+phase+", elapsed="+elapsed+"ms, getter reads="+spy.Reads+", output lines="+OutputLines);loggedPhase=phase;}
    if(elapsed>6000&&phase==0){SetWindowPos(win,IntPtr.Zero,150,130,1100,650,0);PlaceGrid(win,b,350,130,700,390);RecordGrid(b,expectedGrid);phase++;}
    if(elapsed>10000&&phase==1){ShowWindow(win,3);PlaceGrid(win,b,340,120,650,400);RecordGrid(b,expectedGrid);phase++;}
    if(elapsed>14000&&phase==2){ShowWindow(win,9);PlaceGrid(win,b,340,120,620,350);SetForegroundWindow(win);RecordGrid(b,expectedGrid);phase++;}
@@ -205,8 +258,10 @@ class InvoiceWindow{
    if(elapsed>71000&&phase==14){ShowWindow(win,6);phase++;}
    return elapsed>=74000;
   },77000);
+  Trace("exercise complete; closing Invoice");
   DestroyWindow(win);Application.DoEvents();Thread.Sleep(400);
-  lock(gate)File.WriteAllText(args[1],output.ToString());
+  lock(gate){evidenceClosed=true;streamEvidence.Flush();streamEvidence.Close();}
+  if(!helper.HasExited)helper.Kill();
   File.WriteAllText(args[1]+".grid",expectedGrid.ToString());
   File.WriteAllText(args[1]+".scope","{\"before\":"+readsBefore+",\"checkout\":"+readsAfterCheckout+",\"stale\":"+readsAfterStale+",\"resumed\":"+readsAfterResume+",\"epoch\":"+resumeEpoch+"}");
   File.WriteAllText(args[1]+".recovery","{\"delays\":"+spy.Delays+",\"rapid\":"+rapid+"}");

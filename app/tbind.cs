@@ -2141,7 +2141,7 @@ static class TBind {
     try{
       if(!rates.ok){ READ.Append("ERR\tcould not safely read the list\n"); ranOut=true; }
       if(tag!="MV"){
-        string[] headers=rates.Headers();
+        string[] headers=rates.Headers(128);
         rateCol=HeaderAt(headers,"PRICE"); agencyCol=HeaderAt(headers,"TRAVELAGENCY"); currencyCol=HeaderAt(headers,"CURRENCY");
       }
       /* the encoding question, settled on the first row and then left alone */
@@ -2167,16 +2167,21 @@ static class TBind {
         // Re-read the identity cells before accepting this row, within the same budget.
         if(!rates.ok || cells[0]!=rates.GetText(r,cols[0],false,wide)
            || cells[1]!=rates.GetText(r,cols[1],false,wide) || !rates.ok){ ranOut=true; break; }
-        READ.Append(line.ToString() + "\n");
+        string rateLine = null;
         if(rates!=null && rates.ok && rateCol>=0 && agencyCol>=0 && currencyCol>=0){
           string price=rates.Get(r,rateCol,false), agency=rates.Get(r,agencyCol,false), currency=rates.Get(r,currencyCol,false);
           if(rates.ok){
             // Additional tagged rows: existing IH/AR/DP columns and their consumers stay intact.
             string arrival=tag=="AR"?"":cells[3], departure=tag=="DP"?"":cells[tag=="IH"?4:3];
-            READ.Append("RATE\t"+tag+"\t"+cells[0]+"\t"+cells[1]+"\t"+arrival+"\t"+departure
-                       +"\t"+price+"\t"+agency+"\t"+currency+"\t"+cells[cells.Length-1]+"\n");
+            rateLine="RATE\t"+tag+"\t"+cells[0]+"\t"+cells[1]+"\t"+arrival+"\t"+departure
+                       +"\t"+price+"\t"+agency+"\t"+currency+"\t"+cells[cells.Length-1]+"\n";
           }
         }
+        // Optional rate getters can also race a sort/filter; accept both rows together.
+        if(!rates.ok || cells[0]!=rates.GetText(r,cols[0],false,wide)
+           || cells[1]!=rates.GetText(r,cols[1],false,wide) || !rates.ok){ ranOut=true; break; }
+        READ.Append(line.ToString() + "\n");
+        if(rateLine!=null) READ.Append(rateLine);
         got++;
       }
       readMsgs++;
@@ -2331,16 +2336,17 @@ static class TBind {
     }catch(Exception){ return null; }
   }
   /* Written beside and moved, so RecCheck can never read half a list. */
-  static void WriteList(string tag, string body){
+  static bool WriteList(string tag, string body){
     try{
       string p = ListPath(tag);
-      if(p == null) return;
+      if(p == null) return false;
       System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(p));
       string tmp = p + ".tmp";
       System.IO.File.WriteAllText(tmp, body, new System.Text.UTF8Encoding(false));
-      if(System.IO.File.Exists(p)) System.IO.File.Delete(p);
-      System.IO.File.Move(tmp, p);
-    }catch(Exception){}
+      if(System.IO.File.Exists(p)) System.IO.File.Replace(tmp, p, null);
+      else System.IO.File.Move(tmp, p);
+      return true;
+    }catch(Exception){ return false; }
   }
   /* Runs on the pump thread, never in the callback. */
   static void EvServiceReads(){
@@ -2372,12 +2378,20 @@ static class TBind {
       string body = READ.ToString();
       READ = new StringBuilder();
       bool gotRows = (body.IndexOf("\n" + tag + "\t") >= 0 || body.StartsWith(tag + "\t"));
-      if(gotRows){
+      bool complete = false;
+      foreach(string line in body.Split(new char[]{'\n'})){
+        string[] fields=line.Replace("\r", "").Split(new char[]{'\t'});
+        int got,total;
+        if(fields.Length==7 && fields[0]=="DONE" && fields[6]=="complete"
+           && int.TryParse(fields[1],out got) && int.TryParse(fields[2],out total)
+           && got>0 && got==total) complete=true;
+      }
+      if(body.StartsWith("ERR\t") || body.IndexOf("\nERR\t")>=0) complete=false;
+      if(gotRows && complete && WriteList(tag, body)){
         /* the read succeeded: take it, mark the caption taken, and cool this list for four
            seconds so the open window restating its caption is not re-read. */
         evWant.Remove(tag); evWantOpen.Remove(tag); evReadyAt.Remove(tag); evTries.Remove(tag);
         evLastAt[tag] = now; evLastCap[tag] = cap;
-        WriteList(tag, body);
         AppendWatch(DateTime.Now.ToString("HH:mm:ss") + "  READ   " + tag
                     + "  title=\"" + cap + "\"\r\n");
       } else {
@@ -2833,7 +2847,8 @@ static class TBind {
       if(end<0 || end>=CCH-1){ok=false;return "";}
       return s.Substring(0,end).Replace("\t"," ").Replace("\r"," ").Replace("\n"," ");
     }
-    public string[] Headers(){
+    public string[] Headers(){ return Headers(24); }
+    public string[] Headers(int maxColumns){
       IntPtr h,res;
       messages+=2;
       if(!ok || SendMessageTimeout(lv,LVM_GETHEADER,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,250,out h)==IntPtr.Zero
@@ -2841,7 +2856,7 @@ static class TBind {
         ok=false;return new string[0];
       }
       int count=res.ToInt32();
-      if(count<1||count>24){ok=false;return new string[0];}
+      if(count<1||count>maxColumns){ok=false;return new string[0];}
       string[] hs=new string[count];
       for(int i=0;i<count;i++) hs[i]=Get(0,i,true);
       return hs;

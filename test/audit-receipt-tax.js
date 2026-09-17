@@ -39,13 +39,13 @@ function model(rows, extraSections = {}) {
   return buildModel({reportDate:'18/09/2026',sections:Object.assign({'BAR 24%':{rows,reported:null}},extraSections)});
 }
 function receiptContext(m, state) {
-  return context(['rKey','receiptFingerprint','rState','setRState','saveState','effSN','effRoom','corrHasValues','effRates','effTotal','statusOf','checkableList','extraTotal','activeExtras','extrasOf','extrasSum'],
-    {MODEL:m, STATE:state || {date:'18/09/2026',receipts:{},extras:[]}, localStorage:memory(), stateKey:'reccheck_18/09/2026'});
+  return context(['receiptStateValid','receiptStorageFault','rKey','receiptFingerprint','rState','setRState','saveState','effSN','effRoom','corrHasValues','effRates','effTotal','statusOf','checkableList','extraTotal','activeExtras','extrasOf','extrasSum'],
+    {STATE_BLOCKED_SOURCES:[],MODEL:m, STATE:state || {date:'18/09/2026',receipts:{},extras:[]}, localStorage:memory(), stateKey:'reccheck_18/09/2026'});
 }
 const ihRow = (room,name,arr='17/09/26',dep='21/09/26',status='CI') => [name,'',room,'','2',arr,dep,'','','','',status];
 function taxContext() {
   const els = {};
-  return context(['dkey','pillRoom','inhouseToRate','isInhouseTitle','inhouseDate','applyInhouse','taxRoomKeys','taxCaptureRate','taxAccountBounds','crossReference','decidePairing','deriveStatus'],
+  return context(['dkey','pillRoom','inhouseToRate','isInhouseTitle','inhouseDate','applyInhouse','taxRoomKeys','taxCaptureRate','setLiveRate','taxAccountBounds','crossReference','decidePairing','deriveStatus'],
     {IH:{NAME:0,ROOM:2,OCC:4,ARR:5,DEP:6,STATUS:11},RATE:null,TAX:null,PAIR_OVERRIDE:null,ADJ_OPEN_OVERRIDE:null,
       LIVE_SIG:'',LEDGER_TICK:0,MOVES_ROWS:null, window:{},
       t:x=>x,el:id=>(els[id] || (els[id]={})),saveMoves:()=>({res:0}),showMoveSave:()=>{},render:()=>{},statusLoad:()=>({})});
@@ -53,7 +53,7 @@ function taxContext() {
 const capture = rows => ({title:'Guests inhouse: 18/09/26',rows,done:{got:rows.length,rows:rows.length,cut:false}});
 const charges = rooms => ({kind:'tax',fileDate:'18/09/26',dateKey:20260918,totalRooms:Object.keys(rooms).length,rooms});
 function memContext(storage = memory()) {
-  return context(['dkey','dnum','loadMem','saveMem','pruneRoom','ingestTax','roomBalance','recentDates','deriveStatus'],
+  return context(['dkey','dnum','taxStoreValid','taxStoreRead','taxStoreWrite','loadMem','saveMem','pruneRoom','ingestTax','roomBalance','recentDates','deriveStatus'],
     {localStorage:storage,MEM_KEY:'ta_check_memory_v2',t:x=>x});
 }
 function taxParser() {
@@ -91,14 +91,15 @@ function deferred() { let resolve; const promise = new Promise(r=>resolve=r); re
   await check('receipt-date-normalization','Equivalent report date formatting preserves the same saved checks',()=>{
     const state={date:'8/9/2026',receipts:{'BAR|1001|205':{status:'ok',corr:null}},extras:[]};
     const s=memory({'reccheck_8/9/2026':JSON.stringify(state)});
-    const c=context(['blankState','loadState'],{localStorage:s,stateKey:''});
+    const c=context(['blankState','receiptStateValid','receiptStorageFault','loadState'],{STATE_BLOCKED_SOURCES:[],localStorage:s,stateKey:''});
     const loaded=c.loadState('08/09/2026');assert.equal(loaded.receipts['BAR|1001|205']?.status,'ok');
   });
   await check('receipt-cross-dept-primary','Changing department shares cannot silently lose a saved room correction',()=>{
     const c=receiptContext(model([row({amount:12})],{'RESTAURANT 24%':{rows:[row({amount:8})],reported:null}}));
     c.setRState(c.MODEL.receipts[0],{status:'corrected',corr:{room:'210'}});
     c.MODEL=model([row({amount:8})],{'RESTAURANT 24%':{rows:[row({amount:12})],reported:null}});
-    assert.equal(c.effRoom(c.MODEL.receipts[0]),'210');
+    const st=c.rState(c.MODEL.receipts[0]);assert.equal((st.heldCorrection||st.corr).room,'210');
+    assert.ok(st.sourceChanged);assert.equal(c.effRoom(c.MODEL.receipts[0]),'205');
   });
   await check('receipt-manual-then-posted','Later posted manual receipt cannot silently double count total',()=>{
     const c=receiptContext(model([row()])); c.STATE.extras=[{sn:'1001',room:'205',guest:'ALPHA TEST',dept:'BAR',v24:10,v13:0}];
@@ -210,10 +211,118 @@ function deferred() { let resolve; const promise = new Promise(r=>resolve=r); re
     assert.equal(c.TAX,b);
   });
   await check('tax-failed-load-identity','Failed replacement file is not labelled as if it owns previous tax data',async()=>{
-    const els={},old=charges({'205':{arr:1,auto:1,man:0}});
+    const els={'fn-tax':{textContent:'previous.oxps'}},old=charges({'205':{arr:1,auto:1,man:0}});
     const c=context(['loadTax'],{TAX_LOAD_EPOCH:0,TAX:old,PAIR_OVERRIDE:null,ADJ_OPEN_OVERRIDE:null,EXPANDED:new Set(),clearErr:()=>{},
       el:id=>els[id]||(els[id]={classList:{add(){}}}),readOxps:async()=>{throw new Error('corrupt');},showErr:()=>{},t:x=>x});
-    await c.loadTax({name:'broken.oxps'});assert.ok(c.TAX!==old || els['fn-tax'].textContent!=='broken.oxps','previous data still active under failed file name');
+    await c.loadTax({name:'broken.oxps'});assert.equal(c.TAX,old);assert.equal(els['fn-tax'].textContent,'previous.oxps');
+  });
+  await check('receipt-save-failure','Failed persistence cannot leave a receipt visibly confirmed',()=>{
+    const c=receiptContext(model([row()])),r=c.MODEL.receipts[0];
+    c.localStorage.setItem=()=>{throw new Error('full');};
+    assert.equal(c.setRState(r,{status:'ok',corr:null}),false);
+    assert.notEqual(c.rState(r).status,'ok');
+  });
+  await check('receipt-unchanged-source','Unchanged receipt source retains its valid confirmation',()=>{
+    const c=receiptContext(model([row()])),r=c.MODEL.receipts[0];
+    assert.equal(c.setRState(r,{status:'ok',corr:null}),true);
+    c.MODEL=model([row()]);assert.equal(c.rState(c.MODEL.receipts[0]).status,'ok');
+  });
+  await check('receipt-legacy-missing','Source verification does not erase a legacy missing-paper warning',()=>{
+    const c=receiptContext(model([row()]));c.STATE.receipts['BAR|1001|205']={status:'missing',corr:null};
+    assert.equal(c.rState(c.MODEL.receipts[0]).status,'missing');
+  });
+  await check('receipt-manual-different-room','Same serial in a different room cannot consume a manual entry',()=>{
+    const c=receiptContext(model([row()]));c.STATE.extras=[{sn:'1001',room:'206',guest:'ALPHA TEST',dept:'BAR',v24:10,v13:0}];
+    assert.equal(c.activeExtras().length,1);
+  });
+  await check('receipt-manual-retained','Reconciled manual evidence remains stored and reappears if its posting is absent',()=>{
+    const c=receiptContext(model([row()]));c.STATE.extras=[{sn:'1001',room:'205',guest:'ALPHA TEST',dept:'BAR',v24:10,v13:0}];
+    assert.equal(c.activeExtras().length,0);assert.equal(c.STATE.extras.length,1);
+    c.MODEL=model([]);assert.equal(c.activeExtras().length,1);
+  });
+  await check('tax-historical-census','Opening an older IH list cannot overwrite a newer live tax census',()=>{
+    const c=taxContext();c.applyInhouse(capture([ihRow('205','ALPHA TEST')]),true);
+    const old=capture([ihRow('206','BETA TEST')]);old.title='Guests inhouse: 17/09/26';c.applyInhouse(old,true);
+    assert.equal(c.RATE.dateKey,20260918);assert.ok(c.RATE.rooms['205']);
+  });
+  await check('tax-history-retained','Ninth loaded tax night preserves the earliest saved snapshot',()=>{
+    const c=memContext();
+    for(let d=1;d<=9;d++){const t=charges({'205':{arr:1,auto:1,man:0}});t.fileDate=String(d).padStart(2,'0')+'/09/26';t.dateKey=20260900+d;c.ingestTax(t);}
+    assert.ok(c.loadMem()['205']['01/09/26']);
+  });
+  await check('tax-zero-snapshot-retained','A zero snapshot keeps its earlier nonzero evidence as a visible conflict',()=>{
+    const c=memContext();c.ingestTax(charges({'205':{arr:1,auto:1,man:0}}));c.ingestTax(charges({'205':{arr:0,auto:0,man:0}}));
+    const e=c.loadMem()['205']['18/09/26'];assert.ok(e.uncertain&&e.versions.some(x=>x.auto===1));
+  });
+  await check('tax-ack-source','New underlying tax nights with the same balance invalidate a prior dismissal',()=>{
+    const c=context(['dkey','taxStoreValid','taxStoreRead','taxStoreWrite','loadMem','saveMem','loadAck','saveAck','taxAckSource','ackOf','toggleAck'],{localStorage:memory(),MEM_KEY:'ta_check_memory_v2',ACK_KEY:'ta_check_ack_v1'});
+    c.saveMem({'205':{'17/09/26':{arr:1,auto:2,man:0}}});c.toggleAck('205',1);assert.equal(c.ackOf('205',1),true);
+    c.saveMem({'205':{'17/09/26':{arr:1,auto:2,man:0},'18/09/26':{arr:1,auto:1,man:0}}});assert.equal(c.ackOf('205',1),false);
+  });
+  await check('tax-load-save-failure','Tax file cannot become active under a success label after failed persistence',async()=>{
+    const els={},old=charges({'205':{arr:1,auto:1,man:0}}),next=charges({'206':{arr:1,auto:0,man:0}});
+    const c=context(['loadTax'],{TAX_LOAD_EPOCH:0,TAX:old,PAIR_OVERRIDE:null,ADJ_OPEN_OVERRIDE:null,EXPANDED:new Set(),clearErr:()=>{},
+      el:id=>els[id]||(els[id]={classList:{add(){}}}),readOxps:async()=>next,pagesToTokens:x=>x,parseTax:x=>x,
+      ingestTax:()=>false,showErr:()=>{},t:x=>x});
+    await c.loadTax({name:'next.oxps'});assert.equal(c.TAX,old);assert.notEqual(els['fn-tax']?.textContent,'next.oxps');
+  });
+  await check('rate-load-latest-selection','Slow earlier Rate file cannot overwrite the latest selection',async()=>{
+    const one=deferred(),two=deferred(),els={},a={count:1,dateKey:20260917,dateSure:true},b={count:1,dateKey:20260918,dateSure:true};
+    const c=context(['loadRate'],{RATE_LOAD_EPOCH:0,RATE:null,PAIR_OVERRIDE:null,ADJ_OPEN_OVERRIDE:null,clearErr:()=>{},
+      el:id=>els[id]||(els[id]={classList:{add(){}}}),readOxps:f=>f.name==='first'?one.promise:two.promise,
+      parseRate:x=>x,showErr:()=>{},saveMoves:()=>({res:1}),showMoveSave:()=>{},render:()=>{},t:x=>x});
+    const p1=c.loadRate({name:'first'}),p2=c.loadRate({name:'second'});two.resolve(b);await p2;one.resolve(a);await p1;assert.equal(c.RATE,b);
+  });
+  await check('receipt-load-latest-selection','Slow earlier Department file cannot overwrite latest model or state date',async()=>{
+    const one=deferred(),two=deferred(),els={},renders=[];
+    const a=model([row({sn:'1'})]),b=model([row({sn:'2'})]);a.reportDate='17/09/2026';b.reportDate='18/09/2026';
+    const c=context(['dateNum','blankState','receiptStateValid','receiptStorageFault','loadState','loadReport'],{STATE_BLOCKED_SOURCES:[],REPORT_LOAD_EPOCH:0,MODEL:null,STATE:null,stateKey:'',localStorage:memory(),
+      $:id=>els[id]||(els[id]={style:{display:'none'}}),unzipFpages:buf=>buf==='a'?one.promise:two.promise,parseReport:x=>x,
+      isCheckcharge:()=>true,buildModel:x=>x,loadWatch:()=>{},loadRooms:()=>{},mergeRoomsFromDisk:async()=>{},syncRooms:()=>{},
+      renderAll:name=>renders.push(name),toast:()=>{},t:x=>x});
+    const p1=c.loadReport('a','first'),p2=c.loadReport('b','second');two.resolve(b);await p2;one.resolve(a);await p1;
+    assert.equal(c.MODEL,b);assert.equal(c.STATE.date,'18/09/2026');assert.deepEqual(renders,['second']);
+  });
+  await check('tax-corrupt-bytes-preserved','Unreadable tax memory cannot be silently replaced by a new empty database',()=>{
+    const raw='{interrupted original bytes',s=memory({'ta_check_memory_v2':raw}),c=memContext(s);
+    assert.equal(c.ingestTax(charges({'205':{arr:1,auto:1,man:0}})),false);
+    assert.equal(s.getItem('ta_check_memory_v2'),raw);
+  });
+  await check('receipt-corrupt-bytes-preserved','Unreadable saved receipt state blocks edits and preserves original bytes',()=>{
+    const raw='{"date":"18/09/2026","receipts":null,"extras":"broken"}',s=memory({'reccheck_18/9/2026':raw});
+    const c=receiptContext(model([row()]));c.localStorage=s;
+    vm.runInContext(['blankState','loadState'].map(lift).join('\n'),c);c.STATE=c.loadState('18/09/2026');
+    assert.equal(c.setRState(c.MODEL.receipts[0],{status:'ok',corr:null}),false);
+    assert.equal(s.getItem('reccheck_18/9/2026'),raw);
+  });
+  await check('receipt-date-alias-merge','Disjoint checks under equivalent date spellings remain available together',()=>{
+    const s=memory({'reccheck_18/9/2026':JSON.stringify({date:'18/9/2026',receipts:{'1001|205':{status:'missing'}},extras:[]}),
+      'reccheck_18/09/2026':JSON.stringify({date:'18/09/2026',receipts:{'1002|206':{status:'missing'}},extras:[]})});
+    const c=context(['blankState','receiptStateValid','receiptStorageFault','loadState'],{STATE_BLOCKED_SOURCES:[],localStorage:s,stateKey:''});
+    const state=c.loadState('18/09/2026');assert.ok(state.receipts['1001|205']);assert.ok(state.receipts['1002|206']);
+    assert.ok(state.dateAliases['reccheck_18/09/2026']);
+  });
+  await check('receipt-changed-source-room-correction','Old room correction cannot reroute a changed guest receipt',()=>{
+    const c=receiptContext(model([row()]));c.setRState(c.MODEL.receipts[0],{status:'corrected',corr:{room:'210',v24:7,v13:3}});
+    c.MODEL=model([row({guest:'BETA TEST',amount:30})]);const r=c.MODEL.receipts[0],st=c.rState(r);
+    assert.equal(c.effRoom(r),'205');assert.equal(c.effTotal(r),30);assert.equal(st.heldCorrection.room,'210');
+    c.setRState(r,{status:'ok',corr:null});assert.equal(c.STATE.receiptHistory[c.rKey(r)][0].corr.room,'210');
+  });
+  await check('tax-uncertain-not-definitive-balance','Conflicting snapshots cannot produce a definite overcharge verdict',()=>{
+    const c=memContext();vm.runInContext(['taxRoomKeys','taxMemory','taxUncertainties','overchargeFromMemory'].map(lift).join('\n'),c);c.pruneAck=()=>{};
+    c.saveMem({'205':{'18/09/26':{arr:1,auto:2,man:0,uncertain:true,versions:[{arr:1,auto:1,man:0}]}}});
+    assert.equal(c.roomBalance(c.loadMem(),'205').uncertain,true);assert.equal(c.overchargeFromMemory().length,0);
+    assert.equal(c.taxUncertainties(c.loadMem())[0].room,'205');
+  });
+  await check('tax-retained-history-window','Retaining old evidence does not extend the existing seven-date balance window',()=>{
+    const c=memContext();
+    for(let d=1;d<=9;d++){const t=charges({'205':{arr:1,auto:d===1?2:1,man:0}});t.fileDate=String(d).padStart(2,'0')+'/09/26';t.dateKey=20260900+d;c.ingestTax(t);}
+    assert.ok(c.loadMem()['205']['01/09/26']);assert.equal(c.roomBalance(c.loadMem(),'205').bal,0);
+  });
+  await check('tax-consolidated-explicit-retirement','Consolidated explicit checkout cannot resurrect a prior occupied room',()=>{
+    const c=taxContext();c.applyInhouse(capture([ihRow('205','ALPHA TEST')]),true);
+    c.setLiveRate({kind:'rate',live:true,dateKey:20260918,bizDate:'18/09/26',consolidated:true,coverageMissing:[],rooms:{},all:{},count:0});
+    assert.equal(c.RATE.count,0);assert.equal(c.RATE.rooms['205'],undefined);
   });
   console.log('\nAUDIT_RECEIPT_TAX_RESULT '+JSON.stringify({total:results.length,passed:results.filter(x=>x.pass).length,failed:results.filter(x=>!x.pass).length,results}));
   process.exitCode=results.some(x=>!x.pass)?1:0;

@@ -17,7 +17,7 @@ const localStorage = {getItem:k=>(k in store?store[k]:null), setItem:(k,v)=>stor
 const body = [lift("dateNum"), src.match(/^const MOVES_KEY = .*$/m)[0], lift("loadMoves"),
   "const STATUS_KEY = \"reccheck_status_v1\";", lift("loadStatus"), lift("statusRows"), lift("pillRoom"),
   "const LEGACY_KEY = \"reccheck_legacy\";", lift("legacyOn"),
-  lift("dateNum2"), lift("sameName"), lift("nameWordSet"), lift("roomMoves"), lift("ledgerMoves"), lift("movesReport"), "return movesReport();"].join("\n");
+  lift("dateNum2"), lift("sameName"), lift("nameWordSet"), lift("departureRows"), lift("capturedGuestName"), lift("sameGuestLabel"), lift("nameTextIn"), lift("roomMoves"), lift("ledgerMoves"), lift("movesReport"), "return movesReport();"].join("\n");
 const fn = new Function("localStorage","MODEL","ROOMS","Number","String","Object","JSON","Math", body);
 const out = fn(localStorage, {reportDate:"2/9/2026", receipts:[]}, {}, Number, String, Object, JSON, Math);
 console.log(out);

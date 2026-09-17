@@ -31,7 +31,7 @@ rep(/\[DllImport\("user32\.dll", CharSet = CharSet\.Unicode\)\] static extern in
 rep(/\[DllImport\("user32\.dll", CharSet = CharSet\.Unicode\)\] static extern int GetClassName\(IntPtr hWnd, StringBuilder s, int n\);/,
     'static int GetClassName(IntPtr hWnd, StringBuilder s, int n){ s.Append(FAKE.Cls(hWnd)); return s.Length; }', "GetClassName");
 rep(/static void ReadTagged\(string tag, int maxRows\)\{/, 'static void ReadTaggedReal(string tag, int maxRows){', "ReadTagged");
-rep(/static void WriteList\(string tag, string body\)\{/, 'static void WriteListReal(string tag, string body){', "WriteList");
+rep(/static bool WriteList\(string tag, string body\)\{/, 'static bool WriteListReal(string tag, string body){', "WriteList");
 rep(/static void AppendWatch\(string line\)\{/, 'static void AppendWatchReal(string line){', "AppendWatch");
 rep(/static int Main\(string\[\] args\)\{/, 'static int RealMain(string[] args){', "Main");
 src = src.replace(/Environment\.TickCount/g, "FAKE.Now()");
@@ -40,6 +40,8 @@ const rig = `
   /* ---- the rig: what the test controls ---- */
   static class FAKE {
     public static int now = 100000;
+    public static bool cut = false;
+    public static bool writeFails = false;
     public static int Now(){ return now; }
     public static System.Collections.Generic.Dictionary<IntPtr,string[]> win = new System.Collections.Generic.Dictionary<IntPtr,string[]>(); // hwnd -> {cls, title, root}
     public static System.Collections.Generic.Dictionary<string,string[]> rows = new System.Collections.Generic.Dictionary<string,string[]>();
@@ -55,9 +57,9 @@ const rig = `
     READ.Append("TITLE\\tfake " + tag + "\\n");
     string[] r; if(!FAKE.rows.TryGetValue(tag, out r) || r.Length == 0){ READ.Append("ERR\\tthe list is empty\\n"); return; }
     foreach(string x in r) READ.Append(tag + "\\t" + x + "\\n");
-    READ.Append("DONE\\t" + r.Length + "\\t" + r.Length + "\\t9\\t5\\tunicode\\tcomplete\\n");
+    READ.Append("DONE\\t" + r.Length + "\\t" + r.Length + "\\t9\\t5\\tunicode\\t" + (FAKE.cut?"cut-short":"complete") + "\\n");
   }
-  static void WriteList(string tag, string body){ FAKE.written.Add(tag); }
+  static bool WriteList(string tag, string body){ if(FAKE.writeFails)return false; FAKE.written.Add(tag); return true; }
   static void AppendWatch(string line){ FAKE.log.Add(line); }
 
   static int bad = 0;
@@ -166,6 +168,18 @@ const rig = `
     Fire(EVENT_OBJECT_SHOW, MVW);
     for(int i = 0; i < EV_MAX_TRIES + 5; i++){ EvServiceReads(); FAKE.now += EV_RETRY_MS + 1; }
     Ck("an always-empty list stops after EV_MAX_TRIES reads", FAKE.reads.Count == EV_MAX_TRIES && !evWant.ContainsKey("MV"));
+
+    FAKE.rows["MV"] = new string[]{"101\\tBGV\\t102\\tBGV\\tTEST GUEST\\tX\\t01/09/26\\t10/09/26"};
+    FAKE.cut=true; FAKE.reads.Clear(); FAKE.written.Clear();
+    Fire(EVENT_OBJECT_SHOW,MVW); EvServiceReads();
+    Ck("partial rows cannot publish or consume the capture request",FAKE.written.Count==0 && evWant.ContainsKey("MV") && !evLastCap.ContainsKey("MV"));
+    FAKE.cut=false; FAKE.now+=EV_RETRY_MS+1; EvServiceReads();
+    Ck("a partial capture retries and publishes once complete",FAKE.written.Count==1 && !evWant.ContainsKey("MV"));
+    FAKE.now+=EV_COOLDOWN_MS+1; FAKE.writeFails=true;
+    Fire(EVENT_OBJECT_SHOW,MVW); EvServiceReads();
+    Ck("a failed snapshot write leaves its retry armed",evWant.ContainsKey("MV") && FAKE.written.Count==1);
+    FAKE.writeFails=false; FAKE.now+=EV_RETRY_MS+1; EvServiceReads();
+    Ck("the same captured list can save after storage recovers",!evWant.ContainsKey("MV") && FAKE.written.Count==2);
 
     Console.WriteLine(bad > 0 ? "\\n" + bad + " FAILURES" : "\\nall pass");
     return bad > 0 ? 1 : 0;
