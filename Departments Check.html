@@ -234,7 +234,7 @@ body.onMenu #clList{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
    since 1.17.51 — so a row here was as wide as its own text (145px in a 430px column) and
    the rows shared borders with no gap between them. Named by the PLACE, so a row added
    later is sized by being here (7l). */
-#departureReportBtn{width:100%;margin:0 0 12px}.depDateTable{width:100%;border-collapse:collapse}.depDateTable th,.depDateTable td{padding:8px 12px;text-align:left;border-bottom:1px solid #aaa}.depDateTable thead{display:table-header-group}.depDateTable tr{break-inside:avoid}
+#departureReportBtn{width:100%;margin:0 0 12px}.depDateTable{width:100%;border-collapse:collapse;table-layout:fixed}.depDateTable th,.depDateTable td{padding:8px 12px;text-align:left;border-bottom:1px solid #aaa}.depDateTable thead{display:table-header-group}.depDateTable tr{break-inside:avoid}.depDateTable td:nth-child(2){white-space:normal;overflow-wrap:anywhere}.depDateInput{width:12ch}
 #repList{display:flex;flex-direction:column;gap:10px;width:100%}
 #repList > .mItem{width:100%;margin:0}
 /* and a folder name protel or he can make arbitrarily long must not push the row past the
@@ -1948,7 +1948,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.77";
+const APP_VERSION = "1.17.78";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -6599,7 +6599,7 @@ function depReportRows(ledger,status,history,from,to){
       }
       if(extras)break;
     }
-    return {room:r.room,arr:r.arr,dep:r.dep,extras};
+    return {room:r.room,name:r.name,arr:r.arr,dep:r.dep,extras};
   }).sort((a,b)=>a.dep-b.dep||a.room.localeCompare(b.room,undefined,{numeric:true})||a.arr-b.arr);
 }
 function depReportHistory(){
@@ -6623,8 +6623,8 @@ function depReportHistory(){
   return history;
 }
 function depReportTable(rows){
-  return '<table class="depDateTable"><thead><tr><th>Room</th><th>Arrival</th><th>Departure</th><th>Extras</th></tr></thead><tbody>'+
-    rows.map(r=>'<tr><td>'+esc(r.room)+'</td><td>'+depReportDate(r.arr)+'</td><td>'+depReportDate(r.dep)+'</td><td>'+(r.extras?'Yes':'No recorded extras')+'</td></tr>').join("")+'</tbody></table>';
+  return '<table class="depDateTable"><colgroup><col style="width:10%"><col style="width:38%"><col style="width:16%"><col style="width:16%"><col style="width:20%"></colgroup><thead><tr><th>Room</th><th>Guest name</th><th>Arrival</th><th>Departure</th><th>Extras</th></tr></thead><tbody>'+
+    rows.map(r=>'<tr><td>'+esc(r.room)+'</td><td>'+esc(r.name)+'</td><td>'+depReportDate(r.arr)+'</td><td>'+depReportDate(r.dep)+'</td><td>'+(r.extras?'Yes':'No recorded extras')+'</td></tr>').join("")+'</tbody></table>';
 }
 function depReportSheet(job){
   const html='<h1>Departures · '+depReportDate(job.from)+' – '+depReportDate(job.to)+'</h1><p>'+job.rows.length+' reservations</p>'+depReportTable(job.rows)+
@@ -6633,16 +6633,18 @@ function depReportSheet(job){
 }
 function openDepartureReport(){
   clearPrintJob();
-  const today=new Date(),iso=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
-  openModal('<h2>Departure report</h2><div style="display:flex;gap:16px;flex-wrap:wrap;margin:16px 0"><label>Departure from <input id="drFrom" type="date"></label><label>through <input id="drTo" type="date"></label><button class="btn" id="drBuild">Create report</button></div><p id="drNote" class="stNote"></p><div id="drResults" style="max-height:55vh;overflow:auto"></div><div class="actions"><button class="btn" id="drClose">Close</button><button class="btn amber" id="drPrint" disabled>Print</button></div>');
+  const today=new Date(),todayText=String(today.getDate()).padStart(2,"0")+"/"+String(today.getMonth()+1).padStart(2,"0")+"/"+today.getFullYear();
+  openModal('<h2>Departure report</h2><div style="display:flex;gap:16px;flex-wrap:wrap;margin:16px 0"><label>Departure from <input id="drFrom" class="depDateInput" type="text" placeholder="DD/MM/YYYY" aria-label="Departure from, DD/MM/YYYY" maxlength="10"></label><label>through <input id="drTo" class="depDateInput" type="text" placeholder="DD/MM/YYYY" aria-label="Departure through, DD/MM/YYYY" maxlength="10"></label><button class="btn" id="drBuild">Create report</button></div><p id="drNote" class="stNote"></p><div id="drResults" style="max-height:55vh;overflow:auto"></div><div class="actions"><button class="btn" id="drClose">Close</button><button class="btn amber" id="drPrint" disabled>Print</button></div>');
   $("#modal").classList.add("wide");
-  $("#drFrom").value=iso(today);$("#drTo").value=iso(today);
+  $("#drFrom").value=todayText;$("#drTo").value=todayText;
   let job=null;
   const invalidate=()=>{job=null;$("#drPrint").disabled=true;$("#drResults").innerHTML="";$("#drNote").textContent="Choose departure dates, then create the report.";};
-  $("#drFrom").onchange=invalidate;$("#drTo").onchange=invalidate;
+  $("#drFrom").oninput=invalidate;$("#drTo").oninput=invalidate;
   $("#drBuild").onclick=()=>{
-    const from=depReportKey($("#drFrom").value),to=depReportKey($("#drTo").value);
-    if(!from||!to||from>to){invalidate();$("#drNote").textContent="Choose valid departure dates; From must be on or before Through.";return;}
+    const readDate=id=>/^\d{1,2}\/\d{1,2}\/\d{4}$/.test($(id).value.trim())?depReportKey($(id).value):0;
+    const from=readDate("#drFrom"),to=readDate("#drTo");
+    if(!from||!to||from>to){invalidate();$("#drNote").textContent="Use valid DD/MM/YYYY dates; From must be on or before Through.";return;}
+    $("#drFrom").value=depReportDate(from);$("#drTo").value=depReportDate(to);
     const rows=depReportRows(loadMoves(),loadStatus(),depReportHistory(),from,to);
     job={kind:"departureDates",from,to,rows};
     $("#drResults").innerHTML=depReportTable(rows);
