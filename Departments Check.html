@@ -8313,7 +8313,7 @@ async function autoReadInhouse(){
   }
   if(stChanged && RATE && RATE.live){
     const held = statusLoad();
-    if(held.IH && held.IH.key === RATE.dateKey){
+    if(held.IH && held.IH.key === RATE.dateKey && (!held.IH.cut || got.some(g => g.tag === "DP"))){
       setLiveRate(consolidatedInhouseRate(held));
       if(TAX_SCREEN === "tax") render();
     }
@@ -8388,7 +8388,13 @@ function statusIngest(tag, p, at){
     if(!st.IH || at > st.IH.at){
       const keep=st.IH&&st.IH.key===key?st.IH.rows.map(r=>Object.assign({readAt:st.IH.at},r)):[];
       const merged=new Map(keep.map(r=>[stKey(r.name,r.room),r]));
-      for(const r of rows)if(r.name&&r.room)merged.set(stKey(r.name,r.room),r);
+      for(const r of rows){
+        if(!r.name || !r.room) continue;
+        const id = stKey(r.name,r.room);
+        // An interrupted read cannot replace a previously complete reservation row.
+        if(cut && (merged.has(id) || !dkey(r.arr) || !dkey(r.dep) || !r.status)) continue;
+        merged.set(id,r);
+      }
       // Same-day filtered captures add/update; omitted rows remain captured.
       st.IHL=cap;st.IH=Object.assign({},cap,{rows:[...merged.values()]});changed=true;
     }

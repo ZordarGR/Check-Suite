@@ -467,6 +467,10 @@ console.log("--- explicit departures retire only the matching retained in-house 
  ["BETA TEST","102","1/0/0/0/0","02/09/26","08/09/26","CI"]]),T(8));
  ih(IHTXT("Guests inhouse: 04/09/26",[["BETA TEST","102","1/0/0/0/0","02/09/26","08/09/26","CI"]]),T(9));
  ck("a smaller capture retains both active stays", TAX.active().length===2);
+ ih(IHTXT("Guests inhouse: 04/09/26",[["ALPHA TEST","101","","","",""]],true),T(9)+1800000);
+ const heldAlpha=TAX.load().IH.rows.find(r=>r.room==="101");
+ ck("an interrupted row cannot erase the retained stay dates or status",heldAlpha.arr==="01/09/26"&&heldAlpha.dep==="04/09/26"&&heldAlpha.status==="CI");
+ ck("the interrupted capture still reports that it was cut short",TAX.load().IHL.cut);
  rpt("DP",RPT("DP","Departure Report for 04/09/26",[["ALPHA TEST","101","2/0/0/0/0","01/09/26","CI"]]),T(10));
  ck("departure CI does not retire a retained guest",TAX.active().length===2);
  rpt("DP",RPT("DP","Departure Report for 04/09/26",[["ALPHA TEST","101","2/0/0/0/0","01/09/26","CO"]]),T(11));

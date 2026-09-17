@@ -44,6 +44,11 @@ const {chromium}=require("playwright-core"), path=require("path"), assert=requir
  await p.waitForFunction(()=>JSON.parse(localStorage.getItem("reccheck_status_v1")).IHL?.rows.length===1,{},{timeout:15000});
  assert.equal(await p.evaluate(()=>window.__tx.rate().count),2);
  console.log("PASS real capture loop keeps both rooms after a smaller same-day list");
+ const cut="TITLE\tGuests inhouse: 04/09/26\nIH\tALPHA TEST\t101\t\t\t\t\nDONE\t1\t250\t1\t1\tunicode\tcut-short";
+ await p.evaluate(txt=>{window.__files.IH=txt;window.__times.IH=2500;},cut);
+ await p.waitForFunction(()=>JSON.parse(localStorage.getItem("reccheck_status_v1")).IHL?.cut,{},{timeout:15000});
+ assert.equal(await p.evaluate(()=>window.__tx.rate().rooms["101"].arr),"01/09/26");
+ console.log("PASS interrupted read leaves the accepted census and original dates intact");
  const dp=tsv("DP","Departure Report for 04/09/26",[["ALPHA TEST","101","2/0/0/0/0","01/09/26","CO"]]);
  await p.evaluate(txt=>{window.__files.DP=txt;window.__times.DP=3000;},dp);
  await p.waitForFunction(()=>window.__tx.rate()?.count===1,{},{timeout:15000});
