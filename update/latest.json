@@ -1,11 +1,11 @@
 {
-  "version": "1.17.85",
+  "version": "1.17.86",
   "type": "html",
   "engine": "1.17.81",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.81/Pro-Check-Setup.exe",
   "setupSha256": "be25212bb5023ae772f2c00fa8e193948e98338da42536bfcee6ea0595677baa",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/be90ebe3c2e2c786cbb53584451a25ce11220341/Departments%20Check.html",
-  "sha256": "43c739bec6fb0604bd231fffbb37fb88159aed558c57d96903bb2eea24fe5a24",
-  "notes": "Completed Department accordion headers now have a green background and black text."
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/f803a28598f43f157998bb86d503d8bbbac4c2d7/Departments%20Check.html",
+  "sha256": "197ff99fe52b06a7fdfac10f902deb5c7a87ec12cbe63625ad85f789f743b5d8",
+  "notes": "Restore normal departure/move dots for matching older receipt history without IDs; retain guest, stay-date and explicit cancellation/conflict safeguards."
 }
