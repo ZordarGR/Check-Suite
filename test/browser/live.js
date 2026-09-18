@@ -528,7 +528,7 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
   await p.close();
 
   /* 19. WHICH CLOCK STAMPS A REPORT (7a, decided 1.17.41): the census's date when a census
-         is held, the tool's night before one is. The fixtures are dated 04/09/26, which is
+         is held, the tool's night at capture time before one is. The fixtures are dated 04/09/26, which is
          not tonight in this container, so the two are told apart. */
   p = await b.newPage();
   await p.addInitScript(bridgeFor(null, false));
@@ -551,12 +551,12 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
   await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
   await p.evaluate(() => window.__t.showScreen("tax"));
   await p.waitForTimeout(400);
-  await p.evaluate((d) => { window.__files.DP = d; window.__at.DP = 23; },
+  await p.evaluate((d) => { window.__files.DP = d; window.__at.DP = Date.now(); },
     RPT("DP", "Departure Report for 04/09/26", [["BURWIECK/GRUBE TAREK/KATHARINA ", "125", "2/0/0/0/0", "28/08/26", "CO"]]));
   await p.waitForTimeout(6500);
   const seen19b = await p.evaluate(() => { const l = JSON.parse(localStorage.getItem("reccheck_moves_v2") || "{}"); return l["125"] && l["125"]["20260828"] && l["125"]["20260828"].seen; });
-  const bnk19 = await p.evaluate(() => window.__tx.bnk());
-  ck("with no census held, a report is stamped with the tool's night", seen19b === bnk19);
+  const bnk19 = await p.evaluate(() => window.__tx.bnk(window.__at.DP));
+  ck("with no census held, a report is stamped with the tool's night at capture time", seen19b === bnk19);
   await p.close();
 
   /* 20. THE CARDS ON SCREEN AFTER A CAPTURE (queued 05/09, built 1.17.43 under his go):
