@@ -1,11 +1,11 @@
 {
-  "version": "1.17.80",
-  "type": "html",
-  "engine": "1.17.76",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.76/Pro-Check-Setup.exe",
-  "setupSha256": "e329ab9589afda28cfc14423b06e2b78fe895243edb9ad6464c3ed76e3a4f26e",
+  "version": "1.17.81",
+  "type": "full",
+  "engine": "1.17.81",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.81/Pro-Check-Setup.exe",
+  "setupSha256": "5b1abe32f934ff90f8b5217f76bc8757abd0b77fda6e7466736d2eef6efd937f",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/6efbdd7d8519a7d38839fc027a2023f2dc561aed/Departments%20Check.html",
-  "sha256": "929e67801356af3577dc4347ee55e4e325c160fa8344f7d74cb63c2e08ee36c8",
-  "notes": "Match all printed guest-name characters; follow confirmed departure room moves; retain same-day in-house rows until explicit departure CO."
+  "sha256": "bcc954913dd5373122d578826631cc758e3f67ad04514a9f0362c2b4e7bf11a9",
+  "notes": "Preserve room and stay evidence across filtered lists, moves and incomplete captures. Keep changed receipts and conflicting tax snapshots under review. Harden backup reports, imports, saved data, configuration and update recovery."
 }
