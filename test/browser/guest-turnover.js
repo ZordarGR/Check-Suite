@@ -32,24 +32,46 @@ const {chromium}=require("playwright-core"), path=require("path"), assert=requir
  const panel=await p.locator("#moves").textContent();assert(panel.includes("120"));assert(!/\b90\b/.test(panel));
  assert.equal(await p.locator("#moves .rec").count(),0);
  console.log("PASS real card preserves receipt name and has no false LEFT TODAY; obsolete departure room and dot absent");
- const dotCase=async({guest="DAVID/ELENA MORGAN/BR",room="120",rival=false,cancelled=false,historical=false}={})=>{
-  await p.evaluate(({guest,room,rival,cancelled,historical})=>{
+ const dotCase=async({guest="DAVID/ELENA MORGAN/BR",room="120",rival=false,cancelled=false,historical=false,conflict=false,historyDate="20260902"}={})=>{
+  await p.evaluate(({guest,room,rival,cancelled,historical,conflict,historyDate})=>{
    const st=JSON.parse(localStorage.getItem("reccheck_status_v1"));
    st.AR=rival?{"20260904":{rows:{rival:{name:"MORGAN/BRIGGSON DAVID/ELENA",room:"120",dep:"09/09/26"}}}}:{};
    localStorage.setItem("reccheck_status_v1",JSON.stringify(st));
-   localStorage.setItem("reccheck_receipts_v1",JSON.stringify(historical?{"20260902":[[room,guest,{id:"historical|"+room,live:true}]]}:{}));
+   const pair=historical==="legacy"?[room,guest]:[room,guest,historical==="migrated"?
+    {id:"legacy:"+JSON.stringify([room,guest]),legacy:true,live:true,uncertain:true}:
+    {id:"historical|"+room,live:true,uncertain:historical==="uncertain"}];
+   const rows=[pair];
+   if(conflict)rows.push([room,guest,{id:"identified|"+room,live:conflict!=="cancelled",uncertain:conflict==="uncertain",
+    ...(conflict==="version"?{versions:[[room,guest,false]]}:{} )}]);
+   localStorage.setItem("reccheck_receipts_v1",JSON.stringify(historical?{[historyDate]:rows}:{}));
    const r={sn:"80002",roomMain:room,room,guest,dept:"REST",total:10,cancelled,voided:false,rates:{"24%":10,"13%":0,"6%":0,base:10},time:"21:14"};
    const receipts=historical?[]:[r],depts={};
    for(const d of ["REST","RESTAURANT","CAFETERIA","TAVERNAKI","KAFENIO","BAR"])depts[d]={list:d==="REST"?receipts:[],other:[]};
    window.__t.setModel({reportDate:"4/9/2026",receipts,depts});window.__t.setState({receipts:{},extras:[]});window.__rcMovesChanged();
    const input=document.getElementById("snInput");input.value="80002";input.dispatchEvent(new Event("input"));
-  },{guest,room,rival,cancelled,historical});
+  },{guest,room,rival,cancelled,historical,conflict,historyDate});
   return p.locator("#moves .mv-dep.rec").count();
  };
  assert.equal(await dotCase(),1,"same-room reordered complete text dots the departure");
  assert.equal(await p.locator("#matches .match.left").count(),1,"matching receipt is LEFT TODAY");
  assert.equal(await dotCase({room:"90"}),1,"confirmed old room receipt dots the move destination");
  assert.equal(await dotCase({historical:true}),1,"saved earlier extras use the same matcher");
+ for(const historical of ["legacy","migrated"]){
+  assert.equal(await dotCase({historical}),1,"old room/name history gets a normal dot");
+  const history=await p.evaluate(()=>JSON.parse(localStorage.getItem("reccheck_receipts_v1"))["20260902"]);
+  assert.equal(history[0].length,historical==="legacy"?2:3,"drawing does not rewrite old evidence");
+  if(historical==="migrated")assert.equal(history[0][2].uncertain,true);
+  assert.equal(await dotCase({historical,room:"90"}),1,"old history follows the confirmed room move");
+  assert.equal(await dotCase({historical,rival:true}),0,"old history cannot override an ambiguous arrival");
+  assert.equal(await dotCase({historical,guest:"ANOTHER GUEST"}),0,"old room number alone cannot match");
+  assert.equal(await dotCase({historical,conflict:"cancelled"}),0,"identified cancellation blocks the anonymous old observation");
+  assert.equal(await dotCase({historical,conflict:"uncertain"}),0,"identified source conflict blocks the anonymous old observation");
+  assert.equal(await dotCase({historical,conflict:"version"}),0,"a retained cancelled version cannot become a certain dot");
+  assert.equal(await dotCase({historical,historyDate:"20260831"}),0,"history before arrival cannot dot this stay");
+ }
+ assert.equal(await dotCase({historical:"uncertain"}),0,"non-legacy uncertain evidence stays blocked");
+ assert.equal(await dotCase({historical:"legacy",historyDate:"20260904"}),1,"same-day saved legacy evidence remains visible");
+ console.log("PASS legacy history creates normal dots without rewriting evidence or overriding guest/date/cancellation/conflict safeguards");
  assert.equal(await dotCase({room:"77"}),0,"unrelated room cannot dot departure");
  assert.equal(await dotCase({guest:"DAVID/OTHER MORGAN/BR"}),0,"shared words do not match another guest");
  assert.equal(await dotCase({rival:true}),0,"competing arrival blocks ambiguous receipt");

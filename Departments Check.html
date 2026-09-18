@@ -1966,7 +1966,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.85";
+const APP_VERSION = "1.17.86";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -6457,13 +6457,31 @@ function renderMovesFor(box, night){
   }
   /* the earlier nights of each stay, from what was loaded here on those nights */
   const past = loadNightReceipts();
+  // Older versions retained room/name observations without receipt IDs. The user
+  // explicitly wants the normal presence dot for that history. Do not clear its
+  // uncertainty or let it override identified cancellation/conflict evidence.
+  const dotEvidence = (p, rows) => {
+    const meta=p[2];
+    if(!meta || meta.live===false || (meta.versions||[]).some(v=>v[2]===false)) return false;
+    if(!meta.uncertain) return true;
+    if(!meta.legacy || meta.id!=="legacy:"+JSON.stringify(p.slice(0,2)) || (meta.versions||[]).length) return false;
+    const same = (room,name) => String(room)===String(p[0]) &&
+      (nameTextIn(p[1],name,true)||nameTextIn(name,p[1],true));
+    return !rows.some(q => {
+      const m=q[2];
+      if(!m || m.legacy) return false;
+      return (same(q[0],q[1]) && (m.live===false || m.uncertain)) ||
+        (m.versions||[]).some(v=>v[2]===false && same(v[0],v[1]));
+    });
+  };
   for(const k of Object.keys(past)){
     const K = +k;
-    if(!night || K >= night) continue;
+    if(!night || K > night) continue;
+    const evidence=past[k].filter(p=>dotEvidence(p,past[k]));
     for(const room of rooms){
       const m = mv[room];
       if(!m.since || K < m.since || found(room)) continue;
-      for(const pr of past[k])if(pr[2]&&pr[2].live!==false&&!pr[2].uncertain)hit(m, room, String(pr[0] || ""), pr[1] || "");
+      for(const pr of evidence)hit(m, room, String(pr[0] || ""), pr[1] || "");
     }
   }
   /* ARRIVALS, DEPARTURES, MOVES — his order and his words. A move pill reads "old room →
