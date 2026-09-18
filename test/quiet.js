@@ -36,7 +36,13 @@ Module._load = function(req, parent, isMain){
   if(req === "electron") return electron;
   return realLoad.apply(this, arguments);
 };
-require(path.resolve("app/main.js"));
+// Startup is deliberately suspended above. Supply a successful persistence
+// boundary so this fixture exercises overlay visibility after a saved toggle.
+const mainPath = path.resolve("app/main.js"), loaded = new Module(mainPath, module);
+loaded.filename = mainPath;
+loaded.paths = Module._nodeModulePaths(path.dirname(mainPath));
+loaded._compile(require("fs").readFileSync(mainPath,"utf8") +
+  '\nhub = {readConfig: () => ({}), writeConfig: () => true};', mainPath);
 Module._load = realLoad;
 
 const set = handlers["overlay-data"];

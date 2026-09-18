@@ -180,10 +180,14 @@ async function press(){ spawned.length = 0; const h = await handlers["sc-helper"
 
   /* 4. the binds file cannot be written: the specs must not be shown as published */
   const realWrite = fs.writeFileSync;
-  fs.writeFileSync = function(p){ if(String(p) === BINDS){ const e = new Error("EACCES"); e.code = "EACCES"; throw e; }
+  const previousBinds = fs.readFileSync(BINDS,"utf8");
+  let failedWrite = false;
+  fs.writeFileSync = function(p){ if(String(p) === BINDS || String(p) === BINDS + ".tmp"){ failedWrite = true; const e = new Error("EACCES"); e.code = "EACCES"; throw e; }
                                   return realWrite.apply(this, arguments); };
   await rebind();
   fs.writeFileSync = realWrite;
+  ck("the injected failure reached the binding publication write", failedWrite);
+  ck("a failed publication preserves the last complete bindings file", fs.readFileSync(BINDS,"utf8") === previousBinds);
   h = await press();
   ck("no specs are claimed for a file that was not written", !(h.specs && h.specs.length));
   d = page.helperDetail(h);

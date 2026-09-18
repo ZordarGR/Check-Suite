@@ -68,7 +68,8 @@ async function check(id,label,test){try{await test();results.push({id,label,pass
   });
   await check('D05','Detected binding is reported only when its save succeeds',async()=>{
     for(const fail of [false,true]){
-      const r=rig(),before=r.raw();r.faults.config=fail;const pending=r.call('sc-detect','tau');await Promise.resolve();
+      const r=rig(),before=r.raw();r.faults.config=fail;const pending=r.call('sc-detect','tau');
+      await new Promise(setImmediate); // allow the VM's awaited helper-stop promise to settle
       assert.equal(r.effects.children.length,1);r.effects.children[0].stdout.emit('data',Buffer.from('KEY:2-70\n'));
       assert.equal(await pending,fail?null:'k2-70');if(fail)assert.equal(r.raw(),before);else assert.equal(r.config().profiles[0].binds.tau,'k2-70');
     }

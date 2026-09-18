@@ -423,7 +423,7 @@ function tauStart(){
   helperVerb("status").then(st => {
     TAUINFO = {state: st.running ? "running" : "stopped", exe: exe, boot: !!st.on,
                ver: st.ver, res: st.res, binds: wrote ? bindsPath() : "COULD NOT WRITE", err: st.err,
-               specs: LAST_SPECS.slice()};
+               specs: wrote ? LAST_SPECS.slice() : []};
     if(st.available && !st.running){
       try{
         const child = spawn(exe, ["run"], {detached: true, stdio: "ignore", windowsHide: true});
