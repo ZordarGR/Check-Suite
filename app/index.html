@@ -494,16 +494,15 @@ body.hasMoves main{max-width:1330px}
 .acc>.head .name{font-weight:600;letter-spacing:.06em;font-size:15px}
 .acc>.head .cnt{font-family:var(--mono);font-size:14px;color:var(--dim)}
 .acc>.head .cnt b{font-size:16.5px;color:var(--txt)}
-.acc.done>.head .bar{background:var(--green)}
-.acc.done>.head .tot{color:var(--green)}
-.acc.done>.head .cnt b{color:var(--green)}
 .acc>.head .prog{font-family:var(--mono);font-size:13.5px;margin-left:auto;color:var(--dim)}
 .acc>.head .prog b{color:var(--dim);font-weight:700;font-size:15px}
 .acc.part>.head .prog b{color:var(--amber)}
-.acc.done>.head .prog b{color:var(--green)}
 .acc>.head .tot{font-family:var(--mono);font-size:16px;font-weight:700;min-width:110px;text-align:right}
 .acc>.head .chev{color:var(--faint);transition:transform .15s;font-size:12px}
 .acc.open>.head .chev{transform:rotate(90deg)}
+.acc.done>.head{background:var(--green);color:#000}
+.acc.done>.head :is(.cnt,.cnt b,.prog,.prog b,.tot,.chev,.tick,.openPill){color:#000}
+.acc.done>.head .bar{background:#000}
 .acc>.body{display:none;border-top:1px solid var(--line)}
 .roomSearchWrap{display:flex;align-items:center;gap:10px;padding:9px 16px 3px}
 .roomSearch{background:var(--bg2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:6px 10px;font-family:var(--mono);font-size:13.5px;width:110px}
@@ -1967,7 +1966,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.84";
+const APP_VERSION = "1.17.85";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
