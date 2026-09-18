@@ -41,7 +41,8 @@ const {chromium}=require("playwright-core"), path=require("path"), assert=requir
     {id:"legacy:"+JSON.stringify([room,guest]),legacy:true,live:true,uncertain:true}:
     {id:"historical|"+room,live:true,uncertain:historical==="uncertain"}];
    const rows=[pair];
-   if(conflict)rows.push([room,guest,{id:"identified|"+room,live:conflict!=="cancelled",uncertain:conflict==="uncertain",
+   if(conflict)rows.push([room,guest,{id:"identified|"+room,live:!["cancelled","legacy-cancelled"].includes(conflict),uncertain:conflict==="uncertain",
+    ...(conflict==="legacy-cancelled"?{legacy:true}:{}),
     ...(conflict==="version"?{versions:[[room,guest,false]]}:{} )}]);
    localStorage.setItem("reccheck_receipts_v1",JSON.stringify(historical?{[historyDate]:rows}:{}));
    const r={sn:"80002",roomMain:room,room,guest,dept:"REST",total:10,cancelled,voided:false,rates:{"24%":10,"13%":0,"6%":0,base:10},time:"21:14"};
@@ -66,6 +67,7 @@ const {chromium}=require("playwright-core"), path=require("path"), assert=requir
   assert.equal(await dotCase({historical,rival:true}),0,"old history cannot override an ambiguous arrival");
   assert.equal(await dotCase({historical,guest:"ANOTHER GUEST"}),0,"old room number alone cannot match");
   assert.equal(await dotCase({historical,conflict:"cancelled"}),0,"identified cancellation blocks the anonymous old observation");
+  assert.equal(await dotCase({historical,conflict:"legacy-cancelled"}),0,"explicit cancellation remains blocking even in an old-format record");
   assert.equal(await dotCase({historical,conflict:"uncertain"}),0,"identified source conflict blocks the anonymous old observation");
   assert.equal(await dotCase({historical,conflict:"version"}),0,"a retained cancelled version cannot become a certain dot");
   assert.equal(await dotCase({historical,historyDate:"20260831"}),0,"history before arrival cannot dot this stay");

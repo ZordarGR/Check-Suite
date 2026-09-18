@@ -6469,7 +6469,7 @@ function renderMovesFor(box, night){
       (nameTextIn(p[1],name,true)||nameTextIn(name,p[1],true));
     return !rows.some(q => {
       const m=q[2];
-      if(!m || m.legacy) return false;
+      if(!m || (m.legacy && m.live!==false && !(m.versions||[]).length)) return false;
       return (same(q[0],q[1]) && (m.live===false || m.uncertain)) ||
         (m.versions||[]).some(v=>v[2]===false && same(v[0],v[1]));
     });
