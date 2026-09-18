@@ -99,7 +99,7 @@ ck("and the room is stamped as seen tonight",   out.rooms["426"].seen === "4/9/2
 {
   const rooms={"301":{guest:"SYNTHETIC GUEST",liveKey:20260918,seen:"16/9/2026",nick:"source nickname"},
                "302":{guest:"OLD OCCUPANT",seen:"16/9/2026"}};
-  const status={MV:{"20260917":{rows:{move:{from:"301",to:"302",name:"SYNTHETIC GUEST",x:"X"}}}};
+  const status={MV:{"20260917":{rows:{move:{from:"301",to:"302",name:"SYNTHETIC GUEST",x:"X"}}}}};
   runSync(rooms,[{roomMain:"302",guest:"SYNTHETIC GUEST"}],"17/9/2026",[],status);
   ck("an old confirmed move cannot remove a nickname from a newer captured source",rooms["301"].nick==="source nickname"&&!rooms["302"].nick);
 }
@@ -107,7 +107,7 @@ ck("and the room is stamped as seen tonight",   out.rooms["426"].seen === "4/9/2
   const rooms={"303":{guest:"SYNTHETIC GUEST",seen:"17/9/2026",nick:"source nickname"},
                "304":{guest:"CURRENT GUEST",liveKey:20260918,seen:"16/9/2026"}};
   const before=JSON.stringify(rooms);
-  const status={MV:{"20260917":{rows:{move:{from:"303",to:"304",name:"SYNTHETIC GUEST",x:"X"}}}};
+  const status={MV:{"20260917":{rows:{move:{from:"303",to:"304",name:"SYNTHETIC GUEST",x:"X"}}}}};
   runSync(rooms,[{roomMain:"304",guest:"SYNTHETIC GUEST"}],"17/9/2026",[],status);
   ck("an old confirmed move cannot attach a previous guest nickname to a newer destination",JSON.stringify(rooms)===before);
 }
