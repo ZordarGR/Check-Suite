@@ -1373,13 +1373,14 @@ function parseDepList(xmls){
                   the name's place, by page, glyph run and character range; where each row's dash
                   goes; and any token in the guest band on a line this parser could not place —
                   cut like a name, so nothing it could not vouch for reaches paper. */
-               withheld: [], dashes: [], unplaced: []};
+               withheld: [], dashes: [], unplaced: [], pageErrors: [], incomplete: false};
   let group = null, lastRow = null, printNext = false, pg = -1;
+  let pageColumns = null;
   const hold = (tk, list) => list.push({pg, el: tk.el, i0: tk.i0, i1: tk.i1, x: tk.x, y: tk.y, t: tk.t.trim()});
   /* the room column is the leftmost and right-aligned, so a wider room starts further
      left of its heading: 9015 at 4 left, 427-2 at 7.68 (his 08/09 file). Anything left
      of the first heading is the first column's. */
-  const bandOf = x => { let k = out.columns[0] || null; for(const c of out.columns) if(c.x <= x + 6) k = c; return k; };
+  const bandOf = x => { let k = pageColumns[0] || null; for(const c of pageColumns) if(c.x <= x + 6) k = c; return k; };
   for(const xml of xmls){
     pg++;
     const toks = pageTokens(xml).sort((a, b) => a.y - b.y || a.x - b.x);
@@ -1398,6 +1399,7 @@ function parseDepList(xmls){
        Until that line is seen on a page, nothing on it is a row, a note or a fragment
        under the previous page's last room. */
     let inBody = false;
+    pageColumns = null;
     for(const L of lines){
       L.toks.sort((a, b) => a.x - b.x);
       const words = L.toks.map(t => t.t.trim());
@@ -1430,12 +1432,14 @@ function parseDepList(xmls){
       if(!inBody){
         if(words.indexOf("Δωμάτιο") >= 0 && words.indexOf("Πελάτης") >= 0){
           inBody = true;
-          if(!out.columns){
-            const cols = [];
-            for(const [key, word] of DEPLIST_HEAD){ const tk = L.toks.find(t => t.t.trim().indexOf(word) === 0); if(tk) cols.push({key, x: tk.x, head: tk.t.trim()}); }
-            cols.sort((a, b) => a.x - b.x);
-            out.columns = cols;
-          }
+          const cols = [];
+          for(const [key, word] of DEPLIST_HEAD){ const tk = L.toks.find(t => t.t.trim().indexOf(word) === 0); if(tk) cols.push({key, x: tk.x, head: tk.t.trim()}); }
+          cols.sort((a, b) => a.x - b.x);
+          pageColumns = cols;
+          if(!out.columns)out.columns=cols;
+          if(!["room","guest","arr"].every(k=>cols.some(c=>c.key===k))||
+             cols.map(c=>c.key).join("|")!==out.columns.map(c=>c.key).join("|"))
+            out.pageErrors.push("Page "+(pg+1)+": incomplete or different columns");
         }
         continue;
       }
@@ -1498,8 +1502,8 @@ function parseDepList(xmls){
          cells use. A token in it on a line that is not a row is a fragment in the name's
          place (his file prints "TA" there, beside a note) and goes with the name; a token
          right of the band on such a line is not (the wrapped "d." of the Child heading). */
-      const gi = out.columns.findIndex(c => c.key === "guest");
-      const gx = gi >= 0 ? out.columns[gi].x : Infinity, nx = gi >= 0 && out.columns[gi + 1] ? out.columns[gi + 1].x : Infinity;
+      const gi = pageColumns.findIndex(c => c.key === "guest");
+      const gx = gi >= 0 ? pageColumns[gi].x : Infinity, nx = gi >= 0 && pageColumns[gi + 1] ? pageColumns[gi + 1].x : Infinity;
       const band = L.toks.filter(t => t.x >= gx - 6 && t.x < nx - 6);
       if(!lastRow){ for(const tk of band) hold(tk, out.unplaced); continue; }
       /* a note under the room: a date then free text, both LEFT of the guest column.
@@ -1511,7 +1515,9 @@ function parseDepList(xmls){
       for(const tk of band) hold(tk, out.withheld);
       if(dateTok) lastRow.notes.push({date: dateTok, text: left.map(t => t.t.trim()).filter(w => w !== dateTok).join(" ")});
     }
+    if(!inBody)out.pageErrors.push("Page "+(pg+1)+": departure headings could not be read");
   }
+  out.incomplete=out.pageErrors.length>0;
   return out;
 }
 function isDepList(p){ return !!(p && p.columns && (p.title || /^departroom/.test(p.id || ""))); }
@@ -1619,6 +1625,11 @@ function xpsPageSvg(xml, ctx){
        takes a self-closing <Glyphs…/> and, by the same \b, a property element such as
        <Glyphs.Fill/> — so a withheld token can never name the wrong run */
     if(/^<Glyphs\b[^>]*?\/>$/.test(tag)) el++;
+    // These properties change visible positions/content but are not implemented by
+    // this renderer or its column parser. Refuse the exact print instead of silently
+    // dropping the property and presenting a different document as the source page.
+    if(attr(tag,"RenderTransform")!==null||attr(tag,"OpacityMask")!==null||
+       attr(tag,"Opacity")!==null&&Number(attr(tag,"Opacity"))!==1){unknown.push(name+" with unsupported drawing properties");continue;}
     if(name === "FixedPage") continue;
     if(name.indexOf(".") >= 0){ unknown.push(name); continue; }
     if(name === "Path"){
@@ -1639,6 +1650,12 @@ function xpsPageSvg(xml, ctx){
       /* only a self-closing run counts: pageTokens numbers exactly those, and a run with
          child elements would shift every ordinal after it — the wrong characters cut */
       if(m[3] !== "/"){ unknown.push("Glyphs with children"); continue; }
+      const indices=attr(tag,"Indices")||"";
+      if(attr(tag,"IsSideways")==="true"||attr(tag,"BidiLevel")!==null&&Number(attr(tag,"BidiLevel"))!==0||
+         [...indices.matchAll(/\((\d+):(\d+)\)/g)].some(m=>+m[1]!==1||+m[2]!==1)||
+         indices.split(";").some(s=>s.replace(/^\(\d+:\d+\)/,"").split(",").slice(2).some(v=>v!==""&&Number(v)!==0))){
+        unknown.push("Glyphs with unsupported positioning");continue;
+      }
       const us = attr(tag, "UnicodeString"), ox = attr(tag, "OriginX"), oy = attr(tag, "OriginY");
       if(us === null || ox === null || oy === null){ unknown.push("Glyphs without text"); continue; }
       const text = us; if(!text){ if(attr(tag, "Indices")) unknown.push("Glyphs without text"); continue; }
@@ -1809,7 +1826,7 @@ function parseReport(xmls){
           user: userTok ? userTok.t.trim() : "",
           room: roomTok ? roomTok.t.trim() : "",
           guest, qty: qty === null ? 1 : qty,
-          amount: amt === null ? 0 : amt,
+          amount: amt,
           sn: recM ? recM[1] : null,
           text: textStr.trim()
         });
@@ -1836,6 +1853,8 @@ function isCheckcharge(parsed){
 /* ---- receipt model ---- */
 function buildModel(parsed){
   const {sections, reportDate} = parsed;
+  for(const S of Object.values(sections)) for(const r of S.rows)
+    if(!Number.isFinite(r.amount)) throw new Error("A posting amount could not be read. This report was not loaded; reopen a complete report.");
   const validation = [];         // {section, parsed, reported, ok}
   const depts = {};              // base -> {receipts: Map(sn -> receipt), other: [], sections: [names]}
   for(const b of TARGET_DEPTS) depts[b] = {receipts: new Map(), other: [], sections: []};
@@ -1948,9 +1967,45 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.80";
+const APP_VERSION = "1.17.81";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
+
+/* Storage failures must remain visible, including failures in the independent tax
+   scope. No saved fact is described as durable merely because its UI changed. */
+window.__rcStorageFault = function(where, error){
+  window.__rcStorageFaultCount = (window.__rcStorageFaultCount || 0) + 1;
+  try{ console.error("[storage]", where, error); }catch(_){}
+  try{
+    let box = document.getElementById("storageFailure");
+    if(!box){
+      box = document.createElement("div"); box.id = "storageFailure";
+      box.setAttribute("role", "alert");
+      box.style.cssText = "position:fixed;left:8px;right:8px;bottom:8px;z-index:100000;background:#651d27;color:white;padding:12px;border:2px solid #ff8090;border-radius:8px;font:14px sans-serif";
+      document.body.appendChild(box);
+    }
+    box.textContent = "Saving failed (" + where + "). Some changes may only exist in this window. Keep it open until saving is restored.";
+  }catch(_){}
+};
+function importJournalKey(){ return "reccheck_import_pending_v1"; }
+function recoverImport(){
+  try{
+    const raw = localStorage.getItem(importJournalKey());
+    if(!raw) return true;
+    const old = JSON.parse(raw);
+    if(!old || typeof old !== "object" || Array.isArray(old)) throw new Error("Invalid import recovery journal");
+    for(const k of Object.keys(old)){
+      if(!/^(reccheck|ta_check_|ta_lang$)/.test(k) || k === importJournalKey()) continue;
+      if(localStorage.getItem(k) === old[k]) continue;
+      if(old[k] === null) localStorage.removeItem(k);
+      else if(typeof old[k] === "string") localStorage.setItem(k, old[k]);
+      else throw new Error("Invalid import recovery value");
+    }
+    localStorage.removeItem(importJournalKey());
+    return true;
+  }catch(e){ window.__rcStorageFault("import recovery", e); return false; }
+}
+if(!recoverImport()){ window.__rcImportBlocked = true; return; }
 
 /* ================= i18n ================= */
 let LANG = (function(){ try{ return localStorage.getItem("reccheck_lang") || "en"; }catch(e){ return "en"; } })();
@@ -2479,6 +2534,7 @@ function t(key, vars){
   return str;
 }
 function setLang(l){
+  if(window.__rcImportBlocked) return;
   LANG = l;
   try{ localStorage.setItem("reccheck_lang", l); }catch(e){}
   applyLang();
@@ -2578,11 +2634,17 @@ function loadWatch(){
   }catch(e){ WATCH = []; }
 }
 function saveWatch(){
-  try{ localStorage.setItem(WATCH_KEY, JSON.stringify(WATCH)); }catch(e){}
+  if(typeof window!=="undefined" && window.__rcImportBlocked) return false;
+  try{
+    const raw=localStorage.getItem(WATCH_KEY);
+    if(raw!==null && !Array.isArray(JSON.parse(raw))) throw new Error("Invalid saved watchlist; original kept");
+    localStorage.setItem(WATCH_KEY, JSON.stringify(WATCH)); return true;
+  }catch(e){ window.__rcStorageFault("watchlist", e); return false; }
 }
 function watchFor(room){ return WATCH.filter(w => String(w.room) === String(room)); }
 
 let ROOMS = {};           // persistent room database: room -> {guest, nick, seen}
+let ROOMS_DISK_READY = false, ROOMS_DISK_PENDING = null;
 const ROOMS_KEY = "reccheck_rooms";
 function loadRooms(){
   try{
@@ -2591,34 +2653,70 @@ function loadRooms(){
   }catch(e){ ROOMS = {}; }
 }
 function saveRooms(){
-  try{ localStorage.setItem(ROOMS_KEY, JSON.stringify(ROOMS)); }catch(e){}
+  if(typeof window!=="undefined" && window.__rcImportBlocked) return false;
+  let stored = true;
+  try{
+    const raw=localStorage.getItem(ROOMS_KEY), prior=raw===null?{}:JSON.parse(raw);
+    if(!prior || typeof prior!=="object" || Array.isArray(prior)) throw new Error("Invalid saved rooms; original kept");
+  }catch(e){ window.__rcStorageFault("rooms recovery",e); return false; }
+  try{ localStorage.setItem(ROOMS_KEY, JSON.stringify(ROOMS)); }catch(e){ stored = false; window.__rcStorageFault("rooms", e); }
   /* And a mirror in the app's own folder, obfuscated — his call, 04/09. localStorage
      stays the working store because the renderer boots off it synchronously; this is a
      copy beside it, so a browser that cleared its site data has not taken the room
      database with it. It cannot cost anything: it is fire-and-forget and nothing waits
      on the answer. */
-  try{ if(window.reccheckRooms) window.reccheckRooms.write(ROOMS); }catch(e){}
+  try{
+    if(window.reccheckRooms){
+      if(!ROOMS_DISK_READY){
+        mergeRoomsFromDisk().then(() => { if(ROOMS_DISK_READY) saveRooms(); });
+      }else{
+        const result = window.reccheckRooms.write(ROOMS);
+        if(result === false){ stored = false; window.__rcStorageFault("room backup", new Error("Write failed")); }
+        else Promise.resolve(result).then(ok => { if(ok === false) window.__rcStorageFault("room backup", new Error("Write failed")); }, e => window.__rcStorageFault("room backup", e));
+      }
+    }
+  }catch(e){ stored = false; window.__rcStorageFault("room backup", e); }
+  return stored;
 }
 /* Read the disk mirror back and fill in ONLY what localStorage does not have. Never the
    other way round: the store the app has been running on wins every conflict, because a
    stale file quietly replacing tonight's work is the failure that would matter. */
 async function mergeRoomsFromDisk(){
+  if(window.__rcImportBlocked) return 0;
+  if(ROOMS_DISK_PENDING) return ROOMS_DISK_PENDING;
+  ROOMS_DISK_PENDING = (async () => {
   try{
-    if(!window.reccheckRooms) return 0;
+    if(!window.reccheckRooms){ ROOMS_DISK_READY = true; return 0; }
     const disk = await window.reccheckRooms.read();
-    if(!disk || typeof disk !== "object") return 0;
+    if(window.__rcImportBlocked) return 0;
+    if(!disk || typeof disk !== "object" || Array.isArray(disk)){ ROOMS_DISK_READY = true; return 0; }
     let added = 0;
     for(const room of Object.keys(disk)){
-      if(ROOMS[room]) continue;
       const e = disk[room];
+      if(ROOMS[room]){
+        // A capture can arrive before recovery. Preserve metadata for the same
+        // guest without replacing the newly captured facts.
+        const cur = ROOMS[room];
+        if(e && typeof e === "object" && String(cur.guest || "").trim().toUpperCase() === String(e.guest || "").trim().toUpperCase()){
+          for(const k of Object.keys(e)) if(cur[k] === undefined){ cur[k] = e[k]; added++; }
+        }
+        continue;
+      }
       if(e && typeof e === "object"){ ROOMS[room] = e; added++; }
     }
     if(added){
-      try{ localStorage.setItem(ROOMS_KEY, JSON.stringify(ROOMS)); }catch(e){}
+      try{
+        const raw=localStorage.getItem(ROOMS_KEY), prior=raw===null?{}:JSON.parse(raw);
+        if(!prior || typeof prior!=="object" || Array.isArray(prior)) throw new Error("Invalid saved rooms; original kept");
+        localStorage.setItem(ROOMS_KEY, JSON.stringify(ROOMS));
+      }catch(e){ window.__rcStorageFault("room recovery", e); }
       if(MODEL) NAMES_STALE = true;
     }
+    ROOMS_DISK_READY = true;
     return added;
-  }catch(e){ return 0; }
+  }catch(e){ window.__rcStorageFault("room recovery", e); return 0; }
+  })();
+  try{ return await ROOMS_DISK_PENDING; }finally{ ROOMS_DISK_PENDING = null; }
 }
 /* THE PROTEL NAMES, straight into the room database. His call, 04/09.
 
@@ -2628,7 +2726,8 @@ async function mergeRoomsFromDisk(){
    is by definition different from the cut one — and marking two hundred rooms as having
    changed guest is exactly the shape of the 30/08 damage. A longer form of the same name
    is not a change of guest. So this writes the name and the night it came from, and
-   touches nothing else: no movedOn, no nickname, no seen-date guard.
+   touches nothing else: no movedOn or nickname. Older business dates cannot replace
+   the current guest, and equally ranked conflicting rows remain unresolved.
 
    `liveKey` is what lets guestFor prefer this over the receipt's truncated name, and only
    for the night it belongs to. */
@@ -2645,6 +2744,9 @@ function liveNameOf(rate, room){
   const rank = s => /^CI\b/i.test(s) ? 0 : /^CO\b/i.test(s) ? 1 : 2;
   let best = null;
   for(const r of rows) if(!best || rank(String(r.status || "")) <= rank(String(best.status || ""))) best = r;
+  const names=new Set(rows.filter(r=>rank(String(r.status||""))===rank(String(best.status||"")))
+    .map(r=>String(r.name||"").trim().replace(/\s+/g," ").toUpperCase()).filter(Boolean));
+  if(names.size!==1)return "";
   return String((best && best.name) || "").trim();
 }
 function ingestLiveNames(rate){
@@ -2655,6 +2757,7 @@ function ingestLiveNames(rate){
     if(!name) continue;
     const e = ROOMS[room];
     if(!e){ ROOMS[room] = {guest: name, seen: null, liveKey: rate.dateKey}; wrote++; continue; }
+    if(rate.dateKey < Math.max(e.liveKey || 0, dateNum(e.seen))) continue;
     if(e.guest === name && e.liveKey === rate.dateKey) continue;
     e.guest = name;
     e.liveKey = rate.dateKey;
@@ -2678,6 +2781,17 @@ window.__rcLiveNames = function(rate){
   try{ if(n && MODEL){ if(SCREEN === "app") refreshNames(); else NAMES_STALE = true; } }
   catch(e){ uiFault("liveNames", e); }
   return n;
+};
+// Queue acknowledgement must include the app scope's cached rooms and alerts.
+// Retrying an unchanged capture must retry a previous failed save as well.
+window.__rcCaptureFlush = async function(){
+  if(window.__rcImportBlocked) return false;
+  await mergeRoomsFromDisk();
+  if(window.__rcImportBlocked || !saveRooms() || !saveAlerts()) return false;
+  try{
+    if(window.reccheckRooms && await window.reccheckRooms.write(ROOMS) === false) throw new Error("Room backup write failed");
+    return !window.__rcImportBlocked;
+  }catch(e){ window.__rcStorageFault("capture room backup",e); return false; }
 };
 function refreshNames(){
   /* the rows and the cards each on their own: one failing must not keep the other stale */
@@ -2806,8 +2920,8 @@ function syncRooms(){
      sit on an empty room for ever while the guest's new room got none.
 
      So: if the name now charging a room is exactly the name that carried a nickname in
-     another room tonight or last night, and that other room is not still charging under
-     it, they moved. Take the nickname with them.
+     another room tonight or last night, it is a possible move. Transfer the nickname
+     only when an explicit X-marked captured move confirms the same source/destination.
 
      Two guards, both deliberately strict. The old room still charging under that name is
      not a move — that is one party across two rooms. And two rooms holding the same name
@@ -2830,6 +2944,16 @@ function syncRooms(){
       }
       if(from.length !== 1) continue;
       const src = from[0];
+      // A shared name with two possible destinations cannot identify a room move.
+      if(Object.keys(tonight).filter(r => r !== src && sameName(tonight[r], g)).length !== 1) continue;
+      // A room without a receipt may still be occupied. Transfer its label only when
+      // protel's captured move list explicitly links this guest and these two rooms.
+      const status=typeof loadStatus==="function"?loadStatus():{};
+      const moveDay=status.MV&&status.MV[String(rd)];
+      const destinations=new Set(Object.values((moveDay&&moveDay.rows)||{})
+        .filter(r=>/^X$/i.test(String(r.x||"").trim())&&String(r.from||"").trim()===src&&sameName(r.name,g))
+        .map(r=>String(r.to||"").trim()));
+      if(destinations.size!==1||!destinations.has(room))continue;
       e.nick = before[src].nick;
       if(ROOMS[src]) delete ROOMS[src].nick;
       moved.push(src + " → " + room + " (" + e.nick + ")");
@@ -3018,8 +3142,13 @@ function loadAlerts(){
   pruneAlerts();
 }
 function saveAlerts(){
-  try{ localStorage.setItem(ALERTS_KEY, JSON.stringify(ALERTS)); }catch(e){}
-  try{ localStorage.setItem(ALERTS_DONE_KEY, JSON.stringify(ALERTS_DONE)); }catch(e){}
+  if(typeof window!=="undefined" && window.__rcImportBlocked) return false;
+  try{
+    const a=JSON.parse(localStorage.getItem(ALERTS_KEY)||"[]"), d=JSON.parse(localStorage.getItem(ALERTS_DONE_KEY)||"{}");
+    if(!Array.isArray(a) || !d || typeof d!=="object" || Array.isArray(d)) throw new Error("Invalid saved alerts; original kept");
+    localStorage.setItem(ALERTS_KEY, JSON.stringify(ALERTS));
+    localStorage.setItem(ALERTS_DONE_KEY, JSON.stringify(ALERTS_DONE)); return true;
+  }catch(e){ if(typeof window!=="undefined" && window.__rcStorageFault) window.__rcStorageFault("alerts",e); return false; }
 }
 /* NOTHING IN THIS FILE IS ALLOWED TO GROW FOREVER — the ledger has a date floor, the tax
    memory keeps seven days, the verify list seven nights. Alerts leave only when he presses
@@ -3127,18 +3256,124 @@ window.__rcAlertDrop = function(key){ try{ return dropAlert(key); }catch(e){ ret
 function blankState(date){
   return {date, receipts: {}, extras: []};   // receipts: "DEPT|SN" -> {status, corr:{sn,v24,v13}|null}
 }
-function rKey(r){ return r.dept + "|" + r.sn + "|" + r.roomMain; }
-function rState(r){ return STATE.receipts[rKey(r)] || {status: "pending", corr: null}; }
-function setRState(r, st){ STATE.receipts[rKey(r)] = st; saveState(); }
+let STATE_BLOCKED_SOURCES=[];
+function receiptStateValid(s){
+  const obj=x=>!!x&&typeof x==='object'&&!Array.isArray(x);
+  if(!obj(s)||!obj(s.receipts)||!Array.isArray(s.extras)||typeof s.date!=='string')return false;
+  if(!Object.values(s.receipts).every(x=>obj(x)&&(!x.corr||(obj(x.corr)&&
+    ['v24','v13'].every(k=>x.corr[k]===undefined||(typeof x.corr[k]==='number'&&Number.isFinite(x.corr[k])))))))return false;
+  return s.extras.every(x=>obj(x)&&x.sn!==undefined&&x.room!==undefined&&
+    ['v24','v13'].every(k=>x[k]===undefined||(typeof x[k]==='number'&&Number.isFinite(x[k]))));
+}
+function receiptStorageFault(e){
+  if(typeof window!=="undefined"&&window.__rcStorageFault)window.__rcStorageFault("Receipt checks",e);
+  else if(typeof uiFault==="function")uiFault("Receipt checks",e);
+}
+function rKey(r){ return r.sn + "|" + r.roomMain; }
+function receiptFingerprint(r){
+  return JSON.stringify([r.guest || "", r.room || "", r.total,
+    Object.entries(r.rates || {}).sort((a,b)=>a[0].localeCompare(b[0])),
+    (r.entries || []).map(e=>[e.user,e.guest,e.amount,e.rate,e.section]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)))]);
+}
+function rState(r){
+  let st = STATE.receipts[rKey(r)];
+  if(!st){
+    const old = Object.keys(STATE.receipts).filter(k=>k.endsWith("|"+r.sn+"|"+r.roomMain)).map(k=>STATE.receipts[k]);
+    if(old.length===1) st=old[0];
+  }
+  if(!st || typeof st!=="object") return {status:"pending",corr:null};
+  // A legacy check has no source fingerprint; preserve its correction but ask for review.
+  if(st.source !== receiptFingerprint(r)){
+    const held=st.corr||st.heldCorrection||null;
+    return Object.assign({},st,{status:held?"corrected":(st.status==="missing"?"missing":"pending"),corr:null,heldCorrection:held,sourceChanged:true});
+  }
+  return st;
+}
+function setRState(r, st){
+  const key=rKey(r), before=STATE.receipts[key];
+  const beforeHistory=STATE.receiptHistory;
+  if(before&&before.source!==receiptFingerprint(r)){
+    const history=Object.assign({},STATE.receiptHistory||{}),versions=(history[key]||[]).slice();
+    if(!versions.some(x=>JSON.stringify(x)===JSON.stringify(before)))versions.push(before);
+    history[key]=versions;STATE.receiptHistory=history;
+  }
+  STATE.receipts[key]=Object.assign({},st,{source:receiptFingerprint(r)});
+  if(saveState()) return true;
+  if(before===undefined)delete STATE.receipts[key];else STATE.receipts[key]=before;
+  if(beforeHistory===undefined)delete STATE.receiptHistory;else STATE.receiptHistory=beforeHistory;
+  return false;
+}
 function saveState(){
-  try{ localStorage.setItem(stateKey, JSON.stringify(STATE)); }catch(e){}
+  if(typeof window!=="undefined" && window.__rcImportBlocked) return false;
+  try{
+    if(STATE_BLOCKED_SOURCES.length)throw new Error("Saved receipt data is damaged or conflicting. Original bytes retained; import a verified backup before editing this night.");
+    const raw=localStorage.getItem(stateKey);
+    if(raw!==null&&!receiptStateValid(JSON.parse(raw)))throw new Error("Saved receipt data is damaged. Original bytes retained.");
+    if(!receiptStateValid(STATE))throw new Error("Receipt state failed validation; nothing was overwritten.");
+    localStorage.setItem(stateKey, JSON.stringify(STATE)); return true;
+  }
+  catch(e){
+    receiptStorageFault(e);
+    return false;
+  }
+}
+function resetReceiptState(){
+  const previous=STATE;
+  STATE=blankState(MODEL.reportDate);
+  // Remember aliases already consumed so an intentional reset cannot resurrect them.
+  if(previous.dateAliases)STATE.dateAliases=Object.assign({},previous.dateAliases);
+  if(saveState())return true;
+  STATE=previous;return false;
 }
 function loadState(date){
-  stateKey = "reccheck_" + date;
+  const m=String(date||"").match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  const canonical=m?(+m[1])+"/"+(+m[2])+"/"+m[3]:date;
+  stateKey = "reccheck_" + canonical;
+  STATE_BLOCKED_SOURCES=[];
   try{
-    const raw = localStorage.getItem(stateKey);
-    if(raw){ const s = JSON.parse(raw); if(s && s.date === date) return s; }
-  }catch(e){}
+    const keys=[stateKey,"reccheck_"+date];
+    if(m)keys.push("reccheck_"+m[1].padStart(2,"0")+"/"+m[2].padStart(2,"0")+"/"+m[3]);
+    let selected=null;
+    for(const key of [...new Set(keys)]){
+      const raw=localStorage.getItem(key);if(!raw)continue;
+      try{
+        const s=JSON.parse(raw), sm=s&&String(s.date||"").match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if(!receiptStateValid(s)||!sm||!m||+sm[1]!==+m[1]||+sm[2]!==+m[2]||sm[3]!==m[3])throw new Error("Invalid receipt state in "+key);
+        if(!selected){selected=s;selected.date=date;}
+        // Preserve every differently formatted source verbatim inside the canonical state.
+        // A previously consumed alias is historical evidence, not a newer overwrite.
+        if(key!==stateKey){
+          const aliases=selected.dateAliases||(selected.dateAliases={});
+          if(aliases[key]!==raw){
+            if(selected!==s){
+              for(const k of Object.keys(s.receipts)){
+                if(selected.receipts[k]===undefined)selected.receipts[k]=s.receipts[k];
+                else if(JSON.stringify(selected.receipts[k])!==JSON.stringify(s.receipts[k])){
+                  const conflicts=selected.receiptConflicts||(selected.receiptConflicts={});
+                  const values=conflicts[k]||(conflicts[k]=[selected.receipts[k]]);
+                  if(!values.some(x=>JSON.stringify(x)===JSON.stringify(s.receipts[k])))values.push(s.receipts[k]);
+                  selected.receipts[k]={status:'pending',corr:null,stateConflict:true};
+                }
+              }
+              for(const x of s.extras){
+                if(selected.extras.some(y=>JSON.stringify(x)===JSON.stringify(y)))continue;
+                const same=selected.extras.find(y=>String(y.sn)===String(x.sn)&&String(y.room)===String(x.room));
+                if(!same){selected.extras.push(x);continue;}
+                const conflicts=selected.extraConflicts||(selected.extraConflicts={}),id=x.sn+'|'+x.room;
+                conflicts[id]=[Object.assign({},same),x];same.uncertain=true;
+              }
+            }
+            aliases[key]=raw;
+          }
+        }
+      }catch(e){
+        if(key===stateKey||!selected)STATE_BLOCKED_SOURCES.push(key);
+        else(selected.dateAliases||(selected.dateAliases={}))[key]=raw;
+        receiptStorageFault(e);
+      }
+    }
+    if(selected)return selected;
+  }catch(e){STATE_BLOCKED_SOURCES.push(stateKey);receiptStorageFault(e);}
   return blankState(date);
 }
 
@@ -3259,7 +3494,19 @@ let CL = (function(){ try{ const a = JSON.parse(localStorage.getItem("reccheck_c
 let CLEDIT = false;        // edit mode on/off
 let CLEDITID = null;       // task id currently being edited in the form
 let CLTIER = "low";
-function saveCL(){ try{ localStorage.setItem("reccheck_checklist", JSON.stringify(CL)); }catch(e){} }
+function saveCL(){
+  if(typeof window!=="undefined" && window.__rcImportBlocked) return false;
+  try{
+    if(!Array.isArray(JSON.parse(localStorage.getItem("reccheck_checklist")||"[]"))) throw new Error("Invalid saved checklist; original kept");
+    localStorage.setItem("reccheck_checklist", JSON.stringify(CL)); return true;
+  }catch(e){window.__rcStorageFault("checklist",e);return false;}
+}
+function setChecklistDone(task,done){
+  const before=task.done,night=task.doneNight;
+  task.done=!!done;task.doneNight=shiftKey();
+  if(saveCL()===false){task.done=before;if(night===undefined)delete task.doneNight;else task.doneNight=night;return false;}
+  return true;
+}
 /* How many columns the checklist should use, and how tall each one is.
 
    Measured, not guessed: the space a column has is the gap between the top of the list
@@ -3350,7 +3597,7 @@ function renderChecklist(){
     const cb = document.createElement("input");
     cb.type = "checkbox";
     cb.checked = !!task.done;
-    cb.onchange = () => { task.done = cb.checked; saveCL(); renderChecklist(); };
+    cb.onchange = () => { setChecklistDone(task,cb.checked); renderChecklist(); };
     row.append(cb);
     row.append(el("div","txt", task.text));
     const btns = el("div","clBtns");
@@ -3387,7 +3634,7 @@ let OVCFG = (function(){
   try{ return Object.assign({}, OVDEF, JSON.parse(localStorage.getItem("reccheck_overlay_cfg") || "{}")); }
   catch(e){ return Object.assign({}, OVDEF); }
 })();
-function saveOvCfg(){ try{ localStorage.setItem("reccheck_overlay_cfg", JSON.stringify(OVCFG)); }catch(e){} }
+function saveOvCfg(){ if(window.__rcImportBlocked)return; try{ localStorage.setItem("reccheck_overlay_cfg", JSON.stringify(OVCFG)); }catch(e){} }
 function openOverlaySettings(){
   const posBtn = (k, sym) => `<button class="btn small ovPos${OVCFG.pos === k ? " sel" : ""}" data-pos="${k}" style="flex:1;font-size:16px${OVCFG.pos === k ? ";border-color:var(--amber);color:var(--amber)" : ""}">${sym}</button>`;
   openModal(`
@@ -3641,6 +3888,7 @@ function legacyOn(){
   try{ return localStorage.getItem(LEGACY_KEY) !== "0"; }catch(e){ return true; }
 }
 function setLegacy(on){
+  if(window.__rcImportBlocked) return;
   try{ localStorage.setItem(LEGACY_KEY, on ? "1" : "0"); }catch(e){}
   try{ if(window.__taLegacy) window.__taLegacy(on); }catch(e){}
 }
@@ -3665,13 +3913,14 @@ function paintLedger(){
   let rooms = 0, res = 0;
   try{
     const led = loadMoves();
-    for(const r of Object.keys(led)){ rooms++; res += Object.keys(led[r]).length; }
+    for(const r of Object.keys(led)){ rooms++; for(const e of Object.values(led[r]))res+=1+(e.conflicts||[]).length; }
   }catch(e){}
   b.querySelector(".mLabel").textContent = LEDARMED ? t("sc.ledgerConfirm") : t("menu.ledger");
   b.querySelector(".mSub").textContent = t("sc.ledgerSub", {rooms: rooms, res: res});
   b.classList.toggle("danger", LEDARMED);
 }
 function ledgerClick(){
+  if(window.__rcImportBlocked) return;
   if(!LEDARMED){
     LEDARMED = true;
     paintLedger();
@@ -4331,18 +4580,20 @@ function paintSevSel(){
    03:30 and 07:00 it reads one day ahead of this one, and a plain !== would wipe his
    ticks once, mid-shift, on the upgrade. A clock that jumped back does not clear either. */
 function clNightCheck(){
+  if(typeof window!=="undefined" && window.__rcImportBlocked) return;
   const k = shiftKey(), ks = String(k);
   let stored = null;
-  try{ stored = localStorage.getItem("reccheck_cl_night"); }catch(e){}
+  try{ stored = localStorage.getItem("reccheck_cl_night"); }catch(e){ if(typeof window!=="undefined")window.__rcStorageFault("checklist night",e);return; }
   if(stored === ks) return;
-  try{ localStorage.setItem("reccheck_cl_night", ks); }catch(e){}
   const prev = Number(stored);
-  if(stored !== null && prev && k > prev && CL.some(x => x.done)){   // a new shift began — fresh ticks
-    CL.forEach(x => { x.done = false; });
-    saveCL();
+  if(stored !== null && prev && k > prev && CL.some(x => x.done && (+x.doneNight||0)<k)){   // a new shift began — fresh ticks
+    const before=CL.map(x=>x.done);
+    CL.forEach(x => { if((+x.doneNight||0)<k)x.done = false; });
+    if(saveCL()===false){CL.forEach((x,i)=>{x.done=before[i];});return;}
     OVQUIET = true;                              // clear the ticks without summoning the overlay
     try{ renderChecklist(); } finally{ OVQUIET = false; }
   }
+  try{ localStorage.setItem("reccheck_cl_night", ks); }catch(e){if(typeof window!=="undefined")window.__rcStorageFault("checklist night",e);}
 }
 function clSubmit(){
   const txt = $("#clText").value.trim();
@@ -4387,6 +4638,7 @@ function fbCur(){ return FB.p[FB.tool]; }
    key is the fallback — and "" is falsy, so storing it hands the old shared path back at
    the next boot. Going to the root would not survive a restart. Found by the 1.17.53 audit. */
 function saveRel(tool, rel){
+  if(window.__rcImportBlocked) return;
   try{
     if(rel) localStorage.setItem("reccheck_fbrel_" + tool, rel);
     else{
@@ -4408,7 +4660,7 @@ function fbUpRel(){
 
 /* first-timer guides — pinned left inside each audit tool, dismissible per tool */
 const HELP = (function(){ try{ return JSON.parse(localStorage.getItem("reccheck_help") || "{}"); }catch(e){ return {}; } })();
-function saveHelp(){ try{ localStorage.setItem("reccheck_help", JSON.stringify(HELP)); }catch(e){} }
+function saveHelp(){ if(window.__rcImportBlocked)return; try{ localStorage.setItem("reccheck_help", JSON.stringify(HELP)); }catch(e){} }
 function helpToolFor(){ return SCREEN === "app" ? "dept" : (SCREEN === "tax" ? "tax" : null); }
 function paintHelp(){
   const tool = helpToolFor();
@@ -4597,8 +4849,10 @@ async function checkOpenByStat(){
   }
 }
 async function fbOpen(f){
+  const loadEpoch=++REPORT_LOAD_EPOCH;
   try{
     const raw = await window.reccheckFiles.read(FB.tool, f.path);
+    if(loadEpoch!==REPORT_LOAD_EPOCH)return;
     const u8 = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
     if(PICKCB){
       const cb = PICKCB;
@@ -4609,10 +4863,10 @@ async function fbOpen(f){
     }
     if(FB.tool === "tax"){ showScreen("tax"); return; }   // no picker armed — nothing to feed
     const buf = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
-    FB.p.dept.open = {path: f.path, name: f.name, mtimeMs: f.mtimeMs};
-    FB.p.dept.stale = false;
-    paintStaleChip();
-    await loadReport(buf, f.name);
+    if(await loadReport(buf, f.name, loadEpoch)){
+      FB.p.dept.open = {path: f.path, name: f.name, mtimeMs: f.mtimeMs};
+      FB.p.dept.stale = false; paintStaleChip();
+    }
   }catch(err){
     toast("✗ " + (err.message || err), true);
   }
@@ -4660,27 +4914,35 @@ async function fbPickDir(tool){
 }
 
 /* ---------- file load ---------- */
+let REPORT_LOAD_EPOCH=0;
 async function loadFile(file){
+  const epoch=++REPORT_LOAD_EPOCH;
   const buf = await file.arrayBuffer();
-  return loadReport(buf, file.name);
+  if(epoch!==REPORT_LOAD_EPOCH)return false;
+  return loadReport(buf, file.name, epoch);
 }
-async function loadReport(buf, fname){
+async function loadReport(buf, fname, selectedEpoch){
+  const epoch=selectedEpoch===undefined?++REPORT_LOAD_EPOCH:selectedEpoch;
   $("#landErr").textContent = "";
   try{
     const xmls = await unzipFpages(buf);
+    if(epoch!==REPORT_LOAD_EPOCH)return false;
     const parsed = parseReport(xmls);
     if(!isCheckcharge(parsed)){
       throw new Error(t("err.wrongreport") +
         (parsed.reportId ? " The file identifies as: \u201C" + parsed.reportId + "\u201D." : " No protel report id found in it."));
     }
-    MODEL = buildModel(parsed);
-    STATE = loadState(MODEL.reportDate);
+    const nextModel = buildModel(parsed);
+    if(!dateNum(nextModel.reportDate))throw new Error("The report date could not be read; the previous report is retained.");
     loadWatch();
     loadRooms();
     /* Before syncRooms, so a room the mirror knows about is already in hand when the
        report's names meet it — otherwise the ingest would create it fresh from the CUT
        name and the protel one would be lost. */
     await mergeRoomsFromDisk();
+    if(epoch!==REPORT_LOAD_EPOCH)return false;
+    MODEL=nextModel;
+    STATE=loadState(MODEL.reportDate);
     syncRooms();
     renderAll(fname);
     if(!MODEL.receipts.length){
@@ -4688,10 +4950,13 @@ async function loadReport(buf, fname){
       w.style.display = "block";
       w.textContent = t("warn.noreceipts");
     }
+    return true;
   }catch(err){
+    if(epoch!==REPORT_LOAD_EPOCH)return false;
     const msg = "✗ " + (err.message || err);
     if($("#landing").style.display !== "none") $("#landErr").textContent = msg;
     else toast(msg, true);
+    return false;
   }
 }
 
@@ -4759,7 +5024,19 @@ function checkableList(){
    nothing further to confirm, only reception's posting to chase, which is why it stays
    flagged and stays in the discrepancies. */
 function extraTotal(x){ return Math.round((((x && x.v24) || 0) + ((x && x.v13) || 0)) * 100) / 100; }
-function extrasOf(dept){ return STATE.extras.filter(x => x.dept === dept); }
+function activeExtras(){
+  // Keep the original manual entry in storage. An exact, unique posted counterpart
+  // represents the same paper; ambiguous overlaps remain visible for review.
+  const norm=s=>String(s||"").trim().replace(/\s+/g," ").toUpperCase();
+  return STATE.extras.filter(x=>{
+    if(x.uncertain)return true;
+    const matches=(MODEL&&MODEL.receipts||[]).filter(r=>!r.cancelled&&!r.voided&&String(r.sn)===String(x.sn)&&
+      String(r.roomMain)===String(x.room)&&Math.round(r.total*100)===Math.round(extraTotal(x)*100)&&
+      norm(r.guest)&&norm(r.guest)===norm(x.guest));
+    return matches.length!==1;
+  });
+}
+function extrasOf(dept){ return activeExtras().filter(x => x.dept === dept); }
 function extrasSum(xs){ return xs.reduce((a, x) => a + extraTotal(x), 0); }
 
 function renderSummary(){
@@ -4767,7 +5044,7 @@ function renderSummary(){
   s.style.display = "grid";
   s.innerHTML = "";
   const list = checkableList();
-  const ex = STATE.extras;
+  const ex = activeExtras();
   const received = list.length + ex.length;               // every receipt actually in hand
   const grand = list.reduce((a,r) => a + effTotal(r), 0) + extrasSum(ex);
   const done = list.filter(r => ["ok"].includes(rState(r).status)).length + ex.length;
@@ -4781,7 +5058,7 @@ function renderSummary(){
   const gl = el("div","lbl", t("sum.grand"));
   if(received && done === received) gl.append(el("span","tick","✓"));
   g.append(gl);
-  g.append(el("div","val", numToMoney(Math.round(grand*100)/100)));
+  g.append(el("div","val", ex.some(x=>x.uncertain)?"Needs verification":numToMoney(Math.round(grand*100)/100)));
   const gs = el("div","sub");
   gs.append(el("b","", String(done)));
   gs.append(` / ${received}` + t("sum.checked") + (flags ? ` · ${flags}` + t("sum.flagged") : "")
@@ -4791,7 +5068,7 @@ function renderSummary(){
 
   for(const b of TARGET_DEPTS){
     const dl = (MODEL.depts[b].list || []).filter(r => !r.cancelled && !r.voided);
-    if(!dl.length && !STATE.extras.some(x => x.dept === b)) continue;
+    if(!dl.length && !activeExtras().some(x => x.dept === b)) continue;
     const dx = extrasOf(b);
     const dRec = dl.length + dx.length;
     const tot = dl.reduce((a,r) => a + effTotal(r), 0) + extrasSum(dx);
@@ -4805,7 +5082,7 @@ function renderSummary(){
       cl.append(op);
     }
     c.append(cl);
-    c.append(el("div","val", numToMoney(Math.round(tot*100)/100)));
+    c.append(el("div","val", dx.some(x=>x.uncertain)?"Needs verification":numToMoney(Math.round(tot*100)/100)));
     const cs = el("div","sub");
     cs.append(el("b","", String(dn)));
     cs.append(` / ${dRec} · `);
@@ -4836,11 +5113,11 @@ function renderAccordions(){
   for(const b of TARGET_DEPTS){
     const D = MODEL.depts[b];
     const list = (D.list || []);
-    const extras = STATE.extras.filter(x => x.dept === b);
+    const extras = activeExtras().filter(x => x.dept === b);
     if(!list.length && !extras.length) continue;
     wrap.append(buildAcc(b, list, extras, D.other, openSet.has(b)));
   }
-  const unass = STATE.extras.filter(x => !TARGET_DEPTS.includes(x.dept));
+  const unass = activeExtras().filter(x => !TARGET_DEPTS.includes(x.dept));
   if(unass.length) wrap.append(buildAcc("UNASSIGNED — not in report", [], unass, [], true, true));
   for(const a of wrap.querySelectorAll(".acc")) applyRoomFilter(a, a.dataset.dept);
   knavPaint();
@@ -4880,7 +5157,7 @@ function buildAcc(name, list, extras, other, open, isExtraAcc){
   const prog = el("div","prog");
   const pb = el("b","", String(done)); prog.append(pb); prog.append(` / ${received}`);
   head.append(prog);
-  head.append(el("div","tot", numToMoney(Math.round(tot*100)/100)));
+  head.append(el("div","tot", extras.some(x=>x.uncertain)?"Needs verification":numToMoney(Math.round(tot*100)/100)));
   head.append(el("div","chev","▶"));
   head.onclick = () => acc.classList.toggle("open");
   acc.append(head);
@@ -4929,6 +5206,7 @@ function receiptRow(r){
   const row = el("div","rrow st-" + status);
   row.dataset.key = rKey(r);
   row.dataset.room = effRoom(r);
+  if(st.sourceChanged)row.title="The source receipt changed or predates source verification. Review this receipt again; saved corrections are retained.";
   row.onclick = () => { KNAV.key = rKey(r); KNAV.act = "ok"; knavPaint(); };
 
   const room = el("div","room");
@@ -5017,10 +5295,10 @@ function receiptRow(r){
     cb.onchange = () => {
       const cur = rState(r);
       if(cb.checked){
-        setRState(r, {status: "ok", corr: cur.corr || null});
+        if(!setRState(r, {status: "ok", corr: cur.corr || null})){cb.checked=false;return;}
         toastReceipt(r);
       }else{
-        setRState(r, {status: cur.corr ? "corrected" : "pending", corr: cur.corr || null});
+        if(!setRState(r, {status: cur.corr ? "corrected" : "pending", corr: cur.corr || null})){cb.checked=true;return;}
       }
       refresh();
     };
@@ -5046,12 +5324,13 @@ function extraRow(x){
     row.append(wt);
   }
   row.append(el("span","tag extra", t("tag.extra")));
-  row.append(el("div","amt", numToMoney(Math.round(((x.v24||0)+(x.v13||0))*100)/100)));
+  row.append(el("div","amt", x.uncertain?"Needs verification":numToMoney(Math.round(((x.v24||0)+(x.v13||0))*100)/100)));
   const del = el("button","warnBtn","✕");
   del.title = "Remove this manual entry";
   del.onclick = () => {
+    const before=STATE.extras;
     STATE.extras = STATE.extras.filter(e => e !== x && !(e.sn === x.sn && e.dept === x.dept && e.room === x.room));
-    saveState(); refresh();
+    if(!saveState()){STATE.extras=before;return;} refresh();
   };
   row.append(del);
   return row;
@@ -5161,7 +5440,7 @@ function openRowMenu(anchor, r){
 
   const b1 = el("button");
   b1.innerHTML = '<span class="k">' + t("menu1");
-  b1.onclick = () => { setRState(r, {status: "missing", corr: st.corr || null}); closeMenu(); refresh(); toast(t("toast.missing") + r.dept + " " + r.sn, true); };
+  b1.onclick = () => { if(!setRState(r, {status: "missing", corr: st.corr || null}))return; closeMenu(); refresh(); toast(t("toast.missing") + r.dept + " " + r.sn, true); };
   m.append(b1);
 
   const b2 = el("button");
@@ -5177,13 +5456,18 @@ function openRowMenu(anchor, r){
   if(st.status !== "pending" || st.corr){
     const b3 = el("button");
     b3.innerHTML = '<span class="k">' + t("menuClear");
-    b3.onclick = () => { delete STATE.receipts[rKey(r)]; saveState(); closeMenu(); refresh(); };
+    b3.onclick = () => {
+      const before=Object.assign({},STATE.receipts);
+      for(const key of Object.keys(STATE.receipts))if(key===rKey(r)||key.endsWith("|"+r.sn+"|"+r.roomMain))delete STATE.receipts[key];
+      if(!saveState()){STATE.receipts=before;return;}
+      closeMenu();refresh();
+    };
     m.append(b3);
   }
   if(st.status === "corrected"){
     const b4 = el("button");
     b4.innerHTML = '<span class="k">' + t("menuVerified");
-    b4.onclick = () => { setRState(r, {status: "ok", corr: st.corr}); closeMenu(); refresh(); toast("✓ " + r.dept + " " + effSN(r) + t("toast.passing")); };
+    b4.onclick = () => { if(!setRState(r, {status: "ok", corr: st.corr}))return; closeMenu(); refresh(); toast("✓ " + r.dept + " " + effSN(r) + t("toast.passing")); };
     m.append(b4);
   }
   document.body.append(m);
@@ -5226,17 +5510,21 @@ function readMoney(s){
   s = (s || "").trim();
   if(s === "") return 0;
   if(!/^-?\d+(?:[.,]\d{1,2})?$/.test(s)) return null;
-  return Math.round(parseFloat(s.replace(",", ".")) * 100) / 100;
+  const cents=Math.round(parseFloat(s.replace(",", ".")) * 100);
+  return Number.isSafeInteger(cents)?cents/100:null;
 }
 
 function openCorrectionModal(r){
+  const saved=rState(r), current=saved.corr||saved.heldCorrection||{};
+  const currentRates=(current.v24!==undefined||current.v13!==undefined)?{"24%":current.v24,"13%":current.v13}:effRates(r);
   openModal(`
     <h3>${t("corr.title")} — ${r.dept} · ${t("corr.room")} ${r.roomMain} · ${t("corr.was")} ${r.sn}</h3>
+    ${saved.heldCorrection?'<p>Saved correction held for review: the source receipt changed. Verify these values before saving.</p>':''}
     <label>${t("corr.sn")}</label>
-    <input id="cSN" inputmode="numeric" autocomplete="off">
+    <input id="cSN" inputmode="numeric" autocomplete="off" value="${escapeHtml(current.sn || r.sn)}">
     <div class="mrow">
-      <div><label>${t("corr.v24")}</label><input id="cV24" inputmode="decimal" value="${moneyField(r.rates["24%"] ?? r.rates["base"])}"></div>
-      <div><label>${t("corr.v13")}</label><input id="cV13" inputmode="decimal" value="${moneyField(r.rates["13%"])}"></div>
+      <div><label>${t("corr.v24")}</label><input id="cV24" inputmode="decimal" value="${moneyField(currentRates["24%"] ?? currentRates["base"])}"></div>
+      <div><label>${t("corr.v13")}</label><input id="cV13" inputmode="decimal" value="${moneyField(currentRates["13%"])}"></div>
     </div>
     <div class="err" id="cErr"></div>
     <div class="actions">
@@ -5253,7 +5541,7 @@ function openCorrectionModal(r){
     if(v24 === null || v13 === null){ $("#cErr").textContent = t("corr.errVal"); return; }
     const cur = rState(r);
     const corr = Object.assign({}, cur.corr || {}, {sn, v24, v13});
-    setRState(r, {status: "corrected", corr});
+    if(!setRState(r, {status: "corrected", corr}))return;
     closeModal(); refresh();
     toast(t("corr.toast"));
   };
@@ -5277,7 +5565,7 @@ function openRoomModal(r){
     if(!room){ $("#cErr").textContent = t("roomM.err"); return; }
     const cur = rState(r);
     const corr = Object.assign({}, cur.corr || {}, {room});
-    setRState(r, {status: "corrected", corr});
+    if(!setRState(r, {status: "corrected", corr}))return;
     closeModal(); refresh();
     toast(t("roomM.toast"));
   };
@@ -5336,7 +5624,7 @@ function openExtraModal(prefillSN){
     if(!room){ $("#xErr").textContent = t("roomM.err"); return; }
     STATE.extras.push({sn, v24, v13, room, guest: guestFor(room) || null,
                        dept: $("#xDept").value || "UNASSIGNED"});
-    saveState(); closeModal(); refresh();
+    if(!saveState()){STATE.extras.pop();return;} closeModal(); refresh();
     $("#snInput").value = ""; searchInput();
     toast(t("extra.toast") + sn, true);
   };
@@ -5361,7 +5649,7 @@ function findMatches(q){
    already recorded. A manual entry is part of the night; the search knows about it. */
 function findExtras(q){
   if(!q) return [];
-  return STATE.extras.filter(x => String(x.sn) === q);
+  return activeExtras().filter(x => String(x.sn) === q);
 }
 function extraMatchCard(x){
   const c = el("div","match");
@@ -5374,7 +5662,7 @@ function extraMatchCard(x){
   const nm = x.room ? (nick || guestFor(x.room) || x.guest) : null;
   if(nm) c.append(el("span","name" + (nick ? " nick" : ""), nm));
   c.append(el("span","split", rateSplitStr({"24%": x.v24, "13%": x.v13})));
-  c.append(el("span","amt", numToMoney(extraTotal(x))));
+  c.append(el("span","amt", x.uncertain?"Needs verification":numToMoney(extraTotal(x))));
   const ws = x.room ? watchFor(x.room) : [];
   if(ws.length){
     c.classList.add("watch");
@@ -5470,6 +5758,7 @@ function leavingIndex(){
     for(const room of Object.keys(led)){
       for(const a of Object.keys(led[room])){
         const e = led[room][a];
+        if((e.conflicts||[]).length)continue;
         if(!e.mv && Number(a) === night) (arr[room] = arr[room] || []).push(e.n || "");
         if((e.d || 0) !== night) continue;    // not on today's departure list
         (out[room] = out[room] || []).push(e.n || "");
@@ -5644,14 +5933,14 @@ function matchCard(r){
 function confirmReceipt(r, on){
   const st = rState(r);
   if(on){
-    setRState(r, {status: "ok", corr: st.corr || null});
+    if(!setRState(r, {status: "ok", corr: st.corr || null}))return;
     refresh();
     inp().value = "";
     searchInput();
     inp().focus();
     toastReceipt(r);
   }else{
-    setRState(r, {status: st.corr ? "corrected" : "pending", corr: st.corr || null});
+    if(!setRState(r, {status: st.corr ? "corrected" : "pending", corr: st.corr || null}))return;
     refresh();
   }
 }
@@ -5754,6 +6043,7 @@ function loadMoves(){
   try{ return JSON.parse(localStorage.getItem(MOVES_KEY) || "{}") || {}; }catch(e){ return {}; }
 }
 function saveLedger(led){
+  if(typeof window!=="undefined" && window.__rcImportBlocked) return false;
   try{ localStorage.setItem(MOVES_KEY, JSON.stringify(led)); }catch(e){}
 }
 /* The rate list writes a name; the department report writes a name; they are printed by
@@ -5807,29 +6097,75 @@ function statusRows(st, tag, night){
   const d = st && st[tag] && st[tag][String(night)];
   return (d && d.rows && typeof d.rows === "object") ? Object.keys(d.rows).map(k => d.rows[k]) : [];
 }
-/* WHO HAD A RECEIPT ON WHICH NIGHT — the room and guest name of every live receipt in each
-   department report loaded here, by the report's night, so the dot can look back over a
-   stay. Written each time the panel draws for a night (replacing that night: a receipt
-   voided or re-roomed later that night is not kept as it was), kept for 60 nights, and
-   it holds no amounts or serials. The dot's memory and nothing else reads it. */
+/* Receipt evidence by its own report date. Pairs retain their old room/name positions;
+   the optional third field records source identity, explicit cancellation and certainty.
+   An omitted row is uncertain, never erased or silently treated as a current receipt.
+   Old pairs carry no identity, so migration preserves them as uncertain evidence. */
 const RECEIPTS_KEY = "reccheck_receipts_v1";
 const RECEIPTS_KEEP = 15;   // his word, 08/09: "keep data for that matter for the previous 15 days"
-function loadNightReceipts(){
-  try{ const o = JSON.parse(localStorage.getItem(RECEIPTS_KEY) || "{}"); return (o && typeof o === "object" && !Array.isArray(o)) ? o : {}; }
-  catch(e){ return {}; }
+function loadNightReceipts(strict){
+  try{
+    const raw=localStorage.getItem(RECEIPTS_KEY),o=JSON.parse(raw===null?"{}":raw);
+    if(!o||typeof o!=="object"||Array.isArray(o))throw new Error("Receipt history is unreadable; the original saved data was retained");
+    const out={};
+    const room=r=>typeof r==="string"||typeof r==="number"&&Number.isFinite(r);
+    for(const k of Object.keys(o)){
+      if(!/^\d{8}$/.test(k)||!Array.isArray(o[k]))throw new Error("Receipt history has an unreadable day; the original saved data was retained");
+      out[k]=o[k].map(p=>{
+        if(!Array.isArray(p)||p.length<2||p.length>3||!room(p[0])||typeof p[1]!=="string")
+          throw new Error("Receipt history has an unreadable receipt; the original saved data was retained");
+        const m=p[2];
+        if(m!==undefined&&m!==null&&(typeof m!=="object"||Array.isArray(m)||
+          m.id!==undefined&&typeof m.id!=="string"||m.live!==undefined&&typeof m.live!=="boolean"||
+          m.uncertain!==undefined&&typeof m.uncertain!=="boolean"||m.versions!==undefined&&
+          (!Array.isArray(m.versions)||m.versions.some(v=>!Array.isArray(v)||v.length!==3||!room(v[0])||typeof v[1]!=="string"||typeof v[2]!=="boolean"))))
+          throw new Error("Receipt history has unreadable source evidence; the original saved data was retained");
+        return [p[0],p[1],m&&m.id?{...m,live:m.live!==false,uncertain:!!m.uncertain||typeof m.live!=="boolean"}:
+          {...m,id:"legacy:"+JSON.stringify(p.slice(0,2)),live:true,uncertain:true,legacy:true}];
+      });
+    }
+    return out;
+  }
+  catch(e){
+    if(strict)throw e;
+    try{if(typeof window!=="undefined"&&window.__rcStorageFault)window.__rcStorageFault("Receipt history",e);}catch(ignore){}
+    return {};
+  }
 }
 function saveNightReceipts(night, pairs){
+  if(typeof window!=="undefined" && window.__rcImportBlocked) return false;
   try{
-    const o = loadNightReceipts();
-    const seen = new Set(), rows = [];
-    for(const p of pairs){ const k = p[0] + "|" + p[1]; if(!seen.has(k)){ seen.add(k); rows.push([p[0], p[1]]); } }
+    if(!/^\d{8}$/.test(String(night)))return;
+    const o = loadNightReceipts(true);
+    const stored=new Map(),ids=new Set();
+    const key=p=>p[2]&&p[2].id?String(p[2].id):"legacy:"+JSON.stringify(p.slice(0,2));
+    for(const p of o[String(night)]||[])stored.set(key(p),[p[0],p[1],{...p[2],uncertain:p[2].live===false?!!p[2].uncertain:true}]);
+    for(const p of pairs){
+      if(!Array.isArray(p)||p.length<2)continue;
+      const id=key(p),prior=stored.get(id),meta=p[2]&&typeof p[2]==="object"?p[2]:{};
+      const live=meta.live!==false,uncertain=!!meta.uncertain||!meta.id||!!(prior&&live&&
+        (prior[2].live===false||(prior[2].versions||[]).some(v=>v[2]===false)));
+      const versions=prior&&Array.isArray(prior[2].versions)?prior[2].versions.slice():[];
+      const changed=prior&&(prior[0]!==p[0]||prior[1]!==p[1]||(prior[2].live!==false)!==live);
+      if(changed){
+        const old=[prior[0],prior[1],prior[2].live!==false];
+        if(!versions.some(v=>JSON.stringify(v)===JSON.stringify(old)))versions.push(old);
+      }
+      stored.set(id,[p[0],p[1],{...meta,id,live,uncertain:uncertain||!!(changed&&ids.has(id)),...(versions.length?{versions}:{})}]);
+      ids.add(id);
+    }
+    const rows=[...stored.values()];
     let changed = JSON.stringify(o[String(night)] || null) !== JSON.stringify(rows);
     o[String(night)] = rows;
     let cut = night;
     for(let i = 0; i < RECEIPTS_KEEP; i++) cut = prevNightKey(cut);
     for(const k of Object.keys(o)) if(!/^\d{8}$/.test(k) || +k < cut){ delete o[k]; changed = true; }
     if(changed) localStorage.setItem(RECEIPTS_KEY, JSON.stringify(o));   // an unchanged night writes nothing
-  }catch(e){}
+    return true;
+  }catch(e){
+    try{if(typeof window!=="undefined"&&window.__rcStorageFault)window.__rcStorageFault("Receipt history",e);}catch(ignore){}
+    return false;
+  }
 }
 function pillRoom(cell, name){
   const m = String(cell || "").trim().match(/^(\d{2,4})(?!\d)/);
@@ -5870,7 +6206,7 @@ function departureRows(st, night){
     for(const r of statusRows(st, "MV", +k)){
       const from = pillRoom(r.from, r.name), to = pillRoom(r.to, r.name);
       const arr = dateNum2(r.arr);
-      if(!String(r.x || "").trim() || !from || !to || from === to ||
+      if(!/^X$/i.test(String(r.x || "").trim()) || !from || !to || from === to ||
          !arr || +k < arr || dateNum2(r.dep) !== night) continue;
       moves.push({from, to, arr, day: +k, name: r.name});
     }
@@ -5946,6 +6282,7 @@ function ledgerMoves(nightArg){
     let moved = null;
     for(const a of Object.keys(led[room])){
       const r = led[room][a], A = Number(a), D = r.d || 0;
+      if((r.conflicts||[]).length)continue;
       /* A stay the guest was MOVED OUT of. It is kept, because it is what protel printed,
          but it no longer asserts anything: the room did not depart, the guest simply is
          not in it. Without this the old room fires a departure on the original date. */
@@ -5993,6 +6330,17 @@ function renderMoves(){
    check's #moves and the STATUS screen both come through here, so there is one drawing of
    a pill and not two. */
 function renderMovesFor(box, night){
+  // Saving cannot depend on a movement pill existing, or on the STATUS panel's date.
+  // All source rows are included so a known void/re-room can update its own identity.
+  if(MODEL){
+    const modelNight=dateNum(MODEL.reportDate),snapshot=[];
+    for(const r of MODEL.receipts||[]){
+      const room=String(effRoom(r)||"");if(!room)continue;
+      const id=r.sn?String(r.sn)+"|"+String(r.roomMain||r.room||""):"";
+      snapshot.push([room,receiptName(r),{...(id?{id}:{}),live:!r.cancelled&&!r.voided,uncertain:!id}]);
+    }
+    if(modelNight)saveNightReceipts(modelNight,snapshot);
+  }
   const mv = roomMoves(night);
   const rooms = Object.keys(mv).sort((a,b) => (parseInt(a)||0) - (parseInt(b)||0));
   box.innerHTML = "";
@@ -6071,18 +6419,18 @@ function renderMovesFor(box, night){
     if(m.movedFrom && (rm === room || BEFORE[room].move.has(rm)) && m.names.move.concat(m.names.moveFull || []).some(n => nameHit(guest, n, otherNames(m, room, "move")))) moveRec.add(room);
   };
   const found = room => (!mv[room].dep || depRec.has(room)) && (!mv[room].movedFrom || moveRec.has(room));
-  if(MODEL){
-    const pairs = [];
+  if(MODEL&&dateNum(MODEL.reportDate)===night){
+    const saved=loadNightReceipts()[String(night)]||[];
     for(const r of checkableList()){
       const rm = String(effRoom(r) || "");
       if(!rm) continue;
       /* the receipt's own name, completed from the census where it was cut — only ever a
          completion of THIS name, never another guest's name for the same room */
       const gn = receiptName(r);
-      pairs.push([rm, gn]);
+      const evidence=r.sn&&saved.find(p=>p[2]&&p[2].id===String(r.sn)+"|"+String(r.roomMain||r.room||""));
+      if(evidence&&(evidence[2].live===false||evidence[2].uncertain))continue;
       for(const room of rooms) hit(mv[room], room, rm, gn);
     }
-    if(night) saveNightReceipts(night, pairs);
   }
   /* the earlier nights of each stay, from what was loaded here on those nights */
   const past = loadNightReceipts();
@@ -6092,7 +6440,7 @@ function renderMovesFor(box, night){
     for(const room of rooms){
       const m = mv[room];
       if(!m.since || K < m.since || found(room)) continue;
-      for(const pr of past[k]) hit(m, room, String(pr[0] || ""), pr[1] || "");
+      for(const pr of past[k])if(pr[2]&&pr[2].live!==false&&!pr[2].uncertain)hit(m, room, String(pr[0] || ""), pr[1] || "");
     }
   }
   /* ARRIVALS, DEPARTURES, MOVES — his order and his words. A move pill reads "old room →
@@ -6294,7 +6642,7 @@ function saveNick(){
   if(!v){ $("#nErr").textContent = t("n.errEmpty"); return; }
   if(!ROOMS[NSEL]) ROOMS[NSEL] = {guest: null, seen: null};
   ROOMS[NSEL].nick = v;
-  saveRooms();
+  if(!saveRooms()) return;
   toast(t("n.room") + " " + NSEL + " → “" + v + "”");
   refresh();
 }
@@ -6310,7 +6658,7 @@ function exportData(){
   const out = {app: "reccheck", exported: new Date().toISOString(), data: {}};
   for(let i = 0; i < localStorage.length; i++){
     const k = localStorage.key(i);
-    if(k && k.indexOf("reccheck") === 0) out.data[k] = localStorage.getItem(k);
+    if(k && /^(reccheck|ta_check_|ta_lang$)/.test(k) && k !== importJournalKey()) out.data[k] = localStorage.getItem(k);
   }
   const n = Object.keys(out.data).length;
   if(!n){ toast(t("exp.none"), true); return; }
@@ -6323,30 +6671,119 @@ function exportData(){
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   toast(t("exp.done", {n}));
 }
+function backupStoreValid(key,value){
+  const obj=x=>!!x&&typeof x==='object'&&!Array.isArray(x);
+  const number=x=>typeof x==='number'&&Number.isFinite(x);
+  const count=x=>Number.isSafeInteger(x)&&x>=0;
+  const fields=(x,names,test)=>names.every(k=>x[k]===undefined||test(x[k]));
+  const text=x=>typeof x==='string',nullableText=x=>x===null||text(x);
+  const room=x=>text(x)||number(x);
+  const date=x=>{
+    const m=String(x).match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);if(!m)return false;
+    const y=+m[3]+(m[3].length===2?2000:0),d=new Date(Date.UTC(y,+m[2]-1,+m[1]));
+    return d.getUTCFullYear()===y&&d.getUTCMonth()===+m[2]-1&&d.getUTCDate()===+m[1];
+  };
+  if(/^reccheck_\d{1,2}\/\d{1,2}\/\d{4}$/.test(key))return receiptStateValid(value)&&date(value.date)&&
+    /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(value.date)&&value.date.split('/').map(Number).join('/')===key.slice(9).split('/').map(Number).join('/');
+  if(key==='reccheck_rooms')return obj(value)&&Object.values(value).every(e=>obj(e)&&
+    fields(e,['guest','nick','seen'],nullableText)&&fields(e,['liveKey'],count));
+  if(key==='reccheck_watchlist')return Array.isArray(value)&&value.every(e=>obj(e)&&room(e.room)&&
+    fields(e,['sn'],room)&&fields(e,['name'],nullableText));
+  if(key==='reccheck_checklist')return Array.isArray(value)&&value.every(e=>obj(e)&&text(e.text)&&
+    fields(e,['id'],room)&&fields(e,['tier'],text)&&fields(e,['done'],x=>typeof x==='boolean')&&fields(e,['ord'],number));
+  if(key==='ta_check_memory_v2'){
+    const entry=e=>obj(e)&&fields(e,['arr','auto','man'],count)&&fields(e,['manual'],nullableText)&&
+      fields(e,['uncertain'],x=>typeof x==='boolean');
+    return obj(value)&&Object.values(value).every(rec=>obj(rec)&&Object.entries(rec).every(([day,e])=>date(day)&&entry(e)&&
+      (e.versions===undefined||(Array.isArray(e.versions)&&e.versions.every(entry)))));
+  }
+  if(key==='ta_check_verify_v1')return obj(value)&&Object.entries(value).every(([day,rec])=>/^\d{8}$/.test(day)&&obj(rec)&&
+    Object.values(rec).every(x=>x===null||text(x)||typeof x==='boolean'));
+  if(key==='ta_check_ack_v1')return obj(value)&&Object.values(value).every(e=>number(e)||(obj(e)&&number(e.balance)&&text(e.source)));
+  if(key==='reccheck_status_v1'){
+    if(!obj(value))return false;
+    const row=r=>obj(r)&&fields(r,['name','room','arr','dep','status','from','to','x'],text)&&
+      fields(r,['first','last','readAt'],x=>number(x)&&x>=0)&&(r.cells===undefined||Array.isArray(r.cells));
+    for(const tag of ['IH','IHL','IHC']){
+      const c=value[tag];if(c===undefined)continue;
+      if(!obj(c)||!Array.isArray(c.rows)||!c.rows.every(row)||
+        (c.incompleteRows!==undefined&&(!Array.isArray(c.incompleteRows)||!c.incompleteRows.every(row))))return false;
+    }
+    for(const tag of ['AR','DP','MV']){
+      const days=value[tag];if(days===undefined)continue;
+      if(!obj(days)||!Object.entries(days).every(([day,d])=>/^\d{8}$/.test(day)&&obj(d)&&obj(d.rows)&&Object.values(d.rows).every(row)))return false;
+    }
+    return true;
+  }
+  if(key==='reccheck_moves_v2'||key==='reccheck_moves_v1'){
+    const entry=(e,nested)=>obj(e)&&fields(e,['a','d','seen','mv'],count)&&fields(e,['n','from'],text)&&
+      (e.conflicts===undefined||(nested&&Array.isArray(e.conflicts)&&e.conflicts.every(c=>entry(c,false))));
+    if(!obj(value))return false;
+    if(key==='reccheck_moves_v2')return Object.values(value).every(rec=>obj(rec)&&Object.entries(rec).every(([a,e])=>/^\d{8}$/.test(a)&&entry(e,true)));
+    return Object.entries(value).every(([day,rec])=>/^\d{8}$/.test(day)&&obj(rec)&&Object.values(rec).every(rows=>Array.isArray(rows)&&rows.every(e=>entry(e,false)&&/^\d{8}$/.test(String(e.a)))));
+  }
+  if(key==='reccheck_receipts_v1')return obj(value)&&Object.entries(value).every(([day,rows])=>/^\d{8}$/.test(day)&&Array.isArray(rows)&&rows.every(p=>{
+    if(!Array.isArray(p)||p.length<2||p.length>3||!room(p[0])||!text(p[1]))return false;
+    const m=p[2];return m===undefined||m===null||(obj(m)&&fields(m,['id'],text)&&fields(m,['live','uncertain'],x=>typeof x==='boolean')&&
+      (m.versions===undefined||(Array.isArray(m.versions)&&m.versions.every(v=>Array.isArray(v)&&v.length===3&&room(v[0])&&text(v[1])&&typeof v[2]==='boolean'))));
+  }));
+  if(key==='reccheck_alerts')return Array.isArray(value)&&value.every(e=>obj(e)&&text(e.key)&&fields(e,['kind','text','at'],text)&&fields(e,['night'],count)&&fields(e,['read'],x=>typeof x==='boolean'));
+  if(key==='reccheck_alerts_done'||key==='reccheck_moves_applied')return obj(value)&&Object.values(value).every(count);
+  if(/^(reccheck_overlay_cfg|reccheck_help|reccheck_moves_last|ta_check_)/.test(key))return obj(value);
+  return true; // Unknown JSON preferences remain round-trippable; do not discard them.
+}
+function reloadAfterImport(){
+  // Both app scopes cache saved stores. Retire this entire page before an old
+  // checklist, receipt state, capture or delayed mirror can overwrite the import.
+  window.__rcImportBlocked = true;
+  if(document.documentElement) document.documentElement.inert = true;
+  try{ window.location.reload(); }
+  catch(e){ window.__rcStorageFault("reload after import; reload this window before continuing", e); }
+}
 function importData(file){
+  if(window.__rcImportBlocked) return;
   const rd = new FileReader();
   rd.onload = () => {
+    if(window.__rcImportBlocked) return;
+    let needsReload = false;
     try{
+      // Recovery can change stores even when the newly selected file is invalid.
+      needsReload = localStorage.getItem(importJournalKey()) !== null;
+      if(!recoverImport()) throw new Error("Previous import recovery is incomplete; original backup journal retained");
       const j = JSON.parse(rd.result);
       const data = (j && j.app === "reccheck" && j.data && typeof j.data === "object" && !Array.isArray(j.data)) ? j.data : null;
       if(!data) throw new Error(t("imp.notours"));
-      let n = 0;
+      const accepted = {}, previous = {};
       for(const k of Object.keys(data)){
         const v = data[k];
-        if(k.indexOf("reccheck") !== 0 || typeof v !== "string") continue;
-        try{ JSON.parse(v); }catch(e){ continue; }        // only well-formed entries
-        localStorage.setItem(k, v); n++;
+        if(!/^(reccheck|ta_check_|ta_lang$)/.test(k) || k === importJournalKey()) continue;
+        if(typeof v!=="string")throw new Error("Invalid saved value for "+k+"; nothing imported");
+        // Export contains both JSON stores and ordinary string preferences.
+        const plain = /^(reccheck_lang|ta_lang|reccheck_fbview|reccheck_fbrel(?:_dept|_tax|_rep)?|reccheckLastFault)$/.test(k);
+        if(!plain){
+          let value;
+          try{ value = JSON.parse(v); }catch(e){ throw new Error("Invalid saved data for "+k+"; nothing imported"); }
+          if(!backupStoreValid(k,value))throw new Error("Invalid saved data for "+k+"; nothing imported");
+        }
+        accepted[k] = v;
+        previous[k] = localStorage.getItem(k);
       }
+      const n = Object.keys(accepted).length;
       if(!n) throw new Error(t("imp.nodata"));
-      loadWatch(); loadRooms(); loadAlerts(); paintAlertsBtn();
-      if(MODEL){
-        STATE = loadState(MODEL.reportDate);
-        syncRooms();
-        refresh();
-      }
+      // A single atomic localStorage write keeps the old generation recoverable
+      // before any key is replaced. Failure rolls back now or on the next boot.
+      localStorage.setItem(importJournalKey(), JSON.stringify(previous));
+      needsReload = true;
+      try{
+        for(const k of Object.keys(accepted)) localStorage.setItem(k, accepted[k]);
+        localStorage.removeItem(importJournalKey());
+      }catch(e){ recoverImport(); throw e; }
       toast(t("imp.done", {n}) + (MODEL ? "" : t("imp.loadhint")));
     }catch(err){
+      window.__rcStorageFault("import", err);
       toast(t("imp.fail") + (err.message || err), true);
+    }finally{
+      if(needsReload) reloadAfterImport();
     }
   };
   rd.onerror = () => toast(t("imp.noread"), true);
@@ -6380,7 +6817,7 @@ function uiFault(where, e){
   const msg = (e && (e.message || e)) + "";
   LAST_FAULT = new Date().toISOString() + "  " + where + "\n" + ((e && e.stack) || msg);
   try{ console.error("[reccheck]", where, e); }catch(_){}
-  try{ localStorage.setItem("reccheckLastFault", LAST_FAULT); }catch(_){}
+  try{ if(!window.__rcImportBlocked) localStorage.setItem("reccheckLastFault", LAST_FAULT); }catch(_){}
   // once per distinct fault: enough to notice and report, not enough to nag
   const k = where + "|" + msg;
   if(FAULT_SEEN[k]) return;
@@ -6414,9 +6851,9 @@ function buildPrintSheet(force){
     if(r.cancelled || r.voided) continue;    // void / settled receipts don't go on paper
     const st = rState(r);
     if(st.status === "missing") missing.push(r);
-    if(st.corr) corrected.push({r, st});
+    if(st.corr||st.heldCorrection) corrected.push({r, st:st.heldCorrection?Object.assign({},st,{corr:st.heldCorrection}):st});
   }
-  const extras = STATE.extras.slice();
+  const extras = activeExtras().slice();
   if(!missing.length && !extras.length && !corrected.length && !force) return null;
 
   const sheet = $("#printSheet");
@@ -6444,8 +6881,8 @@ function buildPrintSheet(force){
       /* the real guest name, never the nickname — this sheet goes to reception */
       h += `<tr><td>${esc(x.dept === "UNASSIGNED" ? "ΑΤΑΞΙΝΟΜΗΤΟ" : x.dept)}</td><td>${esc(x.room)}</td>
             <td>${esc(x.guest || guestFor(x.room) || "")}</td><td>${esc(x.sn)}</td>
-            <td class="num">${numToMoney(x.v24 || 0)}</td><td class="num">${numToMoney(x.v13 || 0)}</td>
-            <td class="num">${numToMoney(Math.round(((x.v24 || 0) + (x.v13 || 0)) * 100) / 100)}</td></tr>`;
+            <td class="num">${x.uncertain?'Needs verification':numToMoney(x.v24 || 0)}</td><td class="num">${x.uncertain?'Needs verification':numToMoney(x.v13 || 0)}</td>
+            <td class="num">${x.uncertain?'Needs verification':numToMoney(Math.round(((x.v24 || 0) + (x.v13 || 0)) * 100) / 100)}</td></tr>`;
     }
     h += `</table>`;
   }else h += `<div class="none">— καμία —</div>`;
@@ -6611,21 +7048,35 @@ function depReportKey(value){
 }
 function depReportDate(k){return String(k%100).padStart(2,"0")+"/"+String(Math.floor(k/100)%100).padStart(2,"0")+"/"+Math.floor(k/10000);}
 function depReportRows(ledger,status,history,from,to){
-  const all=[], by=new Map();
+  const all=[];
   for(const room of Object.keys(ledger||{})) for(const ak of Object.keys(ledger[room]||{})){
-    const r=ledger[room][ak],a=depReportKey(ak),d=depReportKey(r.d);
-    if(!a||!d||d<a||!pillRoom(room,r.n)||!r.n)continue;
-    const row={room,base:pillRoom(room,r.n),arr:a,dep:d,name:r.n,seen:r.seen||0,mv:!!r.mv,from:r.from||""};
-    all.push(row);by.set(row.base+"|"+a,row);
+    const entry=ledger[room][ak];if(!entry||typeof entry!=="object")continue;
+    for(const r of [entry,...(Array.isArray(entry.conflicts)?entry.conflicts:[])]){
+      if(!r||typeof r!=="object")continue;
+      const a=depReportKey(ak),d=depReportKey(r.d);
+      if(!a||!d||d<a||!pillRoom(room,r.n)||!r.n)continue;
+      all.push({room,base:pillRoom(room,r.n),arr:a,dep:d,name:r.n,seen:r.seen||0,mv:!!r.mv,from:r.from||""});
+    }
   }
   const cap=status&&status.IH;
   for(const r of (cap&&cap.rows)||[]){
-    const room=pillRoom(r.room,r.name),a=depReportKey(r.arr),d=depReportKey(r.dep),key=room+"|"+a,old=by.get(key);
+    if(!r||typeof r!=="object")continue;
+    const room=pillRoom(r.room,r.name),a=depReportKey(r.arr),d=depReportKey(r.dep);
     if(!room||!a||!d||d<a||!r.name||/void|reversal/i.test(r.status||""))continue;
+    const full=String(r.room).trim();
+    // Physical room matching is not reservation identity. A single unsuffixed ledger
+    // row may acquire its actual IH identifier, but two explicit suffixes or names stay.
+    const explicit=new Set(all.filter(o=>o.base===room&&o.arr===a&&sameName(o.name,r.name)&&o.room!==room).map(o=>o.room));
+    for(const other of (cap&&cap.rows)||[])if(other&&pillRoom(other.room,other.name)===room&&depReportKey(other.arr)===a&&sameName(other.name,r.name)&&String(other.room).trim()!==room)explicit.add(String(other.room).trim());
+    const matches=all.filter(o=>o.base===room&&o.arr===a&&sameName(o.name,r.name)&&
+      (o.room===full||(explicit.size<=1&&(o.room===room||full===room))));
+    const old=matches.length===1?matches[0]:null;
     if(old&&(old.mv||(old.seen||0)>(cap.key||0)))continue;
-    const row={room:String(r.room),base:room,arr:a,dep:d,name:r.name,seen:cap.key||0,mv:false,from:old?old.from:"",ih:true};
-    if(old)all.splice(all.indexOf(old),1);
-    all.push(row);by.set(key,row);
+    const row={room:full,base:room,arr:a,dep:d,name:r.name,seen:cap.key||0,mv:false,from:old?old.from:"",ih:true};
+    // A business-day tie supplies no ordering for contradictory departures. Keep both
+    // saved facts so neither date silently disappears from the emergency report.
+    if(old&&(old.dep===d||(cap.key||0)>(old.seen||0)))all.splice(all.indexOf(old),1);
+    all.push(row);
   }
   const moves=[];
   for(const k of Object.keys((status&&status.MV)||{})) for(const r of statusRows(status,"MV",+k)){
@@ -6634,8 +7085,27 @@ function depReportRows(ledger,status,history,from,to){
   // Arrival is a historical ledger key, not a reservation identity. Reconcile only
   // exact guest/room/departure matches, without changing any stored dates.
   const groups=[];
-  for(const row of all.filter(r=>!r.mv)){
-    let group=groups.find(g=>g[0].base===row.base&&g[0].dep===row.dep&&sameName(g[0].name,row.name));
+  const active=all.filter(r=>!r.mv),reportable=active.slice();
+  for(const moved of all.filter(r=>r.mv)){
+    const successors=active.filter(r=>{
+      if((r.arr!==moved.arr&&r.dep!==moved.dep)||!sameName(r.name,moved.name))return false;
+      const linked=new Set(),seen=new Set([r.base]);
+      let grew=true;
+      while(grew){
+        grew=false;
+        const add=source=>{source=pillRoom(source,r.name);if(source&&!seen.has(source)){seen.add(source);linked.add(source);grew=true;}};
+        for(const fact of all)if(seen.has(fact.base)&&(fact.arr===moved.arr||fact.dep===r.dep)&&sameName(fact.name,r.name)&&fact.from)add(fact.from);
+        for(const m of moves)if(seen.has(pillRoom(m.to,m.name))&&sameName(m.name,r.name)&&
+          depReportKey(m.arr)===moved.arr&&m.night>=moved.arr&&m.night<=Math.max(moved.dep,r.dep))add(m.from);
+      }
+      return linked.has(moved.base);
+    });
+    // A source-only move capture must not erase the only saved reservation. Its old
+    // room stays explicitly qualified until one recorded successor can carry the row.
+    if(successors.length!==1){moved.unresolvedMove=true;reportable.push(moved);}
+  }
+  for(const row of reportable){
+    let group=groups.find(g=>g[0].room===row.room&&g[0].dep===row.dep&&sameName(g[0].name,row.name));
     if(!group){group=[];groups.push(group);}group.push(row);
   }
   const current=groups.map(versions=>{
@@ -6651,50 +7121,60 @@ function depReportRows(ledger,status,history,from,to){
     while(grew){
       grew=false;
       for(const m of moves){
-        if(m.night<r.arr||m.night>r.dep||!r.arrivals.includes(depReportKey(m.arr))||depReportKey(m.dep)!==r.dep||!nameLike(m.name,r.name))continue;
+        if(m.night<r.arr||m.night>r.dep||!r.arrivals.includes(depReportKey(m.arr))||!sameName(m.name,r.name))continue;
         const src=pillRoom(m.from,m.name),dst=pillRoom(m.to,m.name);
         if(src&&dst&&rooms.has(dst)&&!rooms.has(src)){rooms.add(src);grew=true;}
       }
     }
-    let extras=false,extrasUncertain=false;
+    let extras=false,extrasUncertain=false,historyUncertain=false;
     for(const k of Object.keys(history||{})){
       const day=depReportKey(k);if(day<r.arr||day>r.dep)continue;
       for(const pair of Array.isArray(history[k])?history[k]:[]){
+        if(pair[2]&&pair[2].live===false)continue;
         const room=pillRoom(pair[0],pair[1]);if(!rooms.has(room))continue;
-        const others=all.filter(o=>o.base===room&&o.arr<=day&&o.dep>=day&&!r.versions.includes(o)&&!(r.arrivals.includes(o.arr)&&o.dep===r.dep&&nameLike(o.name,r.name))).map(o=>o.name);
+        const others=all.filter(o=>o.base===room&&o.arr<=day&&o.dep>=day&&!r.versions.includes(o)&&!(o.base!==r.base&&r.arrivals.includes(o.arr)&&sameName(o.name,r.name))).map(o=>o.name);
         if(nameHit(pair[1],r.name,others)){
-          if(day<Math.max(...r.arrivals))extrasUncertain=true;
+          if(pair[2]&&pair[2].uncertain)historyUncertain=true;
+          else if(day<Math.max(...r.arrivals))extrasUncertain=true;
           else{extras=true;break;}
         }
       }
       if(extras)break;
     }
-    return {room:r.room,name:r.name,arr:r.arr,arrivals:r.arrivals,dep:r.dep,extras,extrasUncertain:!extras&&extrasUncertain};
+    const departures=[...new Set(current.filter(o=>o.room===r.room&&sameName(o.name,r.name)&&o.arrivals.some(a=>r.arrivals.includes(a))).map(o=>o.dep))].sort((a,b)=>a-b);
+    return {room:r.room,name:r.name,arr:r.arr,arrivals:r.arrivals,dep:r.dep,departures,unresolvedMove:!!r.unresolvedMove,extras,extrasUncertain:!extras&&(extrasUncertain||historyUncertain),extrasReason:historyUncertain?"history":"arrival"};
   }).sort((a,b)=>a.dep-b.dep||a.room.localeCompare(b.room,undefined,{numeric:true})||a.arr-b.arr);
 }
 function depReportHistory(){
   const history=loadNightReceipts();
+  const currentDay=MODEL?depReportKey(MODEL.reportDate):0;
   // Manual receipts are retained in each checked night's existing saved state.
   for(let i=0;i<localStorage.length;i++){
     const key=localStorage.key(i),match=/^reccheck_(\d{1,2}\/\d{1,2}\/\d{4})$/.exec(key||"");
     if(!match)continue;
     try{
       const state=JSON.parse(localStorage.getItem(key)),day=depReportKey(match[1]);
-      if(day)for(const x of (state&&state.extras)||[])if(x.room&&x.guest)(history[day]=history[day]||[]).push([String(x.room),x.guest]);
+      if(day&&day!==currentDay)for(const x of (state&&state.extras)||[])if(x.room&&x.guest)(history[day]=history[day]||[]).push([String(x.room),x.guest,{live:true,uncertain:!!x.uncertain}]);
     }catch(e){}
   }
   if(MODEL){
     const day=depReportKey(MODEL.reportDate);
     if(day){
-      history[day]=checkableList().map(r=>[String(effRoom(r)||""),receiptName(r)]);
-      for(const x of (STATE&&STATE.extras)||[])if(x.room&&x.guest)history[day].push([String(x.room),x.guest]);
+      const current=(MODEL.receipts||[]).map(r=>{
+        const id=String(r.sn||"")+"|"+String(r.roomMain||r.room||""),prior=(history[day]||[]).find(p=>p[2]&&p[2].id===id);
+        const uncertain=!r.sn||!(r.roomMain||r.room)||!!(prior&&(prior[2].live===false||prior[2].uncertain&&(prior[2].versions||[]).some(v=>v[2]===false)));
+        return [String(effRoom(r)||""),receiptName(r),{id,live:!r.cancelled&&!r.voided,uncertain}];
+      });
+      const ids=new Set(current.map(p=>p[2].id));
+      history[day]=(history[day]||[]).filter(p=>!p[2]||!ids.has(p[2].id)).map(p=>[p[0],p[1],{...p[2],uncertain:true}]).concat(current);
+      for(const x of (STATE&&STATE.extras)||[])if(x.room&&x.guest)history[day].push([String(x.room),x.guest,{live:true,uncertain:!!x.uncertain}]);
     }
   }
   return history;
 }
 function depReportTable(rows){
   return '<table class="depDateTable"><colgroup><col style="width:10%"><col style="width:38%"><col style="width:16%"><col style="width:16%"><col style="width:20%"></colgroup><thead><tr><th>Room</th><th>Guest name</th><th>Arrival</th><th>Departure</th><th>Extras</th></tr></thead><tbody>'+
-    rows.map(r=>'<tr><td>'+esc(r.room)+'</td><td>'+esc(r.name)+'</td><td>'+(r.arrivals&&r.arrivals.length>1?r.arrivals.map(depReportDate).join('<br>')+'<br><small>Conflicting saved dates</small>':depReportDate(r.arr))+'</td><td>'+depReportDate(r.dep)+'</td><td>'+(r.extras?'Yes':r.extrasUncertain?'Uncertain (arrival date)':'No recorded extras')+'</td></tr>').join("")+'</tbody></table>';
+    rows.map(r=>'<tr><td>'+esc(r.room)+(r.unresolvedMove?'<br><small>Moved; current room not captured</small>':'')+'</td><td>'+esc(r.name)+'</td><td>'+(r.arrivals&&r.arrivals.length>1?r.arrivals.map(depReportDate).join('<br>')+'<br><small>Conflicting saved dates</small>':depReportDate(r.arr))+'</td><td>'+depReportDate(r.dep)+(r.departures&&r.departures.length>1?'<br><small>Conflicting saved departure dates: '+r.departures.map(depReportDate).join(' / ')+'</small>':'')+'</td><td>'+(r.extras?'Yes':r.extrasUncertain?r.extrasReason==='history'?'Uncertain (saved history)':'Uncertain (arrival date)':'No recorded extras')+'</td></tr>').join("")+'</tbody></table>';
 }
 function depReportSheet(job){
   const html='<h1>Departures · '+depReportDate(job.from)+' – '+depReportDate(job.to)+'</h1><p>'+job.rows.length+' reservations</p>'+depReportTable(job.rows)+
@@ -6761,6 +7241,10 @@ function esc(s){
    protel prints it; a note under its room; the totals as printed */
 function buildDepSheet(p, fname, names){
   const sheet = $("#printSheet");
+  if(p.incomplete||(names&&p.unplaced&&p.unplaced.length)){
+    sheet.innerHTML='<p>Cannot print safely: part of the departure list could not be read. The source file is unchanged.</p>';
+    return sheet.innerHTML;
+  }
   /* `names` = the BACKUP print (1.17.67). His ask, 10/09: "a backup print for the lists just
      like protel would print them" — then, shown that protel CLIPS a wrapped name to its row:
      "it cuts the names to fit in the margins, let's not do that though ... if possible lets
@@ -6881,7 +7365,8 @@ function buildDepExact(p, xps, mono){
     cut += r.cut; unknown = unknown.concat(r.unknown);
     html += '<div class="xpsPage">' + r.svg + "</div>";
   });
-  return {html, pages: xps.pages.length, cut, unplaced: p.unplaced.length, unknown};
+  const unsafe=!!p.incomplete||unknown.length>0;
+  return {html:unsafe?"":html, pages: xps.pages.length, cut, unplaced: p.unplaced.length, unknown, unsafe, errors:p.pageErrors||[]};
 }
 /* writes the exact sheet into #printSheet; returns what buildDepExact returned */
 function buildDepExactSheet(p, xps){
@@ -7038,6 +7523,7 @@ async function renderReports(){
   if(!shown && !dirs.length) note("rep.none", {dir: res.dir + (here ? " / " + here : "")});
 }
 function openDepPreview(f, p, kind, xps, names){
+  clearPrintJob();
   const board = kind === "board";
   /* the departure list prints as protel's own page with the names cut out (1.17.59); the
      tabular sheet stays only for a file that somehow carries no page to draw */
@@ -7048,7 +7534,13 @@ function openDepPreview(f, p, kind, xps, names){
      same flag. */
   names = !!(names && !board);
   let ex = null;
-  if(board) buildBoardingSheet(p, f.name); else if(names) buildDepSheet(p, f.name, true); else if(exact) ex = buildDepExactSheet(p, exact); else buildDepSheet(p, f.name);
+  if(exact)ex=buildDepExact(p,exact,false);
+  const blocked=!board&&(!!p.incomplete||!!(ex&&ex.unsafe)||!!(names&&p.unplaced&&p.unplaced.length));
+  if(blocked)$("#printSheet").innerHTML='<p>Cannot print safely: part of the departure list could not be read. The source file is unchanged.</p>';
+  else if(board)buildBoardingSheet(p,f.name);
+  else if(names)buildDepSheet(p,f.name,true);
+  else if(ex)$("#printSheet").innerHTML=ex.html;
+  else buildDepSheet(p,f.name);
   let note = "";
   if(names){
     note = esc(t("rep.exactNames"));
@@ -7076,7 +7568,13 @@ function openDepPreview(f, p, kind, xps, names){
   /* ARM the sheet for this one print. beforeprint rebuilds it from the job — see the
      listener below for why it is not enough to have written #printSheet already. The kind
      also decides the page orientation there: "dep" landscape, "board" portrait. */
-  $("#pvGo").onclick = () => { PRINT_JOB = {kind: board ? "board" : "dep", p: p, fname: f.name, xps: exact, names: names}; closeModal(); setTimeout(() => window.print(), 80); };
+  $("#pvGo").disabled=blocked;
+  $("#pvGo").onclick = () => {
+    if(blocked)return;
+    const job={kind:board?"board":"dep",p:p,fname:f.name,xps:exact,names:names};
+    PRINT_JOB=job;closeModal();
+    setTimeout(()=>{if(PRINT_JOB===job)window.print();},80);
+  };
   $("#repDel").onclick = async () => {
     clearPrintJob();
     if(!confirm(t("rep.deleteQ", {f: f.name}))) return;
@@ -7212,8 +7710,7 @@ $("#resetDay").onclick = () => {
     </div>`);
   $("#rCancel").onclick = closeModal;
   $("#rGo").onclick = () => {
-    STATE = blankState(MODEL.reportDate);
-    saveState();
+    if(!resetReceiptState())return;
     closeModal();
     const i = $("#snInput");
     i.value = ""; i.classList.remove("nomatch");
@@ -7245,7 +7742,7 @@ $("#resetDay").onclick = () => {
     if(window.reccheckOverlay.onTick)
       window.reccheckOverlay.onTick(id => {        // a task was clicked on the desktop overlay
         const task = CL.find(x => x.id === id);
-        if(task){ task.done = !task.done; saveCL(); renderChecklist(); }
+        if(task){ setChecklistDone(task,!task.done); renderChecklist(); }
       });
   }
   /* The room database the app's own folder is holding, pulled in at start so the nickname
@@ -7314,6 +7811,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 <script id="taxapp">
 /* ================= TAX CHECK (integrated) ================= */
 (function(){
+if(window.__rcImportBlocked) return;
 /* ============ i18n ============ */
 const I18N={
  en:{
@@ -7342,12 +7840,13 @@ const I18N={
   st_taken:"taken", st_takenAt:"taken at {0}",
   st_room:"Room", st_name:"Name", st_arr:"Arrival", st_dep:"Departure", st_status:"Status", st_from:"From", st_to:"To", st_x:"X",
   st_arrNote:"Rows leave this list as guests check in and appear in the in-house list. Every arrival captured today is kept here; a row being gone is read as nothing until the in-house list shows the same name and room checked in.",
-  st_depNote:"Smaller in-house lists retain previously captured guests. Checkout requires an explicit CO status in the departure list.",
+  st_depNote:"A row missing from a list does not prove checkout: the list may be filtered. Checkout requires an explicit CO status in the departure list for the same guest, room and original stay.",
   st_mark:"Mark", st_gone:"gone from the list since {0}",
   st_markIn:"checked in \u2014 on the in-house list at {0}", st_markExpected:"expected \u2014 not checked in on the in-house list yet",
   st_markOut:"checked out \u2014 absent from the in-house list at {0}", st_markOutCO:"checked out — CO on the departure list at {0}",
   st_markStay:"still in house at {0}", st_markUnconfirmed:"checkout not confirmed — no departure CO",
   st_markNoIH:"no in-house list captured for this day yet", st_markCut:"in-house read at {0} was cut short \u2014 absence proves nothing",
+  st_markAbsent:"not visible in the capture at {0} — checkout unconfirmed",
   st_complete:"complete", st_cutShort:"read cut short", st_legacyShort:"legacy mode is on \u2014 nothing is captured",
   live_kept:" {0} kept as the census had them.",
   live_rnone:"{0} \u201c{1}\u201d: no rows came back.",
@@ -7410,7 +7909,7 @@ const I18N={
   m_confirm:"Cross-reference this Rate Check as occupancy for {0} against the Tax Check night {1}?",
   m_back:"Back", m_confirmbtn:"Confirm & cross-reference",
   m_nomatch:"That date ({0}) isn't the Tax Check's night ({1}), so they can't be cross-referenced. Pick the Tax night, or don't pair.",
-  foot:"Occupied = arrival ≤ night < departure (charged on the arriving day, never the departure day). Automatic TA missing = arrangement posted but the automatic (asterisked) ΤΕΛΟΣ ΑΝΘΕΚΤΙΚΟΤΗΤΑΣ didn't — flagged even if covered by hand. Overcharged = more TA than nights. Adjoining rooms (96-98 etc.) are keyed to the leading number but the current history report omits them, so they're parked for manual check until protel fixes that export. Everything runs locally in this browser; memory (last 7 days) stays on this PC."
+  foot:"Occupied = arrival ≤ night < departure (charged on the arriving day, never the departure day). Automatic TA missing = arrangement posted but the automatic (asterisked) ΤΕΛΟΣ ΑΝΘΕΚΤΙΚΟΤΗΤΑΣ didn't — flagged even if covered by hand. Overcharged = more TA than nights. Adjoining rooms (96-98 etc.) are keyed to the leading number but the current history report omits them, so they're parked for manual check until protel fixes that export. Everything runs locally in this browser; the recent view shows 7 dates; saved history stays on this PC."
  },
  el:{
   app_brand:"Έλεγχος ΤΑ", app_rest:"— πληρότητα protel vs καταχωρήσεις",
@@ -7438,12 +7937,13 @@ const I18N={
   st_taken:"καταχωρήθηκε", st_takenAt:"λήψη {0}",
   st_room:"Δωμάτιο", st_name:"Όνομα", st_arr:"Άφιξη", st_dep:"Αναχώρηση", st_status:"Κατάσταση", st_from:"Από", st_to:"Σε", st_x:"X",
   st_arrNote:"Οι γραμμές φεύγουν από αυτή τη λίστα καθώς οι επισκέπτες κάνουν check-in και εμφανίζονται στις παραμονές. Κάθε άφιξη που λήφθηκε σήμερα κρατιέται εδώ· μια γραμμή που έφυγε δεν σημαίνει τίποτα μέχρι η λίστα παραμονών να δείξει το ίδιο όνομα και δωμάτιο με check-in.",
-  st_depNote:"Οι μικρότερες λίστες παραμονών διατηρούν τους επισκέπτες που έχουν ήδη καταγραφεί. Το check-out επιβεβαιώνεται μόνο με ένδειξη CO στη λίστα αναχωρήσεων.",
+  st_depNote:"Η απουσία από μια λίστα δεν αποδεικνύει check-out: μπορεί να υπάρχει φίλτρο. Το check-out επιβεβαιώνεται μόνο από ρητό CO για το ίδιο όνομα και δωμάτιο.",
   st_mark:"Σήμανση", st_gone:"εκτός λίστας από {0}",
   st_markIn:"check-in — στη λίστα παραμονών στις {0}", st_markExpected:"αναμένεται — δεν έχει check-in στη λίστα παραμονών ακόμη",
   st_markOut:"check-out — απουσιάζει από τη λίστα παραμονών στις {0}", st_markOutCO:"check-out — CO στη λίστα αναχωρήσεων στις {0}",
   st_markStay:"ακόμη στο ξενοδοχείο στις {0}", st_markUnconfirmed:"το check-out δεν έχει επιβεβαιωθεί — δεν υπάρχει CO στις αναχωρήσεις",
   st_markNoIH:"δεν έχει ληφθεί ακόμη λίστα παραμονών για αυτή την ημέρα", st_markCut:"η ανάγνωση παραμονών στις {0} κόπηκε νωρίς — η απουσία δεν αποδεικνύει τίποτα",
+  st_markAbsent:"δεν φαίνεται στη λήψη στις {0} — το check-out δεν έχει επιβεβαιωθεί",
   st_complete:"πλήρης", st_cutShort:"ανάγνωση κομμένη νωρίς", st_legacyShort:"η παλαιά λειτουργία είναι ενεργή — δεν λαμβάνεται τίποτα",
   live_kept:" {0} έμειναν όπως τις είχε η λίστα παραμονών.",
   live_rnone:"{0} «{1}»: δεν ήρθαν γραμμές.",
@@ -7506,7 +8006,7 @@ const I18N={
   m_confirm:"Διασταύρωση αυτού του Rate Check ως πληρότητα για {0} με τη νύχτα {1} του Tax Check;",
   m_back:"Πίσω", m_confirmbtn:"Επιβεβαίωση & διασταύρωση",
   m_nomatch:"Αυτή η ημ/νία ({0}) δεν είναι η νύχτα του Tax Check ({1}), οπότε δεν γίνεται διασταύρωση. Διάλεξε τη νύχτα του Tax ή μη κάνεις ζεύξη.",
-  foot:"Κατειλημμένο = άφιξη ≤ νύχτα < αναχώρηση (χρέωση την ημέρα άφιξης, ποτέ την ημέρα αναχώρησης). Λείπει αυτόματο ΤΑ = μπήκε διευθέτηση αλλά όχι το αυτόματο (με αστερίσκο) ΤΕΛΟΣ ΑΝΘΕΚΤΙΚΟΤΗΤΑΣ — επισημαίνεται ακόμη κι αν καλύφθηκε χειροκίνητα. Υπερχρέωση = περισσότερα ΤΑ από νύχτες. Τα γειτονικά δωμάτια (96-98 κ.λπ.) κλειδώνονται στο πρώτο νούμερο αλλά το τρέχον ιστορικό τα παραλείπει, οπότε παρκάρονται για χειροκίνητο έλεγχο μέχρι να το διορθώσει το protel. Όλα τρέχουν τοπικά· η μνήμη (7 ημέρες) μένει σε αυτόν τον υπολογιστή."
+  foot:"Κατειλημμένο = άφιξη ≤ νύχτα < αναχώρηση (χρέωση την ημέρα άφιξης, ποτέ την ημέρα αναχώρησης). Λείπει αυτόματο ΤΑ = μπήκε διευθέτηση αλλά όχι το αυτόματο (με αστερίσκο) ΤΕΛΟΣ ΑΝΘΕΚΤΙΚΟΤΗΤΑΣ — επισημαίνεται ακόμη κι αν καλύφθηκε χειροκίνητα. Υπερχρέωση = περισσότερα ΤΑ από νύχτες. Τα γειτονικά δωμάτια (96-98 κ.λπ.) κλειδώνονται στο πρώτο νούμερο αλλά το τρέχον ιστορικό τα παραλείπει, οπότε παρκάρονται για χειροκίνητο έλεγχο μέχρι να το διορθώσει το protel. Όλα τρέχουν τοπικά· η πρόσφατη προβολή δείχνει 7 ημερομηνίες· το αποθηκευμένο ιστορικό παραμένει σε αυτόν τον υπολογιστή."
  }
 };
 let LANG=(function(){try{const g=localStorage.getItem('reccheck_lang');if(g)return g==='gr'?'el':'en';return localStorage.getItem('ta_lang')||'en';}catch(e){return 'en';}})();
@@ -7518,12 +8018,35 @@ function attrOf(el,n){const m=el.match(new RegExp(n+'\\s*=\\s*"([^"]*)"'));retur
 async function oxpsPages(zip){const names=Object.keys(zip.files).filter(n=>/Pages\/\d+\.fpage$/i.test(n)).sort((a,b)=>parseInt((a.match(/(\d+)\.fpage$/i)||[])[1]||0)-parseInt((b.match(/(\d+)\.fpage$/i)||[])[1]||0));const pages=[];for(const n of names){const xml=await zip.files[n].async('string');const els=xml.match(/<Glyphs\b[^>]*\/?>/g)||[];const g=[];for(const el of els){const u=attrOf(el,'UnicodeString');if(u===null)continue;g.push({x:parseFloat(attrOf(el,'OriginX')||0),y:parseFloat(attrOf(el,'OriginY')||0),t:decodeEntities(u)});}pages.push(g);}return pages;}
 function pagesToTokens(pages){let out=[];for(const g of pages){const gg=g.slice().sort((a,b)=>(Math.round(a.y)-Math.round(b.y))||(a.x-b.x));out=out.concat(gg.map(z=>z.t));}return out;}
 function toRows(g){g=g.slice().sort((a,b)=>a.y-b.y||a.x-b.x);const rows=[];let cur=[],ly=null;for(const gl of g){if(ly===null||Math.abs(gl.y-ly)<6)cur.push(gl);else{rows.push(cur);cur=[gl];}ly=gl.y;}if(cur.length)rows.push(cur);return rows;}
-function dkey(s){const m=(s||'').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);if(!m)return 0;let y=parseInt(m[3],10);if(y<100)y+=2000;return y*10000+parseInt(m[2],10)*100+parseInt(m[1],10);}
+function dkey(s){const m=String(s||'').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);if(!m)return 0;let y=parseInt(m[3],10);if(y<100)y+=2000;const mo=+m[2],d=+m[1],dt=new Date(Date.UTC(y,mo-1,d));if(dt.getUTCFullYear()!==y||dt.getUTCMonth()!==mo-1||dt.getUTCDate()!==d)return 0;return y*10000+mo*100+d;}
 function dfmt(key){if(!key)return '';const y=Math.floor(key/10000),m=Math.floor(key/100)%100,d=key%100;return String(d).padStart(2,'0')+'/'+String(m).padStart(2,'0')+'/'+String(y).slice(2);}
 function leadRoom(s){const m=(s||'').trim().match(/^(\d{2,4})/);return m?m[1]:'';}
 const RE_ROOM=/^\d{2,4}(-\d{1,4})?$/;const TA_MARK="ΑΝΘΕΚΤΙΚ";const ARR_MARK="Arrangement";
 function taIsAuto(tk){const di=tk.indexOf("ΤΕΛΟΣ")>=0?tk.indexOf("ΤΕΛΟΣ"):tk.indexOf(TA_MARK);return /\*\s*$/.test(tk.slice(0,di));}
-function parseTax(tokens){const starts=[];for(let i=0;i<tokens.length;i++){if(tokens[i]==="Date"){for(let j=i-1;j>=Math.max(i-7,0);j--){const c=(tokens[j]||"").trim();if(RE_ROOM.test(c)){starts.push({room:leadRoom(c),idx:j});break;}}}}const segs={};for(let k=0;k<starts.length;k++){const room=starts[k].room;const s=starts[k].idx;const e=(k+1<starts.length)?starts[k+1].idx:tokens.length;(segs[room]=segs[room]||[]).push([s,e]);}const rooms={};let totalArr=0;const dc={};for(const room of Object.keys(segs)){let arr=0,auto=0,man=0;for(const [s,e] of segs[room])for(let i=s;i<e;i++){const tk=tokens[i]||"";const dm=tk.match(/(\d{2}\/\d{2}\/\d{2})/);if(dm)dc[dm[1]]=(dc[dm[1]]||0)+1;if(tk.includes(ARR_MARK)){arr++;totalArr++;}if(tk.includes(TA_MARK)){taIsAuto(tk)?auto++:man++;}}rooms[room]={arr,auto,man};}let fileDate=null,best=-1;for(const d of Object.keys(dc))if(dc[d]>best){best=dc[d];fileDate=d;}return{kind:'tax',fileDate,dateKey:dkey(fileDate),totalRooms:Object.keys(rooms).length,totalArrangements:totalArr,rooms};}
+function parseTax(tokens){
+  const starts=[];
+  for(let i=0;i<tokens.length;i++)if(tokens[i]==="Date")for(let j=i-1;j>=Math.max(i-7,0);j--){
+    const c=String(tokens[j]||'').trim();if(RE_ROOM.test(c)){starts.push({room:leadRoom(c),idx:j});break;}
+  }
+  const rooms={},dates=new Set();let totalArr=0,negative=false,badDate=false;
+  for(let k=0;k<starts.length;k++){
+    const room=starts[k].room,end=k+1<starts.length?starts[k+1].idx:tokens.length;
+    const rec=rooms[room]||(rooms[room]={arr:0,auto:0,man:0});
+    for(let i=starts[k].idx;i<end;i++){
+      const tk=String(tokens[i]||'').trim();
+      if(/^\d{1,2}\/\d{1,2}\/(?:\d{2}|\d{4})$/.test(tk)){const key=dkey(tk);if(key)dates.add(key);else badDate=true;}
+      if(/(?:^|\s)-\s*\d[\d.,]*[.,]\d{2}(?:$|\s)/.test(tk))negative=true;
+      if(tk.includes(ARR_MARK)){rec.arr++;totalArr++;}
+      if(tk.includes(TA_MARK)){if(taIsAuto(tk))rec.auto++;else rec.man++;}
+    }
+  }
+  const ambiguous=dates.size!==1||badDate, key=dates.size===1?[...dates][0]:0;
+  const fileDate=key?String(key%100).padStart(2,'0')+'/'+String(Math.floor(key/100)%100).padStart(2,'0')+'/'+String(Math.floor(key/10000)).slice(2):null;
+  return {kind:'tax',fileDate,dateKey:key,totalRooms:Object.keys(rooms).length,totalArrangements:totalArr,rooms,
+    ambiguous,uncertain:ambiguous||negative,
+    error:negative?'This report contains signed reversals. Tax totals need verification; the saved data was retained.':
+      ambiguous?'The tax report must contain one valid posting date. No tax memory was changed.':''};
+}
 /* `rooms` keeps one reservation per room because the tax cross-reference is written
    against that shape. `all` keeps every row, which is the only way to see that a room
    was left AND re-let on the same day — the turnover the department check wants to
@@ -7578,7 +8101,7 @@ function pillRoom(cell, name){
 }
 const IH = {NAME: 0, ROOM: 2, TYPE: 3, OCC: 4, ARR: 5, DEP: 6, STATUS: 11};
 function inhouseToRate(rows, bizDate){
-  const all = {}, rooms = {};
+  const all = {}, rooms = {}, incompleteRooms = {};
   let cancelled = 0, unusable = 0;
   for(const r of (rows || [])){
     if(!r) continue;
@@ -7586,8 +8109,12 @@ function inhouseToRate(rows, bizDate){
     if(/reversal|void/i.test(status)){ cancelled++; continue; }
     const cell = String(r[IH.ROOM] || "").trim();
     const room = (cell.split("-")[0] || "").trim();
-    if(!/^\d{2,4}$/.test(room) || !pillRoom(room, r[IH.NAME])){ unusable++; continue; }
+    const name=String(r[IH.NAME] || "").trim();
     const arr = String(r[IH.ARR] || "").trim(), dep = String(r[IH.DEP] || "").trim();
+    if(/^\d{2,3}$/.test(room)&&(!name||!status||!dkey(arr)||!dkey(dep)||dkey(dep)<dkey(arr)))
+      incompleteRooms[room]={room,name,arr,dep,status,reason:'Incomplete captured reservation fields'};
+    if(!name || !status){ unusable++; continue; }
+    if(!/^\d{2,4}$/.test(room) || !pillRoom(room, r[IH.NAME])){ unusable++; continue; }
     if(!dkey(arr)){ unusable++; continue; }        // no arrival date, no stay
     const partner = cell.indexOf("-") >= 0 ? (cell.split("-")[1] || "").trim() : "";
     const cur = {room: room, arr: arr, dep: dep,
@@ -7601,7 +8128,7 @@ function inhouseToRate(rows, bizDate){
   const dateKey = dkey(bizDate);
   return {kind: "rate", live: true, bizDate: bizDate, dateKey: dateKey, dateSure: !!dateKey,
           count: Object.keys(rooms).length, rooms: rooms, all: all,
-          cancelled: cancelled, unusable: unusable};
+          cancelled: cancelled, unusable: unusable, incompleteRooms: incompleteRooms};
 }
 /* A guest account can precede or follow the physical-room stay. Only a captured,
    X-marked move for this guest and these original stay dates supplies a tax boundary.
@@ -7656,17 +8183,98 @@ function taxMemory(){
   for(const room of taxRoomKeys(raw)) out[room] = raw[room];
   return out;
 }
-function crossReference(rate,tax,nightKey){const N=nightKey||tax.dateKey;const bounds=rate.live?taxAccountBounds(rate,statusLoad().MV||{}):{};const totalFail=[],autoMiss=[],adjoining=[],ok=[];let notOwed=0;for(const room of taxRoomKeys(rate.rooms)){const rr=rate.rooms[room],span=bounds[room]||{};const aK=dkey(rr.arr),dK=dkey(rr.dep);const occ=aK&&dK&&aK<=N&&N<dK&&(!span.start||span.start<=N)&&(!span.end||N<span.end);if(!occ){notOwed++;continue;}if(rr.adjoining){adjoining.push({room,name:rr.name,partner:rr.partner});continue;}const tr=tax.rooms[room];if(!tr||tr.arr===0){totalFail.push({room,name:rr.name,covered:tr?(tr.man>0):false});}else if(tr.auto===0){autoMiss.push({room,name:rr.name,covered:tr.man>0});}else{ok.push(room);}}const over=[];for(const room of taxRoomKeys(tax.rooms)){const b=tax.rooms[room];if((b.auto+b.man)>=2&&b.arr>0)over.push({room,extra:(b.auto+b.man)-1});}const sk=a=>a.sort((x,y)=>(parseInt(x.room||x)||0)-(parseInt(y.room||y)||0));return{nightKey:N,totalFail:sk(totalFail),autoMiss:sk(autoMiss),adjoining:sk(adjoining),overcharge:sk(over),okCount:ok.length,notOwed};}
+function taxCaptureRate(rate){
+  if(RATE&&RATE.live&&RATE.dateKey>rate.dateKey)return RATE;
+  if(!RATE || !RATE.live || RATE.dateKey!==rate.dateKey)return rate;
+  const all={},rooms={},missing=[];
+  for(const room of new Set([...Object.keys(RATE.rooms||{}),...Object.keys(rate.rooms||{})])){
+    const union=new Map();
+    for(const r of [...((RATE.all&&RATE.all[room])||[RATE.rooms[room]]),...((rate.all&&rate.all[room])||[rate.rooms[room]])]){
+      if(!r)continue;
+      const k=JSON.stringify([String(r.name||'').trim().replace(/\s+/g,' ').toUpperCase(),r.arr,r.dep,r.partner||'']);
+      union.set(k,r);
+    }
+    all[room]=[...union.values()];rooms[room]=rate.rooms[room]||RATE.rooms[room];
+    if(!rate.rooms[room])missing.push(room);
+  }
+  return Object.assign({},rate,{all,rooms,count:Object.keys(rooms).length,coverageMissing:missing,
+    incompleteRooms:Object.assign({},RATE.incompleteRooms||{},rate.incompleteRooms||{})});
+}
+function crossReference(rate,tax,nightKey){
+  const N=nightKey||tax.dateKey, totalFail=[],autoMiss=[],adjoining=[],ok=[],uncertain=[];
+  let notOwed=0;
+  for(const room of taxRoomKeys(Object.assign({},rate.rooms,rate.incompleteRooms||{}))){
+    const rows=((rate.all&&rate.all[room])||[rate.rooms[room]]).filter(Boolean);
+    const incomplete=rows.some(r=>!dkey(r.arr)||!dkey(r.dep)||dkey(r.dep)<dkey(r.arr));
+    const occupied=rows.filter(r=>dkey(r.arr)&&dkey(r.dep)&&dkey(r.arr)<=N&&N<dkey(r.dep));
+    const rr=occupied[0]||rate.rooms[room]||(rate.incompleteRooms||{})[room];
+    if(incomplete||(rate.incompleteRooms||{})[room]||(rate.coverageMissing||[]).includes(room)){
+      uncertain.push({room,name:rr.name,reason:(incomplete||(rate.incompleteRooms||{})[room])?'Incomplete captured reservation fields':'Not present in the latest list; saved evidence retained'});continue;
+    }
+    if(!occupied.length){notOwed++;continue;}
+    const dates=new Set(occupied.map(r=>r.arr+'|'+r.dep));
+    if(dates.size>1){uncertain.push({room,name:rr.name,reason:'Conflicting occupied reservation dates'});continue;}
+    const bounds=rate.live?taxAccountBounds(Object.assign({},rate,{rooms:{[room]:rr}}),statusLoad(true).MV||{}):{};
+    const span=bounds[room]||{};
+    if((span.start&&N<span.start)||(span.end&&N>=span.end)){notOwed++;continue;}
+    if(rr.adjoining){adjoining.push({room,name:rr.name,partner:rr.partner});continue;}
+    const tr=tax.rooms[room];
+    if(tr&&tr.uncertain){uncertain.push({room,name:rr.name,reason:'Conflicting saved tax reports'});continue;}
+    if(!tr||tr.arr===0)totalFail.push({room,name:rr.name,covered:!!(tr&&tr.man>0)});
+    else if(tr.auto===0)autoMiss.push({room,name:rr.name,covered:tr.man>0});
+    else ok.push(room);
+  }
+  const over=[];
+  for(const room of taxRoomKeys(tax.rooms)){const b=tax.rooms[room];if(!b.uncertain&&(b.auto+b.man)>=2&&b.arr>0)over.push({room,extra:b.auto+b.man-1});}
+  const sk=a=>a.sort((x,y)=>(parseInt(x.room||x)||0)-(parseInt(y.room||y)||0));
+  return {nightKey:N,totalFail:sk(totalFail),autoMiss:sk(autoMiss),adjoining:sk(adjoining),overcharge:sk(over),uncertain:sk(uncertain),okCount:ok.length,notOwed};
+}
 
 /* ============ state + memory ============ */
 let RATE=null, TAX=null, PAIR_OVERRIDE=null, SEC_OPEN={}; // PAIR_OVERRIDE: {mode:'paired'|'decline', night}
 const MEM_KEY="ta_check_memory_v2"; const EXPANDED=new Set();
-function loadMem(){try{return JSON.parse(localStorage.getItem(MEM_KEY))||{};}catch(e){return{};}}
-function saveMem(m){try{localStorage.setItem(MEM_KEY,JSON.stringify(m));}catch(e){}}
+function taxStoreValid(value,memory){
+  const obj=x=>!!x&&typeof x==='object'&&!Array.isArray(x);
+  if(!obj(value))return false;
+  if(!memory)return true;
+  const counts=x=>obj(x)&&['arr','auto','man'].every(k=>x[k]===undefined||(Number.isSafeInteger(x[k])&&x[k]>=0));
+  return Object.values(value).every(rec=>obj(rec)&&Object.entries(rec).every(([day,e])=>dkey(day)&&counts(e)&&
+    (e.versions===undefined||(Array.isArray(e.versions)&&e.versions.every(counts)))));
+}
+function taxStoreRead(key,memory){
+  try{const raw=localStorage.getItem(key);if(raw===null)return{};const value=JSON.parse(raw);if(!taxStoreValid(value,memory))throw new Error('Invalid saved data in '+key);return value;}
+  catch(e){if(typeof window!=='undefined'&&window.__rcStorageFault)window.__rcStorageFault('Tax saved data',e);return{};}
+}
+function taxStoreWrite(key,value,memory){
+  if(typeof window!=="undefined" && window.__rcImportBlocked) return false;
+  try{
+    const raw=localStorage.getItem(key);
+    if(raw!==null&&!taxStoreValid(JSON.parse(raw),memory))throw new Error('Damaged saved tax data retained. Import a verified backup before editing.');
+    if(!taxStoreValid(value,memory))throw new Error('Tax state failed validation; nothing was overwritten.');
+    localStorage.setItem(key,JSON.stringify(value));return true;
+  }catch(e){if(typeof window!=='undefined'&&window.__rcStorageFault)window.__rcStorageFault('Tax saved data',e);return false;}
+}
+function loadMem(){return taxStoreRead(MEM_KEY,true);}
+function saveMem(m){return taxStoreWrite(MEM_KEY,m,true);}
 function dnum(d){return dkey(d);}
 function recentDates(mem,n){const s=new Set();for(const r of Object.keys(mem))for(const d of Object.keys(mem[r]))s.add(d);return[...s].sort((a,b)=>dnum(b)-dnum(a)).slice(0,n);}
 function pruneRoom(rec,n){const ds=Object.keys(rec).sort((a,b)=>dnum(b)-dnum(a));for(const d of ds.slice(n))delete rec[d];}
-function ingestTax(tax){const mem=loadMem();for(const room of Object.keys(tax.rooms)){const b=tax.rooms[room];const rec=mem[room]||(mem[room]={});if(((b.arr||0)+(b.auto||0)+(b.man||0))===0){delete rec[tax.fileDate];if(!Object.keys(rec).length)delete mem[room];continue;}const pm=rec[tax.fileDate]&&rec[tax.fileDate].manual||null;rec[tax.fileDate]={arr:b.arr,auto:b.auto,man:b.man,manual:pm};pruneRoom(rec,7);}saveMem(mem);}
+function ingestTax(tax){
+  if(!tax||!dkey(tax.fileDate)||tax.uncertain)return false;
+  const mem=loadMem();
+  for(const room of Object.keys(tax.rooms)){
+    const b=tax.rooms[room],rec=mem[room]||(mem[room]={}),old=rec[tax.fileDate];
+    const counts=x=>[x.arr||0,x.auto||0,x.man||0];
+    const changed=old&&JSON.stringify(counts(old))!==JSON.stringify(counts(b));
+    const versions=old&&Array.isArray(old.versions)?old.versions.slice():[];
+    if(changed&&!versions.some(x=>JSON.stringify(counts(x))===JSON.stringify(counts(old))))versions.push({arr:old.arr,auto:old.auto,man:old.man,manual:old.manual||null});
+    const next={arr:b.arr,auto:b.auto,man:b.man,manual:changed?null:(old&&old.manual||null),versions,uncertain:!!(changed||(old&&old.uncertain))};
+    rec[tax.fileDate]=next;
+    b.uncertain=next.uncertain;
+    // Zero counts and earlier versions remain evidence, never implicit deletion.
+  }
+  return saveMem(mem);
+}
 /* Room movements, kept for the DEPARTMENT check to colour its rooms by. The rate list
    is the only report either tool sees carrying arrival and departure dates, and it is
    loaded here — so it is recorded here and read over there.
@@ -7683,22 +8291,48 @@ function ingestTax(tax){const mem=loadMem();for(const room of Object.keys(tax.ro
 const MOVES_KEY="reccheck_moves_v2";
 function loadLedger(){
   try{
-    const raw=JSON.parse(localStorage.getItem(MOVES_KEY)||"null");
-    if(raw&&typeof raw==="object")return raw;
-  }catch(e){}
-  /* carry over the per-night store 1.16.9 shipped, so nothing already recorded is lost */
-  const out={};
-  try{
-    const old=JSON.parse(localStorage.getItem("reccheck_moves_v1")||"{}")||{};
-    for(const night of Object.keys(old))
-      for(const room of Object.keys(old[night]||{}))
-        for(const r of old[night][room]||[]){
-          if(!r.a)continue;
-          const m=out[room]=out[room]||{};
-          if(!m[r.a]||Number(night)>=(m[r.a].seen||0))m[r.a]={d:r.d||0,n:r.n||"",seen:Number(night)||0};
+    const object=v=>!!v&&typeof v==="object"&&!Array.isArray(v);
+    const number=v=>typeof v==="number"&&Number.isFinite(v)&&Number.isInteger(v)&&v>=0;
+    const entry=(e,allowConflicts)=>object(e)&&
+      (e.d===undefined||number(e.d))&&(e.seen===undefined||number(e.seen))&&
+      (e.mv===undefined||number(e.mv))&&(e.n===undefined||typeof e.n==="string")&&
+      (e.from===undefined||typeof e.from==="string")&&
+      (e.conflicts===undefined||(allowConflicts&&Array.isArray(e.conflicts)&&e.conflicts.every(c=>entry(c,false))));
+    const valid=led=>object(led)&&Object.keys(led).every(room=>/^\d{1,4}(?:-\d{1,4})?$/.test(room)&&
+      object(led[room])&&Object.keys(led[room]).every(a=>/^\d{8}$/.test(a)&&entry(led[room][a],true)));
+    const text=localStorage.getItem(MOVES_KEY);
+    if(text!==null){
+      const raw=JSON.parse(text);
+      if(!valid(raw))throw new Error("Saved stay ledger has an invalid structure; original data was left unchanged.");
+      return raw;
+    }
+    /* Migrate only a valid legacy store. A corrupt store is not an empty hotel. */
+    const oldText=localStorage.getItem("reccheck_moves_v1"),out={};
+    if(oldText===null)return out;
+    const old=JSON.parse(oldText);
+    if(!object(old))throw new Error("Saved legacy stay ledger has an invalid structure.");
+    for(const night of Object.keys(old)){
+      if(!/^\d{8}$/.test(night)||!object(old[night]))throw new Error("Invalid saved legacy ledger date.");
+      for(const room of Object.keys(old[night])){
+        if(!/^\d{1,4}(?:-\d{1,4})?$/.test(room)||!Array.isArray(old[night][room]))throw new Error("Invalid saved legacy room records.");
+        for(const r of old[night][room]){
+          if(!entry(r,false)||!number(r.a)||!/^\d{8}$/.test(String(r.a)))throw new Error("Invalid saved legacy reservation.");
+          const m=out[room]=out[room]||{},next={d:r.d||0,n:r.n||"",seen:Number(night)};
+          const current=m[r.a];
+          if(!current)m[r.a]=next;
+          else if(String(current.n).trim().toUpperCase()!==String(next.n).trim().toUpperCase()){
+            const alternatives=current.conflicts||(current.conflicts=[]);
+            const found=alternatives.find(e=>String(e.n).trim().toUpperCase()===String(next.n).trim().toUpperCase());
+            if(!found)alternatives.push(next);else if(next.seen>=(found.seen||0))Object.assign(found,next);
+          }else if(next.seen>=(current.seen||0))Object.assign(current,next);
         }
-  }catch(e){}
-  return out;
+      }
+    }
+    return out;
+  }catch(e){
+    try{if(typeof window!=="undefined"&&window.__rcStorageFault)window.__rcStorageFault("Saved stay ledger",e);}catch(ignore){}
+    throw e;
+  }
 }
 /* ---- room moves ----
    protel prints a room move as a NEW STAY on the new room, dated from the move. Verified
@@ -7736,6 +8370,9 @@ function mvPrevNight(k){
    only moment "where was this name last night" can still be answered. */
 function detectMoves(led, rate, night){
   const out = [];
+  // Neither visible-row completion nor an imported report proves an unfiltered census.
+  // No current capture source supplies that proof; explicit X-marked moves remain valid.
+  if(rate.censusComplete!==true) return out;
   const prev = mvPrevNight(night);
   if(!night || !prev) return out;
   const tonight = {};                       // room -> the names tonight's list puts there
@@ -7751,6 +8388,7 @@ function detectMoves(led, rate, night){
         if(src === room) continue;
         for(const a of Object.keys(led[src])){
           const e = led[src][a], A = Number(a), D = e.d || 0;
+          if((e.conflicts||[]).length)continue;
           if(e.mv) continue;                          // already vacated by an earlier move
           if(!mvSameName(e.n, name)) continue;
           const wasThere = (e.seen === prev) || (A <= prev && prev < D);
@@ -7766,6 +8404,7 @@ function detectMoves(led, rate, night){
   return out;
 }
 function saveMoves(rate){
+  if(typeof window!=="undefined" && window.__rcImportBlocked) return null;
   if(!rate||!rate.all)return null;
   let wrote=0,why="";
   try{
@@ -7788,7 +8427,19 @@ function saveMoves(rate){
         if(!a)continue;
         const m=led[room]=led[room]||{};
         // a later list wins: that is how an extended stay corrects its departure date
-        if(!m[a]||night>=(m[a].seen||0)){m[a]={d:d||0,n:r.name||"",seen:night};wrote++;}
+        const name=String(r.name||"").trim();
+        if(!name)continue;
+        let cur=m[a];
+        if(cur && cur.n && !mvSameName(cur.n,name)){
+          const conflicts=cur.conflicts||(cur.conflicts=[]);
+          let other=conflicts.find(e=>mvSameName(e.n,name));
+          if(!other){other={d:d||0,n:name,seen:night};conflicts.push(other);wrote++;}
+          else if(night>=(other.seen||0)){Object.assign(other,{d:d||other.d||0,n:name,seen:night});wrote++;}
+          continue;
+        }
+        if(!cur||night>=(cur.seen||0)){
+          m[a]=Object.assign({},cur||{},{d:d||(cur&&cur.d)||0,n:name,seen:night});wrote++;
+        }
       }
     }
     /* Keep the ledger bounded without needing a clock — but anchored to a date no single
@@ -7815,7 +8466,7 @@ function saveMoves(rate){
       for(const room of Object.keys(led)){
         for(const a of Object.keys(led[room])){
           const dd=led[room][a].d||0;
-          if(dd&&dd<floor)delete led[room][a];
+          if(dd&&dd<floor&&!(led[room][a].conflicts||[]).some(e=>!e.d||e.d>=floor))delete led[room][a];
         }
         if(!Object.keys(led[room]).length)delete led[room];
       }
@@ -7834,7 +8485,7 @@ function saveMoves(rate){
     localStorage.setItem(MOVES_KEY,JSON.stringify(led));
     /* What this list actually put in the ledger, so DEBUG can answer "why no pills?"
        without anyone having to guess at it a second time. */
-    let rooms=0,res=0;for(const r of Object.keys(led)){rooms++;res+=Object.keys(led[r]).length;}
+    let rooms=0,res=0;for(const r of Object.keys(led)){rooms++;for(const e of Object.values(led[r]))res+=1+(e.conflicts||[]).length;}
     try{localStorage.setItem("reccheck_moves_last",JSON.stringify({
       biz:rate.bizDate||"(none in the header)", key:night||0, sure:!!rate.dateSure,
       moves:moves.map(m=>m.from+"\u2192"+m.to),
@@ -7843,6 +8494,7 @@ function saveMoves(rate){
     return {night:night, sure:!!rate.dateSure, rooms:Object.keys(rate.all).length, res:res};
   }catch(e){
     why=String(e&&e.message||e);
+    try{if(typeof window!=="undefined"&&window.__rcStorageFault)window.__rcStorageFault("Stay ledger",e);}catch(ignore){}
     try{localStorage.setItem("reccheck_moves_last",JSON.stringify({
       biz:rate&&rate.bizDate||"", key:rate&&rate.dateKey||0, wrote:wrote, error:why}));}catch(e2){}
   }
@@ -7851,26 +8503,38 @@ function saveMoves(rate){
 
 /* manual-check outcomes for adjoining rooms, per night */
 const VERIFY_KEY="ta_check_verify_v1";
-function loadVerify(){try{return JSON.parse(localStorage.getItem(VERIFY_KEY))||{};}catch(e){return{};}}
-function saveVerify(v){try{localStorage.setItem(VERIFY_KEY,JSON.stringify(v));}catch(e){}}
+function loadVerify(){return taxStoreRead(VERIFY_KEY,false);}
+function saveVerify(v){return taxStoreWrite(VERIFY_KEY,v,false);}
 function verifyOf(nightKey,room){const v=loadVerify();return (v[nightKey]&&v[nightKey][room])||null;}
-function setVerify(nightKey,room,val){const v=loadVerify();const n=v[nightKey]||(v[nightKey]={});if(val)n[room]=val;else delete n[room];const keys=Object.keys(v).sort((a,b)=>Number(b)-Number(a));for(const k of keys.slice(7))delete v[k];saveVerify(v);}
+function setVerify(nightKey,room,val){const v=loadVerify();const n=v[nightKey]||(v[nightKey]={});if(val)n[room]=val;else delete n[room];saveVerify(v);}
 /* consolidation across the days in memory: TA total vs nights */
-function roomBalance(mem,room){const rec=mem[room]||{};let ta=0,nights=0;for(const d of Object.keys(rec)){const e=rec[d];if(e.manual==='arrival'||e.manual==='checkout')continue;ta+=(e.auto||0)+(e.man||0);if((e.arr||0)>0)nights++;}return{bal:ta-nights,nights,ta};}
-function overchargeFromMemory(){const mem=taxMemory();const out=[];for(const room of Object.keys(mem)){const b=roomBalance(mem,room);if(b.bal>0)out.push({room,extra:b.bal,nights:b.nights});}out.sort((a,b)=>(parseInt(a.room)||0)-(parseInt(b.room)||0));pruneAck(out);return out;}
+function roomBalance(mem,room){const rec=mem[room]||{};let ta=0,nights=0,uncertain=false;const days=Object.keys(rec).filter(d=>rec[d].uncertain||(rec[d].arr||0)+(rec[d].auto||0)+(rec[d].man||0)>0).sort((a,b)=>dkey(b)-dkey(a)).slice(0,7);for(const d of days){const e=rec[d];if(e.uncertain){uncertain=true;continue;}if(e.manual==='arrival'||e.manual==='checkout')continue;ta+=(e.auto||0)+(e.man||0);if((e.arr||0)>0)nights++;}return{bal:ta-nights,nights,ta,uncertain};}
+function overchargeFromMemory(){const mem=taxMemory();const out=[];for(const room of Object.keys(mem)){const b=roomBalance(mem,room);if(!b.uncertain&&b.bal>0)out.push({room,extra:b.bal,nights:b.nights});}out.sort((a,b)=>(parseInt(a.room)||0)-(parseInt(b.room)||0));pruneAck(out);return out;}
+function taxUncertainties(mem){
+  const out=[];
+  for(const room of taxRoomKeys(mem)){
+    const dates=Object.keys(mem[room]||{}).filter(d=>mem[room][d].uncertain).sort((a,b)=>dkey(a)-dkey(b));
+    if(dates.length)out.push({room,name:'',reason:'Conflicting saved tax reports: '+dates.join(', ')});
+  }
+  return out;
+}
 /* overcharge dismissals persist across nights — an ack is tied to the room's balance
    at the moment of dismissal, so the room only resurfaces if something new happens */
 const ACK_KEY="ta_check_ack_v1";
-function loadAck(){try{return JSON.parse(localStorage.getItem(ACK_KEY))||{};}catch(e){return{};}}
-function saveAck(a){try{localStorage.setItem(ACK_KEY,JSON.stringify(a));}catch(e){}}
-function ackOf(room,bal){return loadAck()[room]===bal;}
-function toggleAck(room,bal){const a=loadAck();if(a[room]===bal)delete a[room];else a[room]=bal;saveAck(a);}
-function pruneAck(over){const a=loadAck();let ch=false;for(const room of Object.keys(a)){const cur=over.find(o=>o.room===room);if(!cur||cur.extra!==a[room]){delete a[room];ch=true;}}if(ch)saveAck(a);}
+function loadAck(){return taxStoreRead(ACK_KEY,false);}
+function saveAck(a){return taxStoreWrite(ACK_KEY,a,false);}
+function taxAckSource(room){
+  const rec=loadMem()[room]||{};
+  return JSON.stringify(Object.keys(rec).sort().map(day=>[day,rec[day]]));
+}
+function ackOf(room,bal){const a=loadAck()[room];return !!a&&typeof a==='object'&&a.balance===bal&&a.source===taxAckSource(room);}
+function toggleAck(room,bal){const a=loadAck();if(ackOf(room,bal))delete a[room];else a[room]={balance:bal,source:taxAckSource(room)};saveAck(a);}
+function pruneAck(over){ /* Source-bound acknowledgements become inactive without deleting history. */ }
 
 /* ============ helpers ============ */
 function el(id){return document.getElementById(id);}
 function sk(a){return a.sort((x,y)=>(parseInt(x)||0)-(parseInt(y)||0));}
-function rowHTML(room,name,tagCls,tagLabel,meta){return `<div class="row"><span class="rm">${room}</span><span class="nm">${name||''}</span><span class="tag ${tagCls}">${tagLabel}</span><span class="meta">${meta||''}</span></div>`;}
+function rowHTML(room,name,tagCls,tagLabel,meta){return `<div class="row"><span class="rm">${escHtml(String(room))}</span><span class="nm">${escHtml(name||'')}</span><span class="tag ${tagCls}">${escHtml(tagLabel)}</span><span class="meta">${escHtml(meta||'')}</span></div>`;}
 
 /* ============ main render ============ */
 function decidePairing(){
@@ -7894,6 +8558,7 @@ function render(){
 
   if(d.state==='paired'){
     const x=crossReference(RATE,TAX,d.night);
+    for(const row of taxUncertainties(taxMemory()))if(!x.uncertain.some(x=>x.room===row.room))x.uncertain.push(row);
     const over=overchargeFromMemory();
     const adjPending=x.adjoining.filter(o=>!verifyOf(d.night,o.room)).length;
     const adjProblem=x.adjoining.filter(o=>verifyOf(d.night,o.room)==='problem').length;
@@ -7901,12 +8566,13 @@ function render(){
     bn.innerHTML=`<div class="banner ok">${t('b_paired', dfmt(RATE.dateKey)||RATE.bizDate, dfmt(d.night))}</div>`;
     sm.style.display='flex';
     const overPend=over.filter(o=>!ackOf(o.room,o.extra)).length;
-    sm.innerHTML=stat('stat_night',dfmt(d.night),true)+stat('stat_inhouse',RATE.count)+stat('stat_posted',taxRoomKeys(TAX.rooms).length)+stat('stat_flags',x.totalFail.length+x.autoMiss.length+overPend+adjProblem);
+    sm.innerHTML=stat('stat_night',dfmt(d.night),true)+stat('stat_inhouse',RATE.count)+stat('stat_posted',taxRoomKeys(TAX.rooms).length)+stat('stat_flags',x.totalFail.length+x.autoMiss.length+x.uncertain.length+overPend+adjProblem);
     rs.innerHTML=
       ackSection('fail','sec_fail','empty_fail',x.totalFail,d.night,o=>['red',t('tag_fail'),t('meta_fail')],false)+
       ackSection('auto','sec_auto','empty_auto',x.autoMiss,d.night,o=>['red',o.covered?t('tag_auto_cov'):t('tag_auto_none'),o.covered?t('meta_auto_cov'):t('meta_auto_none')],true)+
       ackSection('over','sec_over','empty_over',over,d.night,o=>['amber',t('tag_over',o.extra),t('meta_over',o.extra,o.nights)],false,'ov:')+
       adjSection(x.adjoining, d.night, adjPending, adjOk, adjProblem)+
+      (x.uncertain.length?'<section><h2>Needs verification</h2><div class="card">'+x.uncertain.map(o=>rowHTML(o.room,o.name,'amber','Uncertain',o.reason)).join('')+'</div></section>':'')+
       `<div class="legend">${t('okline',x.okCount,x.notOwed)}</div>`;
     renderMemory();
     return;
@@ -7931,17 +8597,21 @@ function escHtml(s){return (s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;',
 function buildPrintReport(){
   const d=decidePairing(); let night='',rooms=[],paired=(d.state==='paired');
   if(paired){const x=crossReference(RATE,TAX,d.night);night=dfmt(d.night);
+    for(const row of taxUncertainties(taxMemory()))if(!x.uncertain.some(x=>x.room===row.room))x.uncertain.push(row);
     rooms=x.autoMiss.map(o=>{const rr=RATE.rooms[o.room]||{};return{room:o.room,name:o.name||rr.name||'',term:rr.term||'',agent:rr.agent||'',arr:rr.arr||'',dep:rr.dep||'',covered:o.covered,adj:false};});
+    rooms.push(...x.uncertain.map(o=>{const rr=RATE.rooms[o.room]||{};return{room:o.room,name:o.name||rr.name||'',term:rr.term||'',agent:rr.agent||'',arr:rr.arr||'',dep:rr.dep||'',reason:o.reason};}));
     // adjoining rooms manually flagged "Missing" are the same underlying problem — include them
     x.adjoining.forEach(o=>{ if(verifyOf(d.night,o.room)==='problem'){const rr=RATE.rooms[o.room]||{};rooms.push({room:o.room+(o.partner?('-'+o.partner):''),name:o.name||rr.name||'',term:rr.term||'',agent:rr.agent||'',arr:rr.arr||'',dep:rr.dep||'',covered:false,adj:true});} });
     rooms.sort((a,b)=>(parseInt(a.room)||0)-(parseInt(b.room)||0));
   }
   else if(TAX){night=TAX.fileDate;const mem=loadMem();const man=r=>((mem[r]||{})[TAX.fileDate]||{}).manual||null;
-    rooms=taxRoomKeys(TAX.rooms).filter(r=>{const b=TAX.rooms[r];return b.arr>0&&b.auto===0&&!man(r);}).sort((a,b)=>(parseInt(a)||0)-(parseInt(b)||0)).map(r=>({room:r,name:'',term:'',agent:'',arr:'',dep:'',covered:TAX.rooms[r].man>0,adj:false}));}
+    rooms=taxRoomKeys(TAX.rooms).filter(r=>{const b=TAX.rooms[r];return b.uncertain||(b.arr>0&&b.auto===0&&!man(r));}).sort((a,b)=>(parseInt(a)||0)-(parseInt(b)||0)).map(r=>({room:r,name:'',term:'',agent:'',arr:'',dep:'',covered:TAX.rooms[r].man>0,adj:false,reason:TAX.rooms[r].uncertain?'Conflicting saved tax reports':''}));
+    for(const row of taxUncertainties(taxMemory()))if(!rooms.some(x=>x.room===row.room&&x.reason))rooms.push(row);
+  }
   const _n=new Date(),_p=x=>String(x).padStart(2,'0');const now=_p(_n.getDate())+'/'+_p(_n.getMonth()+1)+'/'+_n.getFullYear()+' '+_p(_n.getHours())+':'+_p(_n.getMinutes());
   let head='<tr><th>'+t('pr_h_room')+'</th>'+(paired?('<th>'+t('pr_h_guest')+'</th><th>'+t('pr_h_board')+'</th><th>'+t('pr_h_operator')+'</th><th>'+t('pr_h_stay')+'</th>'):'')+'<th>'+t('pr_h_auto')+'</th></tr>';
-  let body=rooms.length? rooms.map(r=>{const stay=(r.arr&&r.dep)?(r.arr+' → '+r.dep):'';const status=r.adj?(t('pr_covered')+' ('+t('pr_adjnote')+')'):(r.covered?t('pr_covered'):t('pr_notcovered'));
-    return '<tr><td>'+escHtml(r.room)+'</td>'+(paired?('<td>'+escHtml(r.name)+'</td><td>'+escHtml(r.term)+'</td><td>'+escHtml(r.agent)+'</td><td>'+stay+'</td>'):'')+'<td>'+status+'</td></tr>';}).join('')
+  let body=rooms.length? rooms.map(r=>{const stay=(r.arr&&r.dep)?(r.arr+' → '+r.dep):'';const status=r.reason?('Uncertain: '+escHtml(r.reason)):(r.adj?(t('pr_covered')+' ('+t('pr_adjnote')+')'):(r.covered?t('pr_covered'):t('pr_notcovered')));
+    return '<tr><td>'+escHtml(r.room)+'</td>'+(paired?('<td>'+escHtml(r.name)+'</td><td>'+escHtml(r.term)+'</td><td>'+escHtml(r.agent)+'</td><td>'+escHtml(stay)+'</td>'):'')+'<td>'+status+'</td></tr>';}).join('')
     : '<tr><td colspan="'+(paired?6:2)+'">'+t('pr_empty')+'</td></tr>';
   return '<div class="pr"><h1>'+t('pr_title')+'</h1><div class="prmeta">'+t('pr_meta',night,now,rooms.length)+'</div><table><thead>'+head+'</thead><tbody>'+body+'</tbody></table><div class="prfoot">'+t('pr_foot')+'</div></div>';
 }
@@ -8003,22 +8673,25 @@ function renderRosterInto(container,append){
 /* Tax standalone (no rate loaded / declined) — the v3 logic */
 function renderTaxStandalone(){
   const r=TAX; const mem=loadMem();
+  const uncertain=taxUncertainties(taxMemory());
+  for(const room of taxRoomKeys(r.rooms))if(r.rooms[room].uncertain&&!uncertain.some(x=>x.room===room))uncertain.push({room,reason:'Conflicting saved tax reports'});
   const manualOf=room=>((mem[room]||{})[r.fileDate]||{}).manual||null;
-  const autoMiss=[]; for(const room of taxRoomKeys(r.rooms)){const b=r.rooms[room];if(b.arr>0&&b.auto===0&&!manualOf(room))autoMiss.push({room,covered:b.man>0});}
+  const autoMiss=[]; for(const room of taxRoomKeys(r.rooms)){const b=r.rooms[room];if(!b.uncertain&&b.arr>0&&b.auto===0&&!manualOf(room))autoMiss.push({room,covered:b.man>0});}
   autoMiss.sort((a,b)=>(parseInt(a.room)||0)-(parseInt(b.room)||0));
-  const noArrAll=taxRoomKeys(r.rooms).filter(room=>{const b=r.rooms[room];return b.arr===0&&((b.auto||0)+(b.man||0))>0;});
+  const noArrAll=taxRoomKeys(r.rooms).filter(room=>{const b=r.rooms[room];return !b.uncertain&&b.arr===0&&((b.auto||0)+(b.man||0))>0;});
   const noArr=sk(noArrAll.filter(room=>!manualOf(room)));const classified=noArrAll.length-noArr.length;
   const over=overchargeFromMemory();
   over.sort((a,b)=>(parseInt(a.room)||0)-(parseInt(b.room)||0));
   const overPend=over.filter(o=>!ackOf(o.room,o.extra)).length;
   const sm=el('ta-summary'); sm.style.display='flex';
-  sm.innerHTML=stat('stat_night',r.fileDate,true)+stat('stat_posted',taxRoomKeys(r.rooms).length)+stat('stat_flags',autoMiss.length+overPend);
+  sm.innerHTML=stat('stat_night',r.fileDate,true)+stat('stat_posted',taxRoomKeys(r.rooms).length)+stat('stat_flags',autoMiss.length+overPend+uncertain.length);
   const rs=el('results');
   rs.innerHTML +=
     sectAuto(autoMiss.length, autoMiss.length? autoMiss.map(o=>rowHTML(o.room,'','red',o.covered?t('tag_auto_cov'):t('tag_auto_none'),o.covered?t('meta_auto_cov'):t('meta_auto_none'))).join(''):empt('empty_auto'))+
     sect('sec_over','a2',overPend, over.length? over.map(o=>ackRow(o,0,'amber',t('tag_over',o.extra),t('meta_over',o.extra,o.nights),'ov:')).join(''):empt('empty_over'))+
     sect('sec_adj','a3',0,'')+  // placeholder to keep layout (hidden below)
-    noArrSection(noArr,classified);
+    noArrSection(noArr,classified)+
+    (uncertain.length?'<section><h2>Needs verification</h2><div class="card">'+uncertain.map(o=>rowHTML(o.room,'','amber','Uncertain',o.reason)).join('')+'</div></section>':'');
   // remove empty adjoining placeholder in standalone
   const secs=rs.querySelectorAll('section'); if(secs[2])secs[2].remove();
 }
@@ -8030,7 +8703,7 @@ function noArrRow(room){const mem=loadMem();const cur=((mem[room]||{})[TAX.fileD
   return `<div class="row"><span class="rm">${room}</span><span class="tag grey">${t('tag_noarr')}</span><span class="meta">${t('meta_noarr')}</span><span class="btns"><button class="mini ${cur==='arrival'?'on-arr':''}" data-room="${room}" data-set="arrival">${t('btn_arrival')}</button><button class="mini ${cur==='checkout'?'on-out':''}" data-room="${room}" data-set="checkout">${t('btn_checkout')}</button></span></div>`;}
 
 /* memory accordion (tax) */
-function deriveStatus(e){const man=e.manual||null;if(man==='arrival')return['blue',t('tag_arrival'),true];if(man==='checkout')return['blue',t('tag_checkout'),true];if((e.arr||0)===0)return['grey',t('tag_noarr'),true];if((e.auto||0)===0&&(e.man||0)===0)return['red',t('tag_auto_none'),false];if((e.auto||0)===0&&(e.man||0)>0)return['red',t('tag_auto_cov'),false];if(((e.auto||0)+(e.man||0))>=2)return['amber',t('tag_double'),false];return['ok',t('tag_ok'),false];}
+function deriveStatus(e){if(e.uncertain)return['amber','Conflicting saved tax reports',false];const man=e.manual||null;if(man==='arrival')return['blue',t('tag_arrival'),true];if(man==='checkout')return['blue',t('tag_checkout'),true];if((e.arr||0)===0)return['grey',t('tag_noarr'),true];if((e.auto||0)===0&&(e.man||0)===0)return['red',t('tag_auto_none'),false];if((e.auto||0)===0&&(e.man||0)>0)return['red',t('tag_auto_cov'),false];if(((e.auto||0)+(e.man||0))>=2)return['amber',t('tag_double'),false];return['ok',t('tag_ok'),false];}
 function renderMemory(){const mem=taxMemory();const dates=recentDates(mem,7);const acc=el('acc');if(!dates.length){acc.innerHTML=`<div class="empty" style="background:var(--panel);border:1px solid var(--line);border-radius:10px">${t('mem_empty')}</div>`;return;}let html='';for(const d of dates){const items=[];let total=0,autox=0,dbl=0,noarr=0,arr=0,out=0;for(const room of Object.keys(mem)){const e=mem[room][d];if(!e)continue;total++;const [cls,label,click]=deriveStatus(e);const man=e.manual||null;if(man==='arrival')arr++;else if(man==='checkout')out++;else if((e.arr||0)===0)noarr++;else if((e.auto||0)===0)autox++;else if(((e.auto||0)+(e.man||0))>=2)dbl++;if(cls!=='ok')items.push([room,cls,label,click]);}items.sort((a,b)=>(parseInt(a[0])||0)-(parseInt(b[0])||0));let chips=`<span class="chip">${total} ${t('chip_rooms')}</span>`;if(autox)chips+=`<span class="chip red">${autox} ${t('chip_auto')}</span>`;if(dbl)chips+=`<span class="chip amber">${dbl} ${t('chip_double')}</span>`;if(noarr)chips+=`<span class="chip grey">${noarr} ${t('chip_noarr')}</span>`;if(arr)chips+=`<span class="chip blue">${arr} ${t('chip_arr')}</span>`;if(out)chips+=`<span class="chip blue">${out} ${t('chip_out')}</span>`;let body;if(!items.length)body=`<div class="empty">${t('date_allok')}</div>`;else body=items.map(function(it){const room=it[0],cls=it[1],label=it[2],click=it[3];const tc=click?(cls+' click cyc'):cls;const da=click?('data-room="'+room+'" data-date="'+d+'"'):'';return '<div class="row"><span class="rm">'+room+'</span><span class="tag '+tc+'" '+da+'>'+label+'</span></div>';}).join('');const open=EXPANDED.has(d)?' open':'';html+='<div class="dgroup'+open+'"><div class="dhead" data-toggle="'+d+'"><span class="caret">▶</span><span class="ddate">'+d+'</span><span class="chips">'+chips+'</span></div><div class="dbody">'+body+'</div></div>';}acc.innerHTML=html;}
 
 /* manual tagging */
@@ -8080,7 +8753,7 @@ document.addEventListener('keydown',e=>{
 
 /* ============ language ============ */
 function applyStatic(){el('apptitle').innerHTML='<span>'+t('app_brand')+'</span> '+t('app_rest');document.querySelectorAll('[data-i18n]').forEach(e=>{e.textContent=t(e.getAttribute('data-i18n'));});el('memhint').textContent=t('mem_hint');el('foot').textContent=t('foot');}
-function setLang(l){LANG=l;try{localStorage.setItem('ta_lang',l);}catch(e){}applyStatic();render();}
+function setLang(l){if(window.__rcImportBlocked)return;LANG=l;try{localStorage.setItem('ta_lang',l);}catch(e){}applyStatic();render();}
 
 /* ============ file loading ============ */
 function showErr(m){const e=el('err');e.style.display='block';e.textContent=m;} function clearErr(){el('err').style.display='none';}
@@ -8157,6 +8830,7 @@ const LIVE_RETRY_MS = 5000;
    looks unchanged and nothing is ever written back — he would empty it and watch it stay
    empty. The reset lives in the other scope, so this is its door. */
 window.__taForget = function(){
+  if(window.__rcImportBlocked) return;
   try{ LIVE_SIG = ""; RPT_SIG = {}; LIVE_AT = {}; LIVE_HELD = {}; LIVE_ERR = {}; LEDGER_TICK++; }catch(e){}
   try{ localStorage.removeItem(MOVES_DONE_KEY); }catch(e){}
 };
@@ -8253,9 +8927,79 @@ function paintHeld(){
   box.textContent = bits.length ? t('held_lead') + bits.join("   ") : t('held_none');
 }
 let TAX_MOVES_STALE = false;
+const CAPTURE_CURSOR_KEY = "reccheck_capture_cursor";
+function captureIdParts(id){
+  return typeof id === "string" && id.match(/^(\d{19})-(\d{13})-(IH|MV|AR|DP)-[a-f0-9]{32}\.tsv$/);
+}
+async function replayCapturedBatch(){
+  if(window.__rcImportBlocked) return false;
+  if(!window.reccheckShortcuts || !window.reccheckShortcuts.listCaptures) return true;
+  try{
+    const raw = localStorage.getItem(CAPTURE_CURSOR_KEY);
+    let cursor = raw === null ? "" : JSON.parse(raw);
+    if(typeof cursor !== "string" || (cursor && !captureIdParts(cursor))) throw new Error("Invalid capture cursor; original saved value retained");
+    const batch = await window.reccheckShortcuts.listCaptures(cursor);
+    if(window.__rcImportBlocked) return false;
+    if(!batch || batch.error || !Array.isArray(batch.captures) || typeof batch.more !== "boolean") throw new Error(batch && batch.error || "Invalid capture queue response");
+    let prior = cursor;
+    for(const capture of batch.captures){
+      const parts = captureIdParts(capture.id);
+      if(!parts || capture.id <= prior || capture.tag !== parts[3] || capture.at !== Number(parts[2]) || typeof capture.text !== "string") throw new Error("Invalid or unordered archived capture; queue retained");
+      prior = capture.id;
+    }
+    if(batch.more && !batch.captures.length) throw new Error("Capture queue made no progress");
+    for(const capture of batch.captures){
+      if(window.__rcImportBlocked) return false;
+      const {tag,at,text} = capture;
+      const p = tag === "IH" ? parseInhouse(text) : parseTagged(text,tag);
+      const key = p && dkey(inhouseDate(p.title));
+      const titleOK = p && (tag === "IH" ? isInhouseTitle(p.title) : (tag === "MV" ? /perform\s*move/i : tag === "AR" ? /arrival\s*report/i : /departure\s*report/i).test(p.title));
+      if(!p || p.err || !key || !titleOK || !p.done || p.done.cut || !Number.isInteger(p.done.rows) || p.done.rows !== p.rows.length || p.done.got !== p.rows.length) throw new Error("Archived capture is incomplete or unrecognized: " + capture.id);
+      const failures = window.__rcStorageFaultCount || 0;
+      statusIngest(tag,p,at,true);
+      // Complete empty filtered lists are observations, never instructions to clear.
+      const result = p.rows.length ? await ingestCaptured(tag,text,{replay:true,at,key}) : "ok";
+      if(tag === "IH"){
+        const days=statusLoad().MV||{};
+        for(const day of Object.keys(days).sort())if(+day<=key){
+          const rows=Object.values(days[day].rows||{}).map(r=>[r.from,"",r.to,"",r.name,r.x,r.arr,r.dep]);
+          recordMoves(rows,+day);
+        }
+      }
+      if(window.__rcImportBlocked) return false;
+      if(result !== "ok" || (window.__rcStorageFaultCount || 0) !== failures) throw new Error("Capture application failed: " + capture.id);
+      if(window.__rcCaptureFlush && !await window.__rcCaptureFlush()) throw new Error("Capture persistence is incomplete: " + capture.id);
+      if(window.__rcImportBlocked) return false;
+      if((window.__rcStorageFaultCount || 0) !== failures) throw new Error("Capture persistence failed: " + capture.id);
+      localStorage.setItem(CAPTURE_CURSOR_KEY,JSON.stringify(capture.id));
+      cursor = capture.id;
+      LIVE_AT[tag] = Math.max(LIVE_AT[tag] || 0,at);
+      if(!LIVE_HELD[tag] || at >= LIVE_HELD[tag].at){
+        LIVE_HELD[tag] = heldOf(tag,at,text);LIVE_ROWS[tag] = {p,at};
+      }
+      LEDGER_TICK++;
+    }
+    if(batch.captures.length){
+      if(RATE && RATE.live){const held=statusLoad();if(held.IH && held.IH.key===RATE.dateKey)setLiveRate(consolidatedInhouseRate(held));}
+      if(window.__rcMovesChanged) window.__rcMovesChanged();
+      render();paintHeld();
+    }
+    return !batch.more;
+  }catch(e){
+    // Earlier stages may have succeeded. Replay the same immutable item and flush
+    // again; signatures must never turn a failed save into an acknowledged one.
+    LIVE_SIG = ""; RPT_SIG = {};
+    window.__rcStorageFault("capture replay",e);
+    return false;
+  }
+}
 async function autoReadInhouse(){
+  if(window.__rcImportBlocked || window.__rcCapturePollBusy) return;
+  window.__rcCapturePollBusy = true;
+  try{
   if(legacyOn() || !LIVE_OK){ liveStop(); return; }
   if(!window.reccheckShortcuts || !window.reccheckShortcuts.listFile) return;
+  if(!await replayCapturedBatch()) return;
   /* COLLECTED FIRST, THEN INGESTED OLDEST CAPTURE FIRST, so the NEWEST one has the last
      word on the line.
 
@@ -8283,6 +9027,7 @@ async function autoReadInhouse(){
       if(!f || f.why === "old" || (!f.why && !f.text)){ delete LIVE_HELD[tag]; delete LIVE_ERR[tag]; delete LIVE_ROWS[tag]; continue; }
       if(f.why){ LIVE_ERR[tag] = f.detail || f.why; continue; }
       delete LIVE_ERR[tag];
+      if(LIVE_AT[tag] && +f.at <= LIVE_AT[tag]) continue;
       if(!LIVE_HELD[tag] || LIVE_HELD[tag].at !== f.at){
         LIVE_HELD[tag] = heldOf(tag, +f.at || 0, f.text);
         /* the rows themselves, parsed once per capture, never per tick — and into the
@@ -8306,7 +9051,7 @@ async function autoReadInhouse(){
        held: the one claim the line exists to make, and false. Each ingest answers "ok" or
        why not, and the answer rides on the entry. */
     let r = "threw";
-    try{ const a = await ingestCaptured(g.tag, g.text); r = (a === undefined) ? "unknown" : String(a); }
+    try{ const a = await ingestCaptured(g.tag, g.text, {replay:true,at:g.at}); r = (a === undefined) ? "unknown" : String(a); }
     catch(e){ r = "threw"; }
     const h = LIVE_HELD[g.tag];
     if(h && h.at === g.at) h.why = (r === "ok") ? "" : r;
@@ -8325,6 +9070,7 @@ async function autoReadInhouse(){
   try{ paintHeld(); }catch(e){}
   if(TAX_SCREEN === "status"){ try{ window.__taStatusMenu(); }catch(e){} }
   if(TAX_SCREEN === "stlist"){ try{ renderStatusList(); }catch(e){} }
+  }finally{ window.__rcCapturePollBusy = false; }
 }
 /* ---- STATUS: what protel has told the tool, kept for the day ----
 
@@ -8343,25 +9089,55 @@ async function autoReadInhouse(){
    still that night's arrival, and nothing is read into a row being gone. The marks are
    computed from the latest in-house capture and never stored or written anywhere else:
    an arrival is CHECKED IN when the in-house list shows the same name and room with CI; a
-   departure is CHECKED OUT when a COMPLETE in-house list, captured later, does not show it
-   (or shows it with CO); still on it with CI, it is STILL IN HOUSE as of that capture. A
-   cut-short in-house read proves nothing about absence and says so.
+   departure is CHECKED OUT only when its matching in-house reservation says CO.
+   Reading all visible rows does not establish that no filter is applied, so absence
+   never proves checkout. A cut-short in-house read likewise proves nothing by absence.
 
    The department check's pills read this store (roomMoves) and nothing else. Nothing here
    asks protel anything: the rows are the capture files, already read every tick. */
 const STATUS_KEY = "reccheck_status_v1";
 const STATUS_KEEP_DAYS = 15;   // 7 until 1.17.60 — the dot's look-back needs the moves of a whole stay (his word: 15 days)
 let STATUS_TICK = 0;                           // bumped when the store changes
-function statusLoad(){
-  try{ const o = JSON.parse(localStorage.getItem(STATUS_KEY) || "{}"); return (o && typeof o === "object" && !Array.isArray(o)) ? o : {}; }
-  catch(e){ return {}; }
+function statusLoad(readOnly=false){
+  try{
+    const raw=localStorage.getItem(STATUS_KEY);
+    if(raw===null)return {};
+    const o=JSON.parse(raw), object=v=>v&&typeof v==="object"&&!Array.isArray(v);
+    const validRow=r=>object(r)&&["name","room","arr","dep","status","from","to","x"].every(k=>r[k]===undefined||typeof r[k]==="string")&&
+      ["first","last","readAt"].every(k=>r[k]===undefined||(typeof r[k]==="number"&&Number.isFinite(r[k])&&r[k]>=0))&&
+      (r.cells===undefined||Array.isArray(r.cells));
+    if(!object(o))throw new Error("Saved status data is not an object");
+    for(const tag of ["IH","IHL","IHC"]){
+      const cap=o[tag];if(cap===undefined)continue;
+      if(!object(cap)||!Array.isArray(cap.rows)||!cap.rows.every(validRow))throw new Error("Invalid saved "+tag+" capture");
+      if(cap.incompleteRows!==undefined&&(!Array.isArray(cap.incompleteRows)||!cap.incompleteRows.every(validRow)))throw new Error("Invalid saved "+tag+" incomplete capture");
+    }
+    for(const tag of ["AR","DP","MV"]){
+      const days=o[tag];if(days===undefined)continue;
+      if(!object(days))throw new Error("Invalid saved "+tag+" days");
+      for(const [key,day] of Object.entries(days))if(!/^\d{8}$/.test(key)||!object(day)||!object(day.rows)||!Object.values(day.rows).every(validRow))
+        throw new Error("Invalid saved "+tag+" rows");
+    }
+    return o;
+  }catch(e){
+    try{if(typeof window!=="undefined"&&window.__rcStorageFault)window.__rcStorageFault("Saved status capture",e);}catch(ignore){}
+    if(readOnly)return {};
+    throw e;
+  }
 }
-function statusSave(st){ try{ localStorage.setItem(STATUS_KEY, JSON.stringify(st)); }catch(e){} }
+function statusSave(st){
+  if(typeof window!=="undefined" && window.__rcImportBlocked) throw new Error("Import is reloading; capture was not saved");
+  try{ localStorage.setItem(STATUS_KEY, JSON.stringify(st)); }
+  catch(e){
+    try{ if(typeof window!=="undefined"&&window.__rcStorageFault)window.__rcStorageFault("Status capture",e); }catch(ignore){}
+    throw e;
+  }
+}
 function stName(x){ return String(x || "").trim().replace(/\s+/g, " ").toUpperCase(); }
 function stRoom(x){ return String(x || "").trim(); }
 function stKey(name, room){ return stName(name) + "|" + stRoom(room); }
 /* an exact match of reservation name and room; "414-15" and "414" are one room */
-function stSameRoom(a, b){ a = stRoom(a); b = stRoom(b); return !!a && (a === b || (leadRoom(a) && leadRoom(a) === leadRoom(b))); }
+function stSameRoom(a, b){ a = stRoom(a); b = stRoom(b); return !!a && (a === b || (!(a.includes("-")&&b.includes("-")) && leadRoom(a) && leadRoom(a) === leadRoom(b))); }
 function stDayKey(k){ const y = Math.floor(k / 10000), m = Math.floor(k / 100) % 100, d = k % 100; return Date.UTC(y, m - 1, d) / 86400000; }
 function statusPrune(st){
   const today = stDayKey(bnk());
@@ -8371,41 +9147,64 @@ function statusPrune(st){
   }
 }
 /* A capture into the store. Returns true when something changed. */
-function statusIngest(tag, p, at){
-  if(!p || !p.rows) return false;
+function statusIngest(tag, p, at, replay){
+  if(!p || !Array.isArray(p.rows) || p.err || !p.done || !Number.isInteger(p.done.got) ||
+     !Number.isInteger(p.done.rows) || p.done.got!==p.rows.length || p.done.rows<p.done.got ||
+     (!p.done.cut && p.done.rows!==p.done.got)) return false;
+  if(!["IH","AR","DP","MV"].includes(tag))return false;
+  if(tag!=="IH"&&!(tag==="AR"?/arrival\s*report/i:tag==="DP"?/departure\s*report/i:/perform\s*move/i).test(p.title))return false;
   const st = statusLoad();
   let changed = false;
   if(tag === "IH"){
     if(!isInhouseTitle(p.title)) return false;
     const date = inhouseDate(p.title), key = dkey(date);
     if(!key) return false;
-    const rows = p.rows.map(r => ({name: String(r[IH.NAME] || "").trim(), room: stRoom(r[IH.ROOM]), arr: String(r[IH.ARR] || "").trim(),
+    const historical = st.IH && (key < st.IH.key || at <= st.IH.at);
+    if(historical && (!replay || key !== st.IH.key)) return false;
+    const capturedRows = p.rows.map(r => ({name: String(r[IH.NAME] || "").trim(), room: stRoom(r[IH.ROOM]), arr: String(r[IH.ARR] || "").trim(),
                                    dep: String(r[IH.DEP] || "").trim(), status: String(r[IH.STATUS] || "").trim(),
-                                   readAt: at, cells: r.slice()}))
-                       .filter(r => r.name || r.room);
+                                   readAt: at, cells: r.slice()}));
+    const rows=capturedRows.filter(r => r.name && r.room && r.status && dkey(r.arr));
+    const incompleteRows=capturedRows.filter(r=>/^\d{2,3}$/.test(leadRoom(r.room))&&!/reversal|void/i.test(r.status)&&
+      (!r.name||!r.status||!dkey(r.arr)||!dkey(r.dep)||dkey(r.dep)<dkey(r.arr)));
     const cut = !!(p.done && p.done.cut);
-    const cap = {at: at, date: date, key: key, cut: cut, rows: rows};
+    const cap = {at: at, date: date, key: key, cut: cut, rows: rows, incompleteRows:incompleteRows};
+    if(historical){
+      // Reopening the app may replay history older than its current census.
+      // Add previously unseen stays, without replacing any newer reservation.
+      const identity=r=>stKey(r.name,r.room)+"|"+dkey(r.arr);
+      const known=new Set(st.IH.rows.map(identity));
+      for(const row of rows)if(!known.has(identity(row))){st.IH.rows.push(row);known.add(identity(row));changed=true;}
+      if(changed){statusSave(st);STATUS_TICK++;}
+      return changed;
+    }
     if(!st.IH || at > st.IH.at){
       const keep=st.IH&&st.IH.key===key?st.IH.rows.map(r=>Object.assign({readAt:st.IH.at},r)):[];
-      const merged=new Map(keep.map(r=>[stKey(r.name,r.room),r]));
+      const identity=r=>stKey(r.name,r.room)+"|"+dkey(r.arr);
+      const merged=new Map(keep.map(r=>[identity(r),r]));
       for(const r of rows){
-        if(!r.name || !r.room) continue;
-        const id = stKey(r.name,r.room);
-        // An interrupted read cannot replace a previously complete reservation row.
-        if(cut && (merged.has(id) || !dkey(r.arr) || !dkey(r.dep) || !r.status)) continue;
-        merged.set(id,r);
+        const k=identity(r), had=merged.get(k);
+        // Interrupted reads cannot replace a previously captured reservation.
+        if(cut && (had || !dkey(r.dep)))continue;
+        if(had && !r.dep)r.dep=had.dep||"";
+        merged.set(k,r);
       }
-      // Same-day filtered captures add/update; omitted rows remain captured.
-      st.IHL=cap;st.IH=Object.assign({},cap,{rows:[...merged.values()]});changed=true;
+      // Keep the day's captured rows; latest snapshot remains separate for status marks.
+      const partials=new Map();
+      for(const r of [...((st.IH&&st.IH.key===key&&st.IH.incompleteRows)||[]),...incompleteRows])
+        partials.set(JSON.stringify([r.name,r.room,r.arr,r.dep,r.status]),r);
+      st.IHL=cap;st.IH=Object.assign({},cap,{rows:[...merged.values()],incompleteRows:[...partials.values()]});changed=true;
     }
-    /* Keep the last complete capture as evidence; absence never confirms checkout. */
+    /* Keep the last fully read visible snapshot for diagnostics, never absence claims. */
     if(!cut && (!st.IHC || at > st.IHC.at)){ st.IHC = cap; changed = true; }
   }else{
     const date = inhouseDate(p.title), key = dkey(date);
     if(!key) return false;
     const days = st[tag] = st[tag] || {};
     const day = days[String(key)] = days[String(key)] || {title: p.title, date: date, at: 0, rows: {}};
-    if(at > day.at){ day.at = at; day.title = p.title; day.cut = !!(p.done && p.done.cut); changed = true; }
+    const historical=at < day.at;
+    if(historical && !replay) return false;
+    if(!historical && day.at !== at){ day.at = at; day.title = p.title; day.cut = !!(p.done && p.done.cut); changed = true; }
     for(const c of p.rows){
       let row;
       if(tag === "AR") row = {name: String(c[AR.NAME] || "").trim(), room: stRoom(c[AR.ROOM]), dep: String(c[AR.DEP] || "").trim(), status: String(c[AR.STATUS] || "").trim()};
@@ -8415,10 +9214,15 @@ function statusIngest(tag, p, at){
       /* a half-read row is not a reservation: both a name and a room, or it is not kept */
       if(tag === "MV"){ if(!row.name || !row.from || !row.to) continue; }
       else if(!row.name || !row.room) continue;
-      const k = tag === "MV" ? row.from + "|" + row.to + "|" + stName(row.name) + "|" + row.arr : stKey(row.name, row.room);
+      const base = stKey(row.name, row.room);
+      const k = tag === "MV" ? row.from + "|" + row.to + "|" + stName(row.name) + "|" + row.arr : tag === "DP" ? base + "|" + dkey(row.arr) : base;
+      // Retain a prior arrival variant; only an exact stay may update an older key.
+      if(tag === "DP" && day.rows[base] && dkey(day.rows[base].arr) === dkey(row.arr) && !day.rows[k]){
+        day.rows[k]=day.rows[base];delete day.rows[base];
+      }
       const had = day.rows[k];
       if(!had){ row.first = at; row.last = at; day.rows[k] = row; changed = true; }
-      else if(at >= had.last){ had.last = at; for(const f of Object.keys(row)) if(row[f] !== undefined && had[f] !== row[f]){ had[f] = row[f]; changed = true; } }
+      else if(!historical){ had.last = at; for(const f of Object.keys(row)) if(row[f] !== undefined && (row[f] !== "" || (f === "x" && !p.done.cut)) && had[f] !== row[f]){ had[f] = row[f]; changed = true; } }
     }
   }
   if(changed){ statusPrune(st); statusSave(st); STATUS_TICK++; }
@@ -8431,10 +9235,15 @@ function inhouseCheckedOut(st, row){
   const arrival = dkey(row.arr), departure = dkey(row.dep);
   if(!arrival || !departure) return false;
   const day = st.DP && st.DP[String(departure)];
-  return !!(day && Object.values(day.rows || {}).some(r =>
-    /^CO\b/i.test(r.status || "") && stName(r.name) === stName(row.name) &&
-    stSameRoom(r.room, row.room) && dkey(r.arr) === dkey(row.arr) &&
-    r.last >= (row.readAt || (st.IH && st.IH.at) || 0)));
+  return !!(day && Object.values(day.rows || {}).some(r => {
+    if(!/^CO\b/i.test(r.status || "") || stName(r.name) !== stName(row.name) ||
+       !stSameRoom(r.room,row.room) || dkey(r.arr) !== arrival ||
+       !(r.last >= (row.readAt || (st.IH && st.IH.at) || 0)))return false;
+    // A base room printed for several adjoining identifiers cannot retire them all.
+    const candidates=((st.IH&&st.IH.rows)||[]).filter(v=>stName(v.name)===stName(r.name)&&
+      stSameRoom(v.room,r.room)&&dkey(v.arr)===arrival&&dkey(v.dep)===departure);
+    return new Set(candidates.map(v=>stRoom(v.room))).size===1;
+  }));
 }
 function consolidatedInhouseRows(st){
   return ((st.IH && st.IH.rows) || []).filter(r => !inhouseCheckedOut(st, r));
@@ -8447,21 +9256,41 @@ function consolidatedInhouseRate(st){
     c[IH.NAME]=r.name; c[IH.ROOM]=r.room; c[IH.ARR]=r.arr; c[IH.DEP]=r.dep; c[IH.STATUS]=r.status;
     return c;
   });
-  return inhouseToRate(rows, capture.date);
+  const rate=inhouseToRate(rows,capture.date),latest=st.IHL&&st.IHL.key===capture.key?st.IHL:null;
+  // Unreadable identity fields never enter the confirmed census or room ledger.
+  // Keep their physical room visible until newer exact-identity evidence resolves it.
+  for(const r of capture.incompleteRows||[]){
+    const resolved=r.name&&dkey(r.arr)&&capture.rows.some(v=>v.readAt>r.readAt&&stName(v.name)===stName(r.name)&&
+      stSameRoom(v.room,r.room)&&dkey(v.arr)===dkey(r.arr)&&dkey(v.dep)&&dkey(v.dep)>=dkey(v.arr)&&v.status&&!/reversal|void/i.test(v.status));
+    if(!resolved){const room=leadRoom(r.room);rate.incompleteRooms[room]={room,name:r.name,reason:'Incomplete captured reservation fields'};}
+  }
+  rate.consolidated=true;rate.coverageMissing=[];
+  if(latest){
+    const key=r=>stName(r.name)+'|'+leadRoom(r.room)+'|'+dkey(r.arr);
+    const current=new Set(latest.rows.map(key));
+    for(const room of Object.keys(rate.all))if(rate.all[room].some(r=>!current.has(key(r))))rate.coverageMissing.push(room);
+  }
+  return rate;
 }
 function setLiveRate(rate){
+  if(!rate||(RATE&&RATE.live&&RATE.dateKey>rate.dateKey))return;
+  const previous=RATE&&RATE.dateKey;
   // Guest accounts remain Department-only, including in the consolidated census.
   const rooms = {}, all = {};
   for(const room of Object.keys(rate.rooms)) if(/^\d{2,3}$/.test(room)){
     rooms[room] = rate.rooms[room]; all[room] = rate.all[room];
   }
-  RATE = Object.assign({}, rate, {rooms, all, count: Object.keys(rooms).length});
+  const incompleteRooms={};
+  for(const room of Object.keys(rate.incompleteRooms||{}))if(/^\d{2,3}$/.test(room))incompleteRooms[room]=rate.incompleteRooms[room];
+  const next=Object.assign({},rate,{rooms,all,incompleteRooms,count:Object.keys(rooms).length});
+  RATE=rate.consolidated?next:taxCaptureRate(next);
+  if(previous&&previous!==RATE.dateKey){PAIR_OVERRIDE=null;ADJ_OPEN_OVERRIDE=null;}
 }
-function ihFind(cap, name, room){
+function ihFind(cap, name, room, arrival){
   if(!cap || !cap.rows) return null;
   const n = stName(name);
-  for(const r of cap.rows) if(stName(r.name) === n && stSameRoom(r.room, room)) return r;
-  return null;
+  const matches=cap.rows.filter(r=>stName(r.name)===n&&stSameRoom(r.room,room)&&(!arrival||dkey(r.arr)===arrival));
+  return matches.length===1?matches[0]:null;
 }
 /* {cls, text} from explicit captured statuses. Absence never establishes checkout.
    Arrival sightings survive smaller same-day captures. Only departure CO confirms out.
@@ -8475,13 +9304,14 @@ function ihFind(cap, name, room){
 function statusMark(st, tag, row, dayKey){
   const fresh = c => (c && (!dayKey || (c.key || 0) >= dayKey)) ? c : null;
   if(tag === "AR"){
-    const ih = st.IH, m = ihFind(ih, row.name, row.room);
+    const ih = st.IH, m = ihFind(ih, row.name, row.room, dayKey || 0);
     if(m && /^C[IO]\b/i.test(m.status)) return {cls: "mIn", text: t('st_markIn', hhmm(m.readAt || ih.at) || "?")};
     return {cls: "mNone", text: t('st_markExpected')};
   }
   if(tag === "DP"){
-    const ih = fresh(st.IH), m = ihFind(ih, row.name, row.room);
-    if(/^CO\b/i.test(row.status || "") && (!m || !/^CI\b/i.test(m.status) || row.last >= (m.readAt || ih.at)))
+    const ih = fresh(st.IH), arrival = dkey(row.arr);
+    const m = arrival ? ihFind(ih, row.name, row.room, arrival) : null;
+    if(arrival && /^CO\b/i.test(row.status || "") && (!m || !/^CI\b/i.test(m.status) || row.last >= (m.readAt || ih.at)))
       return {cls: "mOut", text: t('st_markOutCO', hhmm(row.last) || "?")};
     if(m && /^CI\b/i.test(m.status)) return {cls: "mStay", text: t('st_markStay', hhmm(m.readAt || ih.at) || "?")};
     if(ih && ih.cut) return {cls: "mNone", text: t('st_markCut', hhmm(ih.at) || "?")};
@@ -8515,7 +9345,7 @@ function statusSub(st, tag){
 }
 window.__taStatusMenu = function(){
   try{
-    const st = statusLoad();
+    const st = statusLoad(true);
     const ids = {AR: "stArr", DP: "stDep", IH: "stInh", MV: "stMov"};
     for(const tag of Object.keys(ids)){
       const b = el(ids[tag]); if(!b) continue;
@@ -8535,7 +9365,7 @@ function statusCols(tag){
 function renderStatusList(){
   const box = el('stList');
   if(!box || !ST_TAG_T) return;
-  const tag = ST_TAG_T, st = statusLoad();
+  const tag = ST_TAG_T, st = statusLoad(true);
   const sig = JSON.stringify([tag, legacyOn(), LANG, STATUS_TICK, LIVE_HELD[tag] ? LIVE_HELD[tag].at : 0, LIVE_ERR[tag] || "", st.IH ? st.IH.at : 0, st.IHC ? st.IHC.at : 0]);
   if(sig === STATUS_SIG) return;
   STATUS_SIG = sig;
@@ -8578,10 +9408,17 @@ function renderStatusList(){
   h += '</tbody></table></div></div>';
   box.innerHTML = h;
 }
-async function ingestCaptured(tag, txt){
-  if(tag === "IH") return applyInhouse(parseInhouse(txt), true);
-  if(tag === "MV") return applyMoves(parseTagged(txt, "MV"));
-  return applyReport(parseTagged(txt, tag), tag === "AR");
+async function ingestCaptured(tag, txt, capture){
+  if(tag === "IH") return applyInhouse(parseInhouse(txt), true, capture);
+  if(tag === "MV"){
+    let p=parseTagged(txt,"MV");
+    if(capture && capture.replay){
+      const day=(statusLoad().MV||{})[String(capture.key || dkey(inhouseDate(p.title)))];
+      if(day){const rows=Object.values(day.rows).map(r=>[r.from,"",r.to,"",r.name,r.x,r.arr,r.dep]);p={...p,rows,done:{...p.done,got:rows.length,rows:rows.length}};}
+    }
+    return applyMoves(p);
+  }
+  return applyReport(parseTagged(txt, tag), tag === "AR", capture);
 }
 /* THE MOVES WINDOW, and only for the missing X.
 
@@ -8701,13 +9538,14 @@ function reportToStays(rows, night, arrIsNight){
    recency guard in feedStays compares them. So a report is stamped with the census's date
    whenever a census has been captured — the same clock as the other writer, protel's — and
    with the tool's night only before the first census of the day. */
-function censusNight(){
+function censusNight(at){
   const h = LIVE_HELD.IH;
-  const k = h && h.date ? dkey(h.date) : 0;
-  return k || bnk();
+  const k = h && h.date && (!at || h.at<=at) ? dkey(h.date) : 0;
+  return k || bnk(at);
 }
 function feedStays(recs, night){
   const tally = {made: 0, fixed: 0, same: 0, kept: 0, failed: false};
+  if(typeof window!=="undefined" && window.__rcImportBlocked) return {...tally,failed:true};
   if(!recs || !recs.length || !night) return tally;
   try{
     const led = loadLedger();
@@ -8717,8 +9555,15 @@ function feedStays(recs, night){
       const d = dkey(r.dep) || 0;
       const nm = r.name || "";
       const m = led[r.room] || (led[r.room] = {});
-      const cur = m[a];
+      let cur = m[a], conflictIndex = -1;
       if(!cur){ m[a] = {d: d, n: nm, seen: night}; tally.made++; continue; }
+      const normalized=s=>String(s||"").trim().replace(/\s+/g," ").toUpperCase();
+      if(cur.n && nm && normalized(cur.n)!==normalized(nm)){
+        const conflicts=cur.conflicts||(cur.conflicts=[]);
+        conflictIndex=conflicts.findIndex(e=>normalized(e.n)===normalized(nm));
+        if(conflictIndex<0){conflicts.push({d:d,n:nm,seen:night});tally.made++;continue;}
+        cur=conflicts[conflictIndex];
+      }
       /* "ALREADY KNOWN" IS AGREEMENT, NOT DEFEAT. A row the ledger refused — older than
          its word, or the loser of a same-night tie while stating a DIFFERENT departure —
          used to be counted as already known, so the line asserted agreement that was never
@@ -8751,13 +9596,18 @@ function feedStays(recs, night){
                     seen: night};
       if(cur.from) next.from = cur.from;
       if(cur.mv) next.mv = cur.mv;
+      if(cur.conflicts) next.conflicts = cur.conflicts;
       if(next.d !== (cur.d || 0) || next.n !== (cur.n || "")) tally.fixed++;
       else if(agrees) tally.same++;
       else tally.kept++;
-      m[a] = next;
+      if(conflictIndex>=0)m[a].conflicts[conflictIndex]=next;
+      else m[a] = next;
     }
     localStorage.setItem(MOVES_KEY, JSON.stringify(led));
-  }catch(e){ return {made: 0, fixed: 0, same: 0, kept: 0, failed: true}; }
+  }catch(e){
+    try{if(typeof window!=="undefined"&&window.__rcStorageFault)window.__rcStorageFault("Stay ledger",e);}catch(ignore){}
+    return {made: 0, fixed: 0, same: 0, kept: 0, failed: true};
+  }
   return tally;
 }
 let RPT_BUSY = {}, RPT_SIG = {};
@@ -8771,7 +9621,7 @@ async function readReportLive(fn){
   }catch(e){}
   finally{ RPT_BUSY[fn] = false; }
 }
-function applyReport(p, arrIsNight){
+function applyReport(p, arrIsNight, capture){
   const fn = arrIsNight ? "arrivals" : "departures";
   const label = t(arrIsNight ? 'rpt_AR' : 'rpt_DP');
   /* EVERY REFUSAL SAYS WHY, and the function answers what became of the capture. It
@@ -8789,14 +9639,15 @@ function applyReport(p, arrIsNight){
       quiet(t('live_rwrong', label, p.title || '?')); return "wrong";
     }
     /* the same two refusals the in-house read has, and for the same reasons */
-    if(p.done && p.done.cut){ quiet(t('live_rcut', label, p.title || '?')); return "cut"; }
+    if(!p.done || p.done.cut || !Number.isInteger(p.done.got) || !Number.isInteger(p.done.rows) ||
+       p.done.got!==p.rows.length || p.done.rows!==p.done.got){ quiet(t('live_rcut', label, p.title || '?')); return "cut"; }
     const night = inhouseDate(p.title);
     const key = dkey(night);
     if(!key){ quiet(t('live_nodate', p.title || '?')); return "nodate"; }
     const sig = p.title + "|" + p.rows.map(r => r.join("~")).join(";");
     if(sig === RPT_SIG[fn]){ quiet(t('live_rsame', label, night)); return "ok"; }
     const out = reportToStays(p.rows, night, arrIsNight);
-    const w = feedStays(out.recs, censusNight());
+    const w = feedStays(out.recs, censusNight(capture && capture.replay ? capture.at : undefined));
     /* THE REPORT NAMES DO NOT GO INTO THE ROOM DATABASE, and the first cut of this had
        them doing exactly that. __rcLiveNames is the CENSUS door: it says "this is who is
        in this room now", and syncRooms then treats a stored name that does not match the
@@ -8851,7 +9702,8 @@ function applyMoves(p){
     if(!/perform\s*move/i.test(p.title)) return "wrong";   // the caption has to name it
     /* A read the helper called incomplete says nothing about which rows lack an X — the
        missing ones may simply be the rows it never got to. */
-    if(p.done && p.done.cut) return "cut";
+    if(!p.done || p.done.cut || !Number.isInteger(p.done.got) || !Number.isInteger(p.done.rows) ||
+       p.done.got!==p.rows.length || p.done.rows!==p.done.got) return "cut";
     const night = inhouseDate(p.title);
     const key = dkey(night) || 0;
     /* Kept, because a move can only be recorded once the stay it names exists, and that
@@ -8869,7 +9721,7 @@ function applyMoves(p){
         /* Marked, protel will show it. If an EARLIER read of this night raised "no X" on
            this same move, that alert is false now and erases itself — his ask, 10/09. The
            same key the raise uses, so it is the same alert and nothing else. */
-        if(window.__rcAlertDrop) window.__rcAlertDrop(akey);
+        if(/^X$/i.test(x)&&window.__rcAlertDrop) window.__rcAlertDrop(akey);
         continue;
       }
       /* AN EMPTY CELL IS NOT THE SAME AS A MISSING X. ReadCell returns "" for every
@@ -8916,29 +9768,41 @@ function movesApplied(){
   }catch(e){ return {}; }
 }
 function recordMoves(rows, night){
+  if(typeof window!=="undefined" && window.__rcImportBlocked) return 0;
   if(!rows || !rows.length || !night) return 0;
   const done = movesApplied();
   let led = null, wrote = 0, changed = false;
   try{ led = loadLedger(); }catch(e){ return 0; }
   for(const r of (rows || [])){
-    if(!String(r[MV.X] || "").trim()) continue;         // protel has not marked it
+    if(!/^X$/i.test(String(r[MV.X] || "").trim())) continue;
     const from = String(r[MV.FROM] || "").trim();
     const to   = String(r[MV.TO] || "").trim();
     const arr  = dkey(String(r[MV.ARR] || "").trim());
+    const name = String(r[MV.NAME] || "").trim().replace(/\s+/g," ").toUpperCase();
     if(!/^\d{2,4}$/.test(from) || !/^\d{2,4}$/.test(to) || !pillRoom(from, r[MV.NAME]) || !pillRoom(to, r[MV.NAME]) || !arr || from === to) continue;
-    const key = "mv|" + night + "|" + from + "|" + to + "|" + arr;
-    if(done[key]) continue;
+    if(!name || night < arr)continue;
+    const key = "mv|" + night + "|" + from + "|" + to + "|" + arr + "|" + name;
     const dst = led[to] && led[to][arr];
     const src = led[from] && led[from][arr];
     if(!dst && !src) continue;                          // neither stay known yet — try again later
-    if(dst && dst.from !== from){ dst.from = from; wrote++; }
-    if(src && src.mv !== night){ src.mv = night; wrote++; }
-    done[key] = night;
-    changed = true;
+    const matches=e=>!e || (!(e.conflicts||[]).length && String(e.n||"").trim().replace(/\s+/g," ").toUpperCase()===name);
+    if(!matches(dst)||!matches(src))continue;
+    if((dst&&dst.from&&dst.from!==from)||(src&&src.mv&&src.mv!==night))continue;
+    // Reconcile idempotently even when previously applied: a later census or a missing
+    // endpoint becoming available must not leave half the move permanently unrecorded.
+    if(dst && !dst.from){ dst.from = from; wrote++; changed=true; }
+    if(src && !src.mv){ src.mv = night; wrote++; changed=true; }
+    if(dst && src && dst.from===from && src.mv===night && !done[key]){done[key]=night;changed=true;}
   }
   if(!changed) return 0;
-  try{ localStorage.setItem(MOVES_KEY, JSON.stringify(led)); }catch(e){}
-  try{ localStorage.setItem(MOVES_DONE_KEY, JSON.stringify(done)); }catch(e){}
+  try{ localStorage.setItem(MOVES_KEY, JSON.stringify(led)); }catch(e){
+    try{if(typeof window!=="undefined"&&window.__rcStorageFault)window.__rcStorageFault("Room moves",e);}catch(ignore){}
+    return 0;
+  }
+  try{ localStorage.setItem(MOVES_DONE_KEY, JSON.stringify(done)); }catch(e){
+    if(typeof window!=="undefined"&&window.__rcStorageFault)window.__rcStorageFault("Room move acknowledgement",e);
+    return 0;
+  }
   try{ if(wrote) render(); }catch(e){}
   if(wrote) LEDGER_TICK++;
   try{ if(wrote && window.__rcMovesChanged) window.__rcMovesChanged(); }catch(e){}
@@ -8948,7 +9812,7 @@ function recordMoves(rows, night){
    that fetched it: the rows now arrive two ways — spawned on demand when he presses the
    button, and captured by the resident helper the moment protel opened the window. Both
    must land in exactly the same place, so there is one of these and not two. */
-function applyInhouse(p, auto){
+function applyInhouse(p, auto, capture){
   /* Every read is automatic now — the button is gone. `auto` is kept because the same
      function still serves anything that wants the loud form, and because a silent
      parameter that is always one value is worse than one that says so. */
@@ -8962,15 +9826,19 @@ function applyInhouse(p, auto){
   const quiet = (m) => { say.textContent = m; LIVE_SIG = ""; };
   if(!p){ quiet(t('live_idle')); return "empty"; }
   if(p.err){ quiet(t('live_err') + p.err); return "err"; }
+  if(!p.done || !Number.isInteger(p.done.got) || !Number.isInteger(p.done.rows) ||
+     p.done.got!==p.rows.length || p.done.rows!==p.done.got || p.done.cut){
+    quiet(t('live_rcut',t('rpt_IH'),p.title||'?'));return "cut";
+  }
   if(!p.rows.length){ quiet(t('live_none')); return "empty"; }
   if(!isInhouseTitle(p.title)){ quiet(t('live_wrong', p.title || '?')); return "wrong"; }
   const biz = inhouseDate(p.title);
   /* The caption is the only place the live path can learn the night from. Filing 250
      stays under a guessed date is exactly the kind of helpful deduction that put 83
      departures on his panel, so it does not happen: it refuses and says why. */
-  if(!biz){ quiet(t('live_nodate', p.title || '?')); return "nodate"; }
+  if(!biz||!dkey(biz)){ quiet(t('live_nodate', p.title || '?')); return "nodate"; }
   const rate = inhouseToRate(p.rows, biz);
-  if(!rate.count){ quiet(t('live_none')); return "none"; }
+  if(!rate.count&&!Object.keys(rate.incompleteRooms||{}).length){ quiet(t('live_none')); return "none"; }
   /* Nothing has moved in protel since the last tick. Writing the same ledger again and
      redrawing the page under him twenty times a minute is not faithfulness, it is a
      fault. But it used to return in SILENCE, and it is the only refusal in this function
@@ -8978,19 +9846,18 @@ function applyInhouse(p, auto){
      here means the last thing he sees is whatever other list wrote there, which is how
      opening the in-house list showed him a departure report. So it says so and still
      writes nothing. */
-  /* A READ THE HELPER ITSELF CALLS INCOMPLETE MUST NOT BE WRITTEN.
-     ReadTagged abandons the list at READ_BUDGET_MS and says `cut-short`. saveMoves and
-     detectMoves both reason from ABSENCE — a room not in tonight's list is a room the
-     guest has left — so a list missing its tail reads as a hundred people checking out at
-     once. That is the phantom-departure failure, arriving unattended every five seconds.
-     He can still force one by pressing the button, where the "stopped early" line tells
-     him what he is looking at. */
-  if(auto && p.done && p.done.cut){ quiet(t('live_rcut', t('rpt_IH'), p.title || '?')); return "cut"; }
+  // Footer validation above rejects interrupted captures before any live state is changed.
   const sig = p.title + "\u0000" + p.rows.length + "\u0000" + p.rows.map(r => r.join("\u0001")).join("\u0002");
   if(auto && sig === LIVE_SIG){ say.textContent = t('live_same', rate.count, biz || '?'); return "ok"; }
-  const held = statusLoad();
-  setLiveRate(held.IH && held.IH.key === rate.dateKey ? consolidatedInhouseRate(held) : rate);
+  const previousRateDate=RATE&&RATE.dateKey;
+  const held=statusLoad();
+  if(capture && capture.replay && ((held.IH && (held.IH.key>rate.dateKey || held.IH.at>capture.at)) || (RATE && RATE.dateKey>rate.dateKey))){
+    const rows=Object.values(rate.all).flat();
+    return feedStays(rows,rate.dateKey).failed ? "failed" : "ok";
+  }
+  setLiveRate(held.IH&&held.IH.key===rate.dateKey?consolidatedInhouseRate(held):rate);
   const saved = saveMoves(rate);
+  if(!saved){quiet(t('live_wfail'));return "failed";}
   /* A move can only be written onto a stay that exists, and the in-house list is what
      creates them. So the last moves capture is offered again here — the applied set makes
      a second attempt on one already written free, and a move whose stay is still unknown
@@ -9001,7 +9868,7 @@ function applyInhouse(p, auto){
      which adjoining pair to treat as one, which prompt he dismissed — and wiping them
      from a five-second timer would undo his answer and put the prompt back on top of the
      audit he is in the middle of. */
-  if(!auto){ PAIR_OVERRIDE = null; ADJ_OPEN_OVERRIDE = null; }
+  if(!auto||(previousRateDate&&previousRateDate!==RATE.dateKey)){ PAIR_OVERRIDE = null; ADJ_OPEN_OVERRIDE = null; }
   el('fn-rate').textContent = p.title || biz;
   showMoveSave(saved);
   const d = p.done || {};
@@ -9023,8 +9890,31 @@ function applyInhouse(p, auto){
   render();
   return "ok";
 }
-async function loadRate(file){clearErr();el('fn-rate').textContent=file?file.name:'';el('mv-rate').textContent='';if(!file)return;try{const pages=await readOxps(file);const r=parseRate(pages);if(!r.count){showErr(t('err_norooms'));return;}RATE=r;showMoveSave(saveMoves(r));PAIR_OVERRIDE=null;ADJ_OPEN_OVERRIDE=null;el('slot-rate').classList.add('loaded');render();}catch(e){showErr(e.message==='notxps'?t('err_notxps'):t('err_read')+e.message);}}
-async function loadTax(file){clearErr();el('fn-tax').textContent=file?file.name:'';if(!file)return;try{const pages=await readOxps(file);const tokens=pagesToTokens(pages);const r=parseTax(tokens);if(!r.totalRooms){showErr(t('err_norooms'));return;}TAX=r;PAIR_OVERRIDE=null;ADJ_OPEN_OVERRIDE=null;ingestTax(r);if(r.fileDate)EXPANDED.add(r.fileDate);el('slot-tax').classList.add('loaded');render();}catch(e){showErr(e.message==='notxps'?t('err_notxps'):t('err_read')+e.message);}}
+let RATE_LOAD_EPOCH=0,TAX_LOAD_EPOCH=0;
+async function loadRate(file){
+  const epoch=++RATE_LOAD_EPOCH;clearErr();if(!file)return;
+  try{
+    const pages=await readOxps(file);if(epoch!==RATE_LOAD_EPOCH)return;
+    const r=parseRate(pages);
+    if(!r.count){showErr(t('err_norooms'));return;}
+    if(!r.dateKey||!r.dateSure){showErr('The report business date could not be verified. Previous data retained.');return;}
+    const saved=saveMoves(r);if(!saved){showErr('The report could not be saved. Previous data retained.');return;}
+    RATE=r;showMoveSave(saved);PAIR_OVERRIDE=null;ADJ_OPEN_OVERRIDE=null;
+    el('fn-rate').textContent=file.name;el('slot-rate').classList.add('loaded');render();
+  }catch(e){if(epoch===RATE_LOAD_EPOCH)showErr(e.message==='notxps'?t('err_notxps'):t('err_read')+e.message);}
+}
+async function loadTax(file){
+  const epoch=++TAX_LOAD_EPOCH;clearErr();if(!file)return;
+  try{
+    const pages=await readOxps(file);if(epoch!==TAX_LOAD_EPOCH)return;
+    const r=parseTax(pagesToTokens(pages));
+    if(!r.totalRooms){showErr(t('err_norooms'));return;}
+    if(r.uncertain||!r.dateKey){showErr(r.error||'The tax date could not be verified. Previous data retained.');return;}
+    if(!ingestTax(r)){showErr('Tax data could not be saved. Previous data retained.');return;}
+    TAX=r;PAIR_OVERRIDE=null;ADJ_OPEN_OVERRIDE=null;EXPANDED.add(r.fileDate);
+    el('fn-tax').textContent=file.name;el('slot-tax').classList.add('loaded');render();
+  }catch(e){if(epoch===TAX_LOAD_EPOCH)showErr(e.message==='notxps'?t('err_notxps'):t('err_read')+e.message);}
+}
 /* Only where there is a helper to ask. In a browser, or on a machine without it, the row
    is not there at all rather than there and dead. */
 /* The button that used to sit here is gone, on his word: "when im asking for auto-scanning
@@ -9086,7 +9976,7 @@ window.__taScreen = function(which){
 
 /* time safeguard: warn when a loaded report is for a past working night. Separate scope
    from the audit half, so the 03:30 boundary is repeated here rather than shared. */
-function bnk(){const d=new Date();if(d.getHours()<3||(d.getHours()===3&&d.getMinutes()<30))d.setDate(d.getDate()-1);return d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();}
+function bnk(at){const d=at===undefined?new Date():new Date(at);if(d.getHours()<3||(d.getHours()===3&&d.getMinutes()<30))d.setDate(d.getDate()-1);return d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();}
 function timeGuardHTML(){
   let h='';const B=bnk();
   if(RATE&&RATE.dateKey&&RATE.dateKey<B)h+=`<div class="banner warn">⚠ ${t('tw_pastrate',dfmt(RATE.dateKey),dfmt(B))}</div>`;
@@ -9098,7 +9988,7 @@ render=function(){__renderCore();const g=timeGuardHTML();if(g)el('banner').inser
 window.__taSimulate=function(rk,tk){RATE=rk?{kind:'rate',dateKey:rk,bizDate:dfmt(rk),rooms:{},count:0}:null;TAX=tk?{kind:'tax',dateKey:tk,fileDate:dfmt(tk),rooms:{},totalRooms:0,totalArrangements:0}:null;render();};
 
 /* ============ boot ============ */
-function pruneZeroMem(){const mem=loadMem();let ch=false;for(const room of Object.keys(mem)){const rec=mem[room];for(const d of Object.keys(rec)){const e=rec[d];if(((e.arr||0)+(e.auto||0)+(e.man||0))===0){delete rec[d];ch=true;}}if(!Object.keys(rec).length){delete mem[room];ch=true;}}if(ch)saveMem(mem);}
+function pruneZeroMem(){ /* Zero snapshots can be explicit reversals; preserve their evidence. */ }
 (function boot(){liveEnsure();el('taxBack').textContent='← '+(LANG==='el'?'ΕΛΕΓΧΟΣ':'AUDIT');applyLegacy(legacyOn());pruneZeroMem();const mem=loadMem();const ds=recentDates(mem,7);if(ds.length)EXPANDED.add(ds[0]);applyStatic();renderMemory();el('memsec').style.display=ds.length?'block':'none';})();
 })();
 </script>

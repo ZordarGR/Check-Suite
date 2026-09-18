@@ -22,8 +22,10 @@ const {start}=require("../app/arrangement-live");
   hide(){this.visible=false;}
   destroy(){this.dead=true;this.emit("closed");}
  }
- const txt="TITLE\tGuests inhouse: 15/09/26\nRATE\tIH\tTEST GUEST\t101\t14/09/26\t21/09/26\t150,00\tDIRECT\tEUR\tCI\nDONE\t1\t1\t0\t0\tunicode\tcomplete\n";
- fs.writeFileSync(path.join(dir,"rc-list-IH.tsv"),txt);
+ const txt="TITLE\tGuests inhouse: 15/09/26\nRATE\tIH\tTEST GUEST\t101\t14/09/26\t21/09/26\t150,00\tINDIVIDUAL\tEUR\tCI\nDONE\t1\t1\t0\t0\tunicode\tcomplete\n";
+ let sourceAt=Date.now();
+ const writeCapture=text=>{const file=path.join(dir,"rc-list-IH.tsv");fs.writeFileSync(file,text);const at=new Date(sourceAt+=10);fs.utimesSync(file,at,at);};
+ writeCapture(txt);
  const controller=start({electron:{app,ipcMain,BrowserWindow:Win,screen:{screenToDipRect:(_w,r)=>r}},helperPath:"unused",captureDir:dir,userData:dir,spawnHelper:()=>child});
  const send=m=>child.stdout.emit("data",JSON.stringify(m)+"\n");
  const g={kind:"geometry",id:"one",rect:{x:50,y:80,width:1000,height:600},strip:{x:390,y:170,width:370,height:20},grid:{x:390,y:200,width:620,height:350},textWidth:80};
@@ -55,7 +57,8 @@ const {start}=require("../app/arrangement-live");
  // No visible thinking icon while an excluded account changes at checkout.
  send({kind:"reset",id:"one"});assert.equal(window.visible,false);
  send(g);assert.equal(window.visible,false,"geometry alone stays quiet");
- const excluded={...invoice,epoch:2,data:{...invoice.data,fields:invoice.data.fields.map((v,i)=>i===5?"FICTIONAL AGENCY":v)}};
+ writeCapture(txt.replace("INDIVIDUAL","TOUR OPERATOR"));controller.scanRefs();
+ const excluded={...invoice,epoch:2,data:{...invoice.data,fields:invoice.data.fields.map((v,i)=>i===5?"BOOKING.COM/R.Nr.123(1)":v)}};
  send({kind:"metadata",id:"one",epoch:2,fields:excluded.data.fields});
  assert.equal(commands.at(-1),"scope 2 skip\n");
  assert.equal(window.visible,false,"excluded metadata creates no flash");
@@ -66,7 +69,7 @@ const {start}=require("../app/arrangement-live");
  assert.equal(commands.at(-1),"scope 3 skip\n");assert.equal(window.visible,false);
  const sent=commands.length;send(g);send(g);assert.equal(commands.length,sent,"geometry does not resend scope or scan rows");
  // A later WEBHOTELIER list may qualify the SAME invoice without reopening.
- fs.writeFileSync(path.join(dir,"rc-list-IH.tsv"),txt.replace("DIRECT","WEBHOTELIER"));
+ writeCapture(txt.replace("INDIVIDUAL","WEBHOTELIER"));
  controller.scanRefs();
  assert.equal(commands.at(-1),"scope 3 read\n");
  assert.equal(packet.result.state,"unknown");
@@ -76,6 +79,17 @@ const {start}=require("../app/arrangement-live");
  // Qualifying invoices retain live updates when an Arrangement is moved into B.
  send({...invoice,epoch:3,data:{fields:checkout,rows:[...invoice.data.rows,{label:"*Arrangement",amount:"150,00",date:"15/09/26",currency:"EUR"}]}});
  assert.equal(packet.result.state,"paid");
+ // A failed history write cannot keep the previous green verdict visible. The
+ // unchanged source must be retried, and recovery requires fresh invoice entries.
+ const rateFile=path.join(dir,"arrangement-rates-v1.json"),beforeFailure=fs.readFileSync(rateFile,"utf8"),rename=fs.renameSync;
+ writeCapture(txt.replace("INDIVIDUAL","WEBHOTELIER")+"\n");
+ fs.renameSync=function(from,...args){if(from===rateFile+".tmp")throw Error("synthetic write failure");return rename.call(this,from,...args);};
+ try{controller.scanRefs();}finally{fs.renameSync=rename;}
+ assert.equal(fs.readFileSync(rateFile,"utf8"),beforeFailure);
+ assert.equal(packet.result.state,"unknown");assert.match(packet.result.text,/could not be saved/);
+ assert.equal(commands.at(-1),"scope 3 skip\n");
+ controller.scanRefs();assert.equal(commands.at(-1),"scope 3 read\n");
+ send({...invoice,epoch:3,data:{...invoice.data,fields:checkout}});assert.equal(packet.result.state,"paid");
  // An old queued read cannot restore a verdict after a new reservation.
  send({kind:"metadata",id:"one",epoch:4,fields:checkout.map((v,i)=>i===0?"OTHER GUEST":v)});
  send({...invoice,epoch:3,data:{...invoice.data,fields:checkout}});

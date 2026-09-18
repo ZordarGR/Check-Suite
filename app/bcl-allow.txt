@@ -244,6 +244,25 @@ fIncUpdate
 FindTaggedList
 FindWindow
 flags
+# v34 durable capture queue: .NET Framework 4.8 members (Microsoft API reference).
+# DateTime.UtcNow/Ticks, Guid.NewGuid()/ToString(string), Int64.ToString(string,IFormatProvider),
+# CultureInfo.InvariantCulture, Directory.GetFiles(string,string), Path.GetFileName(string).
+# Math.Max(Int64,Int64) keeps the cursor increasing if the system clock moves backward.
+Max
+captureSequence
+get_UtcNow
+get_Ticks
+Guid
+NewGuid
+System.Globalization
+CultureInfo
+get_InvariantCulture
+IFormatProvider
+GetFiles
+GetFileName
+# Helper-owned safe ANSI/Unicode list getter; no new .NET API.
+GetText
+maxColumns
 Flush
 fn
 FocusedOf

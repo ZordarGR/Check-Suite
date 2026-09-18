@@ -2134,36 +2134,14 @@ static class TBind {
     if(SendMessageTimeout(lv, LVM_GETITEMCOUNT, IntPtr.Zero, IntPtr.Zero, SMTO_ABORTIFHUNG, 250, out res) != IntPtr.Zero)
       rows = res.ToInt32();
     if(rows <= 0){ READ.Append("ERR\tthe list is empty\n"); return; }
-    uint pid;
-    GetWindowThreadProcessId(lv, out pid);
-    IntPtr proc = OpenProcess(PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE
-                              | PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
-    if(proc == IntPtr.Zero){ READ.Append("ERR\tprotel would not let this process read it\n"); return; }
-    bool selfWow = false, targetWow = false, okSelf = false, okTarget = false;
-    try{ okSelf = IsWow64Process(GetCurrentProcess(), out selfWow); }catch(Exception){}
-    try{ okTarget = IsWow64Process(proc, out targetWow); }catch(Exception){}
-    if(!okSelf || !okTarget){
-      READ.Append("ERR\tcould not establish whether protel is 32-bit or 64-bit\n");
-      CloseHandle(proc); return;
-    }
-    bool target64 = TargetIs64((IntPtr.Size == 8) || selfWow, targetWow);
-    const int CCH = 512;
-    IntPtr text = VirtualAllocEx(proc, IntPtr.Zero, (UIntPtr)(CCH * 2), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-    IntPtr item = VirtualAllocEx(proc, IntPtr.Zero, (UIntPtr)64, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-    if(text == IntPtr.Zero || item == IntPtr.Zero){
-      READ.Append("ERR\tno scratch page in protel\n");
-      if(text != IntPtr.Zero) VirtualFreeEx(proc, text, UIntPtr.Zero, MEM_RELEASE);
-      if(item != IntPtr.Zero) VirtualFreeEx(proc, item, UIntPtr.Zero, MEM_RELEASE);
-      CloseHandle(proc); return;
-    }
     int show = rows < maxRows ? rows : maxRows, got = 0;
-    SafeListRead rates = null;
+    SafeListRead rates = new SafeListRead(lv, true);
     int rateCol=-1, agencyCol=-1, currencyCol=-1;
     bool wide = true, ranOut = false;
     try{
+      if(!rates.ok){ READ.Append("ERR\tcould not safely read the list\n"); ranOut=true; }
       if(tag!="MV"){
-        rates=new SafeListRead(lv);
-        string[] headers=rates.Headers();
+        string[] headers=rates.Headers(128);
         rateCol=HeaderAt(headers,"PRICE"); agencyCol=HeaderAt(headers,"TRAVELAGENCY"); currencyCol=HeaderAt(headers,"CURRENCY");
       }
       /* the encoding question, settled on the first row and then left alone */
@@ -2172,37 +2150,49 @@ static class TBind {
          column 0 — probing there reads nothing, and "nothing came back as Unicode" is
          exactly how this decides the control is ANSI. It would have flipped the whole
          read to the wrong encoding on the one list whose name is not first. */
-      string probe0 = ReadCell(proc, lv, target64, 0, cols[0], text, item, CCH, true);
+      string probe0 = rates.GetText(0, cols[0], false, true);
       if(probe0.Length == 0){
-        string alt = ReadCell(proc, lv, target64, 0, cols[0], text, item, CCH, false);
+        string alt = rates.GetText(0, cols[0], false, false);
         if(alt.Length > 0) wide = false;
       }
       for(int r = 0; r < show; r++){
-        if(Environment.TickCount - t0 > READ_BUDGET_MS){ ranOut = true; break; }
+        if(!rates.ok || Environment.TickCount - t0 > READ_BUDGET_MS){ ranOut = true; break; }
         StringBuilder line = new StringBuilder(tag);
         string[] cells=new string[cols.Length];
         for(int c = 0; c < cols.Length; c++){
-          cells[c]=ReadCell(proc,lv,target64,r,cols[c],text,item,CCH,wide);
+          cells[c]=rates.GetText(r,cols[c],false,wide);
           line.Append("\t"+cells[c]);
         }
-        READ.Append(line.ToString() + "\n");
+        // A filter/sort can change the control while its cells are being read.
+        // Re-read the identity cells before accepting this row, within the same budget.
+        if(!rates.ok || cells[0]!=rates.GetText(r,cols[0],false,wide)
+           || cells[1]!=rates.GetText(r,cols[1],false,wide) || !rates.ok){ ranOut=true; break; }
+        string rateLine = null;
         if(rates!=null && rates.ok && rateCol>=0 && agencyCol>=0 && currencyCol>=0){
           string price=rates.Get(r,rateCol,false), agency=rates.Get(r,agencyCol,false), currency=rates.Get(r,currencyCol,false);
           if(rates.ok){
             // Additional tagged rows: existing IH/AR/DP columns and their consumers stay intact.
             string arrival=tag=="AR"?"":cells[3], departure=tag=="DP"?"":cells[tag=="IH"?4:3];
-            READ.Append("RATE\t"+tag+"\t"+cells[0]+"\t"+cells[1]+"\t"+arrival+"\t"+departure
-                       +"\t"+price+"\t"+agency+"\t"+currency+"\t"+cells[cells.Length-1]+"\n");
+            rateLine="RATE\t"+tag+"\t"+cells[0]+"\t"+cells[1]+"\t"+arrival+"\t"+departure
+                       +"\t"+price+"\t"+agency+"\t"+currency+"\t"+cells[cells.Length-1]+"\n";
           }
         }
+        // A move can retain FROM/type while TO, guest or stay dates change. Verify all
+        // captured facts again after optional rate reads, not merely the first cells.
+        bool sameRow=rates.ok;
+        for(int c=0;c<cols.Length && sameRow;c++)
+          if(cells[c]!=rates.GetText(r,cols[c],false,wide) || !rates.ok) sameRow=false;
+        if(!sameRow){ ranOut=true; break; }
+        READ.Append(line.ToString() + "\n");
+        if(rateLine!=null) READ.Append(rateLine);
         got++;
       }
-    }catch(Exception e){ READ.Append("ERR\t" + e.Message + "\n"); }
+      readMsgs++;
+      if(!rates.ok || got!=rows || SendMessageTimeout(lv,LVM_GETITEMCOUNT,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,250,out res)==IntPtr.Zero
+         || res.ToInt32()!=rows) ranOut=true;
+    }catch(Exception e){ ranOut=true; READ.Append("ERR\t" + e.Message + "\n"); }
     finally{
       if(rates!=null){ readMsgs+=rates.messages; rates.Dispose(); }
-      VirtualFreeEx(proc, text, UIntPtr.Zero, MEM_RELEASE);
-      VirtualFreeEx(proc, item, UIntPtr.Zero, MEM_RELEASE);
-      CloseHandle(proc);
     }
     READ.Append("DONE\t" + got + "\t" + rows + "\t" + readMsgs + "\t"
                 + (Environment.TickCount - t0) + "\t" + (wide ? "unicode" : "ansi")
@@ -2349,17 +2339,41 @@ static class TBind {
     }catch(Exception){ return null; }
   }
   /* Written beside and moved, so RecCheck can never read half a list. */
-  static void WriteList(string tag, string body){
+  static bool WriteList(string tag, string body){
     try{
       string p = ListPath(tag);
-      if(p == null) return;
+      if(p == null) return false;
       System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(p));
+      // Commit an immutable capture before updating the compatibility mirror. The
+      // resident keeps this queue while the app is closed; readers ignore .tmp files.
+      string queue = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(p), "captures");
+      System.IO.Directory.CreateDirectory(queue);
+      if(captureSequence < 0){
+        long highest = 0;
+        foreach(string file in System.IO.Directory.GetFiles(queue, "*.tsv")){
+          string name = System.IO.Path.GetFileName(file);
+          long prior;
+          if(name.Length >= 20 && name[19] == '-' && long.TryParse(name.Substring(0, 19), out prior) && prior > highest) highest = prior;
+        }
+        captureSequence = highest;
+      }
+      if(captureSequence == long.MaxValue) return false;
+      long ticks = DateTime.UtcNow.Ticks;
+      captureSequence = Math.Max(ticks, captureSequence + 1);
+      long utcMs = (ticks - 621355968000000000L) / 10000;
+      string queued = System.IO.Path.Combine(queue,
+        captureSequence.ToString("D19", System.Globalization.CultureInfo.InvariantCulture) + "-" +
+        utcMs.ToString("D13", System.Globalization.CultureInfo.InvariantCulture) + "-" + tag + "-" + Guid.NewGuid().ToString("N") + ".tsv");
+      System.IO.File.WriteAllText(queued + ".tmp", body, new System.Text.UTF8Encoding(false));
+      System.IO.File.Move(queued + ".tmp", queued);
       string tmp = p + ".tmp";
       System.IO.File.WriteAllText(tmp, body, new System.Text.UTF8Encoding(false));
-      if(System.IO.File.Exists(p)) System.IO.File.Delete(p);
-      System.IO.File.Move(tmp, p);
-    }catch(Exception){}
+      if(System.IO.File.Exists(p)) System.IO.File.Replace(tmp, p, null);
+      else System.IO.File.Move(tmp, p);
+      return true;
+    }catch(Exception){ return false; }
   }
+  static long captureSequence = -1; // one resident writer; recover committed maximum once
   /* Runs on the pump thread, never in the callback. */
   static void EvServiceReads(){
     if(evWant.Count == 0) return;
@@ -2390,12 +2404,20 @@ static class TBind {
       string body = READ.ToString();
       READ = new StringBuilder();
       bool gotRows = (body.IndexOf("\n" + tag + "\t") >= 0 || body.StartsWith(tag + "\t"));
-      if(gotRows){
+      bool complete = false;
+      foreach(string line in body.Split(new char[]{'\n'})){
+        string[] fields=line.Replace("\r", "").Split(new char[]{'\t'});
+        int got,total;
+        if(fields.Length==7 && fields[0]=="DONE" && fields[6]=="complete"
+           && int.TryParse(fields[1],out got) && int.TryParse(fields[2],out total)
+           && got>0 && got==total) complete=true;
+      }
+      if(body.StartsWith("ERR\t") || body.IndexOf("\nERR\t")>=0) complete=false;
+      if(gotRows && complete && WriteList(tag, body)){
         /* the read succeeded: take it, mark the caption taken, and cool this list for four
            seconds so the open window restating its caption is not re-read. */
         evWant.Remove(tag); evWantOpen.Remove(tag); evReadyAt.Remove(tag); evTries.Remove(tag);
         evLastAt[tag] = now; evLastCap[tag] = cap;
-        WriteList(tag, body);
         AppendWatch(DateTime.Now.ToString("HH:mm:ss") + "  READ   " + tag
                     + "  title=\"" + cap + "\"\r\n");
       } else {
@@ -2751,7 +2773,7 @@ static class TBind {
     }catch(Exception){}
   }
 
-  const string VER = "v33";
+  const string VER = "v34";
 
 
   /* Live accommodation reader. Separate child mode: no keyboard hooks, no protel writes.
@@ -2824,6 +2846,9 @@ static class TBind {
       result=replyResult;return !pendingReply;
     }
     public string Get(int row,int col,bool header){
+      return GetText(row,col,header,true);
+    }
+    public string GetText(int row,int col,bool header,bool wide){
       if(!ok || Environment.TickCount-started>READ_BUDGET_MS){ok=false;return "";}
       UIntPtr n;
       byte[] z=new byte[CCH*2], b=header?BuildHeaderItem(target64,text,CCH):BuildLvItem(target64,row,col,text,CCH);
@@ -2836,19 +2861,20 @@ static class TBind {
            ||dest==IntPtr.Zero){ok=false;return "";}
       }
       messages++;
-      uint message=header?0x120Bu:LVM_GETITEMTEXTW;
+      uint message=header?0x120Bu:(wide?LVM_GETITEMTEXTW:LVM_GETITEMTEXTA);
       bool answered=recoverable
         ? AwaitGetter(dest,message,(IntPtr)(header?col:row),out res)
         : SendMessageTimeout(dest,message,(IntPtr)(header?col:row),item,SMTO_ABORTIFHUNG,250,out res)!=IntPtr.Zero;
       if(!answered){ok=false;timedOut=recoverable?pendingReply:true;return "";}
       if(header && res==IntPtr.Zero){ok=false;return "";}
       if(!ReadProcessMemory(proc,text,z,(UIntPtr)z.Length,out n)||n.ToUInt64()!=(ulong)z.Length){ok=false;return "";}
-      string s=System.Text.Encoding.Unicode.GetString(z);
+      string s=wide?System.Text.Encoding.Unicode.GetString(z):System.Text.Encoding.Default.GetString(z);
       int end=s.IndexOf('\0');
       if(end<0 || end>=CCH-1){ok=false;return "";}
       return s.Substring(0,end).Replace("\t"," ").Replace("\r"," ").Replace("\n"," ");
     }
-    public string[] Headers(){
+    public string[] Headers(){ return Headers(24); }
+    public string[] Headers(int maxColumns){
       IntPtr h,res;
       messages+=2;
       if(!ok || SendMessageTimeout(lv,LVM_GETHEADER,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,250,out h)==IntPtr.Zero
@@ -2856,7 +2882,7 @@ static class TBind {
         ok=false;return new string[0];
       }
       int count=res.ToInt32();
-      if(count<1||count>24){ok=false;return new string[0];}
+      if(count<1||count>maxColumns){ok=false;return new string[0];}
       string[] hs=new string[count];
       for(int i=0;i<count;i++) hs[i]=Get(0,i,true);
       return hs;

@@ -110,7 +110,7 @@ ck("and still marks the room",                  !!out.rooms["301"].movedOn);
    05/09: the last row won; named after a due-in guest, the next .oxps load would have
    read the real guest's receipt as a turnover and deleted the nickname. */
 {
-  const body = [lift("liveNameOf"), lift("ingestLiveNames"), "return ingestLiveNames(rate);"].join("\n");
+  const body = [lift("dateNum"),lift("liveNameOf"), lift("ingestLiveNames"), "return ingestLiveNames(rate);"].join("\n");
   const run = (rate, rooms) => { new Function("ROOMS","rate","saveRooms","Object","String", body)(rooms, rate, () => {}, Object, String); return rooms; };
   const row = (name, status) => ({name, status});
   const mk = all => { const rooms = {}; for(const r of Object.keys(all)) rooms[r] = all[r][all[r].length - 1]; return {rooms, all, dateKey: 20260905}; };
@@ -121,7 +121,7 @@ ck("and still marks the room",                  !!out.rooms["301"].movedOn);
   const R3 = run(mk({"426": [row("LEFT TODAY", "CO"), row("DUE IN", "Confirmed")]}), {});
   ck("with no CI row, CO beats Confirmed",              R3["426"].guest === "LEFT TODAY");
   const R4 = run(mk({"426": [row("FIRST CI", "CI"), row("SECOND CI", "CI")]}), {});
-  ck("among equals the last row still wins, as before", R4["426"].guest === "SECOND CI");
+  ck("conflicting equally-ranked guests do not choose a room name", !R4["426"]);
   const R5 = run(mk({"426": [row("ONLY ROW", "Confirmed")]}), {});
   ck("a single row names the room as it always did",   R5["426"].guest === "ONLY ROW");
   const R6 = run({rooms: {"426": row("NO ALL", "CI")}, dateKey: 20260905}, {});

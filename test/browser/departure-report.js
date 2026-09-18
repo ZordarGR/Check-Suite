@@ -9,7 +9,7 @@ const {chromium}=require("playwright-core"),path=require("path"),assert=require(
  await p.addInitScript(()=>{
   localStorage.setItem("reccheck_moves_v2",JSON.stringify({"101":{"20260901":{d:20260918,n:"SYNTHETIC ALPHA/LONGNAME/WRAPPING/COMPANION/SECOND/GUEST/THIRD/GUEST <TEST> & FAMILY",seen:20260917}},"102":{"20260903":{d:20260919,n:"SYNTHETIC BETA",seen:20260917}}}));
   localStorage.setItem("reccheck_moves_v2",JSON.stringify({...JSON.parse(localStorage.getItem("reccheck_moves_v2")),"163":{"20260910":{d:20260918,n:"SYNTHETIC DUPLICATE",seen:20260917},"20260911":{d:20260918,n:"SYNTHETIC DUPLICATE",seen:20260917}}}));
-  localStorage.setItem("reccheck_receipts_v1",JSON.stringify({"20260905":[["101","SYNTHETIC ALPHA/LONGNAME/WRAPPING/COMPANION/SECOND/GUEST/THIRD/GUEST <TEST> & FAMILY"]]}));
+  localStorage.setItem("reccheck_receipts_v1",JSON.stringify({"20260905":[["101","SYNTHETIC ALPHA/LONGNAME/WRAPPING/COMPANION/SECOND/GUEST/THIRD/GUEST <TEST> & FAMILY",{id:"fixture|101",live:true,uncertain:false}]]}));
   window.print=()=>{window.dispatchEvent(new Event("beforeprint"));window.dispatchEvent(new Event("beforeprint"));window.dispatchEvent(new Event("afterprint"));};
  });
  await p.goto("file://"+path.resolve(__dirname,"h-sweep.html"));

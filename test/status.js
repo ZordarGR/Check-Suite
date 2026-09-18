@@ -4,7 +4,7 @@
    leaving the arrival list means nothing until the in-house list shows the same name and
    room checked in; a departure leaving the departure list means nothing either — "there
    are rare cases where we have the departure date wrong" — and is checked out only when
-   a COMPLETE in-house list captured afterwards does not show it; the pills of the
+   its own matching departure capture explicitly shows CO; the pills of the
    department check come from this store and nothing else, with a dot on a departed or
    moved pill when a receipt in the loaded report carries that reservation's name.
 
@@ -60,7 +60,7 @@ function pillsFor(reportDate, receipts, rooms){
   const MODEL = {reportDate, receipts: receipts || []};
   const STATE = {receipts: {}};
   const t = k => k;
-  const body = [line(/^const el = \(tag, cls, txt\) =>.*$/m), lift("dateNum"), lift("dShort"), lift("rKey"), lift("rState"),
+  const body = [line(/^const el = \(tag, cls, txt\) =>.*$/m), lift("dateNum"), lift("dShort"), lift("rKey"), lift("receiptFingerprint"), lift("rState"),
     "const effRoom = (r) => { " + line(/^function effRoom\(r\)\{.*$/m).replace(/^function effRoom\(r\)\{/, "").replace(/\}$/, "") + " };",
     lift("checkableList"), lift("sameName"), lift("isCutOf"), lift("expandReceiptName"), lift("receiptFullName"), lift("receiptName"),
     "const STATUS_KEY = \"reccheck_status_v1\";", lift("loadStatus"), lift("statusRows"), lift("pillRoom"),
@@ -233,11 +233,12 @@ console.log("--- 5b. the dot over the whole stay — his word: \"any of the days
    of the stay carried a receipt on 110 under his name; tonight's report carries none. */
 const nights = JSON.parse(store["reccheck_receipts_v1"] || "{}");
 ck("each night's report leaves its room+name pairs behind, keyed by the night", Array.isArray(nights["20260904"]) && nights["20260904"].some(p => p[0] === "111" && p[1] === "MUELLER HANS"));
-ck("and no amounts or serials", nights["20260904"].every(p => p.length === 2));
-nights["20260901"] = [["110", "MUELLER HANS"]];                         // an earlier night of the stay
-nights["20260825"] = [["116", "SCHAFERL"]];                              // the night BEFORE SCHAFERL arrived (26/08)
-nights["20260902"] = [["116", "SOMEONE ELSE"]];                          // another name on 116
-nights["20260903"] = [["505", "VASSILIEV"]];                             // the moved guest, the night he arrived (03/09), on the room he took
+ck("receipt provenance is retained without amounts", nights["20260904"].every(p => p[2] && typeof p[2].live === "boolean"));
+const knownPair=(room,name)=>[room,name,{id:"fixture|"+room,live:true,uncertain:false}];
+nights["20260901"] = [knownPair("110", "MUELLER HANS")];                // an earlier night of the stay
+nights["20260825"] = [knownPair("116", "SCHAFERL")];                   // the night BEFORE SCHAFERL arrived (26/08)
+nights["20260902"] = [knownPair("116", "SOMEONE ELSE")];               // another name on 116
+nights["20260903"] = [knownPair("505", "VASSILIEV")];                  // the moved guest, the night he arrived (03/09), on the room he took
 store["reccheck_receipts_v1"] = JSON.stringify(nights);
 P = pillsFor(NIGHT, []);
 ck("a receipt on an earlier night of the stay, under the departing name, dots the departure", P.dot("110"));
@@ -245,14 +246,18 @@ ck("a receipt the night before the stay began does not",                        
 ck("a receipt under another name during the stay does not",                                !P.dot("116"));
 ck("the moved reservation's receipt on an earlier night dots the move",                   P.dot("505"));
 ck("an arrival is still never dotted",                                                     !P.dot("337"));
-ck("tonight's pairs were rewritten from tonight's report — the old 111 pair is gone",      !(JSON.parse(store["reccheck_receipts_v1"])["20260904"] || []).length);
+ck("an omitted receipt remains stored as uncertain, not erased", (JSON.parse(store["reccheck_receipts_v1"])["20260904"] || []).some(p=>p[0]==="111"&&p[2].uncertain));
 /* a night whose report was never loaded is unknown, not empty: only loaded nights are keys */
 ck("nights never loaded here are simply absent",                                           !("20260830" in JSON.parse(store["reccheck_receipts_v1"])));
-/* the memory is bounded */
-const old = JSON.parse(store["reccheck_receipts_v1"]); old["20260601"] = [["1", "X"]]; old["junk"] = 1; store["reccheck_receipts_v1"] = JSON.stringify(old);
+/* Retention applies to readable history. Malformed metadata cannot authorize a
+   rewrite that silently drops the original store. Exercise the two boundaries apart. */
+const old = JSON.parse(store["reccheck_receipts_v1"]); old["20260819"] = [["101", "EXPIRED"]]; old["20260820"] = [["102", "BOUNDARY"]]; store["reccheck_receipts_v1"] = JSON.stringify(old);
 P = pillsFor(NIGHT, []);
 const kept = JSON.parse(store["reccheck_receipts_v1"]);
-ck("a night older than sixty is pruned, and a key that is not a night", !("20260601" in kept) && !("junk" in kept) && ("20260901" in kept));
+ck("readable history prunes beyond fifteen nights and retains the exact boundary", !("20260819" in kept) && ("20260820" in kept) && ("20260901" in kept));
+const malformed=JSON.stringify({...kept,junk:1});store["reccheck_receipts_v1"]=malformed;
+P = pillsFor(NIGHT, []);
+ck("an unreadable history key refuses the write and retains the original bytes", store["reccheck_receipts_v1"]===malformed);
 
 console.log("--- 5c. a cut receipt name — the .oxps truncates at the column, protel's list does not");
 /* Room 110's departing guest is MUELLER HANS-JOACHIM/ANNELIESE on the departure list; the
@@ -315,11 +320,11 @@ for(const k of Object.keys(store)) delete store[k];
 store["reccheck_legacy"] = "0";
 rpt("DP", RPT("DP", "Departure Report for 04/09/26", [["QUINK FREDERICK/ANNA", "56", "2/0/1/1/0", "30/08/26", "CI"]]), T(11));
 rpt("MV", "TITLE\tPerform Move for Date 02/09/26\nMV\t72\tBGV\t56\tMVFAM\tQUINK\tX\t30/08/26\t04/09/26\nDONE\t1\t1\t9\t5\tunicode\tcomplete\n", Date.UTC(2026, 8, 2, 9));
-store["reccheck_receipts_v1"] = JSON.stringify({"20260901": [["72", "QUINK FREDERICK"]]});
+store["reccheck_receipts_v1"] = JSON.stringify({"20260901": [knownPair("72", "QUINK FREDERICK")]});
 ck("a receipt written in the room protel moved the guest out of dots the departure from the new room", pillsFor(NIGHT, []).dot("56"));
-store["reccheck_receipts_v1"] = JSON.stringify({"20260829": [["72", "QUINK FREDERICK"]]});
+store["reccheck_receipts_v1"] = JSON.stringify({"20260829": [knownPair("72", "QUINK FREDERICK")]});
 ck("... not one from before the reservation arrived",                                     !pillsFor(NIGHT, []).dot("56"));
-store["reccheck_receipts_v1"] = JSON.stringify({"20260901": [["72", "QUINK FREDERICK"]]});
+store["reccheck_receipts_v1"] = JSON.stringify({"20260901": [knownPair("72", "QUINK FREDERICK")]});
 rpt("MV", "TITLE\tPerform Move for Date 02/09/26\nMV\t72\tBGV\t56\tMVFAM\tQUINK\t\t30/08/26\t04/09/26\nDONE\t1\t1\t9\t5\tunicode\tcomplete\n", Date.UTC(2026, 8, 2, 10));
 ck("... nor through a move protel has not marked",                                        !pillsFor(NIGHT, []).dot("56"));
 /* one reservation on two lists: moved 72 → 56 on the night it departs from 56 — a departure
@@ -358,7 +363,7 @@ function bridgeFixture(){
 }
 function bridgePills(st, pairs, census){
   store["reccheck_status_v1"] = JSON.stringify(st);
-  store["reccheck_receipts_v1"] = JSON.stringify({"20260901": pairs || [["163", RECEIPT_FIRST]]});
+  store["reccheck_receipts_v1"] = JSON.stringify({"20260901": (pairs || [["163", RECEIPT_FIRST]]).map(p=>knownPair(p[0],p[1]))});
   return pillsFor(NIGHT, [], census || {});
 }
 let bridge = bridgeFixture();
@@ -441,7 +446,7 @@ ck("house accounts never become pills or departure marks", ["9000", "9604", "904
 {
 console.log("--- same-day in-house row preservation");
 for(const k of Object.keys(store)) delete store[k];store["reccheck_legacy"]="0";
-const capRows=(date,rows,at)=>TAX.ingest("IH",{title:"Guests Inhouse: "+date,rows:rows,done:{cut:false}},at);
+const capRows=(date,rows,at)=>TAX.ingest("IH",{title:"Guests Inhouse: "+date,rows:rows,done:{cut:false,got:rows.length,rows:rows.length}},at);
 const ihCols=src.match(/^const IH = (\{.*\});/m);
 const ix=new Function("return "+ihCols[1])();
 const item=(name,room,dep)=>{const row=[];row[ix.NAME]=name;row[ix.ROOM]=room;row[ix.ARR]="01/09/26";row[ix.DEP]=dep;row[ix.STATUS]="CI";return row;};
@@ -509,6 +514,8 @@ console.log("--- confirmed room moves supersede old departure locations without 
   ck("same name in two rooms is insufficient without a captured move", draw(data).has("110"));
   data=make();data.MV["20260903"].rows.moved.x="";
   ck("an unmarked move cannot hide the original departure", draw(data).has("110"));
+  data=make();data.MV["20260903"].rows.moved.x="?";
+  ck("an unreadable move mark cannot hide the original departure", draw(data).has("110"));
   data=make();data.MV["20260903"].rows.moved.arr="02/09/26";
   ck("a move from a different arrival cannot hide it", draw(data).has("110"));
   data=make();data.MV["20260903"].rows.moved.dep="05/09/26";

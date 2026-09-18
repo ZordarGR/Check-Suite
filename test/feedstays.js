@@ -82,7 +82,7 @@ ck("an arrival with no departure is still a stay", open.recs.length === 1 && ope
 store["reccheck_moves_v2"] = JSON.stringify({"204": {"20260904": {d: 20260915, n: "OPEN ENDED", seen: 20260903}}});
 R.feedStays(open.recs, 20260905);
 ck("and does not wipe a departure already known", R.led()["204"][20260904].d === 20260915);
-store["reccheck_moves_v2"] = "";
+delete store["reccheck_moves_v2"];
 
 /* --- a cancelled row is not a stay --- */
 const cx = R.reportToStays([["X ", "201", "2/0/0/0/0", "09/09/26", "Reversal/Void"]], "04/09/26", true);
@@ -132,7 +132,7 @@ store["reccheck_moves_v2"] = JSON.stringify({
 R.feedStays([{room:"213", arr:"01/09/26", dep:"07/09/26", name:"REPORT NAME"}], 20260904);
 ck("nor is the census name replaced on a tie",   R.led()["213"][20260901].n === "CENSUS NAME");
 /* put the ledger back to what the next section expects */
-store["reccheck_moves_v2"] = "";
+delete store["reccheck_moves_v2"];
 R.feedStays(a.recs, 20260904);
 R.feedStays([{room:"337", arr:"04/09/26", dep:"07/09/26", name:"AMANN ANJA/BERND"}], 20260906);
 
@@ -253,6 +253,13 @@ ck("arrival list feeds guest account 9017 and excludes its house account", gar.r
 ck("departure list feeds guest account 9017 with the captured arrival", gdp.recs.length === 1 && gdp.recs[0].room === "9017" && gdp.recs[0].arr === "02/09/26");
 R.feedStays(gar.recs, 20260904);
 ck("guest-account arrival is written without changing its stay dates", R.led()["9017"] && R.led()["9017"][20260904].d === 20260909);
+
+for(const raw of ["", "{broken", "[]"]){
+  store["reccheck_moves_v2"]=raw;
+  const refused=R.feedStays(gar.recs,20260904);
+  ck("invalid saved bytes are preserved instead of treated as an empty ledger: "+JSON.stringify(raw),
+    refused.failed===true&&store["reccheck_moves_v2"]===raw);
+}
 
 console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");
 process.exit(bad ? 1 : 0);

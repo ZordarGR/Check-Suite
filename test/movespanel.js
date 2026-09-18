@@ -82,7 +82,7 @@ const MODEL = {
 const ROOMS = {}, STATE = {receipts: {}};
 const t = (k, v) => k + (v ? "(" + JSON.stringify(v) + ")" : "");
 
-const body = [elDecl, lift("dateNum"), lift("dShort"), lift("rKey"), lift("rState"),
+const body = [elDecl, lift("dateNum"), lift("dShort"), lift("rKey"), lift("receiptFingerprint"), lift("rState"),
   "const effRoom = " + line(/^function effRoom\(r\)\{.*$/m).replace(/^function effRoom\(r\)/, "(r) =>") .replace(/^\(r\) =>\{/, "(r) => {"),
   lift("checkableList"), lift("sameName"), lift("isCutOf"), lift("expandReceiptName"), lift("receiptFullName"), lift("receiptName"), lift("nameHit"), lift("censusNameOf"), lift("nameWordSet"), lift("nameLike"), lift("otherNames"), "let ARRIVING = {};",
   "const STATUS_KEY = \"reccheck_status_v1\";", lift("loadStatus"), lift("statusRows"), lift("pillRoom"),

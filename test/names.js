@@ -23,7 +23,7 @@ const NAME = `
 function resolve(receipts, rooms, r, state){
   const MODEL = {reportDate:"3/9/2026", receipts};
   const STATE = state || {receipts:{}};
-  const body = [lift("rKey"), lift("rState"), nickForLine, lift("dateNum"), lift("sameName"), lift("isCutOf"), lift("nameTextIn"), lift("sameGuestLabel"), lift("expandReceiptName"), lift("receiptFullName"), lift("guestFor"),
+  const body = [lift("rKey"), lift("receiptFingerprint"), lift("rState"), nickForLine, lift("dateNum"), lift("sameName"), lift("isCutOf"), lift("nameTextIn"), lift("sameGuestLabel"), lift("expandReceiptName"), lift("receiptFullName"), lift("guestFor"),
     "const effRoom = (r) => { " + effRoomLine.replace(/^function effRoom\(r\)\{/,"").replace(/\}$/,"") + " };",
     NAME].join("\n");
   const fn = new Function("MODEL","ROOMS","STATE","r","Object","String", body);
@@ -80,7 +80,8 @@ ck("a room named only in ROOMS still resolves", d.shown === "FROM THE LEDGER");
 let recs5 = [R("7","111","OLD ROOM GUEST"), R("8","263","PFUENDL")];
 let st = {receipts:{}};
 const rk = new Function("r", lift("rKey") + "\nreturn rKey(r);");
-st.receipts[rk(recs5[0])] = {status:"pending", corr:{room:"263"}};
+const fingerprint = new Function("r", lift("receiptFingerprint") + "\nreturn receiptFingerprint(r);");
+st.receipts[rk(recs5[0])] = {status:"pending", corr:{room:"263"}, source:fingerprint(recs5[0])};
 let e = resolve(recs5, {}, recs5[0], st);
 ck("a charge whose room was corrected takes the new room's name", e.shown === "PFUENDL");
 console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");

@@ -49,7 +49,7 @@ function run(localStorage, ROOMS, receipts, reportDate){
   const MODEL = {reportDate, receipts};
   const STATE = {receipts:{}};
   const t = k => k;
-  const body = [elDecl, lift("dateNum"), lift("dShort"), lift("rKey"), lift("rState"),
+  const body = [elDecl, lift("dateNum"), lift("dShort"), lift("rKey"), lift("receiptFingerprint"), lift("rState"),
     "const effRoom = (r) => { " + effRoomLine.replace(/^function effRoom\(r\)\{/, "").replace(/\}$/, "") + " };",
     lift("checkableList"), lift("sameName"), lift("isCutOf"), lift("expandReceiptName"), lift("receiptFullName"), lift("receiptName"), lift("nameHit"), lift("censusNameOf"), lift("nameWordSet"), lift("nameLike"), lift("otherNames"), "let ARRIVING = {};",
     "const STATUS_KEY = \"reccheck_status_v1\";", lift("loadStatus"), lift("statusRows"), lift("pillRoom"),

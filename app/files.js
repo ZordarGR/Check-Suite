@@ -15,6 +15,8 @@ class FileHub {
     this.o = opts;
     this.watchers = {};         // profile -> fs.FSWatcher
     this.debounce = {};         // profile -> timer
+    this.lastConfig = {};
+    this.configUnreadable = false;
   }
   /* A NAME THIS DOES NOT KNOW IS REFUSED, NOT QUIETLY TURNED INTO "dept".
      This used to read `profile === "tax" ? "tax" : "dept"` — a two-way switch, so the
@@ -26,12 +28,30 @@ class FileHub {
     const p = String(profile == null ? "dept" : profile);
     return PROFILES.indexOf(p) >= 0 ? p : null;
   }
-  readConfig(){ try{ return JSON.parse(fs.readFileSync(this.o.configPath, "utf8")); }catch(e){ return {}; } }
+  readConfig(){
+    try{
+      const c = JSON.parse(fs.readFileSync(this.o.configPath, "utf8"));
+      if(!c || typeof c !== "object" || Array.isArray(c)) throw new Error("Invalid saved configuration");
+      this.lastConfig = c; this.configUnreadable = false;
+    }catch(e){
+      this.configUnreadable = e.code !== "ENOENT";
+      if(!this.configUnreadable) this.lastConfig = {};
+    }
+    return JSON.parse(JSON.stringify(this.lastConfig));
+  }
   writeConfig(c){
+    if(this.configUnreadable) return false; // an unreadable file is not an empty configuration
+    const tmp = this.o.configPath + ".tmp";
     try{
       fs.mkdirSync(path.dirname(this.o.configPath), {recursive: true});
-      fs.writeFileSync(this.o.configPath, JSON.stringify(c));
-    }catch(e){}
+      fs.writeFileSync(tmp, JSON.stringify(c));
+      fs.renameSync(tmp, this.o.configPath);
+      this.lastConfig = JSON.parse(JSON.stringify(c));
+      return true;
+    }catch(e){
+      try{ fs.unlinkSync(tmp); }catch(_){}
+      return false;
+    }
   }
   getDir(profile){
     const p = this.norm(profile);
@@ -48,7 +68,7 @@ class FileHub {
     c.reportsDirs = c.reportsDirs || {};
     c.reportsDirs[p] = dir;
     if(p === "dept") c.reportsDir = dir;          // keep the legacy key in step
-    this.writeConfig(c);
+    if(!this.writeConfig(c)) throw new Error("Could not save the reports folder; the previous configuration was kept");
     this.startWatch();
     return dir;
   }
