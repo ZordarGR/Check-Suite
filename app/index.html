@@ -1967,7 +1967,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.81";
+const APP_VERSION = "1.17.82";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -2875,12 +2875,14 @@ function syncRooms(){
   }
   const before = {};                              // ROOMS as it stood before tonight
   for(const [room, e] of Object.entries(ROOMS))
-    before[room] = {guest: e.guest, nick: e.nick, seen: e.seen};
+    before[room] = {guest: e.guest, nick: e.nick, seen: e.seen, liveKey: e.liveKey};
 
   for(const [room, g] of Object.entries(tonight)){
     const e = ROOMS[room];
     if(!e){ ROOMS[room] = {guest: g, seen: MODEL.reportDate}; continue; }
-    if(rd && e.seen && dateNum(e.seen) > rd) continue;   // older report — read-only
+    // A receipt report cannot replace a name captured on a later business date,
+    // even when its printed name uses a different order and is not a prefix.
+    if(rd && Math.max(Number(e.liveKey) || 0, dateNum(e.seen)) > rd) continue;
     /* A NAME THAT CAME LIVE FROM PROTEL IS NOT A CHANGED GUEST.
        It is the same person, in full; the receipt's is the truncation, and truncation is
        the entire reason the live read exists. Without this, the first night both sources
@@ -2930,13 +2932,14 @@ function syncRooms(){
     const prev = prevNightKey(rd);
     for(const [room, g] of Object.entries(tonight)){
       const e = ROOMS[room];
-      if(!e || (e.seen && dateNum(e.seen) > rd)) continue;
+      if(!e || Math.max(Number(e.liveKey) || 0, dateNum(e.seen)) > rd) continue;
       if(e.nick) continue;                        // already labelled: nothing to carry in
       const was = before[room];
       if(was && was.guest && sameName(was.guest, g)) continue;   // same guest as before
       const from = [];
       for(const [src, b] of Object.entries(before)){
         if(src === room || !b.nick || !sameName(b.guest, g)) continue;
+        if(Number(b.liveKey) > rd) continue;
         const sn = dateNum(b.seen);
         if(sn !== rd && sn !== prev) continue;
         if(tonight[src] && sameName(tonight[src], g)) continue;  // still charging there

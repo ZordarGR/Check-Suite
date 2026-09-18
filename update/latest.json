@@ -1,11 +1,11 @@
 {
-  "version": "1.17.81",
-  "type": "full",
+  "version": "1.17.82",
+  "type": "html",
   "engine": "1.17.81",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.81/Pro-Check-Setup.exe",
   "setupSha256": "be25212bb5023ae772f2c00fa8e193948e98338da42536bfcee6ea0595677baa",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/98c695dc67db9a27b671ac1492c5dc7e2b07cdcd/Departments%20Check.html",
-  "sha256": "5b842c9195ff38a1c98ed565ccde06c671d8edc8a900b2a9da47e5f8bc7d5db3",
-  "notes": "Preserve room, stay, receipt and Tax evidence across filtered lists, moves and failed saves. Arrangement eligibility uses the reservation-list agency for BOOKING.COM, EXPEDIA, INDIVIDUAL and WEBHOTELIER, independent of the B name. The resident helper archives completed lists while Pro-Check is closed and replays them safely when it reopens. Includes backup-print, import, overlay, configuration and update recovery fixes."
+  "sha256": "2c18fcd2a436d8b082773da002e7e8e28e48577d8a080bfa6a7db76446df4d32",
+  "notes": "Preserve newer captured full guest names and nicknames when an older Department report is reopened."
 }

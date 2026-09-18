@@ -20,7 +20,7 @@ const CUT  = "ABBUSHI MIRIAM/OLI";
 
 /* syncRooms is what feeds the .oxps report into the room database. Its world is supplied
    here — ROOMS, MODEL, WATCH — and the pieces it calls that are not the subject. */
-function runSync(rooms, receipts, reportDate, watch){
+function runSync(rooms, receipts, reportDate, watch, status){
   const body = [
     lift("dateNum"),
     lift("prevNightKey"),
@@ -29,13 +29,13 @@ function runSync(rooms, receipts, reportDate, watch){
     lift("syncRooms"),
     "return syncRooms();"
   ].join("\n");
-  const out = {dropped: null};
+  const out = {dropped: null, scheduled: []};
   new Function("ROOMS","MODEL","WATCH","saveRooms","showToast","renderNickPanel","PANEL",
-               "Object","String","Set","Array","console","RegExp", body)(
+               "Object","String","Set","Array","console","RegExp","setTimeout","loadStatus", body)(
     rooms, {receipts, reportDate}, watch || [],
     () => {}, (m) => { out.dropped = m; }, () => {}, null,
-    Object, String, Set, Array, console, RegExp);
-  return {rooms, toast: out.dropped};
+    Object, String, Set, Array, console, RegExp, callback => {out.scheduled.push(callback);}, () => status || {});
+  return {rooms, toast: out.dropped, scheduled: out.scheduled};
 }
 
 /* --- guestFor: which name reaches the card --- */
@@ -85,6 +85,32 @@ ck("the uncut name is NOT overwritten by the cut one",
    out.rooms["426"].guest === FULL && out.rooms["102"].guest === "ADCHMER/KAST FRANZISKA/ANDREAS");
 ck("the watchlist does not cry guest-changed",  !out.toast || !/426/.test(String(out.toast)));
 ck("and the room is stamped as seen tonight",   out.rooms["426"].seen === "4/9/2026");
+
+/* Older receipts are not allowed to replace a later census, irrespective of name
+   order. Synthetic names deliberately do not pass the existing prefix matcher. */
+{
+  const rooms={"121":{guest:"SMITH ALEX/TAYLOR",liveKey:20260918,seen:"17/9/2026",nick:"keep nickname",movedOn:"15/9/2026"},
+               "124":{guest:"JONES CASEY/MORGAN",liveKey:20260918,seen:null}};
+  const before=JSON.stringify(rooms);
+  const result=runSync(rooms,[{roomMain:"121",guest:"ALEX/TAYLOR SMIT"},{roomMain:"124",guest:"SOMEONE DIFFERENT"}],"17/9/2026",[{room:"121"},{room:"124"}]);
+  ck("older receipts preserve all newer census fields, including full name and provenance",JSON.stringify(rooms)===before);
+  ck("older receipt names cause no nickname reset, turnover or watchlist prompts",result.scheduled.length===0);
+}
+{
+  const rooms={"301":{guest:"SYNTHETIC GUEST",liveKey:20260918,seen:"16/9/2026",nick:"source nickname"},
+               "302":{guest:"OLD OCCUPANT",seen:"16/9/2026"}};
+  const status={MV:{"20260917":{rows:{move:{from:"301",to:"302",name:"SYNTHETIC GUEST",x:"X"}}}};
+  runSync(rooms,[{roomMain:"302",guest:"SYNTHETIC GUEST"}],"17/9/2026",[],status);
+  ck("an old confirmed move cannot remove a nickname from a newer captured source",rooms["301"].nick==="source nickname"&&!rooms["302"].nick);
+}
+{
+  const rooms={"303":{guest:"SYNTHETIC GUEST",seen:"17/9/2026",nick:"source nickname"},
+               "304":{guest:"CURRENT GUEST",liveKey:20260918,seen:"16/9/2026"}};
+  const before=JSON.stringify(rooms);
+  const status={MV:{"20260917":{rows:{move:{from:"303",to:"304",name:"SYNTHETIC GUEST",x:"X"}}}};
+  runSync(rooms,[{roomMain:"304",guest:"SYNTHETIC GUEST"}],"17/9/2026",[],status);
+  ck("an old confirmed move cannot attach a previous guest nickname to a newer destination",JSON.stringify(rooms)===before);
+}
 
 /* the guard must survive the .oxps spacing the cut name differently */
 const spaced = {"426": {guest: FULL, seen: null, liveKey: 20260904, nick: "the loud ones"}};

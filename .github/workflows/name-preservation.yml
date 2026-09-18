@@ -1,0 +1,48 @@
+name: Full-name preservation checks
+on:
+  push:
+    branches: ["codex/preserve-full-names-20260918"]
+permissions:
+  contents: read
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/dist-win64/parts/RecCheck-Setup.exe.*
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y mono-devel
+          sh app/build-helper.sh
+          sh test/run.sh
+          node test/departure-report.js
+          for t in test/audit-*.js; do node "$t" || exit 1; done
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/dist-win64/parts/RecCheck-Setup.exe.*
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+          sudo mkdir -p /opt/pw-browsers/chromium-1194/chrome-linux
+          CHROME="$(node -p "require('playwright').chromium.executablePath()")"
+          sudo ln -sf "$CHROME" /opt/pw-browsers/chromium-1194/chrome-linux/chrome
+          node test/harness.js
+          for t in live guest-turnover reports audit-reports; do timeout 420 node "test/browser/$t.js" || exit 1; done
