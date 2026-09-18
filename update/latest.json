@@ -5,7 +5,7 @@
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.81/Pro-Check-Setup.exe",
   "setupSha256": "be25212bb5023ae772f2c00fa8e193948e98338da42536bfcee6ea0595677baa",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/ec3d6dc50a74af7cf34f3a99da7b6eddcb2784e9/Departments%20Check.html",
-  "sha256": "e76935db0796d564e86884224d7481257327fe3bd9c7f582c462a758884f7e71",
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/cace4ac111a31c666ed25d1c5fdced53ac69ed3f/Departments%20Check.html",
+  "sha256": "06b0548c40d54edf489693b1e75ca54912c10cc856b8354033403059e7f2ffa7",
   "notes": "Show uniquely matching full names when receipts print given names before surnames; preserve ambiguous printed names. Includes saved-list replay recovery."
 }
