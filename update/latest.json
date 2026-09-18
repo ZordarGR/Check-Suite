@@ -1,11 +1,11 @@
 {
-  "version": "1.17.84",
+  "version": "1.17.85",
   "type": "html",
   "engine": "1.17.81",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.81/Pro-Check-Setup.exe",
   "setupSha256": "be25212bb5023ae772f2c00fa8e193948e98338da42536bfcee6ea0595677baa",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/863667401eb6fc779dc57ed6cbd9b17f362c4446/Departments%20Check.html",
-  "sha256": "99ff32a96f9f6cf23ad82e27c11aab9b1883327ac23ca4f0ac89d479a9864ab1",
-  "notes": "Restore departure and move extras dots for uniquely matching given-name-first receipts, including saved history; retain ambiguity and cancellation safeguards."
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/be90ebe3c2e2c786cbb53584451a25ce11220341/Departments%20Check.html",
+  "sha256": "43c739bec6fb0604bd231fffbb37fb88159aed558c57d96903bb2eea24fe5a24",
+  "notes": "Completed Department accordion headers now have a green background and black text."
 }
