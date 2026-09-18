@@ -1967,13 +1967,14 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.81";
+const APP_VERSION = "1.17.80";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
 /* Storage failures must remain visible, including failures in the independent tax
    scope. No saved fact is described as durable merely because its UI changed. */
 window.__rcStorageFault = function(where, error){
+  window.__rcStorageFaultCount = (window.__rcStorageFaultCount || 0) + 1;
   try{ console.error("[storage]", where, error); }catch(_){}
   try{
     let box = document.getElementById("storageFailure");
@@ -2780,6 +2781,17 @@ window.__rcLiveNames = function(rate){
   try{ if(n && MODEL){ if(SCREEN === "app") refreshNames(); else NAMES_STALE = true; } }
   catch(e){ uiFault("liveNames", e); }
   return n;
+};
+// Queue acknowledgement must include the app scope's cached rooms and alerts.
+// Retrying an unchanged capture must retry a previous failed save as well.
+window.__rcCaptureFlush = async function(){
+  if(window.__rcImportBlocked) return false;
+  await mergeRoomsFromDisk();
+  if(window.__rcImportBlocked || !saveRooms() || !saveAlerts()) return false;
+  try{
+    if(window.reccheckRooms && await window.reccheckRooms.write(ROOMS) === false) throw new Error("Room backup write failed");
+    return !window.__rcImportBlocked;
+  }catch(e){ window.__rcStorageFault("capture room backup",e); return false; }
 };
 function refreshNames(){
   /* the rows and the cards each on their own: one failing must not keep the other stale */
@@ -8915,9 +8927,79 @@ function paintHeld(){
   box.textContent = bits.length ? t('held_lead') + bits.join("   ") : t('held_none');
 }
 let TAX_MOVES_STALE = false;
+const CAPTURE_CURSOR_KEY = "reccheck_capture_cursor";
+function captureIdParts(id){
+  return typeof id === "string" && id.match(/^(\d{19})-(\d{13})-(IH|MV|AR|DP)-[a-f0-9]{32}\.tsv$/);
+}
+async function replayCapturedBatch(){
+  if(window.__rcImportBlocked) return false;
+  if(!window.reccheckShortcuts || !window.reccheckShortcuts.listCaptures) return true;
+  try{
+    const raw = localStorage.getItem(CAPTURE_CURSOR_KEY);
+    let cursor = raw === null ? "" : JSON.parse(raw);
+    if(typeof cursor !== "string" || (cursor && !captureIdParts(cursor))) throw new Error("Invalid capture cursor; original saved value retained");
+    const batch = await window.reccheckShortcuts.listCaptures(cursor);
+    if(window.__rcImportBlocked) return false;
+    if(!batch || batch.error || !Array.isArray(batch.captures) || typeof batch.more !== "boolean") throw new Error(batch && batch.error || "Invalid capture queue response");
+    let prior = cursor;
+    for(const capture of batch.captures){
+      const parts = captureIdParts(capture.id);
+      if(!parts || capture.id <= prior || capture.tag !== parts[3] || capture.at !== Number(parts[2]) || typeof capture.text !== "string") throw new Error("Invalid or unordered archived capture; queue retained");
+      prior = capture.id;
+    }
+    if(batch.more && !batch.captures.length) throw new Error("Capture queue made no progress");
+    for(const capture of batch.captures){
+      if(window.__rcImportBlocked) return false;
+      const {tag,at,text} = capture;
+      const p = tag === "IH" ? parseInhouse(text) : parseTagged(text,tag);
+      const key = p && dkey(inhouseDate(p.title));
+      const titleOK = p && (tag === "IH" ? isInhouseTitle(p.title) : (tag === "MV" ? /perform\s*move/i : tag === "AR" ? /arrival\s*report/i : /departure\s*report/i).test(p.title));
+      if(!p || p.err || !key || !titleOK || !p.done || p.done.cut || !Number.isInteger(p.done.rows) || p.done.rows !== p.rows.length || p.done.got !== p.rows.length) throw new Error("Archived capture is incomplete or unrecognized: " + capture.id);
+      const failures = window.__rcStorageFaultCount || 0;
+      statusIngest(tag,p,at,true);
+      // Complete empty filtered lists are observations, never instructions to clear.
+      const result = p.rows.length ? await ingestCaptured(tag,text,{replay:true,at,key}) : "ok";
+      if(tag === "IH"){
+        const days=statusLoad().MV||{};
+        for(const day of Object.keys(days).sort())if(+day<=key){
+          const rows=Object.values(days[day].rows||{}).map(r=>[r.from,"",r.to,"",r.name,r.x,r.arr,r.dep]);
+          recordMoves(rows,+day);
+        }
+      }
+      if(window.__rcImportBlocked) return false;
+      if(result !== "ok" || (window.__rcStorageFaultCount || 0) !== failures) throw new Error("Capture application failed: " + capture.id);
+      if(window.__rcCaptureFlush && !await window.__rcCaptureFlush()) throw new Error("Capture persistence is incomplete: " + capture.id);
+      if(window.__rcImportBlocked) return false;
+      if((window.__rcStorageFaultCount || 0) !== failures) throw new Error("Capture persistence failed: " + capture.id);
+      localStorage.setItem(CAPTURE_CURSOR_KEY,JSON.stringify(capture.id));
+      cursor = capture.id;
+      LIVE_AT[tag] = Math.max(LIVE_AT[tag] || 0,at);
+      if(!LIVE_HELD[tag] || at >= LIVE_HELD[tag].at){
+        LIVE_HELD[tag] = heldOf(tag,at,text);LIVE_ROWS[tag] = {p,at};
+      }
+      LEDGER_TICK++;
+    }
+    if(batch.captures.length){
+      if(RATE && RATE.live){const held=statusLoad();if(held.IH && held.IH.key===RATE.dateKey)setLiveRate(consolidatedInhouseRate(held));}
+      if(window.__rcMovesChanged) window.__rcMovesChanged();
+      render();paintHeld();
+    }
+    return !batch.more;
+  }catch(e){
+    // Earlier stages may have succeeded. Replay the same immutable item and flush
+    // again; signatures must never turn a failed save into an acknowledged one.
+    LIVE_SIG = ""; RPT_SIG = {};
+    window.__rcStorageFault("capture replay",e);
+    return false;
+  }
+}
 async function autoReadInhouse(){
+  if(window.__rcImportBlocked || window.__rcCapturePollBusy) return;
+  window.__rcCapturePollBusy = true;
+  try{
   if(legacyOn() || !LIVE_OK){ liveStop(); return; }
   if(!window.reccheckShortcuts || !window.reccheckShortcuts.listFile) return;
+  if(!await replayCapturedBatch()) return;
   /* COLLECTED FIRST, THEN INGESTED OLDEST CAPTURE FIRST, so the NEWEST one has the last
      word on the line.
 
@@ -8945,6 +9027,7 @@ async function autoReadInhouse(){
       if(!f || f.why === "old" || (!f.why && !f.text)){ delete LIVE_HELD[tag]; delete LIVE_ERR[tag]; delete LIVE_ROWS[tag]; continue; }
       if(f.why){ LIVE_ERR[tag] = f.detail || f.why; continue; }
       delete LIVE_ERR[tag];
+      if(LIVE_AT[tag] && +f.at <= LIVE_AT[tag]) continue;
       if(!LIVE_HELD[tag] || LIVE_HELD[tag].at !== f.at){
         LIVE_HELD[tag] = heldOf(tag, +f.at || 0, f.text);
         /* the rows themselves, parsed once per capture, never per tick — and into the
@@ -8968,7 +9051,7 @@ async function autoReadInhouse(){
        held: the one claim the line exists to make, and false. Each ingest answers "ok" or
        why not, and the answer rides on the entry. */
     let r = "threw";
-    try{ const a = await ingestCaptured(g.tag, g.text); r = (a === undefined) ? "unknown" : String(a); }
+    try{ const a = await ingestCaptured(g.tag, g.text, {replay:true,at:g.at}); r = (a === undefined) ? "unknown" : String(a); }
     catch(e){ r = "threw"; }
     const h = LIVE_HELD[g.tag];
     if(h && h.at === g.at) h.why = (r === "ok") ? "" : r;
@@ -8987,6 +9070,7 @@ async function autoReadInhouse(){
   try{ paintHeld(); }catch(e){}
   if(TAX_SCREEN === "status"){ try{ window.__taStatusMenu(); }catch(e){} }
   if(TAX_SCREEN === "stlist"){ try{ renderStatusList(); }catch(e){} }
+  }finally{ window.__rcCapturePollBusy = false; }
 }
 /* ---- STATUS: what protel has told the tool, kept for the day ----
 
@@ -9063,7 +9147,7 @@ function statusPrune(st){
   }
 }
 /* A capture into the store. Returns true when something changed. */
-function statusIngest(tag, p, at){
+function statusIngest(tag, p, at, replay){
   if(!p || !Array.isArray(p.rows) || p.err || !p.done || !Number.isInteger(p.done.got) ||
      !Number.isInteger(p.done.rows) || p.done.got!==p.rows.length || p.done.rows<p.done.got ||
      (!p.done.cut && p.done.rows!==p.done.got)) return false;
@@ -9075,7 +9159,8 @@ function statusIngest(tag, p, at){
     if(!isInhouseTitle(p.title)) return false;
     const date = inhouseDate(p.title), key = dkey(date);
     if(!key) return false;
-    if(st.IH && (key < st.IH.key || at <= st.IH.at)) return false;
+    const historical = st.IH && (key < st.IH.key || at <= st.IH.at);
+    if(historical && (!replay || key !== st.IH.key)) return false;
     const capturedRows = p.rows.map(r => ({name: String(r[IH.NAME] || "").trim(), room: stRoom(r[IH.ROOM]), arr: String(r[IH.ARR] || "").trim(),
                                    dep: String(r[IH.DEP] || "").trim(), status: String(r[IH.STATUS] || "").trim(),
                                    readAt: at, cells: r.slice()}));
@@ -9084,6 +9169,15 @@ function statusIngest(tag, p, at){
       (!r.name||!r.status||!dkey(r.arr)||!dkey(r.dep)||dkey(r.dep)<dkey(r.arr)));
     const cut = !!(p.done && p.done.cut);
     const cap = {at: at, date: date, key: key, cut: cut, rows: rows, incompleteRows:incompleteRows};
+    if(historical){
+      // Reopening the app may replay history older than its current census.
+      // Add previously unseen stays, without replacing any newer reservation.
+      const identity=r=>stKey(r.name,r.room)+"|"+dkey(r.arr);
+      const known=new Set(st.IH.rows.map(identity));
+      for(const row of rows)if(!known.has(identity(row))){st.IH.rows.push(row);known.add(identity(row));changed=true;}
+      if(changed){statusSave(st);STATUS_TICK++;}
+      return changed;
+    }
     if(!st.IH || at > st.IH.at){
       const keep=st.IH&&st.IH.key===key?st.IH.rows.map(r=>Object.assign({readAt:st.IH.at},r)):[];
       const identity=r=>stKey(r.name,r.room)+"|"+dkey(r.arr);
@@ -9108,8 +9202,9 @@ function statusIngest(tag, p, at){
     if(!key) return false;
     const days = st[tag] = st[tag] || {};
     const day = days[String(key)] = days[String(key)] || {title: p.title, date: date, at: 0, rows: {}};
-    if(at < day.at) return false;
-    if(day.at !== at){ day.at = at; day.title = p.title; day.cut = !!(p.done && p.done.cut); changed = true; }
+    const historical=at < day.at;
+    if(historical && !replay) return false;
+    if(!historical && day.at !== at){ day.at = at; day.title = p.title; day.cut = !!(p.done && p.done.cut); changed = true; }
     for(const c of p.rows){
       let row;
       if(tag === "AR") row = {name: String(c[AR.NAME] || "").trim(), room: stRoom(c[AR.ROOM]), dep: String(c[AR.DEP] || "").trim(), status: String(c[AR.STATUS] || "").trim()};
@@ -9127,7 +9222,7 @@ function statusIngest(tag, p, at){
       }
       const had = day.rows[k];
       if(!had){ row.first = at; row.last = at; day.rows[k] = row; changed = true; }
-      else{ had.last = at; for(const f of Object.keys(row)) if(row[f] !== undefined && (row[f] !== "" || (f === "x" && !p.done.cut)) && had[f] !== row[f]){ had[f] = row[f]; changed = true; } }
+      else if(!historical){ had.last = at; for(const f of Object.keys(row)) if(row[f] !== undefined && (row[f] !== "" || (f === "x" && !p.done.cut)) && had[f] !== row[f]){ had[f] = row[f]; changed = true; } }
     }
   }
   if(changed){ statusPrune(st); statusSave(st); STATUS_TICK++; }
@@ -9313,10 +9408,17 @@ function renderStatusList(){
   h += '</tbody></table></div></div>';
   box.innerHTML = h;
 }
-async function ingestCaptured(tag, txt){
-  if(tag === "IH") return applyInhouse(parseInhouse(txt), true);
-  if(tag === "MV") return applyMoves(parseTagged(txt, "MV"));
-  return applyReport(parseTagged(txt, tag), tag === "AR");
+async function ingestCaptured(tag, txt, capture){
+  if(tag === "IH") return applyInhouse(parseInhouse(txt), true, capture);
+  if(tag === "MV"){
+    let p=parseTagged(txt,"MV");
+    if(capture && capture.replay){
+      const day=(statusLoad().MV||{})[String(capture.key || dkey(inhouseDate(p.title)))];
+      if(day){const rows=Object.values(day.rows).map(r=>[r.from,"",r.to,"",r.name,r.x,r.arr,r.dep]);p={...p,rows,done:{...p.done,got:rows.length,rows:rows.length}};}
+    }
+    return applyMoves(p);
+  }
+  return applyReport(parseTagged(txt, tag), tag === "AR", capture);
 }
 /* THE MOVES WINDOW, and only for the missing X.
 
@@ -9436,10 +9538,10 @@ function reportToStays(rows, night, arrIsNight){
    recency guard in feedStays compares them. So a report is stamped with the census's date
    whenever a census has been captured — the same clock as the other writer, protel's — and
    with the tool's night only before the first census of the day. */
-function censusNight(){
+function censusNight(at){
   const h = LIVE_HELD.IH;
-  const k = h && h.date ? dkey(h.date) : 0;
-  return k || bnk();
+  const k = h && h.date && (!at || h.at<=at) ? dkey(h.date) : 0;
+  return k || bnk(at);
 }
 function feedStays(recs, night){
   const tally = {made: 0, fixed: 0, same: 0, kept: 0, failed: false};
@@ -9519,7 +9621,7 @@ async function readReportLive(fn){
   }catch(e){}
   finally{ RPT_BUSY[fn] = false; }
 }
-function applyReport(p, arrIsNight){
+function applyReport(p, arrIsNight, capture){
   const fn = arrIsNight ? "arrivals" : "departures";
   const label = t(arrIsNight ? 'rpt_AR' : 'rpt_DP');
   /* EVERY REFUSAL SAYS WHY, and the function answers what became of the capture. It
@@ -9545,7 +9647,7 @@ function applyReport(p, arrIsNight){
     const sig = p.title + "|" + p.rows.map(r => r.join("~")).join(";");
     if(sig === RPT_SIG[fn]){ quiet(t('live_rsame', label, night)); return "ok"; }
     const out = reportToStays(p.rows, night, arrIsNight);
-    const w = feedStays(out.recs, censusNight());
+    const w = feedStays(out.recs, censusNight(capture && capture.replay ? capture.at : undefined));
     /* THE REPORT NAMES DO NOT GO INTO THE ROOM DATABASE, and the first cut of this had
        them doing exactly that. __rcLiveNames is the CENSUS door: it says "this is who is
        in this room now", and syncRooms then treats a stored name that does not match the
@@ -9697,7 +9799,10 @@ function recordMoves(rows, night){
     try{if(typeof window!=="undefined"&&window.__rcStorageFault)window.__rcStorageFault("Room moves",e);}catch(ignore){}
     return 0;
   }
-  try{ localStorage.setItem(MOVES_DONE_KEY, JSON.stringify(done)); }catch(e){}
+  try{ localStorage.setItem(MOVES_DONE_KEY, JSON.stringify(done)); }catch(e){
+    if(typeof window!=="undefined"&&window.__rcStorageFault)window.__rcStorageFault("Room move acknowledgement",e);
+    return 0;
+  }
   try{ if(wrote) render(); }catch(e){}
   if(wrote) LEDGER_TICK++;
   try{ if(wrote && window.__rcMovesChanged) window.__rcMovesChanged(); }catch(e){}
@@ -9707,7 +9812,7 @@ function recordMoves(rows, night){
    that fetched it: the rows now arrive two ways — spawned on demand when he presses the
    button, and captured by the resident helper the moment protel opened the window. Both
    must land in exactly the same place, so there is one of these and not two. */
-function applyInhouse(p, auto){
+function applyInhouse(p, auto, capture){
   /* Every read is automatic now — the button is gone. `auto` is kept because the same
      function still serves anything that wants the loud form, and because a silent
      parameter that is always one value is worse than one that says so. */
@@ -9746,6 +9851,10 @@ function applyInhouse(p, auto){
   if(auto && sig === LIVE_SIG){ say.textContent = t('live_same', rate.count, biz || '?'); return "ok"; }
   const previousRateDate=RATE&&RATE.dateKey;
   const held=statusLoad();
+  if(capture && capture.replay && ((held.IH && (held.IH.key>rate.dateKey || held.IH.at>capture.at)) || (RATE && RATE.dateKey>rate.dateKey))){
+    const rows=Object.values(rate.all).flat();
+    return feedStays(rows,rate.dateKey).failed ? "failed" : "ok";
+  }
   setLiveRate(held.IH&&held.IH.key===rate.dateKey?consolidatedInhouseRate(held):rate);
   const saved = saveMoves(rate);
   if(!saved){quiet(t('live_wfail'));return "failed";}
@@ -9867,7 +9976,7 @@ window.__taScreen = function(which){
 
 /* time safeguard: warn when a loaded report is for a past working night. Separate scope
    from the audit half, so the 03:30 boundary is repeated here rather than shared. */
-function bnk(){const d=new Date();if(d.getHours()<3||(d.getHours()===3&&d.getMinutes()<30))d.setDate(d.getDate()-1);return d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();}
+function bnk(at){const d=at===undefined?new Date():new Date(at);if(d.getHours()<3||(d.getHours()===3&&d.getMinutes()<30))d.setDate(d.getDate()-1);return d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();}
 function timeGuardHTML(){
   let h='';const B=bnk();
   if(RATE&&RATE.dateKey&&RATE.dateKey<B)h+=`<div class="banner warn">⚠ ${t('tw_pastrate',dfmt(RATE.dateKey),dfmt(B))}</div>`;

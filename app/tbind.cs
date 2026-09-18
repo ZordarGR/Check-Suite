@@ -2344,6 +2344,28 @@ static class TBind {
       string p = ListPath(tag);
       if(p == null) return false;
       System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(p));
+      // Commit an immutable capture before updating the compatibility mirror. The
+      // resident keeps this queue while the app is closed; readers ignore .tmp files.
+      string queue = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(p), "captures");
+      System.IO.Directory.CreateDirectory(queue);
+      if(captureSequence < 0){
+        long highest = 0;
+        foreach(string file in System.IO.Directory.GetFiles(queue, "*.tsv")){
+          string name = System.IO.Path.GetFileName(file);
+          long prior;
+          if(name.Length >= 20 && name[19] == '-' && long.TryParse(name.Substring(0, 19), out prior) && prior > highest) highest = prior;
+        }
+        captureSequence = highest;
+      }
+      if(captureSequence == long.MaxValue) return false;
+      long ticks = DateTime.UtcNow.Ticks;
+      captureSequence = Math.Max(ticks, captureSequence + 1);
+      long utcMs = (ticks - 621355968000000000L) / 10000;
+      string queued = System.IO.Path.Combine(queue,
+        captureSequence.ToString("D19", System.Globalization.CultureInfo.InvariantCulture) + "-" +
+        utcMs.ToString("D13", System.Globalization.CultureInfo.InvariantCulture) + "-" + tag + "-" + Guid.NewGuid().ToString("N") + ".tsv");
+      System.IO.File.WriteAllText(queued + ".tmp", body, new System.Text.UTF8Encoding(false));
+      System.IO.File.Move(queued + ".tmp", queued);
       string tmp = p + ".tmp";
       System.IO.File.WriteAllText(tmp, body, new System.Text.UTF8Encoding(false));
       if(System.IO.File.Exists(p)) System.IO.File.Replace(tmp, p, null);
@@ -2351,6 +2373,7 @@ static class TBind {
       return true;
     }catch(Exception){ return false; }
   }
+  static long captureSequence = -1; // one resident writer; recover committed maximum once
   /* Runs on the pump thread, never in the callback. */
   static void EvServiceReads(){
     if(evWant.Count == 0) return;

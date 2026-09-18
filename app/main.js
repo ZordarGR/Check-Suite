@@ -9,7 +9,7 @@ const PKG_VERSION = require("./package.json").version;
 const REPO_RAW = "https://raw.githubusercontent.com/ZordarGR/Check-Suite/main";
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
-let win = null, updater = null, hub = null;
+let win = null, updater = null, hub = null, arrangementService = null;
 let tray = null, QUITTING = false, TRAYLANG = "en";
 
 /* ---- single instance: a second launch just resurfaces the running one ---- */
@@ -557,7 +557,7 @@ app.whenReady().then(() => {
     if(process.platform==="win32"){
       try{
         const local=process.env.LOCALAPPDATA||app.getPath("userData");
-        require("./arrangement-live").start({electron:require("electron"),helperPath:tauPath(),
+        arrangementService = require("./arrangement-live").start({electron:require("electron"),helperPath:tauPath(),
           captureDir:path.join(local,"RecCheck"),userData:app.getPath("userData")});
       }catch(e){ console.error("Arrangement overlay unavailable:",e.message); }
     }
@@ -912,6 +912,38 @@ ipcMain.handle("sc-diag", (_e, delayMs) => new Promise(res => {
    at all — and the page turned every one into "nothing captured from protel yet", a claim
    about protel made from the tool's own failure. null now means exactly "there is no
    such file"; everything else says what it is. */
+function readCapturedLists(after){
+  const fs=require("fs"), pth=require("path");
+  const valid=/^(\d{19})-(\d{13})-(IH|MV|AR|DP)-[a-f0-9]{32}\.tsv$/;
+  if(after!=null && (typeof after!=="string" || (after && !valid.test(after))))return {error:"Invalid saved capture cursor"};
+  const base=process.env.LOCALAPPDATA;
+  if(!base)return {error:"Capture folder is unavailable"};
+  const dir=pth.join(base,"RecCheck","captures"),captures=[];
+  try{
+    let names;
+    try{names=fs.readdirSync(dir);}catch(e){if(e.code==="ENOENT")return {captures:[],more:false};throw e;}
+    names=names.filter(n=>valid.test(n)&&(!after||n>after)).sort();
+    let bytes=0;
+    for(const id of names){
+      if(captures.length>=25)break;
+      const file=pth.join(dir,id),size=fs.statSync(file).size;
+      if(size>8*1024*1024)throw new Error("Saved capture is too large: "+id);
+      if(captures.length && bytes+size>8*1024*1024)break;
+      const match=valid.exec(id),text=fs.readFileSync(file,"utf8");
+      captures.push({id,tag:match[3],at:Number(match[2]),text});bytes+=size;
+    }
+    return {captures,more:names.length>captures.length};
+  }catch(e){return {error:"Saved captures could not be read: "+String(e.code||e.message||e)};}
+}
+ipcMain.handle("sc-listcaptures", (_e, after) => {
+  const result=readCapturedLists(after);
+  if(!result.error && result.captures.length && process.platform==="win32"){
+    if(!arrangementService)return {error:"Saved captures are waiting for accommodation history to start"};
+    for(const c of result.captures)if(!arrangementService.ingestCapture(c.tag,c.text,c.at))
+      return {error:"Saved capture retained: accommodation history could not be saved"};
+  }
+  return result;
+});
 ipcMain.handle("sc-listfile", (_e, tag) => {
   const t = String(tag || "").toUpperCase();
   if(["IH", "MV", "AR", "DP"].indexOf(t) < 0) return null;

@@ -2,6 +2,7 @@
 "use strict";
 const assert=require("assert"),fs=require("fs"),os=require("os"),path=require("path"),{EventEmitter}=require("events");
 const {start}=require("../app/arrangement-live");
+const calc=require("../app/arrangement");
 const root=fs.mkdtempSync(path.join(os.tmpdir(),"arrangement-storage-"));
 const now=Date.now(),day=n=>{const d=new Date(now+n*86400000);return String(d.getUTCDate()).padStart(2,"0")+"/"+String(d.getUTCMonth()+1).padStart(2,"0")+"/"+d.getUTCFullYear();};
 const ref=(name="SAVED GUEST",room="201")=>({tag:"IH",name,room,arr:day(-2),dep:day(5),price:"100,00",agency:"DIRECT",currency:"EUR",at:now-10000});
@@ -67,6 +68,50 @@ try{
  test("an interrupted source capture cannot replace the saved reference store",(dir,file)=>{
   const raw=JSON.stringify([ref()]);fs.writeFileSync(file,raw);fs.writeFileSync(path.join(dir,"rc-list-IH.tsv"),capture.replace("complete","cut-short"));
   service(dir,c=>{c.scanRefs();assert.equal(fs.readFileSync(file,"utf8"),raw);});
+ });
+ test("archived price before checkout zero survives out-of-order replay and duplicate replay is durable without another write",(dir,file)=>{
+  service(dir,c=>{
+   const zero=capture.replace("150,00","0,00");
+   assert.equal(c.ingestCapture("IH",zero,now),true);
+   assert.equal(c.ingestCapture("IH",capture,now-1000),true);
+   const saved=JSON.parse(fs.readFileSync(file,"utf8")),r=calc.reference({name:"NEW GUEST",room:"101",arr:day(-2),dep:day(5)},saved);
+   assert.equal(r.price,"0,00");assert.equal(r.priorRate,15000);assert.equal(saved.length,2);
+   const raw=fs.readFileSync(file,"utf8"),rename=fs.renameSync;let writes=0;
+   fs.renameSync=function(p,...args){if(String(p)===file+".tmp")writes++;return rename.call(this,p,...args);};
+   try{assert.equal(c.ingestCapture("IH",capture,now-1000),true);assert.equal(c.ingestCapture("IH",zero,now),true);}
+   finally{fs.renameSync=rename;}
+   assert.equal(writes,0);assert.equal(fs.readFileSync(file,"utf8"),raw);
+  });
+ });
+ test("archive replay refuses a corrupt store and resumes after repair without deleting evidence",(dir,file)=>{
+  fs.writeFileSync(file,"{damaged");
+  service(dir,c=>{
+   assert.equal(c.ingestCapture("IH",capture,now),false);assert.equal(fs.readFileSync(file,"utf8"),"{damaged");
+   fs.writeFileSync(file,JSON.stringify([ref()]));
+   assert.equal(c.ingestCapture("IH",capture,now),true);assert.deepStrictEqual(names(file),["NEW GUEST","SAVED GUEST"]);
+  });
+ });
+ for(const operation of ["writeFileSync","renameSync"]){
+  test("archive replay acknowledges durability only after "+operation+" recovers",(dir,file)=>{
+   const raw=JSON.stringify([ref()]);fs.writeFileSync(file,raw);
+   service(dir,c=>{
+    const method=fs[operation];let deny=true;
+    fs[operation]=function(p,...args){if(String(p)===file+".tmp"&&deny)throw Error("synthetic replay save failure");return method.call(this,p,...args);};
+    try{
+     assert.equal(c.ingestCapture("IH",capture,now),false);assert.equal(fs.readFileSync(file,"utf8"),raw);
+     deny=false;assert.equal(c.ingestCapture("IH",capture,now),true);assert.deepStrictEqual(names(file),["NEW GUEST","SAVED GUEST"]);
+    }finally{fs[operation]=method;}
+   });
+  });
+ }
+ test("archive API ignores movement metadata and refuses interrupted or wrong-list input",(dir,file)=>{
+  service(dir,c=>{
+   assert.equal(c.ingestCapture("MV","no price metadata",now),true);
+   assert.equal(c.ingestCapture("IH",capture.replace("complete","cut-short"),now),false);
+   assert.equal(c.ingestCapture("AR",capture,now),false);
+   assert.equal(c.ingestCapture("IH",capture,NaN),false);
+   assert.equal(fs.existsSync(file),false);
+  });
  });
  console.log(cases+" Arrangement storage integration cases passed");
 }finally{console.error=originalError;fs.rmSync(root,{recursive:true,force:true});}

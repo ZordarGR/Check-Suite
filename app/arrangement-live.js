@@ -181,6 +181,12 @@ function start({electron,helperPath,captureDir,userData,spawnHelper=spawn}){
         if(fresh.length){refs=calc.mergeRefs(refs,fresh);refsDirty=true;changed=true;}
       }catch(e){}
     }
+    persistRefs();
+    if(changed){
+      lastPaint="";paint();
+    }
+  }
+  function persistRefs(){
     if(refsDirty){
       try{
         // Re-read before replacement: a concurrently repaired/changed store is not
@@ -191,11 +197,33 @@ function start({electron,helperPath,captureDir,userData,spawnHelper=spawn}){
       }catch(e){
         try{fs.unlinkSync(file+".tmp");}catch(ignore){}
         referenceFault("Daily-price history could not be saved; retrying with original data retained",e);
+        return false;
       }
     }
-    if(changed){
-      lastPaint="";paint();
+    return true;
+  }
+  function ingestCapture(tag,text,at){
+    if(closed)return false;
+    if(tag==="MV")return true; // Moves contain no Arrangement price reference.
+    if(!["IH","AR","DP"].includes(tag)||typeof text!=="string"||!Number.isFinite(at)||at<0)return false;
+    const lines=text.split(/\r?\n/).map(s=>s.split("\t")),done=lines.find(c=>c[0]==="DONE");
+    const title=lines.find(c=>c[0]==="TITLE")?.[1]||"";
+    const titleOK=tag==="IH"?/in\s*-?\s*house/i.test(title):tag==="AR"?/arrival\s*report/i.test(title):/departure\s*report/i.test(title);
+    const date=(title.match(/\b\d{2}\/\d{2}\/(?:\d{4}|\d{2})\b/)||[])[0];
+    if(!done||done[6]!=="complete"||!Number.isInteger(+done[1])||+done[1]<0||+done[1]!==+done[2]||
+      lines.some(c=>c[0]==="ERR")||!titleOK||calc.day(date)===null)return false;
+    try{
+      // Archive replay is independent of the latest-file timestamps. Load/validate
+      // the durable store before accepting even a duplicate queued capture.
+      const saved=readSavedRefs(),next=calc.mergeRefs(saved,refs.concat(calc.capture(text,tag,at)));
+      refsDirty=refsDirty||JSON.stringify(next)!==JSON.stringify(saved);
+      refs=next;refsLoaded=true;
+    }catch(e){
+      referenceFault("Saved daily-price history could not be read; original data retained",e);return false;
     }
+    if(!persistRefs())return false;
+    referenceFault("");lastPaint="";paint();
+    return true;
   }
   function retireHelper(current,error){
     if(child!==current)return;
@@ -254,6 +282,6 @@ function start({electron,helperPath,captureDir,userData,spawnHelper=spawn}){
     // It notices the parent’s exit and closes itself after returning from the read.
     if(overlay&&!overlay.isDestroyed())overlay.destroy();
   });
-  return {state,scanRefs};
+  return {state,scanRefs,ingestCapture};
 }
 module.exports={layout,InvoiceState,start};
