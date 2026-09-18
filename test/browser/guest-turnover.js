@@ -32,6 +32,30 @@ const {chromium}=require("playwright-core"), path=require("path"), assert=requir
  const panel=await p.locator("#moves").textContent();assert(panel.includes("120"));assert(!/\b90\b/.test(panel));
  assert.equal(await p.locator("#moves .rec").count(),0);
  console.log("PASS real card preserves receipt name and has no false LEFT TODAY; obsolete departure room and dot absent");
+ const dotCase=async({guest="DAVID/ELENA MORGAN/BR",room="120",rival=false,cancelled=false,historical=false}={})=>{
+  await p.evaluate(({guest,room,rival,cancelled,historical})=>{
+   const st=JSON.parse(localStorage.getItem("reccheck_status_v1"));
+   st.AR=rival?{"20260904":{rows:{rival:{name:"MORGAN/BRIGGSON DAVID/ELENA",room:"120",dep:"09/09/26"}}}}:{};
+   localStorage.setItem("reccheck_status_v1",JSON.stringify(st));
+   localStorage.setItem("reccheck_receipts_v1",JSON.stringify(historical?{"20260902":[[room,guest,{id:"historical|"+room,live:true}]]}:{}));
+   const r={sn:"80002",roomMain:room,room,guest,dept:"REST",total:10,cancelled,voided:false,rates:{"24%":10,"13%":0,"6%":0,base:10},time:"21:14"};
+   const receipts=historical?[]:[r],depts={};
+   for(const d of ["REST","RESTAURANT","CAFETERIA","TAVERNAKI","KAFENIO","BAR"])depts[d]={list:d==="REST"?receipts:[],other:[]};
+   window.__t.setModel({reportDate:"4/9/2026",receipts,depts});window.__t.setState({receipts:{},extras:[]});window.__rcMovesChanged();
+   const input=document.getElementById("snInput");input.value="80002";input.dispatchEvent(new Event("input"));
+  },{guest,room,rival,cancelled,historical});
+  return p.locator("#moves .mv-dep.rec").count();
+ };
+ assert.equal(await dotCase(),1,"same-room reordered complete text dots the departure");
+ assert.equal(await p.locator("#matches .match.left").count(),1,"matching receipt is LEFT TODAY");
+ assert.equal(await dotCase({room:"90"}),1,"confirmed old room receipt dots the move destination");
+ assert.equal(await dotCase({historical:true}),1,"saved earlier extras use the same matcher");
+ assert.equal(await dotCase({room:"77"}),0,"unrelated room cannot dot departure");
+ assert.equal(await dotCase({guest:"DAVID/OTHER MORGAN/BR"}),0,"shared words do not match another guest");
+ assert.equal(await dotCase({rival:true}),0,"competing arrival blocks ambiguous receipt");
+ assert.equal(await p.locator("#matches .match.left").count(),0,"ambiguous receipt is not LEFT TODAY");
+ assert.equal(await dotCase({cancelled:true}),0,"cancelled extras cannot dot a departure");
+ console.log("PASS real departure dots and LEFT TODAY match reordered receipts, including history and confirmed moves, without matching rivals or cancelled receipts");
  const tsv=(tag,title,rows)=>["TITLE\t"+title,...rows.map(r=>tag+"\t"+r.join("\t")),"DONE\t"+rows.length+"\t"+rows.length+"\t1\t1\tunicode\tcomplete"].join("\n");
  await p.evaluate(()=>{localStorage.removeItem("reccheck_status_v1");window.__t.showScreen("tax");});
  const full=tsv("IH","Guests inhouse: 04/09/26",[

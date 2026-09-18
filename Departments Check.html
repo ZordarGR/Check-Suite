@@ -1967,7 +1967,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.83";
+const APP_VERSION = "1.17.84";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -3055,21 +3055,7 @@ function isCutOf(short, full){
    guest fragment for the room that fits the same full name. Keep the printed evidence. */
 function expandReceiptName(room, own, candidate, allowReorder){
   const full = String(candidate || "").trim(), live = ROOMS[String(room)];
-  // Display may rotate surname-first text into the receipt's given-name-first
-  // order. Keep every printed character and punctuation; only the final suffix
-  // may be cut. Identity decisions (dots/LEFT TODAY) keep their existing rule.
-  const matches = (part, label) => {
-    if(nameTextIn(part, label)) return true;
-    if(!allowReorder) return false;
-    const norm = x => String(x || "").trim().replace(/\s+/g," ").toUpperCase();
-    const a=norm(part), words=norm(label).split(" ");
-    if(a.length<4 || !a.includes(" ")) return false;
-    for(let i=1;i<words.length;i++){
-      const rotated=words.slice(i).concat(words.slice(0,i)).join(" ");
-      if(rotated.startsWith(a)) return true;
-    }
-    return false;
-  };
+  const matches = (part, label) => nameTextIn(part, label, allowReorder);
   if(!own || !matches(own, full)) return "";
   if(sameName(own, full)) return full;
   const rivals = [].concat(typeof LEAVING === "undefined" ? [] : (LEAVING[room] || []),
@@ -5841,18 +5827,26 @@ function nameLike(a, b){
 }
 /* Use every character actually read from the receipt. Whitespace and case are
    normalised; words are not dropped, reordered or compared independently. */
-function nameTextIn(part, full){
+function nameTextIn(part, full, allowReorder){
   const norm = s => String(s || "").trim().replace(/\s+/g, " ").toUpperCase();
   const a = norm(part), b = norm(full);
-  return !!a && !!b && b.includes(a);
+  if(!a || !b) return false;
+  if(b.includes(a)) return true;
+  if(!allowReorder || a.length<4 || !a.includes(" ")) return false;
+  // Match the whole printed text after surname/given-name rotation, without
+  // rearranging internal slash groups or ignoring any printed characters.
+  const words=b.split(" ");
+  for(let i=1;i<words.length;i++)
+    if(words.slice(i).concat(words.slice(0,i)).join(" ").startsWith(a)) return true;
+  return false;
 }
 /* A list/census label may be a continuous shortened part of a fuller name. */
 function sameGuestLabel(a, b){
   return nameTextIn(a, b) || nameTextIn(b, a);
 }
 function nameHit(guest, target, others){
-  if(!nameTextIn(guest, target)) return false;
-  return !(others || []).some(o => nameTextIn(guest, o));
+  if(!nameTextIn(guest, target, true)) return false;
+  return !(others || []).some(o => nameTextIn(guest, o, true));
 }
 
 function censusNameOf(room){
