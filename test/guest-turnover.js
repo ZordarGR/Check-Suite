@@ -9,9 +9,9 @@ function lift(n){
 }
 const names=["sameName","nameWordSet","nameLike","isCutOf","nameTextIn","sameGuestLabel","nameHit","expandReceiptName","receiptFullName","receiptName","guestFor","dateNum","dateNum2","pillRoom","statusRows","departureRows","capturedGuestName","censusNameOf","otherNames","isLeaving"];
 const old="MORGAN/BRIGGS DAVID/ELENA", fresh="KELLER/STONE ANNA/MORGAN";
-const run=(rooms,receipts)=>new Function("ROOMS","MODEL","STATE",
- names.map(lift).join("\n")+ '\nconst rState=r=>STATE[r.sn]||{}; const effRoom=r=>r.roomMain; let LEAVING={"120":["MORGAN/BRIGGS DAVID/ELENA"]}, ARRIVING={}; return {guestFor,receiptName,nameHit,isLeaving,otherNames};'
-)(rooms,{reportDate:"4/9/2026",receipts},{});
+const run=(rooms,receipts,rivals={"120":["MORGAN/BRIGGS DAVID/ELENA"]})=>new Function("ROOMS","MODEL","STATE","LEAVING",
+ names.map(lift).join("\n")+ '\nconst rState=r=>STATE[r.sn]||{}; const effRoom=r=>r.roomMain; let ARRIVING={}; return {guestFor,receiptName,nameHit,isLeaving,otherNames};'
+)(rooms,{reportDate:"4/9/2026",receipts},{},rivals);
 let bad=0;
 const check=(name,condition)=>{console.log((condition?"PASS ":"FAIL ")+name);if(!condition)bad++;};
 const r={sn:"1",roomMain:"120",guest:fresh};
@@ -31,4 +31,21 @@ check("the original departing guest still matches",api.isLeaving("120",old));
 const oldPaper={sn:"4",roomMain:"120",guest:old}, shortPaper={sn:"5",roomMain:"120",guest:"MORGAN"};
 api=run({"120":{guest:fresh,liveKey:20260904}},[oldPaper,shortPaper]);
 check("the first receipt fallback cannot assign an ambiguous fragment to the previous guest",api.guestFor("120",shortPaper)==="MORGAN");
+for(const [full,printed] of [["SMITH ALEX/TAYLOR","ALEX/TAYLOR SMIT"],["SMITH ALEX MARIE/TAYLOR","ALEX MARIE/TAYLOR SMIT"],["SMITH/JONES ALEX/TAYLOR","ALEX/TAYLOR SMITH/JO"]]){
+ const paper={sn:"10",roomMain:"120",guest:printed};
+ const a=run({"120":{guest:full,liveKey:20260904}},[paper],{});
+ check("unique reordered complete receipt text expands for display: "+printed,a.guestFor("120",paper)===full);
+ check("reordered display does not broaden receipt identity or departure decisions",a.receiptName(paper)===printed&&!a.nameHit(printed,full,[]));
+}
+{
+ const full="SMITH ALEX/TAYLOR",paper={sn:"11",roomMain:"120",guest:"ALEX/TAYLOR SMIT"};
+ const rooms={"120":{guest:full,liveKey:20260904}};
+ check("two matching captured surnames remain ambiguous",run(rooms,[paper],{"120":["SMITHSON ALEX/TAYLOR"]}).guestFor("120",paper)===paper.guest);
+ check("another room cannot supply the full name",run({"121":rooms["120"]},[paper],{}).guestFor("120",paper)===paper.guest);
+ for(const printed of ["ALEX/OTHER SMIT","TAYLOR/ALEX SMIT","ALEX-TAYLOR SMIT","ALEX/TAYLOR JONE"]){
+  const p={...paper,guest:printed};check("reordered match retains every character: "+printed,run(rooms,[p],{}).guestFor("120",p)===printed);
+ }
+ const other={...paper,sn:"12",guest:"SMITH ALEX"};
+ check("conflicting printed fragments remain unexpanded",run(rooms,[paper,other],{}).guestFor("120",paper)===paper.guest);
+}
 process.exitCode=bad?1:0;

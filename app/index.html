@@ -1967,7 +1967,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.82";
+const APP_VERSION = "1.17.83";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -3053,14 +3053,29 @@ function isCutOf(short, full){
    receipts (i rip those and throw them, so please, careful)". */
 /* Never expand a fragment when this report also contains a different, non-overlapping
    guest fragment for the room that fits the same full name. Keep the printed evidence. */
-function expandReceiptName(room, own, candidate){
+function expandReceiptName(room, own, candidate, allowReorder){
   const full = String(candidate || "").trim(), live = ROOMS[String(room)];
-  if(!own || !nameTextIn(own, full)) return "";
+  // Display may rotate surname-first text into the receipt's given-name-first
+  // order. Keep every printed character and punctuation; only the final suffix
+  // may be cut. Identity decisions (dots/LEFT TODAY) keep their existing rule.
+  const matches = (part, label) => {
+    if(nameTextIn(part, label)) return true;
+    if(!allowReorder) return false;
+    const norm = x => String(x || "").trim().replace(/\s+/g," ").toUpperCase();
+    const a=norm(part), words=norm(label).split(" ");
+    if(a.length<4 || !a.includes(" ")) return false;
+    for(let i=1;i<words.length;i++){
+      const rotated=words.slice(i).concat(words.slice(0,i)).join(" ");
+      if(rotated.startsWith(a)) return true;
+    }
+    return false;
+  };
+  if(!own || !matches(own, full)) return "";
   if(sameName(own, full)) return full;
   const rivals = [].concat(typeof LEAVING === "undefined" ? [] : (LEAVING[room] || []),
                            typeof ARRIVING === "undefined" ? [] : (ARRIVING[room] || []),
                            live && live.liveKey && live.guest ? [live.guest] : []);
-  if(rivals.some(n => nameTextIn(own, n) && !sameGuestLabel(n, full))) return "";
+  if(rivals.some(n => matches(own, n) && !sameGuestLabel(n, full))) return "";
   if(MODEL && !MODEL._nameFragments){
     const byRoom = {};
     for(const r of MODEL.receipts || []) if(r.roomMain && r.guest && !r.cancelled && !r.voided){
@@ -3070,13 +3085,13 @@ function expandReceiptName(room, own, candidate){
   }
   const fragments = MODEL && MODEL._nameFragments[String(room)];
   const ambiguous = fragments && [...fragments].some(n =>
-    (nameTextIn(n, full) && !sameGuestLabel(own, n)) ||
-    (nameTextIn(own, n) && !sameGuestLabel(n, full)));
+    (matches(n, full) && !sameGuestLabel(own, n)) ||
+    (matches(own, n) && !sameGuestLabel(n, full)));
   return ambiguous ? "" : full;
 }
-function receiptFullName(room, own){
+function receiptFullName(room, own, allowReorder){
   const live = ROOMS[String(room)];
-  return live && live.liveKey ? expandReceiptName(room, own, live.guest) : "";
+  return live && live.liveKey ? expandReceiptName(room, own, live.guest, allowReorder) : "";
 }
 
 function receiptName(r){
@@ -3108,10 +3123,10 @@ function guestFor(room, r){
      is the one that is true of it. */
   if(r && !(rState(r).corr && rState(r).corr.room)){
     const own = String(r.guest || "").trim();
-    const full = receiptFullName(room, own);
+    const full = receiptFullName(room, own, true);
     if(full) return full;
     if(own){
-      if(onReceipt) return expandReceiptName(room, own, onReceipt) || own;
+      if(onReceipt) return expandReceiptName(room, own, onReceipt, true) || own;
       return own; // a same-day room cache cannot rename this receipt after turnover
     }
   }
