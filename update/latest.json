@@ -5,7 +5,7 @@
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.81/Pro-Check-Setup.exe",
   "setupSha256": "be25212bb5023ae772f2c00fa8e193948e98338da42536bfcee6ea0595677baa",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/f803a28598f43f157998bb86d503d8bbbac4c2d7/Departments%20Check.html",
-  "sha256": "197ff99fe52b06a7fdfac10f902deb5c7a87ec12cbe63625ad85f789f743b5d8",
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/4cd5dffa9c1b8b85884309f6fcf6f30f695952fd/Departments%20Check.html",
+  "sha256": "e606077050aab27d55eb63c4a3a4f6b07b0888e721a68a06723b92aded7648a6",
   "notes": "Restore normal departure/move dots for matching older receipt history without IDs; retain guest, stay-date and explicit cancellation/conflict safeguards."
 }

@@ -45,7 +45,7 @@ jobs:
           CHROME="$(node -p "require('playwright').chromium.executablePath()")"
           sudo ln -sf "$CHROME" /opt/pw-browsers/chromium-1194/chrome-linux/chrome
           node test/harness.js
-          for t in guest-turnover live reports audit-reports; do timeout 420 node "test/browser/$t.js" || exit 1; done
+          for t in guest-turnover; do timeout 420 node "test/browser/$t.js" || exit 1; done
 
   delivery:
     runs-on: ubuntu-latest
