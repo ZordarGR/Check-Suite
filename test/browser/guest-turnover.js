@@ -59,8 +59,9 @@ const {chromium}=require("playwright-core"), path=require("path"), assert=requir
  for(const historical of ["legacy","migrated"]){
   assert.equal(await dotCase({historical}),1,"old room/name history gets a normal dot");
   const history=await p.evaluate(()=>JSON.parse(localStorage.getItem("reccheck_receipts_v1"))["20260902"]);
-  assert.equal(history[0].length,historical==="legacy"?2:3,"drawing does not rewrite old evidence");
-  if(historical==="migrated")assert.equal(history[0][2].uncertain,true);
+  assert.deepEqual(history[0].slice(0,2),["120","DAVID/ELENA MORGAN/BR"],"stored guest/room facts remain intact");
+  assert.equal(history[0][2].uncertain,true,"a presence dot does not clear the saved uncertainty");
+  assert.equal(history[0][2].legacy,true);
   assert.equal(await dotCase({historical,room:"90"}),1,"old history follows the confirmed room move");
   assert.equal(await dotCase({historical,rival:true}),0,"old history cannot override an ambiguous arrival");
   assert.equal(await dotCase({historical,guest:"ANOTHER GUEST"}),0,"old room number alone cannot match");
@@ -71,7 +72,7 @@ const {chromium}=require("playwright-core"), path=require("path"), assert=requir
  }
  assert.equal(await dotCase({historical:"uncertain"}),0,"non-legacy uncertain evidence stays blocked");
  assert.equal(await dotCase({historical:"legacy",historyDate:"20260904"}),1,"same-day saved legacy evidence remains visible");
- console.log("PASS legacy history creates normal dots without rewriting evidence or overriding guest/date/cancellation/conflict safeguards");
+ console.log("PASS legacy history creates normal dots without changing stored guest/room facts or overriding guest/date/cancellation/conflict safeguards");
  assert.equal(await dotCase({room:"77"}),0,"unrelated room cannot dot departure");
  assert.equal(await dotCase({guest:"DAVID/OTHER MORGAN/BR"}),0,"shared words do not match another guest");
  assert.equal(await dotCase({rival:true}),0,"competing arrival blocks ambiguous receipt");
