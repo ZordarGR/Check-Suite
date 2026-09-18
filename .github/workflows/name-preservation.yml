@@ -1,0 +1,78 @@
+name: Departure dot matching checks
+on:
+  push:
+    branches: ["codex/departure-dot-names-20260919"]
+permissions:
+  contents: read
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/dist-win64/parts/RecCheck-Setup.exe.*
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y mono-devel
+          sh app/build-helper.sh
+          sh test/run.sh
+          node test/departure-report.js
+          for t in test/audit-*.js; do node "$t" || exit 1; done
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/dist-win64/parts/RecCheck-Setup.exe.*
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+          sudo mkdir -p /opt/pw-browsers/chromium-1194/chrome-linux
+          CHROME="$(node -p "require('playwright').chromium.executablePath()")"
+          sudo ln -sf "$CHROME" /opt/pw-browsers/chromium-1194/chrome-linux/chrome
+          node test/harness.js
+          for t in live guest-turnover reports audit-reports; do timeout 420 node "test/browser/$t.js" || exit 1; done
+
+  delivery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/dist-win64/parts/RecCheck-Setup.exe.*
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: |
+          node <<'NODE'
+          const fs=require('fs'),os=require('os'),path=require('path'),assert=require('assert/strict');
+          const {Updater}=require('./app/updater'),manifest=require('./update/latest.json'),nativeFetch=global.fetch;
+          global.fetch=(url,opts)=>String(url).startsWith('https://candidate.invalid/')?Promise.resolve(new Response(JSON.stringify(manifest))):nativeFetch(url,{...opts,signal:AbortSignal.timeout(60000)});
+          (async()=>{
+            const dir=fs.mkdtempSync(path.join(os.tmpdir(),'name-delivery-'));
+            try{
+              const u=new Updater({userDataDir:dir,packagedDir:path.resolve('app'),pkgVersion:'1.17.81',updateUrl:'https://candidate.invalid/manifest',fallbackReleaseUrl:''});
+              const p=await u.check();assert.equal(p.version,'1.17.84');assert(!p.full);assert.equal(u.promote(),true);
+              assert.equal(u.effective().version,'1.17.84');
+              assert.equal(fs.readFileSync(u.effective().file,'utf8'),fs.readFileSync('app/index.html','utf8'));
+              console.log('1.17.84 immutable download, checksum and promotion verified');
+            }finally{fs.rmSync(dir,{recursive:true,force:true});}
+          })().catch(e=>{console.error(e);process.exitCode=1;});
+          NODE
