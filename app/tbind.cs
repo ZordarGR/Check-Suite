@@ -2177,9 +2177,12 @@ static class TBind {
                        +"\t"+price+"\t"+agency+"\t"+currency+"\t"+cells[cells.Length-1]+"\n";
           }
         }
-        // Optional rate getters can also race a sort/filter; accept both rows together.
-        if(!rates.ok || cells[0]!=rates.GetText(r,cols[0],false,wide)
-           || cells[1]!=rates.GetText(r,cols[1],false,wide) || !rates.ok){ ranOut=true; break; }
+        // A move can retain FROM/type while TO, guest or stay dates change. Verify all
+        // captured facts again after optional rate reads, not merely the first cells.
+        bool sameRow=rates.ok;
+        for(int c=0;c<cols.Length && sameRow;c++)
+          if(cells[c]!=rates.GetText(r,cols[c],false,wide) || !rates.ok) sameRow=false;
+        if(!sameRow){ ranOut=true; break; }
         READ.Append(line.ToString() + "\n");
         if(rateLine!=null) READ.Append(rateLine);
         got++;

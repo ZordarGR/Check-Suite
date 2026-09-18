@@ -405,7 +405,7 @@ test('R40 interrupted captures preserve the last complete row and its original r
   e.statusIngest('IH',e.parseInhouse(ihText([row('101')])),1000);
   e.statusIngest('IH',e.parseInhouse(ihText([row('101','ALPHA GUEST','10/09/26','19/09/26','CO')],{cut:true,total:100})),2000);
   const held=e.readStatus().IH.rows[0];
-  assert.equal(held.dep,'25/09/26');assert.equal(held.status,'CI');assert.equal(held.readAt,1000);assert.equal(held.cells[4],'25/09/26');
+  assert.equal(held.dep,'25/09/26');assert.equal(held.status,'CI');assert.equal(held.readAt,1000);assert.equal(held.cells[6],'25/09/26');
 });
 
 test('R41 a cut-short blank move cell cannot revoke previously captured X', () => {

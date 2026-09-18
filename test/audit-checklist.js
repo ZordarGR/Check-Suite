@@ -1,0 +1,12 @@
+/* Cloud only: failed shift bookkeeping cannot clear freshly completed tasks twice. */
+'use strict';
+const fs=require('fs'),vm=require('vm'),assert=require('assert'),src=fs.readFileSync('app/index.html','utf8');
+function lift(name){const at=src.indexOf('\nfunction '+name+'(');assert(at>=0);let i=src.indexOf('{',at),depth=0;for(let j=i;j<src.length;j++){if(src[j]==='{')depth++;if(src[j]==='}'&&!--depth)return src.slice(at+1,j+1);}throw Error(name);}
+function rig(){const data={reccheck_cl_night:'20260917',reccheck_checklist:JSON.stringify([{id:'a',done:true},{id:'b',done:false}])},faults=[];
+const c={CL:JSON.parse(data.reccheck_checklist),shiftKey:()=>20260918,OVQUIET:false,renderChecklist(){},window:{__rcStorageFault:(...x)=>faults.push(x)},localStorage:{fail:null,getItem:k=>data[k]??null,setItem(k,v){if(k===this.fail)throw Error('quota');data[k]=String(v);}}};vm.createContext(c);vm.runInContext(['saveCL','setChecklistDone','clNightCheck'].map(lift).join('\n'),c);return{c,data,faults};}
+let bad=0;function test(name,fn){try{fn();console.log('PASS '+name);}catch(e){bad++;console.log('FAIL '+name+'\n'+e.stack);}}
+test('night-stamp failure cannot clear a newly completed same-shift task',()=>{const {c,data,faults}=rig();c.localStorage.fail='reccheck_cl_night';c.clNightCheck();assert.equal(c.CL[0].done,false);assert.equal(c.setChecklistDone(c.CL[1],true),true);c.clNightCheck();assert.equal(c.CL[1].done,true);assert(faults.length);c.localStorage.fail=null;c.clNightCheck();assert.equal(c.CL[1].done,true);assert.equal(data.reccheck_cl_night,'20260918');});
+test('same-shift completion survives restart before failed night stamp is repaired',()=>{const {c,data}=rig();c.localStorage.fail='reccheck_cl_night';c.clNightCheck();c.setChecklistDone(c.CL[1],true);c.CL=JSON.parse(data.reccheck_checklist);c.localStorage.fail=null;c.clNightCheck();assert.equal(c.CL[1].done,true);assert.equal(c.CL[0].done,false);});
+test('failed checkbox save restores its previous visible state',()=>{const {c,data}=rig();c.localStorage.fail='reccheck_checklist';assert.equal(c.setChecklistDone(c.CL[1],true),false);assert.equal(c.CL[1].done,false);assert.equal(c.CL[1].doneNight,undefined);assert.equal(JSON.parse(data.reccheck_checklist)[1].done,false);});
+test('the next shift still resets prior-shift completions',()=>{const {c}=rig();c.clNightCheck();c.setChecklistDone(c.CL[1],true);c.shiftKey=()=>20260919;c.clNightCheck();assert.equal(c.CL[1].done,false);});
+process.exitCode=bad?1:0;

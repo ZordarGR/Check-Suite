@@ -249,11 +249,15 @@ ck("an arrival is still never dotted",                                          
 ck("an omitted receipt remains stored as uncertain, not erased", (JSON.parse(store["reccheck_receipts_v1"])["20260904"] || []).some(p=>p[0]==="111"&&p[2].uncertain));
 /* a night whose report was never loaded is unknown, not empty: only loaded nights are keys */
 ck("nights never loaded here are simply absent",                                           !("20260830" in JSON.parse(store["reccheck_receipts_v1"])));
-/* the memory is bounded */
-const old = JSON.parse(store["reccheck_receipts_v1"]); old["20260601"] = [["1", "X"]]; old["junk"] = 1; store["reccheck_receipts_v1"] = JSON.stringify(old);
+/* Retention applies to readable history. Malformed metadata cannot authorize a
+   rewrite that silently drops the original store. Exercise the two boundaries apart. */
+const old = JSON.parse(store["reccheck_receipts_v1"]); old["20260819"] = [["101", "EXPIRED"]]; old["20260820"] = [["102", "BOUNDARY"]]; store["reccheck_receipts_v1"] = JSON.stringify(old);
 P = pillsFor(NIGHT, []);
 const kept = JSON.parse(store["reccheck_receipts_v1"]);
-ck("a night older than sixty is pruned, and a key that is not a night", !("20260601" in kept) && !("junk" in kept) && ("20260901" in kept));
+ck("readable history prunes beyond fifteen nights and retains the exact boundary", !("20260819" in kept) && ("20260820" in kept) && ("20260901" in kept));
+const malformed=JSON.stringify({...kept,junk:1});store["reccheck_receipts_v1"]=malformed;
+P = pillsFor(NIGHT, []);
+ck("an unreadable history key refuses the write and retains the original bytes", store["reccheck_receipts_v1"]===malformed);
 
 console.log("--- 5c. a cut receipt name — the .oxps truncates at the column, protel's list does not");
 /* Room 110's departing guest is MUELLER HANS-JOACHIM/ANNELIESE on the departure list; the

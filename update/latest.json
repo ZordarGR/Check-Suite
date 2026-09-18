@@ -6,6 +6,6 @@
   "setupSha256": "e329ab9589afda28cfc14423b06e2b78fe895243edb9ad6464c3ed76e3a4f26e",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/6efbdd7d8519a7d38839fc027a2023f2dc561aed/Departments%20Check.html",
-  "sha256": "d2fa8156ae6a6e92c507059e8d586993e28f2201cd908635016e7258a34500ce",
+  "sha256": "929e67801356af3577dc4347ee55e4e325c160fa8344f7d74cb63c2e08ee36c8",
   "notes": "Match all printed guest-name characters; follow confirmed departure room moves; retain same-day in-house rows until explicit departure CO."
 }

@@ -149,7 +149,7 @@ test("REP-06 unimplemented drawing properties cannot silently alter an exact doc
 
 const charge=(label,amount,date="10/09/26")=>({label,amount,date,currency:"EUR"});
 const invoice=(more={})=>({complete:true,name:"ALPHA GUEST",room:"101",arr:"10/09/26",dep:"18/09/26",currency:"EUR",title:"INDIVIDUAL",rows:[charge("*Arrangement","100,00"),charge("Deposit Cash","-800,00")],...more});
-const rate=(more={})=>({tag:"IH",at:100,name:"ALPHA GUEST",room:"101",arr:"10/09/26",dep:"18/09/26",price:"100,00",agency:"DIRECT",currency:"EUR",...more});
+const rate=(more={})=>({tag:"IH",at:100,name:"ALPHA GUEST",room:"101",arr:"10/09/26",dep:"18/09/26",price:"100,00",agency:"INDIVIDUAL",currency:"EUR",...more});
 test("ARR-01 exact cents preserve under/exact/over verdicts",()=>{
   for(const [amt,diff,state] of [["-799,99",-1,"difference"],["-800,00",0,"paid"],["-800,01",1,"difference"]]){
     const v=A.evaluate(invoice({rows:[charge("*Arrangement","100,00"),charge("PAYMENT",amt)]}),[rate()]);

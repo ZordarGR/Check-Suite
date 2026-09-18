@@ -2533,6 +2533,7 @@ function t(key, vars){
   return str;
 }
 function setLang(l){
+  if(window.__rcImportBlocked) return;
   LANG = l;
   try{ localStorage.setItem("reccheck_lang", l); }catch(e){}
   applyLang();
@@ -2632,6 +2633,7 @@ function loadWatch(){
   }catch(e){ WATCH = []; }
 }
 function saveWatch(){
+  if(typeof window!=="undefined" && window.__rcImportBlocked) return false;
   try{
     const raw=localStorage.getItem(WATCH_KEY);
     if(raw!==null && !Array.isArray(JSON.parse(raw))) throw new Error("Invalid saved watchlist; original kept");
@@ -2650,6 +2652,7 @@ function loadRooms(){
   }catch(e){ ROOMS = {}; }
 }
 function saveRooms(){
+  if(typeof window!=="undefined" && window.__rcImportBlocked) return false;
   let stored = true;
   try{
     const raw=localStorage.getItem(ROOMS_KEY), prior=raw===null?{}:JSON.parse(raw);
@@ -2678,11 +2681,13 @@ function saveRooms(){
    other way round: the store the app has been running on wins every conflict, because a
    stale file quietly replacing tonight's work is the failure that would matter. */
 async function mergeRoomsFromDisk(){
+  if(window.__rcImportBlocked) return 0;
   if(ROOMS_DISK_PENDING) return ROOMS_DISK_PENDING;
   ROOMS_DISK_PENDING = (async () => {
   try{
     if(!window.reccheckRooms){ ROOMS_DISK_READY = true; return 0; }
     const disk = await window.reccheckRooms.read();
+    if(window.__rcImportBlocked) return 0;
     if(!disk || typeof disk !== "object" || Array.isArray(disk)){ ROOMS_DISK_READY = true; return 0; }
     let added = 0;
     for(const room of Object.keys(disk)){
@@ -3125,6 +3130,7 @@ function loadAlerts(){
   pruneAlerts();
 }
 function saveAlerts(){
+  if(typeof window!=="undefined" && window.__rcImportBlocked) return false;
   try{
     const a=JSON.parse(localStorage.getItem(ALERTS_KEY)||"[]"), d=JSON.parse(localStorage.getItem(ALERTS_DONE_KEY)||"{}");
     if(!Array.isArray(a) || !d || typeof d!=="object" || Array.isArray(d)) throw new Error("Invalid saved alerts; original kept");
@@ -3286,6 +3292,7 @@ function setRState(r, st){
   return false;
 }
 function saveState(){
+  if(typeof window!=="undefined" && window.__rcImportBlocked) return false;
   try{
     if(STATE_BLOCKED_SOURCES.length)throw new Error("Saved receipt data is damaged or conflicting. Original bytes retained; import a verified backup before editing this night.");
     const raw=localStorage.getItem(stateKey);
@@ -3297,6 +3304,14 @@ function saveState(){
     receiptStorageFault(e);
     return false;
   }
+}
+function resetReceiptState(){
+  const previous=STATE;
+  STATE=blankState(MODEL.reportDate);
+  // Remember aliases already consumed so an intentional reset cannot resurrect them.
+  if(previous.dateAliases)STATE.dateAliases=Object.assign({},previous.dateAliases);
+  if(saveState())return true;
+  STATE=previous;return false;
 }
 function loadState(date){
   const m=String(date||"").match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
@@ -3468,10 +3483,17 @@ let CLEDIT = false;        // edit mode on/off
 let CLEDITID = null;       // task id currently being edited in the form
 let CLTIER = "low";
 function saveCL(){
+  if(typeof window!=="undefined" && window.__rcImportBlocked) return false;
   try{
     if(!Array.isArray(JSON.parse(localStorage.getItem("reccheck_checklist")||"[]"))) throw new Error("Invalid saved checklist; original kept");
     localStorage.setItem("reccheck_checklist", JSON.stringify(CL)); return true;
   }catch(e){window.__rcStorageFault("checklist",e);return false;}
+}
+function setChecklistDone(task,done){
+  const before=task.done,night=task.doneNight;
+  task.done=!!done;task.doneNight=shiftKey();
+  if(saveCL()===false){task.done=before;if(night===undefined)delete task.doneNight;else task.doneNight=night;return false;}
+  return true;
 }
 /* How many columns the checklist should use, and how tall each one is.
 
@@ -3563,7 +3585,7 @@ function renderChecklist(){
     const cb = document.createElement("input");
     cb.type = "checkbox";
     cb.checked = !!task.done;
-    cb.onchange = () => { task.done = cb.checked; saveCL(); renderChecklist(); };
+    cb.onchange = () => { setChecklistDone(task,cb.checked); renderChecklist(); };
     row.append(cb);
     row.append(el("div","txt", task.text));
     const btns = el("div","clBtns");
@@ -3600,7 +3622,7 @@ let OVCFG = (function(){
   try{ return Object.assign({}, OVDEF, JSON.parse(localStorage.getItem("reccheck_overlay_cfg") || "{}")); }
   catch(e){ return Object.assign({}, OVDEF); }
 })();
-function saveOvCfg(){ try{ localStorage.setItem("reccheck_overlay_cfg", JSON.stringify(OVCFG)); }catch(e){} }
+function saveOvCfg(){ if(window.__rcImportBlocked)return; try{ localStorage.setItem("reccheck_overlay_cfg", JSON.stringify(OVCFG)); }catch(e){} }
 function openOverlaySettings(){
   const posBtn = (k, sym) => `<button class="btn small ovPos${OVCFG.pos === k ? " sel" : ""}" data-pos="${k}" style="flex:1;font-size:16px${OVCFG.pos === k ? ";border-color:var(--amber);color:var(--amber)" : ""}">${sym}</button>`;
   openModal(`
@@ -3854,6 +3876,7 @@ function legacyOn(){
   try{ return localStorage.getItem(LEGACY_KEY) !== "0"; }catch(e){ return true; }
 }
 function setLegacy(on){
+  if(window.__rcImportBlocked) return;
   try{ localStorage.setItem(LEGACY_KEY, on ? "1" : "0"); }catch(e){}
   try{ if(window.__taLegacy) window.__taLegacy(on); }catch(e){}
 }
@@ -3885,6 +3908,7 @@ function paintLedger(){
   b.classList.toggle("danger", LEDARMED);
 }
 function ledgerClick(){
+  if(window.__rcImportBlocked) return;
   if(!LEDARMED){
     LEDARMED = true;
     paintLedger();
@@ -4544,18 +4568,20 @@ function paintSevSel(){
    03:30 and 07:00 it reads one day ahead of this one, and a plain !== would wipe his
    ticks once, mid-shift, on the upgrade. A clock that jumped back does not clear either. */
 function clNightCheck(){
+  if(typeof window!=="undefined" && window.__rcImportBlocked) return;
   const k = shiftKey(), ks = String(k);
   let stored = null;
-  try{ stored = localStorage.getItem("reccheck_cl_night"); }catch(e){}
+  try{ stored = localStorage.getItem("reccheck_cl_night"); }catch(e){ if(typeof window!=="undefined")window.__rcStorageFault("checklist night",e);return; }
   if(stored === ks) return;
-  try{ localStorage.setItem("reccheck_cl_night", ks); }catch(e){}
   const prev = Number(stored);
-  if(stored !== null && prev && k > prev && CL.some(x => x.done)){   // a new shift began — fresh ticks
-    CL.forEach(x => { x.done = false; });
-    saveCL();
+  if(stored !== null && prev && k > prev && CL.some(x => x.done && (+x.doneNight||0)<k)){   // a new shift began — fresh ticks
+    const before=CL.map(x=>x.done);
+    CL.forEach(x => { if((+x.doneNight||0)<k)x.done = false; });
+    if(saveCL()===false){CL.forEach((x,i)=>{x.done=before[i];});return;}
     OVQUIET = true;                              // clear the ticks without summoning the overlay
     try{ renderChecklist(); } finally{ OVQUIET = false; }
   }
+  try{ localStorage.setItem("reccheck_cl_night", ks); }catch(e){if(typeof window!=="undefined")window.__rcStorageFault("checklist night",e);}
 }
 function clSubmit(){
   const txt = $("#clText").value.trim();
@@ -4600,6 +4626,7 @@ function fbCur(){ return FB.p[FB.tool]; }
    key is the fallback — and "" is falsy, so storing it hands the old shared path back at
    the next boot. Going to the root would not survive a restart. Found by the 1.17.53 audit. */
 function saveRel(tool, rel){
+  if(window.__rcImportBlocked) return;
   try{
     if(rel) localStorage.setItem("reccheck_fbrel_" + tool, rel);
     else{
@@ -4621,7 +4648,7 @@ function fbUpRel(){
 
 /* first-timer guides — pinned left inside each audit tool, dismissible per tool */
 const HELP = (function(){ try{ return JSON.parse(localStorage.getItem("reccheck_help") || "{}"); }catch(e){ return {}; } })();
-function saveHelp(){ try{ localStorage.setItem("reccheck_help", JSON.stringify(HELP)); }catch(e){} }
+function saveHelp(){ if(window.__rcImportBlocked)return; try{ localStorage.setItem("reccheck_help", JSON.stringify(HELP)); }catch(e){} }
 function helpToolFor(){ return SCREEN === "app" ? "dept" : (SCREEN === "tax" ? "tax" : null); }
 function paintHelp(){
   const tool = helpToolFor();
@@ -6004,6 +6031,7 @@ function loadMoves(){
   try{ return JSON.parse(localStorage.getItem(MOVES_KEY) || "{}") || {}; }catch(e){ return {}; }
 }
 function saveLedger(led){
+  if(typeof window!=="undefined" && window.__rcImportBlocked) return false;
   try{ localStorage.setItem(MOVES_KEY, JSON.stringify(led)); }catch(e){}
 }
 /* The rate list writes a name; the department report writes a name; they are printed by
@@ -6093,6 +6121,7 @@ function loadNightReceipts(strict){
   }
 }
 function saveNightReceipts(night, pairs){
+  if(typeof window!=="undefined" && window.__rcImportBlocked) return false;
   try{
     if(!/^\d{8}$/.test(String(night)))return;
     const o = loadNightReceipts(true);
@@ -6601,7 +6630,7 @@ function saveNick(){
   if(!v){ $("#nErr").textContent = t("n.errEmpty"); return; }
   if(!ROOMS[NSEL]) ROOMS[NSEL] = {guest: null, seen: null};
   ROOMS[NSEL].nick = v;
-  saveRooms();
+  if(!saveRooms()) return;
   toast(t("n.room") + " " + NSEL + " → “" + v + "”");
   refresh();
 }
@@ -6630,24 +6659,99 @@ function exportData(){
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   toast(t("exp.done", {n}));
 }
+function backupStoreValid(key,value){
+  const obj=x=>!!x&&typeof x==='object'&&!Array.isArray(x);
+  const number=x=>typeof x==='number'&&Number.isFinite(x);
+  const count=x=>Number.isSafeInteger(x)&&x>=0;
+  const fields=(x,names,test)=>names.every(k=>x[k]===undefined||test(x[k]));
+  const text=x=>typeof x==='string',nullableText=x=>x===null||text(x);
+  const room=x=>text(x)||number(x);
+  const date=x=>{
+    const m=String(x).match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);if(!m)return false;
+    const y=+m[3]+(m[3].length===2?2000:0),d=new Date(Date.UTC(y,+m[2]-1,+m[1]));
+    return d.getUTCFullYear()===y&&d.getUTCMonth()===+m[2]-1&&d.getUTCDate()===+m[1];
+  };
+  if(/^reccheck_\d{1,2}\/\d{1,2}\/\d{4}$/.test(key))return receiptStateValid(value)&&date(value.date)&&
+    /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(value.date)&&value.date.split('/').map(Number).join('/')===key.slice(9).split('/').map(Number).join('/');
+  if(key==='reccheck_rooms')return obj(value)&&Object.values(value).every(e=>obj(e)&&
+    fields(e,['guest','nick','seen'],nullableText)&&fields(e,['liveKey'],count));
+  if(key==='reccheck_watchlist')return Array.isArray(value)&&value.every(e=>obj(e)&&room(e.room)&&
+    fields(e,['sn'],room)&&fields(e,['name'],nullableText));
+  if(key==='reccheck_checklist')return Array.isArray(value)&&value.every(e=>obj(e)&&text(e.text)&&
+    fields(e,['id'],room)&&fields(e,['tier'],text)&&fields(e,['done'],x=>typeof x==='boolean')&&fields(e,['ord'],number));
+  if(key==='ta_check_memory_v2'){
+    const entry=e=>obj(e)&&fields(e,['arr','auto','man'],count)&&fields(e,['manual'],nullableText)&&
+      fields(e,['uncertain'],x=>typeof x==='boolean');
+    return obj(value)&&Object.values(value).every(rec=>obj(rec)&&Object.entries(rec).every(([day,e])=>date(day)&&entry(e)&&
+      (e.versions===undefined||(Array.isArray(e.versions)&&e.versions.every(entry)))));
+  }
+  if(key==='ta_check_verify_v1')return obj(value)&&Object.entries(value).every(([day,rec])=>/^\d{8}$/.test(day)&&obj(rec)&&
+    Object.values(rec).every(x=>x===null||text(x)||typeof x==='boolean'));
+  if(key==='ta_check_ack_v1')return obj(value)&&Object.values(value).every(e=>number(e)||(obj(e)&&number(e.balance)&&text(e.source)));
+  if(key==='reccheck_status_v1'){
+    if(!obj(value))return false;
+    const row=r=>obj(r)&&fields(r,['name','room','arr','dep','status','from','to','x'],text)&&
+      fields(r,['first','last','readAt'],x=>number(x)&&x>=0)&&(r.cells===undefined||Array.isArray(r.cells));
+    for(const tag of ['IH','IHL','IHC']){
+      const c=value[tag];if(c===undefined)continue;
+      if(!obj(c)||!Array.isArray(c.rows)||!c.rows.every(row)||
+        (c.incompleteRows!==undefined&&(!Array.isArray(c.incompleteRows)||!c.incompleteRows.every(row))))return false;
+    }
+    for(const tag of ['AR','DP','MV']){
+      const days=value[tag];if(days===undefined)continue;
+      if(!obj(days)||!Object.entries(days).every(([day,d])=>/^\d{8}$/.test(day)&&obj(d)&&obj(d.rows)&&Object.values(d.rows).every(row)))return false;
+    }
+    return true;
+  }
+  if(key==='reccheck_moves_v2'||key==='reccheck_moves_v1'){
+    const entry=(e,nested)=>obj(e)&&fields(e,['a','d','seen','mv'],count)&&fields(e,['n','from'],text)&&
+      (e.conflicts===undefined||(nested&&Array.isArray(e.conflicts)&&e.conflicts.every(c=>entry(c,false))));
+    if(!obj(value))return false;
+    if(key==='reccheck_moves_v2')return Object.values(value).every(rec=>obj(rec)&&Object.entries(rec).every(([a,e])=>/^\d{8}$/.test(a)&&entry(e,true)));
+    return Object.entries(value).every(([day,rec])=>/^\d{8}$/.test(day)&&obj(rec)&&Object.values(rec).every(rows=>Array.isArray(rows)&&rows.every(e=>entry(e,false)&&/^\d{8}$/.test(String(e.a)))));
+  }
+  if(key==='reccheck_receipts_v1')return obj(value)&&Object.entries(value).every(([day,rows])=>/^\d{8}$/.test(day)&&Array.isArray(rows)&&rows.every(p=>{
+    if(!Array.isArray(p)||p.length<2||p.length>3||!room(p[0])||!text(p[1]))return false;
+    const m=p[2];return m===undefined||m===null||(obj(m)&&fields(m,['id'],text)&&fields(m,['live','uncertain'],x=>typeof x==='boolean')&&
+      (m.versions===undefined||(Array.isArray(m.versions)&&m.versions.every(v=>Array.isArray(v)&&v.length===3&&room(v[0])&&text(v[1])&&typeof v[2]==='boolean'))));
+  }));
+  if(key==='reccheck_alerts')return Array.isArray(value)&&value.every(e=>obj(e)&&text(e.key)&&fields(e,['kind','text','at'],text)&&fields(e,['night'],count)&&fields(e,['read'],x=>typeof x==='boolean'));
+  if(key==='reccheck_alerts_done'||key==='reccheck_moves_applied')return obj(value)&&Object.values(value).every(count);
+  if(/^(reccheck_overlay_cfg|reccheck_help|reccheck_moves_last|ta_check_)/.test(key))return obj(value);
+  return true; // Unknown JSON preferences remain round-trippable; do not discard them.
+}
+function reloadAfterImport(){
+  // Both app scopes cache saved stores. Retire this entire page before an old
+  // checklist, receipt state, capture or delayed mirror can overwrite the import.
+  window.__rcImportBlocked = true;
+  if(document.documentElement) document.documentElement.inert = true;
+  try{ window.location.reload(); }
+  catch(e){ window.__rcStorageFault("reload after import; reload this window before continuing", e); }
+}
 function importData(file){
+  if(window.__rcImportBlocked) return;
   const rd = new FileReader();
   rd.onload = () => {
+    if(window.__rcImportBlocked) return;
+    let needsReload = false;
     try{
+      // Recovery can change stores even when the newly selected file is invalid.
+      needsReload = localStorage.getItem(importJournalKey()) !== null;
+      if(!recoverImport()) throw new Error("Previous import recovery is incomplete; original backup journal retained");
       const j = JSON.parse(rd.result);
       const data = (j && j.app === "reccheck" && j.data && typeof j.data === "object" && !Array.isArray(j.data)) ? j.data : null;
       if(!data) throw new Error(t("imp.notours"));
       const accepted = {}, previous = {};
       for(const k of Object.keys(data)){
         const v = data[k];
-        if(!/^(reccheck|ta_check_|ta_lang$)/.test(k) || k === importJournalKey() || typeof v !== "string") continue;
+        if(!/^(reccheck|ta_check_|ta_lang$)/.test(k) || k === importJournalKey()) continue;
+        if(typeof v!=="string")throw new Error("Invalid saved value for "+k+"; nothing imported");
         // Export contains both JSON stores and ordinary string preferences.
         const plain = /^(reccheck_lang|ta_lang|reccheck_fbview|reccheck_fbrel(?:_dept|_tax|_rep)?|reccheckLastFault)$/.test(k);
         if(!plain){
           let value;
-          try{ value = JSON.parse(v); }catch(e){ continue; }
-          if(/^reccheck_\d{1,2}\/\d{1,2}\/\d{4}$/.test(k) && (!value || !value.receipts || Array.isArray(value.receipts) || typeof value.receipts !== "object" || !Array.isArray(value.extras))) continue;
-          if(/^(reccheck_rooms|reccheck_status_v1|reccheck_moves_v2|ta_check_)/.test(k) && (!value || typeof value !== "object" || Array.isArray(value))) continue;
+          try{ value = JSON.parse(v); }catch(e){ throw new Error("Invalid saved data for "+k+"; nothing imported"); }
+          if(!backupStoreValid(k,value))throw new Error("Invalid saved data for "+k+"; nothing imported");
         }
         accepted[k] = v;
         previous[k] = localStorage.getItem(k);
@@ -6657,21 +6761,17 @@ function importData(file){
       // A single atomic localStorage write keeps the old generation recoverable
       // before any key is replaced. Failure rolls back now or on the next boot.
       localStorage.setItem(importJournalKey(), JSON.stringify(previous));
+      needsReload = true;
       try{
         for(const k of Object.keys(accepted)) localStorage.setItem(k, accepted[k]);
         localStorage.removeItem(importJournalKey());
       }catch(e){ recoverImport(); throw e; }
-      loadWatch(); loadRooms(); loadAlerts(); paintAlertsBtn();
-      saveRooms();
-      if(MODEL){
-        STATE = loadState(MODEL.reportDate);
-        syncRooms();
-        refresh();
-      }
       toast(t("imp.done", {n}) + (MODEL ? "" : t("imp.loadhint")));
     }catch(err){
       window.__rcStorageFault("import", err);
       toast(t("imp.fail") + (err.message || err), true);
+    }finally{
+      if(needsReload) reloadAfterImport();
     }
   };
   rd.onerror = () => toast(t("imp.noread"), true);
@@ -6705,7 +6805,7 @@ function uiFault(where, e){
   const msg = (e && (e.message || e)) + "";
   LAST_FAULT = new Date().toISOString() + "  " + where + "\n" + ((e && e.stack) || msg);
   try{ console.error("[reccheck]", where, e); }catch(_){}
-  try{ localStorage.setItem("reccheckLastFault", LAST_FAULT); }catch(_){}
+  try{ if(!window.__rcImportBlocked) localStorage.setItem("reccheckLastFault", LAST_FAULT); }catch(_){}
   // once per distinct fault: enough to notice and report, not enough to nag
   const k = where + "|" + msg;
   if(FAULT_SEEN[k]) return;
@@ -7598,8 +7698,7 @@ $("#resetDay").onclick = () => {
     </div>`);
   $("#rCancel").onclick = closeModal;
   $("#rGo").onclick = () => {
-    STATE = blankState(MODEL.reportDate);
-    saveState();
+    if(!resetReceiptState())return;
     closeModal();
     const i = $("#snInput");
     i.value = ""; i.classList.remove("nomatch");
@@ -7631,7 +7730,7 @@ $("#resetDay").onclick = () => {
     if(window.reccheckOverlay.onTick)
       window.reccheckOverlay.onTick(id => {        // a task was clicked on the desktop overlay
         const task = CL.find(x => x.id === id);
-        if(task){ task.done = !task.done; saveCL(); renderChecklist(); }
+        if(task){ setChecklistDone(task,!task.done); renderChecklist(); }
       });
   }
   /* The room database the app's own folder is holding, pulled in at start so the nickname
@@ -7729,7 +7828,7 @@ const I18N={
   st_taken:"taken", st_takenAt:"taken at {0}",
   st_room:"Room", st_name:"Name", st_arr:"Arrival", st_dep:"Departure", st_status:"Status", st_from:"From", st_to:"To", st_x:"X",
   st_arrNote:"Rows leave this list as guests check in and appear in the in-house list. Every arrival captured today is kept here; a row being gone is read as nothing until the in-house list shows the same name and room checked in.",
-  st_depNote:"A row missing from a list does not prove checkout: the list may be filtered. Checkout is confirmed by an explicit CO for the same guest and room.",
+  st_depNote:"A row missing from a list does not prove checkout: the list may be filtered. Checkout requires an explicit CO status in the departure list for the same guest, room and original stay.",
   st_mark:"Mark", st_gone:"gone from the list since {0}",
   st_markIn:"checked in \u2014 on the in-house list at {0}", st_markExpected:"expected \u2014 not checked in on the in-house list yet",
   st_markOut:"checked out \u2014 absent from the in-house list at {0}", st_markOutCO:"checked out — CO on the departure list at {0}",
@@ -7990,17 +8089,20 @@ function pillRoom(cell, name){
 }
 const IH = {NAME: 0, ROOM: 2, TYPE: 3, OCC: 4, ARR: 5, DEP: 6, STATUS: 11};
 function inhouseToRate(rows, bizDate){
-  const all = {}, rooms = {};
+  const all = {}, rooms = {}, incompleteRooms = {};
   let cancelled = 0, unusable = 0;
   for(const r of (rows || [])){
     if(!r) continue;
     const status = String(r[IH.STATUS] || "").trim();
     if(/reversal|void/i.test(status)){ cancelled++; continue; }
-    if(!String(r[IH.NAME] || "").trim() || !status){ unusable++; continue; }
     const cell = String(r[IH.ROOM] || "").trim();
     const room = (cell.split("-")[0] || "").trim();
-    if(!/^\d{2,4}$/.test(room) || !pillRoom(room, r[IH.NAME])){ unusable++; continue; }
+    const name=String(r[IH.NAME] || "").trim();
     const arr = String(r[IH.ARR] || "").trim(), dep = String(r[IH.DEP] || "").trim();
+    if(/^\d{2,3}$/.test(room)&&(!name||!status||!dkey(arr)||!dkey(dep)||dkey(dep)<dkey(arr)))
+      incompleteRooms[room]={room,name,arr,dep,status,reason:'Incomplete captured reservation fields'};
+    if(!name || !status){ unusable++; continue; }
+    if(!/^\d{2,4}$/.test(room) || !pillRoom(room, r[IH.NAME])){ unusable++; continue; }
     if(!dkey(arr)){ unusable++; continue; }        // no arrival date, no stay
     const partner = cell.indexOf("-") >= 0 ? (cell.split("-")[1] || "").trim() : "";
     const cur = {room: room, arr: arr, dep: dep,
@@ -8014,7 +8116,7 @@ function inhouseToRate(rows, bizDate){
   const dateKey = dkey(bizDate);
   return {kind: "rate", live: true, bizDate: bizDate, dateKey: dateKey, dateSure: !!dateKey,
           count: Object.keys(rooms).length, rooms: rooms, all: all,
-          cancelled: cancelled, unusable: unusable};
+          cancelled: cancelled, unusable: unusable, incompleteRooms: incompleteRooms};
 }
 /* A guest account can precede or follow the physical-room stay. Only a captured,
    X-marked move for this guest and these original stay dates supplies a tax boundary.
@@ -8083,23 +8185,24 @@ function taxCaptureRate(rate){
     all[room]=[...union.values()];rooms[room]=rate.rooms[room]||RATE.rooms[room];
     if(!rate.rooms[room])missing.push(room);
   }
-  return Object.assign({},rate,{all,rooms,count:Object.keys(rooms).length,coverageMissing:missing});
+  return Object.assign({},rate,{all,rooms,count:Object.keys(rooms).length,coverageMissing:missing,
+    incompleteRooms:Object.assign({},RATE.incompleteRooms||{},rate.incompleteRooms||{})});
 }
 function crossReference(rate,tax,nightKey){
   const N=nightKey||tax.dateKey, totalFail=[],autoMiss=[],adjoining=[],ok=[],uncertain=[];
   let notOwed=0;
-  for(const room of taxRoomKeys(rate.rooms)){
-    const rows=(rate.all&&rate.all[room])||[rate.rooms[room]];
+  for(const room of taxRoomKeys(Object.assign({},rate.rooms,rate.incompleteRooms||{}))){
+    const rows=((rate.all&&rate.all[room])||[rate.rooms[room]]).filter(Boolean);
     const incomplete=rows.some(r=>!dkey(r.arr)||!dkey(r.dep)||dkey(r.dep)<dkey(r.arr));
     const occupied=rows.filter(r=>dkey(r.arr)&&dkey(r.dep)&&dkey(r.arr)<=N&&N<dkey(r.dep));
-    const rr=occupied[0]||rate.rooms[room];
-    if(incomplete||(rate.coverageMissing||[]).includes(room)){
-      uncertain.push({room,name:rr.name,reason:incomplete?'Incomplete reservation dates':'Not present in the latest list; saved evidence retained'});continue;
+    const rr=occupied[0]||rate.rooms[room]||(rate.incompleteRooms||{})[room];
+    if(incomplete||(rate.incompleteRooms||{})[room]||(rate.coverageMissing||[]).includes(room)){
+      uncertain.push({room,name:rr.name,reason:(incomplete||(rate.incompleteRooms||{})[room])?'Incomplete captured reservation fields':'Not present in the latest list; saved evidence retained'});continue;
     }
     if(!occupied.length){notOwed++;continue;}
     const dates=new Set(occupied.map(r=>r.arr+'|'+r.dep));
     if(dates.size>1){uncertain.push({room,name:rr.name,reason:'Conflicting occupied reservation dates'});continue;}
-    const bounds=rate.live?taxAccountBounds(Object.assign({},rate,{rooms:{[room]:rr}}),statusLoad().MV||{}):{};
+    const bounds=rate.live?taxAccountBounds(Object.assign({},rate,{rooms:{[room]:rr}}),statusLoad(true).MV||{}):{};
     const span=bounds[room]||{};
     if((span.start&&N<span.start)||(span.end&&N>=span.end)){notOwed++;continue;}
     if(rr.adjoining){adjoining.push({room,name:rr.name,partner:rr.partner});continue;}
@@ -8131,6 +8234,7 @@ function taxStoreRead(key,memory){
   catch(e){if(typeof window!=='undefined'&&window.__rcStorageFault)window.__rcStorageFault('Tax saved data',e);return{};}
 }
 function taxStoreWrite(key,value,memory){
+  if(typeof window!=="undefined" && window.__rcImportBlocked) return false;
   try{
     const raw=localStorage.getItem(key);
     if(raw!==null&&!taxStoreValid(JSON.parse(raw),memory))throw new Error('Damaged saved tax data retained. Import a verified backup before editing.');
@@ -8288,6 +8392,7 @@ function detectMoves(led, rate, night){
   return out;
 }
 function saveMoves(rate){
+  if(typeof window!=="undefined" && window.__rcImportBlocked) return null;
   if(!rate||!rate.all)return null;
   let wrote=0,why="";
   try{
@@ -8636,7 +8741,7 @@ document.addEventListener('keydown',e=>{
 
 /* ============ language ============ */
 function applyStatic(){el('apptitle').innerHTML='<span>'+t('app_brand')+'</span> '+t('app_rest');document.querySelectorAll('[data-i18n]').forEach(e=>{e.textContent=t(e.getAttribute('data-i18n'));});el('memhint').textContent=t('mem_hint');el('foot').textContent=t('foot');}
-function setLang(l){LANG=l;try{localStorage.setItem('ta_lang',l);}catch(e){}applyStatic();render();}
+function setLang(l){if(window.__rcImportBlocked)return;LANG=l;try{localStorage.setItem('ta_lang',l);}catch(e){}applyStatic();render();}
 
 /* ============ file loading ============ */
 function showErr(m){const e=el('err');e.style.display='block';e.textContent=m;} function clearErr(){el('err').style.display='none';}
@@ -8713,6 +8818,7 @@ const LIVE_RETRY_MS = 5000;
    looks unchanged and nothing is ever written back — he would empty it and watch it stay
    empty. The reset lives in the other scope, so this is its door. */
 window.__taForget = function(){
+  if(window.__rcImportBlocked) return;
   try{ LIVE_SIG = ""; RPT_SIG = {}; LIVE_AT = {}; LIVE_HELD = {}; LIVE_ERR = {}; LEDGER_TICK++; }catch(e){}
   try{ localStorage.removeItem(MOVES_DONE_KEY); }catch(e){}
 };
@@ -8908,7 +9014,7 @@ async function autoReadInhouse(){
 const STATUS_KEY = "reccheck_status_v1";
 const STATUS_KEEP_DAYS = 15;   // 7 until 1.17.60 — the dot's look-back needs the moves of a whole stay (his word: 15 days)
 let STATUS_TICK = 0;                           // bumped when the store changes
-function statusLoad(){
+function statusLoad(readOnly=false){
   try{
     const raw=localStorage.getItem(STATUS_KEY);
     if(raw===null)return {};
@@ -8920,6 +9026,7 @@ function statusLoad(){
     for(const tag of ["IH","IHL","IHC"]){
       const cap=o[tag];if(cap===undefined)continue;
       if(!object(cap)||!Array.isArray(cap.rows)||!cap.rows.every(validRow))throw new Error("Invalid saved "+tag+" capture");
+      if(cap.incompleteRows!==undefined&&(!Array.isArray(cap.incompleteRows)||!cap.incompleteRows.every(validRow)))throw new Error("Invalid saved "+tag+" incomplete capture");
     }
     for(const tag of ["AR","DP","MV"]){
       const days=o[tag];if(days===undefined)continue;
@@ -8930,10 +9037,12 @@ function statusLoad(){
     return o;
   }catch(e){
     try{if(typeof window!=="undefined"&&window.__rcStorageFault)window.__rcStorageFault("Saved status capture",e);}catch(ignore){}
+    if(readOnly)return {};
     throw e;
   }
 }
 function statusSave(st){
+  if(typeof window!=="undefined" && window.__rcImportBlocked) throw new Error("Import is reloading; capture was not saved");
   try{ localStorage.setItem(STATUS_KEY, JSON.stringify(st)); }
   catch(e){
     try{ if(typeof window!=="undefined"&&window.__rcStorageFault)window.__rcStorageFault("Status capture",e); }catch(ignore){}
@@ -8967,12 +9076,14 @@ function statusIngest(tag, p, at){
     const date = inhouseDate(p.title), key = dkey(date);
     if(!key) return false;
     if(st.IH && (key < st.IH.key || at <= st.IH.at)) return false;
-    const rows = p.rows.map(r => ({name: String(r[IH.NAME] || "").trim(), room: stRoom(r[IH.ROOM]), arr: String(r[IH.ARR] || "").trim(),
+    const capturedRows = p.rows.map(r => ({name: String(r[IH.NAME] || "").trim(), room: stRoom(r[IH.ROOM]), arr: String(r[IH.ARR] || "").trim(),
                                    dep: String(r[IH.DEP] || "").trim(), status: String(r[IH.STATUS] || "").trim(),
-                                   readAt: at, cells: r.slice()}))
-                       .filter(r => r.name && r.room && r.status && dkey(r.arr));
+                                   readAt: at, cells: r.slice()}));
+    const rows=capturedRows.filter(r => r.name && r.room && r.status && dkey(r.arr));
+    const incompleteRows=capturedRows.filter(r=>/^\d{2,3}$/.test(leadRoom(r.room))&&!/reversal|void/i.test(r.status)&&
+      (!r.name||!r.status||!dkey(r.arr)||!dkey(r.dep)||dkey(r.dep)<dkey(r.arr)));
     const cut = !!(p.done && p.done.cut);
-    const cap = {at: at, date: date, key: key, cut: cut, rows: rows};
+    const cap = {at: at, date: date, key: key, cut: cut, rows: rows, incompleteRows:incompleteRows};
     if(!st.IH || at > st.IH.at){
       const keep=st.IH&&st.IH.key===key?st.IH.rows.map(r=>Object.assign({readAt:st.IH.at},r)):[];
       const identity=r=>stKey(r.name,r.room)+"|"+dkey(r.arr);
@@ -8985,7 +9096,10 @@ function statusIngest(tag, p, at){
         merged.set(k,r);
       }
       // Keep the day's captured rows; latest snapshot remains separate for status marks.
-      st.IHL=cap;st.IH=Object.assign({},cap,{rows:[...merged.values()]});changed=true;
+      const partials=new Map();
+      for(const r of [...((st.IH&&st.IH.key===key&&st.IH.incompleteRows)||[]),...incompleteRows])
+        partials.set(JSON.stringify([r.name,r.room,r.arr,r.dep,r.status]),r);
+      st.IHL=cap;st.IH=Object.assign({},cap,{rows:[...merged.values()],incompleteRows:[...partials.values()]});changed=true;
     }
     /* Keep the last fully read visible snapshot for diagnostics, never absence claims. */
     if(!cut && (!st.IHC || at > st.IHC.at)){ st.IHC = cap; changed = true; }
@@ -9048,6 +9162,13 @@ function consolidatedInhouseRate(st){
     return c;
   });
   const rate=inhouseToRate(rows,capture.date),latest=st.IHL&&st.IHL.key===capture.key?st.IHL:null;
+  // Unreadable identity fields never enter the confirmed census or room ledger.
+  // Keep their physical room visible until newer exact-identity evidence resolves it.
+  for(const r of capture.incompleteRows||[]){
+    const resolved=r.name&&dkey(r.arr)&&capture.rows.some(v=>v.readAt>r.readAt&&stName(v.name)===stName(r.name)&&
+      stSameRoom(v.room,r.room)&&dkey(v.arr)===dkey(r.arr)&&dkey(v.dep)&&dkey(v.dep)>=dkey(v.arr)&&v.status&&!/reversal|void/i.test(v.status));
+    if(!resolved){const room=leadRoom(r.room);rate.incompleteRooms[room]={room,name:r.name,reason:'Incomplete captured reservation fields'};}
+  }
   rate.consolidated=true;rate.coverageMissing=[];
   if(latest){
     const key=r=>stName(r.name)+'|'+leadRoom(r.room)+'|'+dkey(r.arr);
@@ -9064,7 +9185,9 @@ function setLiveRate(rate){
   for(const room of Object.keys(rate.rooms)) if(/^\d{2,3}$/.test(room)){
     rooms[room] = rate.rooms[room]; all[room] = rate.all[room];
   }
-  const next=Object.assign({},rate,{rooms,all,count:Object.keys(rooms).length});
+  const incompleteRooms={};
+  for(const room of Object.keys(rate.incompleteRooms||{}))if(/^\d{2,3}$/.test(room))incompleteRooms[room]=rate.incompleteRooms[room];
+  const next=Object.assign({},rate,{rooms,all,incompleteRooms,count:Object.keys(rooms).length});
   RATE=rate.consolidated?next:taxCaptureRate(next);
   if(previous&&previous!==RATE.dateKey){PAIR_OVERRIDE=null;ADJ_OPEN_OVERRIDE=null;}
 }
@@ -9127,7 +9250,7 @@ function statusSub(st, tag){
 }
 window.__taStatusMenu = function(){
   try{
-    const st = statusLoad();
+    const st = statusLoad(true);
     const ids = {AR: "stArr", DP: "stDep", IH: "stInh", MV: "stMov"};
     for(const tag of Object.keys(ids)){
       const b = el(ids[tag]); if(!b) continue;
@@ -9147,7 +9270,7 @@ function statusCols(tag){
 function renderStatusList(){
   const box = el('stList');
   if(!box || !ST_TAG_T) return;
-  const tag = ST_TAG_T, st = statusLoad();
+  const tag = ST_TAG_T, st = statusLoad(true);
   const sig = JSON.stringify([tag, legacyOn(), LANG, STATUS_TICK, LIVE_HELD[tag] ? LIVE_HELD[tag].at : 0, LIVE_ERR[tag] || "", st.IH ? st.IH.at : 0, st.IHC ? st.IHC.at : 0]);
   if(sig === STATUS_SIG) return;
   STATUS_SIG = sig;
@@ -9320,6 +9443,7 @@ function censusNight(){
 }
 function feedStays(recs, night){
   const tally = {made: 0, fixed: 0, same: 0, kept: 0, failed: false};
+  if(typeof window!=="undefined" && window.__rcImportBlocked) return {...tally,failed:true};
   if(!recs || !recs.length || !night) return tally;
   try{
     const led = loadLedger();
@@ -9542,6 +9666,7 @@ function movesApplied(){
   }catch(e){ return {}; }
 }
 function recordMoves(rows, night){
+  if(typeof window!=="undefined" && window.__rcImportBlocked) return 0;
   if(!rows || !rows.length || !night) return 0;
   const done = movesApplied();
   let led = null, wrote = 0, changed = false;
@@ -9608,7 +9733,7 @@ function applyInhouse(p, auto){
      departures on his panel, so it does not happen: it refuses and says why. */
   if(!biz||!dkey(biz)){ quiet(t('live_nodate', p.title || '?')); return "nodate"; }
   const rate = inhouseToRate(p.rows, biz);
-  if(!rate.count){ quiet(t('live_none')); return "none"; }
+  if(!rate.count&&!Object.keys(rate.incompleteRooms||{}).length){ quiet(t('live_none')); return "none"; }
   /* Nothing has moved in protel since the last tick. Writing the same ledger again and
      redrawing the page under him twenty times a minute is not faithfulness, it is a
      fault. But it used to return in SILENCE, and it is the only refusal in this function

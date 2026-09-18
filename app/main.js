@@ -72,9 +72,10 @@ function overlayRecall(){
   return true;
 }
 function setOverlay(on){
+  try{ const c=readDesktopConfig();c.overlayOn=!!on;writeDesktopConfig(c); }catch(e){ return false; }
   if(on) createOverlay(); else destroyOverlay();
-  try{ const c = hub.readConfig(); c.overlayOn = !!overlayWin; hub.writeConfig(c); }catch(e){}
   announceOverlayState();
+  return true;
 }
 function toggleOverlayGlobal(){
   if(overlayRecall()) return;
@@ -97,9 +98,8 @@ function tryRegister(acc, fn){
   try{ return globalShortcut.register(acc, fn); }catch(e){ return false; }
 }
 /* register both system-wide combos: toggle, and interact (focus + tick tasks) */
-function applyHotkeys(){
+function applyHotkeys(tog=currentHotkey(),inter=currentIHotkey()){
   try{ globalShortcut.unregisterAll(); }catch(e){}
-  const tog = currentHotkey(), inter = currentIHotkey();
   const okT = tryRegister(tog, toggleOverlayGlobal);
   const okI = (inter && inter === tog) ? false : tryRegister(inter, interactOverlayGlobal);
   return {okT, okI};
@@ -113,9 +113,7 @@ function interactOverlayGlobal(){
      "finished" means reads as a bug even when it is deliberate. */
   if(overlayRecall()) return;
   if(!overlayWin){
-    createOverlay();
-    try{ const c = hub.readConfig(); c.overlayOn = true; hub.writeConfig(c); }catch(e){}
-    announceOverlayState();
+    if(!setOverlay(true))return;
     setTimeout(() => setInteract(true), 120);   // let the window finish loading
     return;
   }
@@ -205,46 +203,75 @@ function seqSpec(){
   return "seq:" + q.keys.join(",") + "@" + q.gap;
 }
 function newProfileId(){ return "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+function readDesktopConfig(){
+  if(!hub)throw new Error("Configuration is unavailable");
+  const c=hub.readConfig();
+  if(hub.configUnreadable)throw new Error("Saved configuration could not be read; the original file was kept");
+  return c;
+}
+function writeDesktopConfig(c){
+  if(!hub || !hub.writeConfig(c))throw new Error("Configuration could not be saved; the previous file was kept");
+}
+function setDesktopHotkey(field,acc){
+  let oldT,oldI,attempted=false;
+  try{
+    const c=readDesktopConfig();
+    oldT=c.overlayHotkey===undefined?"Control+T":c.overlayHotkey;
+    oldI=c.interactHotkey===undefined?"Alt+Shift+Z":c.interactHotkey;
+    c[field]=typeof acc==="string"?acc:"";
+    attempted=true;
+    const result=applyHotkeys(field==="overlayHotkey"?c[field]:oldT,field==="interactHotkey"?c[field]:oldI);
+    if(!result.okT||!result.okI)throw new Error("Hotkey unavailable");
+    writeDesktopConfig(c);
+    return true;
+  }catch(e){
+    if(attempted)applyHotkeys(oldT,oldI);
+    return false;
+  }
+}
+function validateProfiles(list,active){
+  const object=v=>v&&typeof v==="object"&&!Array.isArray(v),ids=new Set();
+  if(!Array.isArray(list)||!list.length)throw new Error("Invalid saved profiles");
+  for(const p of list){
+    if(!object(p)||typeof p.id!=="string"||!p.id||ids.has(p.id)||
+       (p.name!==undefined&&typeof p.name!=="string")||
+       (p.binds!==undefined&&(!object(p.binds)||!Object.values(p.binds).every(v=>typeof v==="string"))))
+      throw new Error("Invalid saved profile; no profile was replaced");
+    ids.add(p.id);
+  }
+  if(active!==undefined&&!ids.has(active))throw new Error("The saved active profile is missing");
+}
 /* pre-1.12 config kept a single c.tauButton — fold it into a first profile so nobody
    loses the binding they already had */
 function readProfiles(){
-  let c = {};
-  try{ c = hub.readConfig(); }catch(e){ c = {}; }
-  let list = Array.isArray(c.profiles) ? c.profiles.filter(p => p && p.id) : null;
-  if(!list || !list.length){
+  const c = readDesktopConfig();
+  let list = c.profiles;
+  if(list === undefined){
+    if(c.activeProfile!==undefined)throw new Error("Saved profiles are missing; no default profile was written");
     const binds = {};
     if(c.tauButton >= 3 && c.tauButton <= 5) binds.tau = "m" + c.tauButton;
     list = [{id: newProfileId(), name: "Default", binds}];
     c.profiles = list;
     c.activeProfile = list[0].id;
-    try{ hub.writeConfig(c); }catch(e){}
+    writeDesktopConfig(c);
   }
-  /* 1.15.0 could store "m0" for a mouse bind — a valid-looking but unbindable trigger
-     that also displaced the working one. Drop anything unparsable so the row simply
-     reads "not set" and can be bound again, instead of looking set and doing nothing. */
-  let repaired = false;
-  for(const prof of list){
-    if(!prof.binds) continue;
-    for(const a of Object.keys(prof.binds)){
-      if(!validTrigger(prof.binds[a])){ delete prof.binds[a]; repaired = true; }
-    }
-  }
-  if(repaired){ c.profiles = list; try{ hub.writeConfig(c); }catch(e){} }
-  const active = list.some(p => p.id === c.activeProfile) ? c.activeProfile : list[0].id;
+  validateProfiles(list,c.activeProfile);
+  const active = c.activeProfile === undefined ? list[0].id : c.activeProfile;
   return {list, active, cfg: c};
 }
 function writeProfiles(list, active){
-  let c = {};
-  try{ c = hub.readConfig(); }catch(e){ c = {}; }
+  validateProfiles(list,active);
+  const c = readDesktopConfig();
   c.profiles = list;
   c.activeProfile = active;
   delete c.tauButton;                       // migrated; never read again
-  try{ hub.writeConfig(c); }catch(e){}
+  writeDesktopConfig(c);
 }
 function activeBinds(){
   const {list, active} = readProfiles();
   const p = list.find(x => x.id === active);
-  return (p && p.binds) || {};
+  // Keep malformed legacy strings for recovery, but never publish an invalid trigger.
+  return Object.fromEntries(Object.entries((p && p.binds) || {}).filter(([a,v])=>ACTIONS.includes(a)&&validTrigger(v)));
 }
 let TAU_DETECT = null;          // the short-lived `detect` child; the standalone is not ours to hold
 /* Why the shortcuts are or are not working, in a form the app can show the user.
@@ -311,20 +338,54 @@ let LAST_SPECS = [];
 function writeBinds(){
   const f = bindsPath();
   if(!f){ LAST_SPECS = []; return false; }
-  let binds = {};
-  try{ binds = activeBinds(); }catch(e){}
+  let binds;
+  try{ binds = activeBinds(); }catch(e){ return false; }
   const focus = focusSpec();
   const acts = ACTIONS.filter(a => binds[a])
       .map(a => binds[a] + "=" + (a === "seq" ? seqSpec() : a));
   const lines = ["# written by RecCheck — edited here has no effect, use the app"]
     .concat(focus).concat(acts);
+  if(hub.configUnreadable)return false;
+  const tmp=f+".tmp";
   try{
     const fs = require("fs");
     fs.mkdirSync(path.dirname(f), {recursive: true});
-    fs.writeFileSync(f, lines.join("\r\n") + "\r\n");
+    fs.writeFileSync(tmp, lines.join("\r\n") + "\r\n");
+    fs.renameSync(tmp,f);
     LAST_SPECS = focus.concat(acts);
     return true;
-  }catch(e){ LAST_SPECS = []; return false; }
+  }catch(e){ try{require("fs").unlinkSync(tmp);}catch(ignore){} return false; }
+}
+let BOOT_QUEUE=Promise.resolve(), BOOT_CHOICE=0;
+function bootHelperVerb(verb){
+  const task=BOOT_QUEUE.catch(()=>{}).then(()=>helperVerb(verb));
+  BOOT_QUEUE=task;
+  return task;
+}
+async function setHelperBoot(on){
+  BOOT_CHOICE++;
+  const state=await bootHelperVerb(on?"install":"uninstall");
+  if(state&&state.available&&state.on===!!on&&!state.err){
+    try{
+      const c=readDesktopConfig();c.bootMigrated=true;writeDesktopConfig(c);
+    }catch(e){return Object.assign({},state,{err:String(e.message||e)});}
+  }
+  return state;
+}
+async function migrateHelperBoot(){
+  if(BOOT_CHOICE)return false;
+  const c=readDesktopConfig();
+  if(c.bootMigrated)return true;
+  if(c.capsFlash!==false){
+    const state=await bootHelperVerb("install");
+    if(!state||!state.available||!state.on||state.err)return false;
+  }
+  // A manual choice, including off, always supersedes the delayed startup migration.
+  if(BOOT_CHOICE)return false;
+  const latest=readDesktopConfig();
+  latest.bootMigrated=true;
+  writeDesktopConfig(latest);
+  return true;
 }
 /* kill any rc-tbind left over from a previous run (incl. crashed/old versions) */
 function tauKillStrays(cb){
@@ -504,14 +565,7 @@ app.whenReady().then(() => {
        moved it into the helper, which only survives RecCheck closing if it starts at
        login. Carry that setting across exactly ONCE, so a feature he already had does
        not go quiet the night the update lands. After this, unticking it stays unticked. */
-    try{
-      const c = hub.readConfig();
-      if(!c.bootMigrated){
-        c.bootMigrated = true;
-        hub.writeConfig(c);
-        if(c.capsFlash !== false) setTimeout(() => helperVerb("install"), 1500);
-      }
-    }catch(e){}
+    setTimeout(() => migrateHelperBoot().catch(() => {}), 1500);
   });
   MANUAL_SHOWN = true;                        // startup check never pops the window
   updater.check().then(info => {
@@ -669,10 +723,8 @@ ipcMain.handle("open-help", () => { shell.openExternal(ISSUES_URL); return true;
 
 ipcMain.handle("overlay-toggle", () => {
   if(overlayRecall()) return true;          // finished for tonight — flash and stay away
-  const on = !overlayWin;
-  if(on) createOverlay(); else destroyOverlay();
-  try{ const c = hub.readConfig(); c.overlayOn = on; hub.writeConfig(c); }catch(e){}
-  return on;
+  setOverlay(!overlayWin);
+  return !!overlayWin;
 });
 ipcMain.handle("overlay-state", () => !!overlayWin);
 ipcMain.handle("overlay-data", (_e, d) => {
@@ -707,30 +759,9 @@ app.on("before-quit", () => { QUITTING = true; });
 app.on("window-all-closed", () => { if(QUITTING) app.quit(); });   // otherwise we live in the tray
 
 ipcMain.handle("overlay-hotkey-get", () => currentHotkey());
-ipcMain.handle("overlay-hotkey-set", (_e, acc) => {
-  acc = typeof acc === "string" ? acc : "";
-  const prev = currentHotkey();
-  try{ const c = hub.readConfig(); c.overlayHotkey = acc; hub.writeConfig(c); }catch(e){}
-  if(!applyHotkeys().okT){
-    try{ const c = hub.readConfig(); c.overlayHotkey = prev; hub.writeConfig(c); }catch(e){}
-    applyHotkeys();                            // keep the old one working
-    return false;
-  }
-  return true;
-});
+ipcMain.handle("overlay-hotkey-set", (_e, acc) => setDesktopHotkey("overlayHotkey",acc));
 ipcMain.handle("overlay-ihotkey-get", () => currentIHotkey());
-ipcMain.handle("overlay-ihotkey-set", (_e, acc) => {
-  acc = typeof acc === "string" ? acc : "";
-  const prev = currentIHotkey();
-  try{ const c = hub.readConfig(); c.interactHotkey = acc; hub.writeConfig(c); }catch(e){}
-  if(acc && !applyHotkeys().okI){
-    try{ const c = hub.readConfig(); c.interactHotkey = prev; hub.writeConfig(c); }catch(e){}
-    applyHotkeys();
-    return false;
-  }
-  if(!acc) applyHotkeys();
-  return true;
-});
+ipcMain.handle("overlay-ihotkey-set", (_e, acc) => setDesktopHotkey("interactHotkey",acc));
 ipcMain.handle("sc-get", async () => {
   try{
     const {list, active} = readProfiles();
@@ -744,16 +775,16 @@ ipcMain.handle("sc-get", async () => {
 /* On writes the login entry and starts the helper; off removes it and stops it. This is
    the switch for the whole standalone: with it off, nothing starts with Windows and the
    Caps Lock indicator only exists while RecCheck itself is open. */
-ipcMain.handle("sc-boot-set", (_e, on) => helperVerb(on ? "install" : "uninstall"));
+ipcMain.handle("sc-boot-set", (_e, on) => setHelperBoot(!!on));
 /* Turn the gate on or off, and store what it should match. An empty needle can only
    mean off — a gate matching nothing would swallow the shortcuts entirely. */
 ipcMain.handle("sc-focus-set", (_e, on, needle) => {
   try{
-    const c = hub.readConfig();
+    const c = readDesktopConfig();
     const n = typeof needle === "string" ? needle.trim().slice(0, 64) : (focusConfig().needle || "");
     c.focus = {on: !!on && n.length > 0, needle: n};
-    hub.writeConfig(c);
-  }catch(e){}
+    writeDesktopConfig(c);
+  }catch(e){ return null; }
   tauStart();                                  // the helper takes the gate at spawn time
   return focusConfig();
 });
@@ -813,6 +844,7 @@ ipcMain.handle("sc-detect", (_e, action) => new Promise(async res => {
         if(mk) trigger = "k" + mk[1] + "-" + mk[2];
       }
       if(!trigger || !validTrigger(trigger)) return;   // never overwrite a good bind with junk
+      let saved=false;
       try{
         const {list, active} = readProfiles();
         const p = list.find(x => x.id === active);
@@ -822,10 +854,11 @@ ipcMain.handle("sc-detect", (_e, action) => new Promise(async res => {
           for(const a of ACTIONS) if(a !== action && p.binds[a] === trigger) delete p.binds[a];
           p.binds[action] = trigger;
           writeProfiles(list, active);
+          saved=true;
         }
       }catch(e){}
       try{ child.kill(); }catch(e){}
-      finish(trigger);
+      finish(saved?trigger:null);
     });
     child.on("exit", () => finish(null));
     child.on("error", () => finish(null));
@@ -1056,12 +1089,13 @@ ipcMain.handle("sc-watchlog", () => {
 });
 ipcMain.handle("sc-cancel", () => { try{ if(TAU_DETECT) TAU_DETECT.kill(); }catch(e){} return true; });
 ipcMain.handle("sc-clear", (_e, action) => {
+  if(!ACTIONS.includes(action))return false;
   try{
     const {list, active} = readProfiles();
     const p = list.find(x => x.id === active);
     if(p && p.binds) delete p.binds[action];
     writeProfiles(list, active);
-  }catch(e){}
+  }catch(e){ return false; }
   tauStart();                                  // rebind whatever is left
   return true;
 });

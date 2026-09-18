@@ -7,7 +7,7 @@ const acceptInvoice=(s,m,now)=>{
  if(!s.meta)s.accept({kind:"metadata",id:m.id,epoch:1,fields:m.data.fields},now);
  s.accept({...m,epoch:s.epoch},now);
 };
-const ref=(price="150,00",agency="DIRECT")=>({name:"GUEST TEST",room:"101",arr:"14/09/26",dep:"21/09/26",price,agency,currency:"EUR",at:1});
+const ref=(price="150,00",agency="INDIVIDUAL")=>({name:"GUEST TEST",room:"101",arr:"14/09/26",dep:"21/09/26",price,agency,currency:"EUR",at:1});
 test("cent parser accepts Greek display, refuses ambiguous formats",()=>{
  assert.equal(A.cents("-1.167,25"),-116725);assert.equal(A.cents("259,25"),25925);
  for(const s of ["1,234.56","1.234","1,2","","NaN","12.34,56"])assert.equal(A.cents(s),null);
@@ -32,6 +32,28 @@ test("Webhotelier lists qualify a different B agency",()=>{
  assert.equal(A.evaluate(i,[]).state,"unknown");
  i.title="WEBHOTELIER/R.Nr.33(1)";
  assert.equal(A.evaluate(i,[ref("308,00","TOUR OPERATOR")]).state,"outside");
+});
+test("the four eligible cases share exact/under/over/unknown rules, other agencies remain quiet",()=>{
+ for(const agency of ["INDIVIDUAL","BOOKING.COM","EXPEDIA","EXPEDIA LODGING PARTNER SERVICES SARL","WEBHOTELIER"]){
+  const title="INTENTIONALLY DIFFERENT B ACCOUNT/R.Nr.765(1)";
+  const r=ref("150,00",agency);
+  for(const [amount,state,diff] of [["-1.050,00","paid",0],["-1.049,99","difference",-1],["-1.050,01","difference",1]]){
+   const x=A.evaluate(inv(title,[row("PAYMENT",amount)]),[r]);assert.equal(x.state,state,title+" / "+agency);assert.equal(x.diff,diff);
+  }
+  const i=inv(title,[row("PAYMENT","-1.050,00")]);
+  assert.equal(A.evaluate({...i,complete:false},[r]).state,"unknown");
+  assert.equal(A.evaluate({...i,currency:"USD"},[r]).state,"unknown");
+  assert.equal(A.evaluate(i,[]).state,"unknown");
+  assert.equal(A.evaluate(i,[r,{...r,price:"200,00"}]).state,"unknown");
+  assert.equal(A.evaluate(i,[{...r,name:"OTHER GUEST"}]).state,"unknown");
+  assert.equal(A.evaluate(i,[{...r,agency:""}]).state,"unknown");
+ }
+ for(const title of ["INDIVIDUAL","BOOKING.COM/R.Nr.123(1)","EXPEDIA LODGING PARTNER SERVICES SARL","WEBHOTELIER",""])
+ for(const agency of ["TOUR OPERATOR","DIRECT","UNKNOWN"]){
+  const i=inv(title,[row("PAYMENT","-1.050,00")]);
+  assert.equal(A.evaluate(i,[ref("150,00",agency)]).state,"outside");
+  assert.equal(A.evaluate({...i,complete:false},[ref("150,00",agency)]).state,"outside");
+ }
 });
 test("checkout Price 0 uses B normal charge; unpaid tint ignores A/C and notes",()=>{
  const i=inv("INDIVIDUAL",[row("*Arrangement","150,00"),row("*Arrangement","150,00","15/09/26")]);i.remarks="FULLY PREPAID!!!";i.overallPayments=36000;i.a=[row("Deposit Cash","-270,00")];i.c=[row("Deposit Cash","-90,00")];
@@ -107,7 +129,8 @@ test("new list metadata changes an open Invoice verdict, and malformed rows are 
  s.accept({kind:"geometry",id:"x",rect:{},strip:{}},100);
  const m={kind:"invoice",id:"x",complete:true,data:{fields:["TEST GUEST","101","14/09/26","21/09/26","","INDIVIDUAL","","EUR","CI"],rows:[row("*Arrangement","150,00"),row("PAYMENT","-1.050,00")]}};
  acceptInvoice(s,m,110);assert.equal(s.display([],150).result.state,"unknown");
- assert.equal(s.display([ref()],160).result.state,"paid");
+ const refs=[ref()];assert.equal(s.display(refs,155).result.state,"unknown","new list eligibility requires a fresh B read");
+ acceptInvoice(s,m,158);assert.equal(s.display(refs,160).result.state,"paid");
  acceptInvoice(s,{...m,data:{...m.data,rows:[null]}},170);assert.equal(s.display([ref()],180).result.state,"unknown");
 });
 test("four-digit invoice dates are preserved",()=>{
@@ -200,7 +223,8 @@ test("live arrival updates on list capture and only adds a late night after a do
  const payments=[row("PAYMENT","-1.050,00")];
  acceptInvoice(s,packet(payments),110);
  assert.equal(s.display([],120).result.state,"unknown");
- let x=s.display([ref()],130).result;assert.equal(x.state,"paid");assert.equal(x.nights,7);
+ const refs=[ref()];assert.equal(s.display(refs,125).result.state,"unknown");acceptInvoice(s,packet(payments),128);
+ let x=s.display(refs,130).result;assert.equal(x.state,"paid");assert.equal(x.nights,7);
  acceptInvoice(s,packet([...payments,row("*Arrangement","150,00")]),140);
  x=s.display([ref()],150).result;assert.equal(x.state,"paid");assert.equal(x.nights,7);
  acceptInvoice(s,packet([...payments,row("*Arrangement","300,00")]),160);

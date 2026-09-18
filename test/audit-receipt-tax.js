@@ -50,6 +50,11 @@ function taxContext() {
       LIVE_SIG:'',LEDGER_TICK:0,MOVES_ROWS:null, window:{},
       t:x=>x,el:id=>(els[id] || (els[id]={})),saveMoves:()=>({res:0}),showMoveSave:()=>{},render:()=>{},statusLoad:()=>({})});
 }
+function savedTaxContext(){
+  const c=taxContext();Object.assign(c,{localStorage:memory(),STATUS_KEY:'reccheck_status_v1',STATUS_TICK:0,statusPrune:()=>{}});
+  vm.runInContext(['leadRoom','stName','stRoom','stKey','stSameRoom','statusLoad','statusSave','statusIngest','inhouseCheckedOut','consolidatedInhouseRows','consolidatedInhouseRate'].map(lift).join('\n'),c);
+  return c;
+}
 const capture = rows => ({title:'Guests inhouse: 18/09/26',rows,done:{got:rows.length,rows:rows.length,cut:false}});
 const charges = rooms => ({kind:'tax',fileDate:'18/09/26',dateKey:20260918,totalRooms:Object.keys(rooms).length,rooms});
 function memContext(storage = memory()) {
@@ -323,6 +328,47 @@ function deferred() { let resolve; const promise = new Promise(r=>resolve=r); re
     const c=taxContext();c.applyInhouse(capture([ihRow('205','ALPHA TEST')]),true);
     c.setLiveRate({kind:'rate',live:true,dateKey:20260918,bizDate:'18/09/26',consolidated:true,coverageMissing:[],rooms:{},all:{},count:0});
     assert.equal(c.RATE.count,0);assert.equal(c.RATE.rooms['205'],undefined);
+  });
+  await check('receipt-reset-failure','Failed day reset preserves the current state and reports failure',()=>{
+    const c=receiptContext(model([row()]));vm.runInContext(['blankState','resetReceiptState'].map(lift).join('\n'),c);
+    c.setRState(c.MODEL.receipts[0],{status:'ok',corr:null});const previous=c.STATE,raw=c.localStorage.getItem(c.stateKey);
+    c.localStorage.setItem=()=>{throw new Error('QuotaExceededError');};
+    assert.equal(c.resetReceiptState(),false);assert.equal(c.STATE,previous);assert.equal(c.localStorage.getItem(c.stateKey),raw);
+  });
+  await check('receipt-reset-alias','A successful reset cannot resurrect previously migrated date aliases',()=>{
+    const c=receiptContext(model([row()]));vm.runInContext(['blankState','loadState','resetReceiptState'].map(lift).join('\n'),c);
+    c.localStorage.setItem('reccheck_18/09/2026',JSON.stringify({date:'18/09/2026',receipts:{old:{status:'ok'}},extras:[]}));
+    c.STATE=c.loadState('18/09/2026');assert(c.STATE.receipts.old);assert.equal(c.resetReceiptState(),true);
+    assert.equal(Object.keys(c.loadState('18/09/2026').receipts).length,0);
+  });
+  await check('tax-incomplete-new-room','Unreadable identity fields are visible in Tax without creating confirmed stays',()=>{
+    for(const field of [0,5,11]){
+      const c=savedTaxContext(),r=ihRow('205','ALPHA TEST');r[field]='';const p=capture([r]);
+      c.statusIngest('IH',p,1000);c.applyInhouse(p,true);
+      assert.equal(c.statusLoad().IH.rows.length,0);assert.equal(c.RATE.rooms['205'],undefined);
+      assert.equal(c.crossReference(c.RATE,charges({})).uncertain[0].room,'205');
+    }
+  });
+  await check('tax-incomplete-room-filter','A smaller later list retains incomplete physical-room evidence',()=>{
+    const c=savedTaxContext(),partial=ihRow('205','ALPHA TEST');partial[5]='';
+    c.statusIngest('IH',capture([partial]),1000);
+    const p=capture([ihRow('206','BETA TEST')]);c.statusIngest('IH',p,2000);c.applyInhouse(p,true);
+    assert.equal(c.statusLoad().IH.incompleteRows[0].room,'205');
+    assert(c.crossReference(c.RATE,charges({})).uncertain.some(r=>r.room==='205'));
+  });
+  await check('tax-incomplete-stay-resolution','Newer complete exact identity resolves uncertainty while preserving raw evidence',()=>{
+    const c=savedTaxContext(),partial=ihRow('205','ALPHA TEST');partial[6]='';
+    c.statusIngest('IH',capture([partial]),1000);c.applyInhouse(capture([partial]),true);
+    assert.equal(c.crossReference(c.RATE,charges({})).uncertain.length,1);
+    const p=capture([ihRow('205','ALPHA TEST')]);c.statusIngest('IH',p,2000);c.applyInhouse(p,true);
+    assert.equal(c.crossReference(c.RATE,charges({})).uncertain.length,0);
+    assert.equal(c.crossReference(c.RATE,charges({})).totalFail.length,1);
+    assert.equal(c.statusLoad().IH.incompleteRows.length,1);
+  });
+  await check('tax-incomplete-schema','Malformed stored incomplete-room evidence cannot be silently replaced',()=>{
+    const c=savedTaxContext(),raw=JSON.stringify({IH:{rows:[],incompleteRows:'damaged'}});
+    c.localStorage.setItem(c.STATUS_KEY,raw);assert.throws(()=>c.statusLoad());
+    assert.equal(c.localStorage.getItem(c.STATUS_KEY),raw);
   });
   console.log('\nAUDIT_RECEIPT_TAX_RESULT '+JSON.stringify({total:results.length,passed:results.filter(x=>x.pass).length,failed:results.filter(x=>!x.pass).length,results}));
   process.exitCode=results.some(x=>!x.pass)?1:0;

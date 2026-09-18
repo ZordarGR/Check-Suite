@@ -41,11 +41,11 @@ function reference(inv, refs){
   return result;
 }
 function eligible(inv, ref){
-  if(["INDIVIDUAL","BOOKING.COM","EXPEDIA LODGING PARTNER SERVICES SARL"].includes(allocation(inv.title))) return true;
-  // WEBHOTELIER belongs to the reservation list; B may name the booking agency.
-  if(ref && norm(ref.agency)==="WEBHOTELIER") return true;
-  if(ref && norm(ref.agency)) return false;
-  return null;
+  // The list identifies the reservation's agency. B's allocation/title may be
+  // deliberately different and must neither qualify nor exclude that reservation.
+  const agency=ref&&norm(ref.agency);
+  if(!agency)return null;
+  return ["INDIVIDUAL","BOOKING.COM","EXPEDIA","EXPEDIA LODGING PARTNER SERVICES SARL","WEBHOTELIER"].includes(agency);
 }
 function evaluate(inv, refs){
   if(!inv) return unsure("Reading accommodation entries");
