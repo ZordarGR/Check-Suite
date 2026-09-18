@@ -1,11 +1,11 @@
 {
-  "version": "1.17.83",
+  "version": "1.17.84",
   "type": "html",
   "engine": "1.17.81",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.81/Pro-Check-Setup.exe",
   "setupSha256": "be25212bb5023ae772f2c00fa8e193948e98338da42536bfcee6ea0595677baa",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/cace4ac111a31c666ed25d1c5fdced53ac69ed3f/Departments%20Check.html",
-  "sha256": "06b0548c40d54edf489693b1e75ca54912c10cc856b8354033403059e7f2ffa7",
-  "notes": "Show uniquely matching full names when receipts print given names before surnames; preserve ambiguous printed names. Includes saved-list replay recovery."
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/863667401eb6fc779dc57ed6cbd9b17f362c4446/Departments%20Check.html",
+  "sha256": "99ff32a96f9f6cf23ad82e27c11aab9b1883327ac23ca4f0ac89d479a9864ab1",
+  "notes": "Restore departure and move extras dots for uniquely matching given-name-first receipts, including saved history; retain ambiguity and cancellation safeguards."
 }

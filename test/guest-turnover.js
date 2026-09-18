@@ -35,7 +35,8 @@ for(const [full,printed] of [["SMITH ALEX/TAYLOR","ALEX/TAYLOR SMIT"],["SMITH AL
  const paper={sn:"10",roomMain:"120",guest:printed};
  const a=run({"120":{guest:full,liveKey:20260904}},[paper],{});
  check("unique reordered complete receipt text expands for display: "+printed,a.guestFor("120",paper)===full);
- check("reordered display does not broaden receipt identity or departure decisions",a.receiptName(paper)===printed&&!a.nameHit(printed,full,[]));
+ check("matching uses the original receipt text with the same complete reordered match",a.receiptName(paper)===printed&&a.nameHit(printed,full,[]));
+ check("a reordered surname rival blocks departure matching",!a.nameHit(printed,full,[full.replace(' ','SON ')]));
 }
 {
  const full="SMITH ALEX/TAYLOR",paper={sn:"11",roomMain:"120",guest:"ALEX/TAYLOR SMIT"};
