@@ -47,5 +47,7 @@ for(const [full,printed] of [["SMITH ALEX/TAYLOR","ALEX/TAYLOR SMIT"],["SMITH AL
  }
  const other={...paper,sn:"12",guest:"SMITH ALEX"};
  check("conflicting printed fragments remain unexpanded",run(rooms,[paper,other],{}).guestFor("120",paper)===paper.guest);
+ const rivalPaper={...paper,sn:"13",guest:"ALEX/TAYLOR SMITHSON"};
+ check("a longer printed surname rival blocks a shorter rotated match",run(rooms,[paper,rivalPaper],{}).guestFor("120",paper)===paper.guest);
 }
 process.exitCode=bad?1:0;

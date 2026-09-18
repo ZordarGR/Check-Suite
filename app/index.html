@@ -3086,7 +3086,7 @@ function expandReceiptName(room, own, candidate, allowReorder){
   const fragments = MODEL && MODEL._nameFragments[String(room)];
   const ambiguous = fragments && [...fragments].some(n =>
     (matches(n, full) && !sameGuestLabel(own, n)) ||
-    (matches(own, n) && !sameGuestLabel(n, full)));
+    (!sameName(own, n) && matches(own, n) && !sameGuestLabel(n, full)));
   return ambiguous ? "" : full;
 }
 function receiptFullName(room, own, allowReorder){
