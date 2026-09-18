@@ -5,7 +5,7 @@
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.81/Pro-Check-Setup.exe",
   "setupSha256": "be25212bb5023ae772f2c00fa8e193948e98338da42536bfcee6ea0595677baa",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/98c695dc67db9a27b671ac1492c5dc7e2b07cdcd/Departments%20Check.html",
-  "sha256": "2c18fcd2a436d8b082773da002e7e8e28e48577d8a080bfa6a7db76446df4d32",
-  "notes": "Preserve newer captured full guest names and nicknames when an older Department report is reopened."
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/a7a6719b99f3064302b8e4f2d33ed23dbd8b84d9/Departments%20Check.html",
+  "sha256": "52541e9a5fd553201787bc636e53c94b5987f8e38126f462522cb508511d9af9",
+  "notes": "Resume saved-list replay after excluded-account filters, show save error details, and prevent older reports from replacing newer captured guest names."
 }
