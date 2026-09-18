@@ -1967,25 +1967,37 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.81";
+const APP_VERSION = "1.17.82";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
 /* Storage failures must remain visible, including failures in the independent tax
    scope. No saved fact is described as durable merely because its UI changed. */
-window.__rcStorageFault = function(where, error){
-  window.__rcStorageFaultCount = (window.__rcStorageFaultCount || 0) + 1;
-  try{ console.error("[storage]", where, error); }catch(_){}
+window.__rcStorageFaults = Object.create(null);
+window.__rcPaintStorageFault = function(){
   try{
     let box = document.getElementById("storageFailure");
+    const faults = Object.entries(window.__rcStorageFaults);
+    if(!faults.length){ if(box) box.remove(); return; }
+    const [where, detail] = faults[faults.length - 1];
     if(!box){
       box = document.createElement("div"); box.id = "storageFailure";
       box.setAttribute("role", "alert");
       box.style.cssText = "position:fixed;left:8px;right:8px;bottom:8px;z-index:100000;background:#651d27;color:white;padding:12px;border:2px solid #ff8090;border-radius:8px;font:14px sans-serif";
       document.body.appendChild(box);
     }
-    box.textContent = "Saving failed (" + where + "). Some changes may only exist in this window. Keep it open until saving is restored.";
+    box.textContent = "Saving failed (" + where + "): " + detail + ". Some changes may only exist in this window. Keep it open until saving is restored.";
   }catch(_){}
+};
+window.__rcStorageFault = function(where, error){
+  window.__rcStorageFaultCount = (window.__rcStorageFaultCount || 0) + 1;
+  window.__rcStorageFaults[where] = String(error && error.message || error || "Unknown error");
+  try{ console.error("[storage]", where, error); }catch(_){}
+  window.__rcPaintStorageFault();
+};
+window.__rcStorageRecovered = function(where){
+  delete window.__rcStorageFaults[where];
+  window.__rcPaintStorageFault();
 };
 function importJournalKey(){ return "reccheck_import_pending_v1"; }
 function recoverImport(){
@@ -2875,12 +2887,14 @@ function syncRooms(){
   }
   const before = {};                              // ROOMS as it stood before tonight
   for(const [room, e] of Object.entries(ROOMS))
-    before[room] = {guest: e.guest, nick: e.nick, seen: e.seen};
+    before[room] = {guest: e.guest, nick: e.nick, seen: e.seen, liveKey: e.liveKey};
 
   for(const [room, g] of Object.entries(tonight)){
     const e = ROOMS[room];
     if(!e){ ROOMS[room] = {guest: g, seen: MODEL.reportDate}; continue; }
-    if(rd && e.seen && dateNum(e.seen) > rd) continue;   // older report — read-only
+    // A receipt report cannot replace a name captured on a later business date,
+    // even when its printed name uses a different order and is not a prefix.
+    if(rd && Math.max(Number(e.liveKey) || 0, dateNum(e.seen)) > rd) continue;
     /* A NAME THAT CAME LIVE FROM PROTEL IS NOT A CHANGED GUEST.
        It is the same person, in full; the receipt's is the truncation, and truncation is
        the entire reason the live read exists. Without this, the first night both sources
@@ -2930,13 +2944,14 @@ function syncRooms(){
     const prev = prevNightKey(rd);
     for(const [room, g] of Object.entries(tonight)){
       const e = ROOMS[room];
-      if(!e || (e.seen && dateNum(e.seen) > rd)) continue;
+      if(!e || Math.max(Number(e.liveKey) || 0, dateNum(e.seen)) > rd) continue;
       if(e.nick) continue;                        // already labelled: nothing to carry in
       const was = before[room];
       if(was && was.guest && sameName(was.guest, g)) continue;   // same guest as before
       const from = [];
       for(const [src, b] of Object.entries(before)){
         if(src === room || !b.nick || !sameName(b.guest, g)) continue;
+        if(Number(b.liveKey) > rd) continue;
         const sn = dateNum(b.seen);
         if(sn !== rd && sn !== prev) continue;
         if(tonight[src] && sameName(tonight[src], g)) continue;  // still charging there
@@ -8984,6 +8999,7 @@ async function replayCapturedBatch(){
       if(window.__rcMovesChanged) window.__rcMovesChanged();
       render();paintHeld();
     }
+    if(!batch.more && window.__rcStorageRecovered) window.__rcStorageRecovered("capture replay");
     return !batch.more;
   }catch(e){
     // Earlier stages may have succeeded. Replay the same immutable item and flush
@@ -9838,7 +9854,12 @@ function applyInhouse(p, auto, capture){
      departures on his panel, so it does not happen: it refuses and says why. */
   if(!biz||!dkey(biz)){ quiet(t('live_nodate', p.title || '?')); return "nodate"; }
   const rate = inhouseToRate(p.rows, biz);
-  if(!rate.count&&!Object.keys(rate.incompleteRooms||{}).length){ quiet(t('live_none')); return "none"; }
+  if(!rate.count&&!Object.keys(rate.incompleteRooms||{}).length){
+    // A complete filter containing only excluded accounts is a valid observation.
+    // Replay has already retained it in STATUS and the immutable archive. It must
+    // not replace the census, nor prevent later captures from being applied.
+    quiet(t('live_none')); return capture && capture.replay ? "ok" : "none";
+  }
   /* Nothing has moved in protel since the last tick. Writing the same ledger again and
      redrawing the page under him twenty times a minute is not faithfulness, it is a
      fault. But it used to return in SILENCE, and it is the only refusal in this function

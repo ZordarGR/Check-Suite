@@ -49,6 +49,21 @@ const mv=(from,to,name='ALPHA GUEST',x='X')=>[from,'STD',to,'STD',name,x,'10/09/
 async function drain(e){for(let i=0;i<30;i++){if(await e.replay())return;}throw Error('Queue did not drain: '+JSON.stringify(e.faults));}
 const cases=[];function test(name,fn){cases.push([name,fn]);}
 
+test('recovered replay clears only its own banner and preserves other save failures',async()=>{
+ let box=null;const window={},document={getElementById:()=>box,createElement:()=>({setAttribute(){},style:{},remove(){box=null;}}),body:{appendChild:b=>{box=b;}}};
+ const start=source.indexOf('window.__rcStorageFaults ='),end=source.indexOf('function importJournalKey()',start);
+ new Function('window','document','console',source.slice(start,end))(window,document,{error(){}});
+ window.__rcStorageFault('rooms',Error('Disk unavailable'));
+ window.__rcStorageFault('capture replay',Error('Capture could not be applied'));
+ assert.match(box.textContent,/Capture could not be applied/);
+ window.__rcStorageRecovered('capture replay');assert.match(box.textContent,/Disk unavailable/);
+ window.__rcStorageRecovered('rooms');assert.equal(box,null);
+ const e=env([cap(1,'IH',[ih('101')])]);let recovered=0;
+ e.window.__rcStorageRecovered=where=>{assert.equal(where,'capture replay');recovered++;};
+ e.failures.add(CURSOR);await e.replay();assert.equal(recovered,0);
+ e.failures.clear();await drain(e);assert.equal(recovered,1);
+});
+
 test('closed-app captures preserve every room through filters and move order',async()=>{
  const captures=[cap(1,'IH',[ih('101'),ih('150','OTHER GUEST')]),cap(2,'MV',[mv('101','102')]),cap(3,'IH',[ih('102')])];
  const e=env(captures);await drain(e);
@@ -99,6 +114,17 @@ test('future report date does not stamp its history into the future',async()=>{
 test('complete empty filter is acknowledged and does not remove known guests',async()=>{
  const captures=[cap(1,'IH',[ih('101')]),cap(2,'IH',[])],e=env(captures);await drain(e);
  assert.equal(e.ledger()['101']['20260910'].n,'ALPHA GUEST');assert.equal(e.load().IH.rows.length,1);assert.equal(e.store[CURSOR],JSON.stringify(captures[1].id));
+});
+
+test('excluded-account-only filters cannot block later saved lists or clear rooms',async()=>{
+ for(const row of [ih('9608','CREDIT CARDS'),ih('9000','HOUSE ACCOUNT'),ih('101','VOID GUEST').map((v,i)=>i===5?'Void':v)]){
+  const captures=[cap(1,'IH',[ih('101')]),cap(2,'IH',[row]),cap(3,'IH',[ih('102','BETA GUEST')])],e=env(captures);
+  await drain(e);
+  assert.equal(e.store[CURSOR],JSON.stringify(captures[2].id));
+  assert.equal(e.ledger()['101']['20260910'].n,'ALPHA GUEST');
+  assert.equal(e.ledger()['102']['20260910'].n,'BETA GUEST');
+  assert.equal(e.faults.length,0);assert.equal(e.captures.length,3);
+ }
 });
 test('monotonic IDs consume captures even when their wall clock moves backwards',async()=>{
  const captures=[cap(1,'IH',[ih('101')]),cap(2,'IH',[ih('150','OTHER GUEST')],{at:BASE-1000})],e=env(captures);await drain(e);
