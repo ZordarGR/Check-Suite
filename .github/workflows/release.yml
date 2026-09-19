@@ -9,8 +9,8 @@ on:
 permissions:
   contents: write
 env:
-  VERSION: v1.17.81
-  SETUP_SHA256: be25212bb5023ae772f2c00fa8e193948e98338da42536bfcee6ea0595677baa
+  VERSION: v1.17.87
+  SETUP_SHA256: 70a3ab53dc939c364a843f5566380cbbb53bbcf6a2ce5fab40749672d56640c3
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -73,3 +73,9 @@ jobs:
         env:
           RELEASE_VERSION: 1.17.81
         run: node test/update-delivery.js
+
+      - name: Verify the published full update using the released updater
+        run: |
+          if [ "$(jq -r .type update/latest.json)" = full ]; then
+            RELEASE_VERSION="${VERSION#v}" node test/update-delivery.js
+          fi
