@@ -1,11 +1,11 @@
 {
-  "version": "1.17.86",
+  "version": "1.17.87",
   "type": "html",
   "engine": "1.17.81",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.81/Pro-Check-Setup.exe",
   "setupSha256": "be25212bb5023ae772f2c00fa8e193948e98338da42536bfcee6ea0595677baa",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/4cd5dffa9c1b8b85884309f6fcf6f30f695952fd/Departments%20Check.html",
-  "sha256": "e606077050aab27d55eb63c4a3a4f6b07b0888e721a68a06723b92aded7648a6",
-  "notes": "Restore normal departure/move dots for matching older receipt history without IDs; retain guest, stay-date and explicit cancellation/conflict safeguards."
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/837c5df64c41d19356b5ec36716c8d27d4a7bbd6/Departments%20Check.html",
+  "sha256": "fc7b8bfaf8fb47d258914bc1beb0899b062a15be89419475e7424b06658d2888",
+  "notes": "Correct arrangement payment comparison and joined departure-report headings."
 }
