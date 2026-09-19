@@ -51,6 +51,15 @@ const first=page(glyph(500,50,"Departure List by Time")+head()+row("101","ALPHAS
   assert.equal(await p.evaluate(()=>window.__printCount),1);
   assert(!/ALPHASECRET/.test(await p.locator("#printSheet").innerText()));
   await p.pdf({path:path.resolve(__dirname,"audit-reports.pdf"),format:"A4",landscape:true,printBackground:true});
+  const {pages:joinedPages}=require('../fixtures/dep-joined-headings');
+  await open(joinedPages);
+  assert(!await p.locator("#pvGo").isDisabled(),'joined headings must permit the complete redacted preview');
+  assert.equal(await p.locator("#pvPaper .xpsPage").count(),3);
+  const {NAMES}=require('../fixtures/dep0809');
+  const preview=await p.locator("#pvPaper").innerText();assert(NAMES.every(n=>!preview.includes(n)));
+  await p.click("#pvGo");await p.waitForTimeout(120);
+  assert.equal(await p.locator("#printSheet .xpsPage").count(),3);
+  const printed=await p.locator("#printSheet").innerText();assert(NAMES.every(n=>!printed.includes(n)));
   assert.deepStrictEqual(errors,[]);
   console.log("PASS REPORTS browser: unsafe page/unsupported element blocked for both previews, direct handler and Ctrl+P blocked, shifted columns redacted, stale timer canceled, normal repeated print and PDF preserved");
  }finally{await browser.close();}

@@ -310,5 +310,12 @@ test("PROP-03 explicit adjoining ambiguity is independent of capture order",()=>
  const results=[census,census.slice().reverse()].map(rs=>rows(ledger,{IH:{key:20260917,rows:rs}}).map(r=>r.room).sort());
  assert.deepStrictEqual(results[0],["101","101-2","101-3"]);assert.deepStrictEqual(results[0],results[1]);
 });
+test("DEP joined headings preserve all three pages and original column coordinates",()=>{
+ const {pages,baseline}=require('./fixtures/dep-joined-headings'),p=R.parse(pages),before=R.parse(baseline);
+ assert.equal(p.incomplete,false);assert.deepStrictEqual(p.groups,before.groups);assert.equal(p.guests,before.guests);
+ const exact=R.exact(p,{pages,fonts:{}});assert.equal(exact.unsafe,false);assert.equal(exact.pages,3);
+ const bad=pages.map((s,i)=>i===1?s.replace('UnicodeString="EbChil"','UnicodeString="EbUnknownChil"'):s);
+ assert.equal(R.parse(bad).incomplete,true,'unrecognised headings must not be silently accepted');
+});
 console.log(JSON.stringify({suite:"audit-reports-arrangement",passed,failed}));
 process.exitCode=failed?1:0;
