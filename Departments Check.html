@@ -1432,7 +1432,24 @@ function parseDepList(xmls){
         if(words.indexOf("Δωμάτιο") >= 0 && words.indexOf("Πελάτης") >= 0){
           inBody = true;
           const cols = [];
-          for(const [key, word] of DEPLIST_HEAD){ const tk = L.toks.find(t => t.t.trim().indexOf(word) === 0); if(tk) cols.push({key, x: tk.x, head: tk.t.trim()}); }
+          // XPS can join adjacent headings even when their advance gap is below
+          // the generic column-splitting threshold (e.g. EbChil). Split only an
+          // entire sequence of recognised headings, at its original glyph positions.
+          const glyphs=xml.match(/<Glyphs\b[^>]*?\/>/g)||[];
+          const headings=L.toks.flatMap(t=>{
+            const parts=t.t.match(/Δωμάτιο|Ποσ\.?|Ζήτηση|Πελάτης|Άφιξη|ΑΤ\.|Eb|Child\.?|Chil|Bc|Τιμοκατάλογος|Όροι|Συμφωνία|Vip Code|Vip/g);
+            if(!parts||parts.length<2||parts.join("")!==t.t)return [t];
+            const tag=glyphs[t.el]||"",attr=n=>(tag.match(new RegExp(n+'="([^"]*)"'))||[])[1];
+            const text=xmlDecode(attr("UnicodeString")||""),advs=parseIndices(attr("Indices"),text.length);
+            const em=parseFloat(attr("FontRenderingEmSize")||"10")||10;
+            let at=t.i0,x=t.x;
+            return parts.map(part=>{
+              const h={...t,t:part,x,i0:at,i1:at+part.length};
+              for(let j=0;j<part.length;j++,at++)x+=(advs[at]===null?DEFAULT_ADV:advs[at])*em/100;
+              return h;
+            });
+          });
+          for(const [key, word] of DEPLIST_HEAD){ const tk = headings.find(t => t.t.trim().indexOf(word) === 0); if(tk) cols.push({key, x: tk.x, head: tk.t.trim()}); }
           cols.sort((a, b) => a.x - b.x);
           pageColumns = cols;
           if(!out.columns)out.columns=cols;
@@ -1966,7 +1983,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.86";
+const APP_VERSION = "1.17.87";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 

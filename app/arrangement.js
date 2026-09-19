@@ -81,12 +81,18 @@ function evaluate(inv, refs){
     // to distinguish an ordinary rate from a lone doubled late-arrival charge.
     rate=r.priorRate>0?r.priorRate:charges.length>1?Math.min(...charges.map(c=>c.amount)):null;
   }
+  // Repeated ordinary B postings establish the charged nightly rate when the
+  // list Price differs. A single posting cannot distinguish a rate change from
+  // an adjustment; repeated doubles of the list rate remain suspicious too.
+  if(rate>0 && charges.length>=2 && charges[0].amount!==rate*2
+     && charges.every(c=>c.amount===charges[0].amount)) rate=charges[0].amount;
   if(!(rate>0)) reason="Daily price could not be established";
   let extra=0;
   if(rate>0 && charges.length){
     if(charges[0].amount===rate*2) extra=1;
     else if(charges[0].amount!==rate) reason="Arrangement differs from the list’s daily price";
-    if(charges.slice(1).some(c=>c.amount!==rate)) reason="Arrangement charges are inconsistent";
+    if(charges.slice(1).some(c=>c.amount!==rate)) reason=charges.every(c=>c.amount===charges[0].amount)
+      ? "Arrangement differs from the list’s daily price" : "Arrangement charges are inconsistent";
     if(new Set(charges.map(c=>c.date)).size!==charges.length) reason="Multiple Arrangement entries on one date";
     if(charges.some(c=>c.date<a || c.date>=d)) reason="Arrangement dates differ from the stay";
   }

@@ -276,4 +276,27 @@ test("metadata gates rows and invalidates old generations on reused invoices",()
  assert.equal(s.display(qualifying,240).result.state,"unknown");
 });
 
+test("consistent posted rate overrides a different list price for the four eligible agencies",()=>{
+ const charges=Array.from({length:16},(_,i)=>row("*Arrangement","290,00",String(i+3).padStart(2,"0")+"/09/26"));
+ for(const agency of ["INDIVIDUAL","BOOKING.COM","EXPEDIA","WEBHOTELIER"]){
+  for(const [payment,diff] of [["-4.860,00",-7000],["-4.930,00",0],["-4.930,01",1]]){
+   const i={...inv("DIFFERENT B NAME",[row("PAYMENT",payment,"03/08/26"),...charges]),arr:"03/09/26",dep:"20/09/26",balance:"-220,00"};
+   const refs=[{...ref("220,00",agency),arr:i.arr,dep:i.dep}],before=JSON.stringify([i,refs]);
+   const x=A.evaluate(i,refs);assert.equal(x.expected,493000);assert.equal(x.diff,diff);assert.equal(x.rate,29000);assert.equal(x.nights,17);
+   assert.equal(x.state,diff===0?"paid":"difference");if(diff===-7000)assert.equal(x.text,"Under €70.00");
+   assert.equal(JSON.stringify([i,refs]),before);
+  }
+ }
+});
+test("posted-rate override keeps incomplete, conflicting, duplicate, out-of-stay and double charges uncertain",()=>{
+ const payment=row("PAYMENT","-2.030,00"),normal=[row("*Arrangement","290,00"),row("*Arrangement","290,00","15/09/26")];
+ for(const charges of [[normal[0]],[normal[0],row("*Arrangement","291,00","15/09/26")],[normal[0],normal[0]],
+  [normal[0],row("*Arrangement","290,00","21/09/26")],[row("*Arrangement","440,00"),row("*Arrangement","440,00","15/09/26")]]){
+  const x=A.evaluate(inv("INDIVIDUAL",[payment,...charges]),[ref("220,00")]);assert.equal(x.state,"unknown");assert.equal(x.expected,undefined);
+ }
+ for(const refs of [[],[ref("220,00"),ref("230,00")],[{...ref("220,00"),room:"102"}],[ref("")],[{...ref("220,00"),currency:"USD"}]])
+  assert.equal(A.evaluate(inv("INDIVIDUAL",[payment,...normal]),refs).state,"unknown");
+ assert.equal(A.evaluate({...inv("INDIVIDUAL",[payment,...normal]),complete:false},[ref("220,00")]).state,"unknown");
+ assert.equal(A.evaluate(inv("INDIVIDUAL",[payment,...normal]),[ref("220,00","TOUR OPERATOR")]).state,"outside");
+});
 console.log(tests+" arrangement tests passed");
