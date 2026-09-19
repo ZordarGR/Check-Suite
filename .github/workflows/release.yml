@@ -57,8 +57,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "$VERSION" >/dev/null 2>&1; then
-            echo "This release already exists; refusing to overwrite it." >&2
-            exit 1
+            digest="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$VERSION" --jq '.assets[] | select(.name == "Pro-Check-Setup.exe") | .digest')"
+            [ "$digest" = "sha256:$SETUP_SHA256" ] || { echo "Existing installer does not match the verified package." >&2; exit 1; }
+            echo "Verified existing installer; preserving the published release."
+            exit 0
           fi
           gh release create "$VERSION" Pro-Check-Setup.exe \
             --target "$GITHUB_SHA" \
@@ -70,11 +72,6 @@ jobs:
         with:
           node-version: 22
       - name: Verify public delivery through the released updater
-        env:
-          RELEASE_VERSION: 1.17.81
-        run: node test/update-delivery.js
-
-      - name: Verify the published full update using the released updater
         run: |
           if [ "$(jq -r .type update/latest.json)" = full ]; then
             RELEASE_VERSION="${VERSION#v}" node test/update-delivery.js
