@@ -93,6 +93,16 @@ const {chromium}=require("playwright-core"), path=require("path"), fs=require("f
    await p.waitForFunction(v=>window.ack===JSON.stringify(v),invalid);
    assert.equal(await p.$eval("#tint",el=>getComputedStyle(el).display),"none","invalid geometry must not retain or expand tint");
   }
-  console.log(checks+" overlay placement cases, "+messageChecks+" wrapped-message cases and 6 invalid-grid cases passed: missing-data messages above, payment details below, B-grid-only tint and title icons.");
+  const calc=require('../../app/arrangement');
+  const fields={complete:true,name:"SYNTHETIC GUEST",room:"101",arr:"14/09/26",dep:"21/09/26",currency:"EUR",title:"INDIVIDUAL"};
+  const ref={...fields,price:"240,00",agency:"INDIVIDUAL",at:1};
+  const entry=(label,amount,date="14/09/26")=>({label,amount,date,currency:"EUR"});
+  const result=calc.evaluate({...fields,rows:[entry("PAYMENT","-1.750,00"),entry("*Arrangement","310,00"),entry("*Arrangement","240,00","15/09/26")]},[ref]);
+  assert.equal(result.state,"paid");
+  const packet={result,strip:layouts[0].strip,grid:layouts[0].grid};
+  await p.evaluate(v=>{window.ack=null;window.paint(v);},packet);await p.waitForFunction(v=>window.ack===JSON.stringify(v),packet);
+  assert.equal(await p.$eval('#detail',e=>getComputedStyle(e).display),'none');
+  assert.equal(await p.$eval('#icon',e=>e.textContent),'✓');
+  console.log(checks+" overlay placement cases, "+messageChecks+" wrapped-message cases, 6 invalid-grid cases and paid variable first-night pricing passed.");
  }finally{await b.close();}
 })().catch(e=>{console.error(e);process.exit(1);});

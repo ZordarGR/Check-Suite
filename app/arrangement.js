@@ -76,38 +76,26 @@ function evaluate(inv, refs){
   charges.sort((x,y)=>x.date-y.date);
   let rate=r && norm(r.currency)==="EUR" ? cents(r.price) : null;
   let reason="";
-  if(rate===0 && charges.length){
-    // An earlier explicit list price wins. Otherwise at least two postings are needed
-    // to distinguish an ordinary rate from a lone doubled late-arrival charge.
-    rate=r.priorRate>0?r.priorRate:charges.length>1?Math.min(...charges.map(c=>c.amount)):null;
-  }
-  // Repeated ordinary B postings establish the charged nightly rate when the
-  // list Price differs. A single posting cannot distinguish a rate change from
-  // an adjustment; repeated doubles of the list rate remain suspicious too.
-  if(rate>0 && charges.length>=2 && charges[0].amount!==rate*2
-     && charges.every(c=>c.amount===charges[0].amount)) rate=charges[0].amount;
-  if(!(rate>0)) reason="Daily price could not be established";
-  let extra=0;
-  if(rate>0 && charges.length){
-    if(charges[0].amount===rate*2) extra=1;
-    else if(charges[0].amount!==rate) reason="Arrangement differs from the list’s daily price";
-    if(charges.slice(1).some(c=>c.amount!==rate)) reason=charges.every(c=>c.amount===charges[0].amount)
-      ? "Arrangement differs from the list’s daily price" : "Arrangement charges are inconsistent";
-    if(new Set(charges.map(c=>c.date)).size!==charges.length) reason="Multiple Arrangement entries on one date";
-    if(charges.some(c=>c.date<a || c.date>=d)) reason="Arrangement dates differ from the stay";
-  }
+  // A checkout reset may retain an earlier explicit list price. Never infer the
+  // price of an unposted night from the invoice's first/last/lowest charge.
+  if(rate===0 && r.priorRate>0) rate=r.priorRate;
+  const dates=new Set(charges.map(c=>c.date)), missing=d-a-dates.size;
+  if(norm(r.currency)!=="EUR") reason="List currency could not be verified";
+  else if(missing>0 && !(rate>0)) reason="List price needed for "+missing+" unposted nights";
+  if(dates.size!==charges.length) reason="Multiple Arrangement entries on one date";
+  if(charges.some(c=>c.date<a || c.date>=d)) reason="Arrangement dates differ from the stay";
   const noPayment=payments===0 && paid===0;
-  // Before the first posting, a verified positive list Price is sufficient.
-  // A late-arrival night is added only when the first double charge is present.
   if(reason){
     // A readable unpaid account remains red even if Price=0; no amount is invented.
     return noPayment ? {state:"unpaid",icon:"✕",text:"No accommodation payment · "+reason,tint:true} : unsure(reason);
   }
-  const nights=d-a+extra, expected=rate*nights, diff=paid-expected;
-  const detail=extra ? " · +1 late-arrival night" : "";
-  if(noPayment) return {state:"unpaid",icon:"✕",text:"No accommodation payment · under €"+money(expected)+detail,tint:true,paid,expected,nights,rate,diff};
-  if(diff===0) return {state:"paid",icon:"✓",text:"€"+money(paid)+" paid · "+nights+" nights"+detail,tint:false,paid,expected,nights,rate,diff};
-  return {state:"difference",icon:"✕",text:(diff>0?"Over":"Under")+" €"+money(diff)+detail,tint:false,paid,expected,nights,rate,diff};
+  const posted=charges.reduce((sum,c)=>sum+c.amount,0);
+  const expected=posted+(missing?missing*rate:0), diff=paid-expected;
+  if(!Number.isSafeInteger(expected))return unsure("Accommodation total could not be verified");
+  const nights=d-a, amounts={paid,expected,nights,rate,diff,posted,missing};
+  if(noPayment) return {state:"unpaid",icon:"✕",text:"No accommodation payment · under €"+money(expected),tint:true,...amounts};
+  if(diff===0) return {state:"paid",icon:"✓",text:"€"+money(paid)+" paid · "+nights+" nights",tint:false,...amounts};
+  return {state:"difference",icon:"✕",text:(diff>0?"Over":"Under")+" €"+money(diff),tint:false,...amounts};
 }
 function capture(txt, tag, at){
   const lines=String(txt).split(/\r?\n/).map(s=>s.split("\t"));

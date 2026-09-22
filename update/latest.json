@@ -1,11 +1,11 @@
 {
-  "version": "1.17.87",
+  "version": "1.17.88",
   "type": "full",
-  "engine": "1.17.87",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.87/Pro-Check-Setup.exe",
-  "setupSha256": "70a3ab53dc939c364a843f5566380cbbb53bbcf6a2ce5fab40749672d56640c3",
+  "engine": "1.17.88",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.88/Pro-Check-Setup.exe",
+  "setupSha256": "5a94bafc5ed56397cb58ac9098b845caa17ed17643abaa028c3af757f8923db3",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/837c5df64c41d19356b5ec36716c8d27d4a7bbd6/Departments%20Check.html",
-  "sha256": "fc7b8bfaf8fb47d258914bc1beb0899b062a15be89419475e7424b06658d2888",
-  "notes": "Use consistent posted Arrangement charges when the list price differs. Read joined departure-report headings without losing pages or exposing guest names."
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/2ff30e4ab159ff1e4d7d63dbdb9d6ad6fdcc2f22/Departments%20Check.html",
+  "sha256": "3e7c8edf5630aded18b2f91fbbbe1efb5522aa1676e940b7e1052fc9709cf5df",
+  "notes": "Calculate already posted Arrangement charges plus the list rate for each unposted night. Use recorded charges without separate rate-difference alerts."
 }

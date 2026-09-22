@@ -55,9 +55,9 @@ test("the four eligible cases share exact/under/over/unknown rules, other agenci
   assert.equal(A.evaluate({...i,complete:false},[ref("150,00",agency)]).state,"outside");
  }
 });
-test("checkout Price 0 uses B normal charge; unpaid tint ignores A/C and notes",()=>{
+test("checkout Price 0 without an earlier list rate cannot price missing nights; unpaid tint ignores A/C",()=>{
  const i=inv("INDIVIDUAL",[row("*Arrangement","150,00"),row("*Arrangement","150,00","15/09/26")]);i.remarks="FULLY PREPAID!!!";i.overallPayments=36000;i.a=[row("Deposit Cash","-270,00")];i.c=[row("Deposit Cash","-90,00")];
- const x=A.evaluate(i,[ref("0,00")]);assert.equal(x.state,"unpaid");assert.equal(x.expected,105000);assert.equal(x.tint,true);
+ const x=A.evaluate(i,[ref("0,00")]);assert.equal(x.state,"unpaid");assert.equal(x.expected,undefined);assert.equal(x.tint,true);
 });
 test("checkout zero Price and only one posting cannot establish an ordinary rate",()=>{
  const x=A.evaluate(inv("INDIVIDUAL",[row("*Arrangement","300,00"),row("PAYMENT","-2.100,00")]),[ref("0,00")]);
@@ -65,11 +65,11 @@ test("checkout zero Price and only one posting cannot establish an ordinary rate
 });
 test("late arrival first-night double uses positive list rate and +1 exactly once",()=>{
  const i=inv("INDIVIDUAL",[row("Deposit Cash","-1.200,00"),row("*Arrangement","300,00")]);
- const x=A.evaluate(i,[ref()]);assert.equal(x.state,"paid");assert.equal(x.nights,8);assert.equal(i.arr,"14/09/26");
+ const x=A.evaluate(i,[ref()]);assert.equal(x.state,"paid");assert.equal(x.nights,7);assert.equal(x.expected,120000);assert.equal(i.arr,"14/09/26");
 });
-test("late arrival checkout zero rate uses smaller subsequent charge",()=>{
+test("late arrival checkout zero rate uses the retained positive list rate",()=>{
  const i=inv("INDIVIDUAL",[row("NATIONAL BANK","-1.200,00"),row("*Arrangement","300,00"),row("*Arrangement","150,00","15/09/26")]);
- assert.equal(A.evaluate(i,[ref("0,00")]).nights,8);
+ assert.equal(A.evaluate(i,[ref(),{...ref("0,00"),at:2}]).nights,7);
 });
 test("ordinary rate, exact cent difference",()=>{
  const x=A.evaluate(inv("INDIVIDUAL",[row("*Arrangement","150,00"),row("Deposit Cash","-1.049,99")]),[ref()]);
@@ -85,7 +85,7 @@ test("any B payment label counts, while incomplete data never produces a verdict
  i.complete=false;assert.equal(A.evaluate(i,[ref()]).tint,false);
 });
 test("dates, refunds, abnormal arrangements and currency fail honestly",()=>{
- for(const rows of [[row("*Arrangement","-150,00")],[row("*Arrangement","450,00")],[row("*Arrangement","150,00"),row("*Arrangement","300,00","15/09/26")],[row("Deposit Cash","150,00")]]){
+ for(const rows of [[row("*Arrangement","-150,00")],[row("Deposit Cash","150,00")]]){
   const i=inv("INDIVIDUAL",rows.concat(row("Deposit Cash","-1,00")));assert.equal(A.evaluate(i,[ref()]).state,"unknown");
  }
  const i=inv();i.currency="USD";assert.equal(A.evaluate(i,[ref()]).state,"unknown");
@@ -228,9 +228,9 @@ test("live arrival updates on list capture and only adds a late night after a do
  acceptInvoice(s,packet([...payments,row("*Arrangement","150,00")]),140);
  x=s.display([ref()],150).result;assert.equal(x.state,"paid");assert.equal(x.nights,7);
  acceptInvoice(s,packet([...payments,row("*Arrangement","300,00")]),160);
- x=s.display([ref()],170).result;assert.equal(x.state,"difference");assert.equal(x.nights,8);assert.equal(x.diff,-15000);
+ x=s.display([ref()],170).result;assert.equal(x.state,"difference");assert.equal(x.nights,7);assert.equal(x.diff,-15000);
  acceptInvoice(s,packet([...payments,row("*Arrangement","300,00"),row("*Arrangement","150,00","15/09/26")]),180);
- x=s.display([ref()],190).result;assert.equal(x.nights,8);assert.equal(x.diff,-15000);
+ x=s.display([ref()],190).result;assert.equal(x.nights,7);assert.equal(x.diff,-15000);
 });
 
 
@@ -276,27 +276,80 @@ test("metadata gates rows and invalidates old generations on reused invoices",()
  assert.equal(s.display(qualifying,240).result.state,"unknown");
 });
 
-test("consistent posted rate overrides a different list price for the four eligible agencies",()=>{
+test("consistent posted charges plus a different list price for the missing night across four agencies",()=>{
  const charges=Array.from({length:16},(_,i)=>row("*Arrangement","290,00",String(i+3).padStart(2,"0")+"/09/26"));
  for(const agency of ["INDIVIDUAL","BOOKING.COM","EXPEDIA","WEBHOTELIER"]){
-  for(const [payment,diff] of [["-4.860,00",-7000],["-4.930,00",0],["-4.930,01",1]]){
+  for(const [payment,diff] of [["-4.859,99",-1],["-4.860,00",0],["-4.860,01",1]]){
    const i={...inv("DIFFERENT B NAME",[row("PAYMENT",payment,"03/08/26"),...charges]),arr:"03/09/26",dep:"20/09/26",balance:"-220,00"};
    const refs=[{...ref("220,00",agency),arr:i.arr,dep:i.dep}],before=JSON.stringify([i,refs]);
-   const x=A.evaluate(i,refs);assert.equal(x.expected,493000);assert.equal(x.diff,diff);assert.equal(x.rate,29000);assert.equal(x.nights,17);
-   assert.equal(x.state,diff===0?"paid":"difference");if(diff===-7000)assert.equal(x.text,"Under €70.00");
+   const x=A.evaluate(i,refs);assert.equal(x.expected,486000);assert.equal(x.diff,diff);assert.equal(x.rate,22000);assert.equal(x.nights,17);
+   assert.equal(x.state,diff===0?"paid":"difference");
    assert.equal(JSON.stringify([i,refs]),before);
   }
  }
 });
-test("posted-rate override keeps incomplete, conflicting, duplicate, out-of-stay and double charges uncertain",()=>{
+test("posted totals keep incomplete, conflicting, duplicate and out-of-stay charges uncertain",()=>{
  const payment=row("PAYMENT","-2.030,00"),normal=[row("*Arrangement","290,00"),row("*Arrangement","290,00","15/09/26")];
- for(const charges of [[normal[0]],[normal[0],row("*Arrangement","291,00","15/09/26")],[normal[0],normal[0]],
-  [normal[0],row("*Arrangement","290,00","21/09/26")],[row("*Arrangement","440,00"),row("*Arrangement","440,00","15/09/26")]]){
+ for(const charges of [[normal[0],normal[0]], [normal[0],row("*Arrangement","290,00","21/09/26")]]){
   const x=A.evaluate(inv("INDIVIDUAL",[payment,...charges]),[ref("220,00")]);assert.equal(x.state,"unknown");assert.equal(x.expected,undefined);
  }
  for(const refs of [[],[ref("220,00"),ref("230,00")],[{...ref("220,00"),room:"102"}],[ref("")],[{...ref("220,00"),currency:"USD"}]])
   assert.equal(A.evaluate(inv("INDIVIDUAL",[payment,...normal]),refs).state,"unknown");
  assert.equal(A.evaluate({...inv("INDIVIDUAL",[payment,...normal]),complete:false},[ref("220,00")]).state,"unknown");
  assert.equal(A.evaluate(inv("INDIVIDUAL",[payment,...normal]),[ref("220,00","TOUR OPERATOR")]).state,"outside");
+});
+test("five nights at 240 and two at 220 use the list price for the remaining three",()=>{
+ const charges=[240,240,240,240,240,220,220].map((n,i)=>row("*Arrangement",n+",00",String(14+i)+"/09/26"));
+ const i={...inv("DIFFERENT B ACCOUNT",[row("PAYMENT","-2.300,00"),...charges]),dep:"24/09/26"};
+ const r={...ref("220,00"),dep:i.dep}, before=JSON.stringify([i,r]);
+ const x=A.evaluate(i,[r]);assert.equal(x.posted,164000);assert.equal(x.missing,3);assert.equal(x.expected,230000);assert.equal(x.state,"paid");
+ const changed=A.evaluate(i,[{...r,price:"210,00"}]);assert.equal(changed.expected,227000);assert.equal(changed.diff,3000);
+ assert.equal(JSON.stringify([i,r]),before);
+});
+test("a first night priced 70 higher is counted without an independent charge warning",()=>{
+ const charges=[310,240,240].map((n,i)=>row("*Arrangement",n+",00",String(14+i)+"/09/26"));
+ for(const [payment,state,diff] of [["-1.750,00","paid",0],["-1.680,00","difference",-7000],["-1.800,00","difference",5000]]){
+  const x=A.evaluate(inv("INDIVIDUAL",[row("PAYMENT",payment),...charges]),[ref("240,00")]);
+  assert.equal(x.expected,175000);assert.equal(x.state,state);assert.equal(x.diff,diff);assert(!/First night|inconsistent|overcharge/.test(x.text));
+ }
+ const first=A.evaluate(inv("INDIVIDUAL",[row("PAYMENT","-1.750,00"),charges[0]]),[ref("240,00")]);
+ assert.equal(first.state,"paid");assert.equal(first.expected,175000);
+ const unpaid=A.evaluate(inv("INDIVIDUAL",charges),[ref("240,00")]);assert.equal(unpaid.tint,true);assert.equal(unpaid.expected,175000);
+});
+test("every unposted date counts, including gaps and the first night, regardless of input order",()=>{
+ const charges=[row("*Arrangement","100,00","16/09/26"),row("*Arrangement","200,00","20/09/26")];
+ const i=inv("INDIVIDUAL",[...charges,row("PAYMENT","-1.050,00")]);
+ for(const rows of [i.rows,i.rows.slice().reverse()]){
+  const x=A.evaluate({...i,rows},[ref()]);assert.equal(x.posted,30000);assert.equal(x.missing,5);assert.equal(x.expected,105000);assert.equal(x.state,"paid");
+ }
+});
+test("fully posted variable stays need no future price but never accept duplicate or out-of-stay dates",()=>{
+ const charges=[100,150,125,220,210,90,105].map((n,i)=>row("*Arrangement",n+",00",String(14+i)+"/09/26"));
+ const i=inv("INDIVIDUAL",[row("PAYMENT","-1.000,00"),...charges]);
+ for(const price of ["0,00","","bad","999,00"]){const x=A.evaluate(i,[ref(price)]);assert.equal(x.state,"paid");assert.equal(x.missing,0);assert.equal(x.expected,100000);}
+ for(const rows of [[...i.rows,charges[0]],i.rows.map((r,n)=>n===1?{...r,date:"21/09/26"}:r)])
+  assert.equal(A.evaluate({...i,rows},[ref("0,00")]).state,"unknown");
+});
+test("missing nights require a list rate, never a repeated invoice rate",()=>{
+ const i=inv("INDIVIDUAL",[row("PAYMENT","-1.050,00"),row("*Arrangement","150,00"),row("*Arrangement","150,00","15/09/26")]);
+ for(const price of ["0,00","","bad","-150,00"]){const x=A.evaluate(i,[ref(price)]);assert.equal(x.state,"unknown");assert.equal(x.expected,undefined);}
+ const x=A.evaluate(i,[ref(),{...ref("0,00"),at:2}]);assert.equal(x.expected,105000);assert.equal(x.state,"paid");
+});
+test("signed payments and refunds compare against posted cents plus the list projection",()=>{
+ const i=inv("INDIVIDUAL",[row("*Arrangement","100,01"),row("*Arrangement","150,02","15/09/26"),row("PAYMENT","-1.100,00"),row("REFUND","99,92")]);
+ const x=A.evaluate(i,[ref("150,01")]);assert.equal(x.expected,100008);assert.equal(x.paid,100008);assert.equal(x.diff,0);
+});
+test("a first-night double is counted once, with all other missing nights at the list rate",()=>{
+ const x=A.evaluate(inv("INDIVIDUAL",[row("PAYMENT","-1.200,00"),row("*Arrangement","300,00")]),[ref()]);
+ assert.equal(x.posted,30000);assert.equal(x.missing,6);assert.equal(x.expected,120000);assert.equal(x.nights,7);assert.equal(x.state,"paid");
+});
+test("500 varied posting subsets and rate changes preserve the arithmetic and inputs",()=>{
+ for(let seed=1;seed<=500;seed++){
+  const rates=Array.from({length:7},(_,j)=>10000+(seed*(j+3)*37)%25000),mask=seed%128,list=10000+seed*13;
+  const fmt=n=>(Math.abs(n)/100).toFixed(2).replace('.',','),posted=[];let expected=0,missing=0;
+  for(let j=0;j<7;j++)if(mask&(1<<j)){posted.push(row("*Arrangement",fmt(rates[j]),String(14+j)+"/09/26"));expected+=rates[j];}else{expected+=list;missing++;}
+  const i=inv("IGNORED B TITLE",[row("PAYMENT","-"+fmt(expected)),...posted.reverse()]),refs=[ref(fmt(list))],before=JSON.stringify([i,refs]);
+  const x=A.evaluate(i,refs);assert.equal(x.expected,expected);assert.equal(x.missing,missing);assert.equal(x.diff,0);assert.equal(x.state,"paid");assert.equal(JSON.stringify([i,refs]),before);
+ }
 });
 console.log(tests+" arrangement tests passed");
