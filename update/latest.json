@@ -1,9 +1,9 @@
 {
   "version": "1.17.89",
-  "type": "html",
-  "engine": "1.17.88",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.88/Pro-Check-Setup.exe",
-  "setupSha256": "5a94bafc5ed56397cb58ac9098b845caa17ed17643abaa028c3af757f8923db3",
+  "type": "full",
+  "engine": "1.17.89",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.89/Pro-Check-Setup.exe",
+  "setupSha256": "3bb1ddb000c19b530a1f23c0d6b3c268767d3be7e4c8584903a4aea4f2b72e20",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/9da019d2c0db30b23a7571a35aedd1b6e5c08144/Departments%20Check.html",
   "sha256": "7fee044e593f9631561f32a0bc67fe69300f9023b306cd36050346d867169181",
