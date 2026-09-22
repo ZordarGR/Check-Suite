@@ -14,7 +14,7 @@ process.stdin.on("data",chunk=>{
   const line=buffer.slice(0,end).replace(/^\uFEFF/,"").trim();
   buffer=buffer.slice(end+1);
   if(!line)continue;
-  if(!/^scope \d+ (?:read|skip)$/.test(line))throw Error("invalid fixture scope command");
+  if(!/^scope \d+ (?:read|skip)(?: [1-9]\d*)?$/.test(line))throw Error("invalid fixture scope command");
   child.stdin.write(line+"\n");
  }
 });
