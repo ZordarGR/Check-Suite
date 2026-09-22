@@ -35,9 +35,11 @@ console.log("Real Windows IH Price/agency capture passed");
 
 
 const metadata=messages.filter(m=>m.kind==="metadata");
+assert(messages.some(m=>m.kind==="scope"&&m.read===true&&m.request===73),"native reader acknowledges the exact resume request");
 assert(metadata.length>=4,"metadata precedes row scanning and updates during checkout");
 for(const m of stable){
  const index=messages.indexOf(m);
+ assert(messages.slice(0,index).some(x=>x.kind==="scope"&&x.epoch===m.epoch&&x.read===true&&x.request===73),"fresh rows follow their native resume acknowledgement");
  assert(messages.slice(0,index).some(x=>x.kind==="metadata"&&x.id===m.id&&x.epoch===m.epoch&&JSON.stringify(x.fields)===JSON.stringify(m.data.fields)),
   "stable rows require matching earlier metadata");
 }

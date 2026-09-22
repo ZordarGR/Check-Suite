@@ -212,6 +212,23 @@ function readDesktopConfig(){
 function writeDesktopConfig(c){
   if(!hub || !hub.writeConfig(c))throw new Error("Configuration could not be saved; the previous file was kept");
 }
+function arrangementSetting(){
+  const c=readDesktopConfig();
+  if(c.arrangementEnabled!==undefined&&typeof c.arrangementEnabled!=="boolean")throw new Error("Invalid saved Arrangement setting");
+  return c.arrangementEnabled!==false;
+}
+ipcMain.handle("arrangement-get-enabled",e=>{
+  if(!win||e.sender!==win.webContents)return {ok:false};
+  try{return {ok:true,enabled:arrangementSetting()};}catch(error){return {ok:false,error:error.message};}
+});
+ipcMain.handle("arrangement-set-enabled",(e,on)=>{
+  if(!win||e.sender!==win.webContents||typeof on!=="boolean")return {ok:false};
+  try{
+    const c=readDesktopConfig();c.arrangementEnabled=on;writeDesktopConfig(c);
+    if(arrangementService)arrangementService.setEnabled(on);
+    return {ok:true,enabled:on};
+  }catch(error){return {ok:false,error:error.message};}
+});
 function setDesktopHotkey(field,acc){
   let oldT,oldI,attempted=false;
   try{
@@ -557,8 +574,9 @@ app.whenReady().then(() => {
     if(process.platform==="win32"){
       try{
         const local=process.env.LOCALAPPDATA||app.getPath("userData");
+        let enabled=false;try{enabled=arrangementSetting();}catch(e){console.error(e.message);}
         arrangementService = require("./arrangement-live").start({electron:require("electron"),helperPath:tauPath(),
-          captureDir:path.join(local,"RecCheck"),userData:app.getPath("userData")});
+          captureDir:path.join(local,"RecCheck"),userData:app.getPath("userData"),enabled});
       }catch(e){ console.error("Arrangement overlay unavailable:",e.message); }
     }
     /* 1.17.10 drew the Caps Lock icon inside this app and shipped with it ON. 1.17.11

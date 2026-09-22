@@ -1,4 +1,8 @@
 const {contextBridge, ipcRenderer} = require("electron");
+contextBridge.exposeInMainWorld("reccheckArrangement", {
+  get: () => ipcRenderer.invoke("arrangement-get-enabled"),
+  set: on => ipcRenderer.invoke("arrangement-set-enabled", on)
+});
 contextBridge.exposeInMainWorld("reccheckUpdate", {
   onReady: (cb) => ipcRenderer.on("reccheck-update-ready", (_e, info) => cb(info)),
   onProgress: (cb) => ipcRenderer.on("reccheck-update-progress", (_e, p) => cb(p)),

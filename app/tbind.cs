@@ -390,70 +390,7 @@ static class TBind {
      The state is TRACKED, not read back. A low-level hook fires BEFORE Windows applies
      the toggle, so reading the key there returns the value the press is about to
      replace. Seeded once from GetKeyState at start and flipped on each press; the hook
-     sees every press on the machine, injected ones included, so it cannot drift.
-     capsDown is here because auto-repeat sends a run of DOWNs for one physical press. */
-  static bool capsOn = false, capsDown = false;
-  static IntPtr capsWnd = IntPtr.Zero;
-  static byte capsAlpha = CAPS_ALPHA;
-  static readonly IntPtr T_HOLD = (IntPtr)1, T_FADE = (IntPtr)2;
-
-  /* ---- is RecCheck up? ----
-     The shortcuts are RecCheck's; the Caps Lock icon is not. Only the first is gated. */
-  static volatile bool hostUp = false;
-
-  /* The capital A the laptop OSDs draw, as one polygon with the counter punched out.
-     Coordinates are the app icon's 150-unit glyph offset by a 10-unit margin, so the
-     two are the same shape. ALTERNATE fill makes the second contour a hole. */
-  static readonly CPOINT[] GLYPH = new CPOINT[] {
-    new CPOINT( 85,  30), new CPOINT(128, 132), new CPOINT(110, 132), new CPOINT(100, 109),
-    new CPOINT( 70, 109), new CPOINT( 60, 132), new CPOINT( 42, 132),
-    new CPOINT( 76,  93), new CPOINT( 94,  93), new CPOINT( 85,  72)
-  };
-  static readonly int[] GLYPH_N = new int[] { 7, 3 };
-  static IntPtr hook = IntPtr.Zero, kbHook = IntPtr.Zero;
-  static int mode = 0;                   // 1 = detect, 2 = bind
-  static uint mainTid = 0;
-  static Thread watchdog;                // static ref so it can never be collected
-  class Bind { public int action; public ushort[] keys; public int gap; }
-  static readonly List<Bind> bindList = new List<Bind>();
-  static readonly Dictionary<string, int> binds = new Dictionary<string, int>();   // trigger -> index
-  static readonly HashSet<uint> swallowed = new HashSet<uint>();   // keys whose KEYUP we must eat too
-  static readonly HashSet<int> swallowedBtn = new HashSet<int>();  // buttons whose release we must eat
-
-  static bool IsModifierVk(uint vk){
-    return vk == VK_SHIFT || vk == VK_CONTROL || vk == VK_MENU || vk == VK_LWIN || vk == VK_RWIN
-        || vk == 0xA0 || vk == 0xA1 || vk == 0xA2 || vk == 0xA3 || vk == 0xA4 || vk == 0xA5;
-  }
-  static int CurMods(){
-    int m = 0;
-    if((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0) m |= 1;
-    if((GetAsyncKeyState(VK_MENU)    & 0x8000) != 0) m |= 2;
-    if((GetAsyncKeyState(VK_SHIFT)   & 0x8000) != 0) m |= 4;
-    if(((GetAsyncKeyState(VK_LWIN) | GetAsyncKeyState(VK_RWIN)) & 0x8000) != 0) m |= 8;
-    return m;
-  }
-
-  static int ButtonOf(IntPtr wParam, IntPtr lParam, out bool down){
-    int m = wParam.ToInt32();
-    down = m == WM_MBUTTONDOWN || m == WM_XBUTTONDOWN;
-    if(m == WM_MBUTTONDOWN || m == WM_MBUTTONUP) return 3;
-    if(m == WM_XBUTTONDOWN || m == WM_XBUTTONUP){
-      MSLLHOOKSTRUCT info = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
-      return ((info.mouseData >> 16) & 0xFFFF) == 2 ? 5 : 4;
-    }
-    return 0;
-  }
-
-  static void KeyEvent(ushort vk, ushort scan, uint flags){
-    INPUT[] one = new INPUT[1];
-    one[0].type = 1; // INPUT_KEYBOARD
-    one[0].u.ki = new KEYBDINPUT { wVk = vk, wScan = scan, dwFlags = flags, time = 0, dwExtraInfo = IntPtr.Zero };
-    SendInput(1, one, Marshal.SizeOf(typeof(INPUT)));
-  }
-  static void PressKeys(ushort vk, ushort scan, uint flags){
-    INPUT[] inputs = new INPUT[2];
-    inputs[0].type = 1;
-    inputs[0].u.ki = new KEYBDINPUT { wVk = vk, wScan = scan, dwFlags = flags, time = 0, dwExtraInfo = IntPtr.Zero };
+  = vk, wScan = scan, dwFlags = flags, time = 0, dwExtraInfo = IntPtr.Zero };
     inputs[1].type = 1;
     inputs[1].u.ki = new KEYBDINPUT { wVk = vk, wScan = scan, dwFlags = flags | KEYEVENTF_KEYUP, time = 0, dwExtraInfo = IntPtr.Zero };
     SendInput(2, inputs, Marshal.SizeOf(typeof(INPUT)));
@@ -2132,116 +2069,7 @@ static class TBind {
     readMsgs++;
     int rows = 0;
     if(SendMessageTimeout(lv, LVM_GETITEMCOUNT, IntPtr.Zero, IntPtr.Zero, SMTO_ABORTIFHUNG, 250, out res) != IntPtr.Zero)
-      rows = res.ToInt32();
-    if(rows <= 0){ READ.Append("ERR\tthe list is empty\n"); return; }
-    int show = rows < maxRows ? rows : maxRows, got = 0;
-    SafeListRead rates = new SafeListRead(lv, true);
-    int rateCol=-1, agencyCol=-1, currencyCol=-1;
-    bool wide = true, ranOut = false;
-    try{
-      if(!rates.ok){ READ.Append("ERR\tcould not safely read the list\n"); ranOut=true; }
-      if(tag!="MV"){
-        string[] headers=rates.Headers(128);
-        rateCol=HeaderAt(headers,"PRICE"); agencyCol=HeaderAt(headers,"TRAVELAGENCY"); currencyCol=HeaderAt(headers,"CURRENCY");
-      }
-      /* the encoding question, settled on the first row and then left alone */
-      int[] cols = ColsFor(tag);
-      /* Probe on the TAG'S OWN first column, not column 0. The arrivals list has an EMPTY
-         column 0 — probing there reads nothing, and "nothing came back as Unicode" is
-         exactly how this decides the control is ANSI. It would have flipped the whole
-         read to the wrong encoding on the one list whose name is not first. */
-      string probe0 = rates.GetText(0, cols[0], false, true);
-      if(probe0.Length == 0){
-        string alt = rates.GetText(0, cols[0], false, false);
-        if(alt.Length > 0) wide = false;
-      }
-      for(int r = 0; r < show; r++){
-        if(!rates.ok || Environment.TickCount - t0 > READ_BUDGET_MS){ ranOut = true; break; }
-        StringBuilder line = new StringBuilder(tag);
-        string[] cells=new string[cols.Length];
-        for(int c = 0; c < cols.Length; c++){
-          cells[c]=rates.GetText(r,cols[c],false,wide);
-          line.Append("\t"+cells[c]);
-        }
-        // A filter/sort can change the control while its cells are being read.
-        // Re-read the identity cells before accepting this row, within the same budget.
-        if(!rates.ok || cells[0]!=rates.GetText(r,cols[0],false,wide)
-           || cells[1]!=rates.GetText(r,cols[1],false,wide) || !rates.ok){ ranOut=true; break; }
-        string rateLine = null;
-        if(rates!=null && rates.ok && rateCol>=0 && agencyCol>=0 && currencyCol>=0){
-          string price=rates.Get(r,rateCol,false), agency=rates.Get(r,agencyCol,false), currency=rates.Get(r,currencyCol,false);
-          if(rates.ok){
-            // Additional tagged rows: existing IH/AR/DP columns and their consumers stay intact.
-            string arrival=tag=="AR"?"":cells[3], departure=tag=="DP"?"":cells[tag=="IH"?4:3];
-            rateLine="RATE\t"+tag+"\t"+cells[0]+"\t"+cells[1]+"\t"+arrival+"\t"+departure
-                       +"\t"+price+"\t"+agency+"\t"+currency+"\t"+cells[cells.Length-1]+"\n";
-          }
-        }
-        // A move can retain FROM/type while TO, guest or stay dates change. Verify all
-        // captured facts again after optional rate reads, not merely the first cells.
-        bool sameRow=rates.ok;
-        for(int c=0;c<cols.Length && sameRow;c++)
-          if(cells[c]!=rates.GetText(r,cols[c],false,wide) || !rates.ok) sameRow=false;
-        if(!sameRow){ ranOut=true; break; }
-        READ.Append(line.ToString() + "\n");
-        if(rateLine!=null) READ.Append(rateLine);
-        got++;
-      }
-      readMsgs++;
-      if(!rates.ok || got!=rows || SendMessageTimeout(lv,LVM_GETITEMCOUNT,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,250,out res)==IntPtr.Zero
-         || res.ToInt32()!=rows) ranOut=true;
-    }catch(Exception e){ ranOut=true; READ.Append("ERR\t" + e.Message + "\n"); }
-    finally{
-      if(rates!=null){ readMsgs+=rates.messages; rates.Dispose(); }
-    }
-    READ.Append("DONE\t" + got + "\t" + rows + "\t" + readMsgs + "\t"
-                + (Environment.TickCount - t0) + "\t" + (wide ? "unicode" : "ansi")
-                + "\t" + (ranOut ? "cut-short" : "complete") + "\n");
-  }
-
-  static string[] ReadRow(IntPtr proc, IntPtr lv, bool target64, int row, int cols,
-                         IntPtr text, IntPtr item, int cch, bool wide){
-    string[] out2 = new string[cols];
-    for(int c = 0; c < cols; c++) out2[c] = ReadCell(proc, lv, target64, row, c, text, item, cch, wide);
-    return out2;
-  }
-  static bool AnyText(string[] cells){
-    for(int i = 0; i < cells.Length; i++) if(cells[i] != null && cells[i].Length > 0) return true;
-    return false;
-  }
-  static string Join(string[] cells){
-    StringBuilder b = new StringBuilder();
-    for(int i = 0; i < cells.Length; i++) b.Append("[" + cells[i] + "] ");
-    return b.ToString();
-  }
-  static string ReadCell(IntPtr proc, IntPtr lv, bool target64, int row, int col,
-                         IntPtr text, IntPtr item, int cch, bool wide){
-    try{
-      byte[] zero = new byte[cch * 2];
-      UIntPtr n;
-      WriteProcessMemory(proc, text, zero, (UIntPtr)(uint)zero.Length, out n);
-      byte[] li = BuildLvItem(target64, row, col, text, cch);
-      if(!WriteProcessMemory(proc, item, li, (UIntPtr)(uint)li.Length, out n)) return "";
-      IntPtr res;
-      readMsgs++;
-      if(SendMessageTimeout(lv, wide ? LVM_GETITEMTEXTW : LVM_GETITEMTEXTA,
-                            (IntPtr)row, item, SMTO_ABORTIFHUNG, 250, out res) == IntPtr.Zero) return "";
-      byte[] back = new byte[cch * 2];
-      if(!ReadProcessMemory(proc, text, back, (UIntPtr)(uint)back.Length, out n)) return "";
-      string got = wide ? System.Text.Encoding.Unicode.GetString(back)
-                        : System.Text.Encoding.Default.GetString(back);
-      int z = got.IndexOf('\0');
-      if(z >= 0) got = got.Substring(0, z);
-      return got.Replace("\r", " ").Replace("\n", " ").Replace("\t", " ");
-    }catch(Exception){ return ""; }
-  }
-
-  /* ================= the window watcher — reads nothing from protel =================
-     What it records: that a protel window opened or closed, when, its class and the
-     caption Windows already holds for it. No field is read, no control is asked
-     anything, nothing is written anywhere near protel.
-
-     Retention is his decision of 03/09: TONIGHT ONLY, CLEARED AT 07:00. That is the
+      rows , CLEARED AT 07:00. That is the
      SHIFT boundary — the same clock as the checklist ticks — and deliberately not the
      03:30 working night: the wipe follows the shift being stood. The file names the
      shift it belongs to, so a helper restarted mid-shift keeps that night's lines and
@@ -2773,7 +2601,7 @@ static class TBind {
     }catch(Exception){}
   }
 
-  const string VER = "v34";
+  const string VER = "v35";
 
 
   /* Live accommodation reader. Separate child mode: no keyboard hooks, no protel writes.
@@ -2998,10 +2826,13 @@ static class TBind {
     bool resumed=false;int end;
     while((end=pending.IndexOf('\n'))>=0){
       string line=pending.Substring(0,end).Trim();pending=pending.Substring(end+1);
-      string[] parts=line.Split(new char[]{' '});long requested;
-      if(parts.Length==3&&parts[0]=="scope"&&long.TryParse(parts[1],out requested)&&requested==epoch&&epoch>0){
+      string[] parts=line.Split(new char[]{' '});long requested,requestId=0;
+      if((parts.Length==3||parts.Length==4&&long.TryParse(parts[3],out requestId)&&requestId>0)
+         &&parts[0]=="scope"&&long.TryParse(parts[1],out requested)&&requested==epoch&&epoch>0){
         if(parts[2]=="read"){if(!allowed)resumed=true;allowed=true;}
         else if(parts[2]=="skip")allowed=false;
+        if(parts[2]=="read"||parts[2]=="skip")
+          Say("{\"kind\":\"scope\",\"epoch\":"+epoch+",\"request\":"+requestId+",\"read\":"+(allowed?"true":"false")+"}");
       }
     }
     return resumed;

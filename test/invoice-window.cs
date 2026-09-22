@@ -61,7 +61,7 @@ class InvoiceWindow{
  [DllImport("user32.dll")]static extern void NotifyWinEvent(uint ev,IntPtr hwnd,int obj,int child);
  static void Scope(Process helper,long epoch,string mode){
   // Never block the target UI thread or stdout reader on another process's pipe.
-  ScopeCommands.Enqueue("scope "+epoch+" "+mode+"\n");ScopeReady.Set();
+  ScopeCommands.Enqueue("scope "+epoch+" "+mode+(mode=="read"?" 73":"")+"\n");ScopeReady.Set();
  }
  static void StartScopeWriter(Process helper){
   var writer=new Thread(()=>{

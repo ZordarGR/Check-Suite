@@ -28,6 +28,7 @@ function rig(initial=baseline()){
   const handlers={};
   const c=vm.createContext({hub,console,Buffer,process:{platform:'win32',pid:123},ACTIONS:['tau','altf4','altn','seq'],
     TRIGGER_RE:/^(?:m(?:[345]|\d{1,2}-[345])|k\d{1,2}-\d{1,3})$/,SEQ_DEFAULT:{keys:[13,13,13,39,13,13],gap:25},
+    win:{webContents:{}},arrangementService:{setEnabled(on){(effects.arrangement||(effects.arrangement=[])).push(on);}},
     LAST_SPECS:['m3=tau'],TAU_DETECT:null,overlayWin:null,BOOT_QUEUE:Promise.resolve(),BOOT_CHOICE:0,path:{dirname:()=>'/synthetic'},require:name=>{assert.equal(name,'fs');return fakefs;},
     bindsPath:()=>'/synthetic/binds.txt',tauPath:()=>'/synthetic/helper.exe',tauStop:async()=>({}),tauStart:()=>{effects.restarts++;},
     helperVerb:async verb=>{effects.helper.push(verb);return faults.install?{available:true,on:false,err:'failed'}:{available:true,on:verb!=='uninstall'};},
@@ -38,9 +39,10 @@ function rig(initial=baseline()){
     spawn(){const child=new EventEmitter();child.stdout=new EventEmitter();child.kill=()=>{queueMicrotask(()=>child.emit('exit',0));};effects.children.push(child);return child;}});
   const names=['validTrigger','newProfileId','readDesktopConfig','writeDesktopConfig','validateProfiles','readProfiles','writeProfiles','activeBinds',
     'focusConfig','focusSpec','seqConfig','seqSpec','writeBinds','bootHelperVerb','setHelperBoot','migrateHelperBoot','currentHotkey','currentIHotkey','tryRegister','applyHotkeys','setDesktopHotkey','setOverlay'];
-  const channels=['sc-profile-add','sc-profile-rename','sc-profile-delete','sc-profile-select','sc-clear','sc-focus-set','sc-detect'];
+  names.push('arrangementSetting');
+  const channels=['sc-profile-add','sc-profile-rename','sc-profile-delete','sc-profile-select','sc-clear','sc-focus-set','sc-detect','arrangement-get-enabled','arrangement-set-enabled'];
   vm.runInContext(names.map(lift).concat(channels.map(handler)).join('\n'),c);
-  return {c,files,faults,effects,raw:()=>raw,config:()=>JSON.parse(raw),call:(name,...args)=>handlers[name](null,...args)};
+  return {c,files,faults,effects,raw:()=>raw,config:()=>JSON.parse(raw),call:(name,...args)=>handlers[name](null,...args),ipc:(name,event,...args)=>handlers[name](event,...args)};
 }
 const results=[];
 async function check(id,label,test){try{await test();results.push({id,label,passed:true});console.log('PASS '+id+' '+label);}
@@ -142,6 +144,22 @@ async function check(id,label,test){try{await test();results.push({id,label,pass
     assert.equal(typeof release,'function');const manual=r.c.setHelperBoot(false);release({available:true,on:true});
     assert.equal(await migration,false);assert.equal((await manual).on,false);
     assert.deepEqual(calls,['install','uninstall']);assert.equal(r.config().bootMigrated,true);
+  });
+  await check('ARR-TOGGLE','Arrangement preference defaults on, persists independently and refuses failed writes or foreign callers',()=>{
+    const r=rig(),event={sender:r.c.win.webContents},before=r.config();
+    assert.equal(r.ipc('arrangement-get-enabled',event).enabled,true);
+    assert.equal(r.ipc('arrangement-set-enabled',event,false).ok,true);
+    assert.deepEqual(r.config(),{...before,arrangementEnabled:false});assert.deepEqual(r.effects.arrangement,[false]);
+    assert.equal(rig(r.config()).c.arrangementSetting(),false,'restart retains off');
+    r.faults.config=true;assert.equal(r.ipc('arrangement-set-enabled',event,true).ok,false);
+    assert.equal(r.config().arrangementEnabled,false);assert.deepEqual(r.effects.arrangement,[false]);
+    r.faults.config=false;
+    assert.equal(r.ipc('arrangement-set-enabled',{sender:{}},true).ok,false);
+    assert.equal(r.ipc('arrangement-set-enabled',event,'true').ok,false);
+    assert.equal(r.ipc('arrangement-set-enabled',event,true).enabled,true);
+    assert.deepEqual(r.effects.arrangement,[false,true]);
+    const broken=rig('{broken'),raw=broken.raw();
+    assert.equal(broken.ipc('arrangement-set-enabled',{sender:broken.c.win.webContents},false).ok,false);assert.equal(broken.raw(),raw);
   });
   const failed=results.filter(r=>!r.passed);const summary={suite:'desktop-config',total:results.length,passed:results.length-failed.length,failed:failed.length,results};
   if(process.env.AUDIT_JSON)fs.writeFileSync(process.env.AUDIT_JSON,JSON.stringify(summary,null,2)+'\n');
