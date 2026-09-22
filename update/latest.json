@@ -7,5 +7,5 @@
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/2ff30e4ab159ff1e4d7d63dbdb9d6ad6fdcc2f22/Departments%20Check.html",
   "sha256": "3e7c8edf5630aded18b2f91fbbbe1efb5522aa1676e940b7e1052fc9709cf5df",
-  "notes": "Calculate already posted Arrangement charges plus the list rate for each unposted night. Keep isolated first-night differences visible."
+  "notes": "Sum posted Arrangement charges plus the list rate for each unposted night, without separate rate-difference alerts."
 }

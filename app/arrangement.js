@@ -92,23 +92,10 @@ function evaluate(inv, refs){
   const posted=charges.reduce((sum,c)=>sum+c.amount,0);
   const expected=posted+(missing?missing*rate:0), diff=paid-expected;
   if(!Number.isSafeInteger(expected))return unsure("Accommodation total could not be verified");
-  // The established first-night double remains descriptive only: its full amount
-  // is already in posted, so it must not add a second charge to the total.
-  const first=charges[0], later=charges.slice(1);
-  const extra=first && first.date===a && rate>0 && first.amount===rate*2
-    && later.every(c=>c.amount===rate) ? 1 : 0;
-  const nights=d-a+extra, warnings=[];
-  const ordinary=later.length && later.every(c=>c.amount===later[0].amount)
-    ? later[0].amount : !later.length && rate>0 ? rate : null;
-  if(!extra && first && first.date===a && ordinary>0 && first.amount!==ordinary){
-    warnings.push("First night €"+money(first.amount-ordinary)+(first.amount>ordinary?" above ":" below ")
-      +(later.length?"later nights":"the list rate"));
-  }
-  const detail=(extra?" · +1 late-arrival night":"")+(warnings.length?" · "+warnings.join(" · "):"");
-  const amounts={paid,expected,nights,rate,diff,posted,missing,warnings};
-  if(noPayment) return {state:"unpaid",icon:"✕",text:"No accommodation payment · under €"+money(expected)+detail,tint:true,...amounts};
-  if(diff===0) return {state:warnings.length?"warning":"paid",icon:warnings.length?"⚠":"✓",text:"€"+money(paid)+" paid · "+nights+" nights"+detail,tint:false,...amounts};
-  return {state:"difference",icon:"✕",text:(diff>0?"Over":"Under")+" €"+money(diff)+detail,tint:false,...amounts};
+  const nights=d-a, amounts={paid,expected,nights,rate,diff,posted,missing};
+  if(noPayment) return {state:"unpaid",icon:"✕",text:"No accommodation payment · under €"+money(expected),tint:true,...amounts};
+  if(diff===0) return {state:"paid",icon:"✓",text:"€"+money(paid)+" paid · "+nights+" nights",tint:false,...amounts};
+  return {state:"difference",icon:"✕",text:(diff>0?"Over":"Under")+" €"+money(diff),tint:false,...amounts};
 }
 function capture(txt, tag, at){
   const lines=String(txt).split(/\r?\n/).map(s=>s.split("\t"));

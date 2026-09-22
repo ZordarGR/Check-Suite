@@ -62,11 +62,6 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-        with:
-          sparse-checkout-cone-mode: false
-          sparse-checkout: |
-            /*
-            !/dist-win64/parts/RecCheck-Setup.exe.*
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -111,7 +106,7 @@ jobs:
           sudo apt-get install -y mono-devel nsis p7zip-full
           npm install --no-save asar@3.2.0
           bash test/package-integrity.sh
-          node -e 'const fs=require("fs"),p="update/latest.json",m=JSON.parse(fs.readFileSync(p));m.notes="Calculate already posted Arrangement charges plus the list rate for each unposted night. Keep isolated first-night differences visible.";fs.writeFileSync(p,JSON.stringify(m,null,2)+"\n")'
+          node -e 'const fs=require("fs"),p="update/latest.json",m=JSON.parse(fs.readFileSync(p));m.notes="Calculate already posted Arrangement charges plus the list rate for each unposted night. Use recorded charges without separate rate-difference alerts.";fs.writeFileSync(p,JSON.stringify(m,null,2)+"\n")'
       - uses: actions/upload-artifact@v4
         with:
           name: verified-integrity-installer

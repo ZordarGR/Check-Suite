@@ -17,7 +17,7 @@ const {chromium}=require("playwright-core"), path=require("path"), fs=require("f
   let checks=0;
   for(const {viewport,strip:s,grid:g} of layouts){
    await p.setViewportSize(viewport);
-   for(const state of ["paid","difference","unpaid","unknown","warning"]){
+   for(const state of ["paid","difference","unpaid","unknown"]){
     let firstPosition;
     for(const textWidth of [120,348,370,900,-1,undefined]){
      const packet={result:{state,icon:state==="paid"?"✓":state==="unknown"?"🤔":"✕",text:"€180.00 × 7 nights = €1,260.00. Paid €1,110.00. Under €150.00.",tint:state==="unpaid"},textWidth,strip:s,grid:g};
@@ -98,12 +98,11 @@ const {chromium}=require("playwright-core"), path=require("path"), fs=require("f
   const ref={...fields,price:"240,00",agency:"INDIVIDUAL",at:1};
   const entry=(label,amount,date="14/09/26")=>({label,amount,date,currency:"EUR"});
   const result=calc.evaluate({...fields,rows:[entry("PAYMENT","-1.750,00"),entry("*Arrangement","310,00"),entry("*Arrangement","240,00","15/09/26")]},[ref]);
-  assert.equal(result.state,"warning");
+  assert.equal(result.state,"paid");
   const packet={result,strip:layouts[0].strip,grid:layouts[0].grid};
   await p.evaluate(v=>{window.ack=null;window.paint(v);},packet);await p.waitForFunction(v=>window.ack===JSON.stringify(v),packet);
-  assert.equal(await p.$eval('#detail',e=>getComputedStyle(e).display),'block');
-  assert.match(await p.$eval('#detail',e=>e.textContent),/First night €70.00 above later nights/);
-  assert.equal(await p.$eval('#icon',e=>e.textContent),'⚠');
-  console.log(checks+" overlay placement cases, "+messageChecks+" wrapped-message cases, 6 invalid-grid cases and the paid first-night warning passed.");
+  assert.equal(await p.$eval('#detail',e=>getComputedStyle(e).display),'none');
+  assert.equal(await p.$eval('#icon',e=>e.textContent),'✓');
+  console.log(checks+" overlay placement cases, "+messageChecks+" wrapped-message cases, 6 invalid-grid cases and paid variable first-night pricing passed.");
  }finally{await b.close();}
 })().catch(e=>{console.error(e);process.exit(1);});
