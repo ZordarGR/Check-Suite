@@ -72,12 +72,19 @@ class InvoiceState {
     return {result:this.result,g:this.g,textWidth:this.textWidth,remarks:this.inv.remarks||""};
   }
 }
-function start({electron,helperPath,captureDir,userData,spawnHelper=spawn}){
+function start({electron,helperPath,captureDir,userData,spawnHelper=spawn,enabled=true}){
   const {app,BrowserWindow,screen,ipcMain}=electron;
   const state=new InvoiceState(), file=path.join(userData,"arrangement-rates-v1.json"),noRefs=[];
   let refs=[],child=null,overlay=null,ready=false,lastPaint="",lastBounds="",pending=null,closed=false,buffer="",stamps={},lastScope="";
   let inputBroken=false,nextHelperAt=0,helperRetry=1000,nextOverlayAt=0,overlayRetry=1000;
   let refsLoaded=false,refsDirty=false,refFault="";
+  let awaitingScope=false,scopeRevision=0;
+  function setEnabled(on){
+    if(typeof on!=="boolean")throw new Error("Invalid Arrangement setting");
+    if(enabled===on)return;
+    enabled=on;awaitingScope=on;if(on)scopeRevision++;lastScope="";state.inv=state.meta;state.result=null;
+    hide();if(on)startHelper();paint();
+  }
   function readSavedRefs(){
     let raw;
     try{raw=fs.readFileSync(file,"utf8");}catch(e){if(e.code==="ENOENT")return [];throw e;}
@@ -113,12 +120,14 @@ function start({electron,helperPath,captureDir,userData,spawnHelper=spawn}){
   function paintNow(){
     if(closed)return;
     if(child&&!inputBroken&&state.meta){
-      const command="scope "+state.epoch+" "+(!refFault&&state.readScope(refs)===true?"read":"skip")+"\n";
+      const read=enabled&&!refFault&&state.readScope(refs)===true;
+      const command="scope "+state.epoch+" "+(read?"read":"skip")+(read&&awaitingScope?" "+scopeRevision:"")+"\n";
       if(command!==lastScope){
         try{child.stdin.write(command);lastScope=command;}
         catch(e){inputBroken=true;state.inv=state.meta;console.error("Arrangement reader connection failed:",e.message||e);}
       }
     }
+    if(!enabled){state.inv=state.meta;hide();return;}
     if((refFault||inputBroken)&&state.meta)state.inv=state.meta;
     const d=state.display(refFault?noRefs:refs,Date.now());
     if(d&&refFault)d.result={state:"unknown",icon:"🤔",text:refFault,tint:false};
@@ -158,6 +167,7 @@ function start({electron,helperPath,captureDir,userData,spawnHelper=spawn}){
     // Reveal only after the renderer confirms it has replaced the previous reservation.
   }
   ipcMain.on("arrangement-painted",(e,p)=>{
+    if(!enabled)return;
     if(!overlay||e.sender!==overlay.webContents||!pending||p!==pending.p||pending.id!==state.id)return;
     if(!state.display(refFault?noRefs:refs,Date.now()))return;
     try{overlay.showInactive();overlayRetry=1000;}catch(e){retireOverlay(e);}
@@ -232,7 +242,7 @@ function start({electron,helperPath,captureDir,userData,spawnHelper=spawn}){
     if(error)console.error("Arrangement reader will retry:",error.message||error);
   }
   function startHelper(){
-    if(closed||child||Date.now()<nextHelperAt)return;
+    if(closed||!enabled||child||Date.now()<nextHelperAt)return;
     let current;
     try{
       current=spawnHelper(helperPath,["invoice",String(process.pid)],{windowsHide:true,stdio:["pipe","pipe","ignore"]});
@@ -253,6 +263,11 @@ function start({electron,helperPath,captureDir,userData,spawnHelper=spawn}){
           const line=buffer.slice(0,n);buffer=buffer.slice(n+1);
           try{
             const m=JSON.parse(line);
+            if(m.kind==="scope"){
+              if(enabled&&m.epoch===state.epoch&&m.read===true&&m.request===scopeRevision)awaitingScope=false;
+              continue;
+            }
+            if(m.kind==="invoice"&&(!enabled||awaitingScope))continue;
             if(m.kind==="reset"||m.kind==="hide")hide();
             state.accept(m,Date.now());
             if(m.kind==="geometry"||m.kind==="metadata")helperRetry=1000;
@@ -282,6 +297,6 @@ function start({electron,helperPath,captureDir,userData,spawnHelper=spawn}){
     // It notices the parent’s exit and closes itself after returning from the read.
     if(overlay&&!overlay.isDestroyed())overlay.destroy();
   });
-  return {state,scanRefs,ingestCapture};
+  return {state,scanRefs,ingestCapture,setEnabled};
 }
 module.exports={layout,InvoiceState,start};

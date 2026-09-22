@@ -1,11 +1,11 @@
 {
-  "version": "1.17.88",
+  "version": "1.17.89",
   "type": "full",
-  "engine": "1.17.88",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.88/Pro-Check-Setup.exe",
-  "setupSha256": "5a94bafc5ed56397cb58ac9098b845caa17ed17643abaa028c3af757f8923db3",
+  "engine": "1.17.89",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.89/Pro-Check-Setup.exe",
+  "setupSha256": "3bb1ddb000c19b530a1f23c0d6b3c268767d3be7e4c8584903a4aea4f2b72e20",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/2ff30e4ab159ff1e4d7d63dbdb9d6ad6fdcc2f22/Departments%20Check.html",
-  "sha256": "3e7c8edf5630aded18b2f91fbbbe1efb5522aa1676e940b7e1052fc9709cf5df",
-  "notes": "Calculate already posted Arrangement charges plus the list rate for each unposted night. Use recorded charges without separate rate-difference alerts."
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/9da019d2c0db30b23a7571a35aedd1b6e5c08144/Departments%20Check.html",
+  "sha256": "7fee044e593f9631561f32a0bc67fe69300f9023b306cd36050346d867169181",
+  "notes": "Add a remembered Arrangement Check switch beside the Audit options. Pause invoice checks and the overlay while keeping list capture and history active; resume with fresh invoice data."
 }

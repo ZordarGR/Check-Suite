@@ -311,7 +311,17 @@ body.onMenu #clList{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
 #statusListScreen table.st td.mStay{color:#fbbf24}
 #statusListScreen table.st td.mNone{color:var(--faint)}
 #statusListScreen table.st tr.gone td{opacity:.6}
-#auditScreen{margin-top:60px}
+#auditScreen{margin-top:60px;position:relative}
+.arrangementControl{position:absolute;top:0;left:calc(50% + 235px);width:180px;padding:14px;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:14px}
+.arrangementControl label{display:block;font-size:14px;color:var(--txt);margin-bottom:12px;cursor:pointer}
+.arrangementSwitchRow{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--dim)}
+#arrangementToggle{appearance:none;flex:none;width:38px;height:22px;margin:0;border:1px solid var(--line);border-radius:12px;background:var(--panel2);cursor:pointer;position:relative}
+#arrangementToggle:after{content:"";position:absolute;width:16px;height:16px;left:2px;top:2px;border-radius:50%;background:var(--dim);transition:transform .15s}
+#arrangementToggle:checked{background:var(--green);border-color:var(--green)}
+#arrangementToggle:checked:after{transform:translateX(16px);background:#07120b}
+#arrangementToggle:focus-visible{outline:2px solid var(--amber);outline-offset:3px}
+#arrangementToggle:disabled{opacity:.45;cursor:wait}
+@media(max-width:940px){.arrangementControl{position:static;width:auto;max-width:430px;box-sizing:border-box;margin:18px auto 0}}
 .mNav{display:flex;flex-direction:column;gap:10px;max-width:430px;margin:0 auto}
 .mItem{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;background:var(--panel);
   border:1px solid var(--line);border-radius:14px;padding:15px 20px;cursor:pointer;color:var(--txt);
@@ -1030,6 +1040,10 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
       <button class="mItem primary" id="aDept"><span class="mLabel"></span><span class="mSub"></span></button>
       <button class="mItem primary" id="aTax"><span class="mLabel"></span><span class="mSub"></span></button>
       <button class="btn small" id="aBack" style="margin-top:6px"></button>
+    </div>
+    <div class="arrangementControl">
+      <label for="arrangementToggle" id="arrangementLabel"></label>
+      <div class="arrangementSwitchRow"><input id="arrangementToggle" type="checkbox" role="switch" disabled><span id="arrangementStatus" aria-live="polite"></span></div>
     </div>
   </div>
 
@@ -1983,7 +1997,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.88";
+const APP_VERSION = "1.17.89";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -2047,6 +2061,8 @@ en: {
   "audit.dept": "DEPARTMENT CHECK", "audit.deptSub": "POS receipts vs the checkcharge report",
   "audit.tax": "TAX CHECK", "audit.taxSub": "occupancy vs accommodation-tax postings",
   "audit.back": "← Menu",
+  "audit.arrangement": "Arrangement Check", "audit.arrOn": "On", "audit.arrOff": "Off",
+  "audit.arrUnavailable": "Unavailable", "audit.arrSaving": "Saving…", "audit.arrSaveFailed": "Could not save",
   "cl.title": "TONIGHT'S CHECKLIST", "cl.count": "{d} / {n} done", "cl.empty": "— no tasks yet — use Edit home screen → Edit checklist to add some",
   "cl.add": "Add task", "cl.save": "Save", "cl.doneEditing": "Done editing", "cl.edit": "edit", "cl.del": "delete",
   "cl.up": "move up", "cl.down": "move down",
@@ -2306,6 +2322,8 @@ gr: {
   "audit.dept": "ΕΛΕΓΧΟΣ ΤΜΗΜΑΤΩΝ", "audit.deptSub": "αποδείξεις POS vs αναφορά checkcharge",
   "audit.tax": "ΕΛΕΓΧΟΣ ΤΑ", "audit.taxSub": "πληρότητα vs καταχωρήσεις τέλους διαμονής",
   "audit.back": "← Μενού",
+  "audit.arrangement": "Έλεγχος διαμονής", "audit.arrOn": "Ενεργό", "audit.arrOff": "Ανενεργό",
+  "audit.arrUnavailable": "Μη διαθέσιμο", "audit.arrSaving": "Αποθήκευση…", "audit.arrSaveFailed": "Δεν αποθηκεύτηκε",
   "cl.title": "Η ΛΙΣΤΑ ΤΗΣ ΒΡΑΔΙΑΣ", "cl.count": "{d} / {n} έγιναν", "cl.empty": "— καμία εργασία — Επεξεργασία αρχικής → Επεξεργασία λίστας για προσθήκη",
   "cl.add": "Προσθήκη", "cl.save": "Αποθήκευση", "cl.doneEditing": "Τέλος επεξεργασίας", "cl.edit": "αλλαγή", "cl.del": "διαγραφή",
   "cl.up": "μετακίνηση πάνω", "cl.down": "μετακίνηση κάτω",
@@ -2608,6 +2626,7 @@ function applyLang(){
   mi("#aDept", "audit.dept", "audit.deptSub");
   mi("#aTax", "audit.tax", "audit.taxSub");
   $("#aBack").textContent = t("audit.back");
+  paintArrangementToggle();
   paintClock();
   $("#clTitle").textContent = t("cl.title");
   $("#clText").placeholder = t("cl.ph");
@@ -4753,6 +4772,7 @@ function showScreen(which){
   $("#statusListScreen").style.display = which === "stlist" ? "" : "none";
   $("#reportsScreen").style.display = which === "reports" ? "" : "none";
   if(which === "reports") renderReports();
+  if(which === "audit") loadArrangementToggle();
   /* STATUS is drawn by the tax half, which holds the captures: the menu's four lines, and
      the list he chose. Doors, like __taScreen above. */
   if(which === "status"){ try{ if(window.__taStatusMenu) window.__taStatusMenu(); }catch(e){} }
@@ -6974,6 +6994,36 @@ $("#openAnother").onclick = () => {
 $("#homeLogo").onclick = () => showScreen("menu");
 $("#hdrLogo").onclick = () => showScreen("menu");
 $("#reportMeta").onclick = () => { if(MODEL && SCREEN !== "app") showScreen("app"); };
+let ARRANGEMENT_ON=null,ARRANGEMENT_BUSY=false,ARRANGEMENT_ERROR="";
+function paintArrangementToggle(){
+  const input=$("#arrangementToggle");
+  $("#arrangementLabel").textContent=t("audit.arrangement");
+  input.checked=ARRANGEMENT_ON===true;
+  input.disabled=ARRANGEMENT_BUSY||ARRANGEMENT_ON===null||!window.reccheckArrangement;
+  $("#arrangementStatus").textContent=t(ARRANGEMENT_BUSY?"audit.arrSaving":ARRANGEMENT_ERROR||
+    (ARRANGEMENT_ON===null?"audit.arrUnavailable":ARRANGEMENT_ON?"audit.arrOn":"audit.arrOff"));
+}
+async function loadArrangementToggle(){
+  if(ARRANGEMENT_BUSY)return;
+  if(!window.reccheckArrangement){paintArrangementToggle();return;}
+  ARRANGEMENT_BUSY=true;paintArrangementToggle();
+  try{
+    const r=await window.reccheckArrangement.get();
+    if(!r||!r.ok||typeof r.enabled!=="boolean")throw new Error("setting unavailable");
+    ARRANGEMENT_ON=r.enabled;ARRANGEMENT_ERROR="";
+  }catch(e){ARRANGEMENT_ON=null;ARRANGEMENT_ERROR="audit.arrUnavailable";}
+  finally{ARRANGEMENT_BUSY=false;paintArrangementToggle();}
+}
+$("#arrangementToggle").onchange=async e=>{
+  if(ARRANGEMENT_BUSY||ARRANGEMENT_ON===null||!window.reccheckArrangement){paintArrangementToggle();return;}
+  const on=e.target.checked;ARRANGEMENT_BUSY=true;ARRANGEMENT_ERROR="";paintArrangementToggle();
+  try{
+    const r=await window.reccheckArrangement.set(on);
+    if(!r||!r.ok||typeof r.enabled!=="boolean")throw new Error("setting not saved");
+    ARRANGEMENT_ON=r.enabled;
+  }catch(e){ARRANGEMENT_ERROR="audit.arrSaveFailed";}
+  finally{ARRANGEMENT_BUSY=false;paintArrangementToggle();}
+};
 $("#auditBtn").onclick = () => showScreen("audit");
 $("#aBack").onclick = () => showScreen("menu");
 $("#alertsBtn").onclick = () => showScreen("alerts");

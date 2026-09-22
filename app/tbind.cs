@@ -2773,7 +2773,7 @@ static class TBind {
     }catch(Exception){}
   }
 
-  const string VER = "v34";
+  const string VER = "v35";
 
 
   /* Live accommodation reader. Separate child mode: no keyboard hooks, no protel writes.
@@ -2998,10 +2998,13 @@ static class TBind {
     bool resumed=false;int end;
     while((end=pending.IndexOf('\n'))>=0){
       string line=pending.Substring(0,end).Trim();pending=pending.Substring(end+1);
-      string[] parts=line.Split(new char[]{' '});long requested;
-      if(parts.Length==3&&parts[0]=="scope"&&long.TryParse(parts[1],out requested)&&requested==epoch&&epoch>0){
+      string[] parts=line.Split(new char[]{' '});long requested,requestId=0;
+      if((parts.Length==3||parts.Length==4&&long.TryParse(parts[3],out requestId)&&requestId>0)
+         &&parts[0]=="scope"&&long.TryParse(parts[1],out requested)&&requested==epoch&&epoch>0){
         if(parts[2]=="read"){if(!allowed)resumed=true;allowed=true;}
         else if(parts[2]=="skip")allowed=false;
+        if(parts[2]=="read"||parts[2]=="skip")
+          Say("{\"kind\":\"scope\",\"epoch\":"+epoch+",\"request\":"+requestId+",\"read\":"+(allowed?"true":"false")+"}");
       }
     }
     return resumed;
