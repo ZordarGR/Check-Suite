@@ -1,11 +1,11 @@
 {
   "version": "1.17.88",
-  "type": "html",
-  "engine": "1.17.87",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.87/Pro-Check-Setup.exe",
-  "setupSha256": "70a3ab53dc939c364a843f5566380cbbb53bbcf6a2ce5fab40749672d56640c3",
+  "type": "full",
+  "engine": "1.17.88",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.88/Pro-Check-Setup.exe",
+  "setupSha256": "c013ab7dabe111ce75be4bac445c49760a30a23c9a6e47e25b7e0d200e73e267",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/2ff30e4ab159ff1e4d7d63dbdb9d6ad6fdcc2f22/Departments%20Check.html",
   "sha256": "3e7c8edf5630aded18b2f91fbbbe1efb5522aa1676e940b7e1052fc9709cf5df",
-  "notes": "Calculate posted Arrangement charges plus list rates for unposted nights."
+  "notes": "Calculate already posted Arrangement charges plus the list rate for each unposted night. Keep isolated first-night differences visible."
 }
