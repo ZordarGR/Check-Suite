@@ -17,7 +17,7 @@ const {chromium}=require("playwright-core"), path=require("path"), fs=require("f
   let checks=0;
   for(const {viewport,strip:s,grid:g} of layouts){
    await p.setViewportSize(viewport);
-   for(const state of ["paid","difference","unpaid","unknown"]){
+   for(const state of ["paid","difference","unpaid","unknown","warning"]){
     let firstPosition;
     for(const textWidth of [120,348,370,900,-1,undefined]){
      const packet={result:{state,icon:state==="paid"?"✓":state==="unknown"?"🤔":"✕",text:"€180.00 × 7 nights = €1,260.00. Paid €1,110.00. Under €150.00.",tint:state==="unpaid"},textWidth,strip:s,grid:g};
@@ -93,6 +93,17 @@ const {chromium}=require("playwright-core"), path=require("path"), fs=require("f
    await p.waitForFunction(v=>window.ack===JSON.stringify(v),invalid);
    assert.equal(await p.$eval("#tint",el=>getComputedStyle(el).display),"none","invalid geometry must not retain or expand tint");
   }
-  console.log(checks+" overlay placement cases, "+messageChecks+" wrapped-message cases and 6 invalid-grid cases passed: missing-data messages above, payment details below, B-grid-only tint and title icons.");
+  const calc=require('../../app/arrangement');
+  const fields={complete:true,name:"SYNTHETIC GUEST",room:"101",arr:"14/09/26",dep:"21/09/26",currency:"EUR",title:"INDIVIDUAL"};
+  const ref={...fields,price:"240,00",agency:"INDIVIDUAL",at:1};
+  const entry=(label,amount,date="14/09/26")=>({label,amount,date,currency:"EUR"});
+  const result=calc.evaluate({...fields,rows:[entry("PAYMENT","-1.750,00"),entry("*Arrangement","310,00"),entry("*Arrangement","240,00","15/09/26")]},[ref]);
+  assert.equal(result.state,"warning");
+  const packet={result,strip:layouts[0].strip,grid:layouts[0].grid};
+  await p.evaluate(v=>{window.ack=null;window.paint(v);},packet);await p.waitForFunction(v=>window.ack===JSON.stringify(v),packet);
+  assert.equal(await p.$eval('#detail',e=>getComputedStyle(e).display),'block');
+  assert.match(await p.$eval('#detail',e=>e.textContent),/First night €70.00 above later nights/);
+  assert.equal(await p.$eval('#icon',e=>e.textContent),'⚠');
+  console.log(checks+" overlay placement cases, "+messageChecks+" wrapped-message cases, 6 invalid-grid cases and the paid first-night warning passed.");
  }finally{await b.close();}
 })().catch(e=>{console.error(e);process.exit(1);});
