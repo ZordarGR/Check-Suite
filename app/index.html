@@ -514,7 +514,12 @@ body.hasMoves main{max-width:1330px}
 .acc.done>.head :is(.cnt,.cnt b,.prog,.prog b,.tot,.chev,.tick,.openPill){color:#000}
 .acc.done>.head .bar{background:#000}
 .acc>.body{display:none;border-top:1px solid var(--line)}
-.roomSearchWrap{display:flex;align-items:center;gap:10px;padding:9px 16px 3px}
+.roomSearchWrap{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:9px 16px 3px}
+.receiptSortLabel{display:flex;align-items:center;gap:7px;margin-left:auto;color:var(--dim);font-size:12px}
+.receiptSort{background:var(--bg2);color:var(--txt);border:1px solid var(--line);border-radius:7px;padding:5px 8px;font:inherit}
+.receiptSort:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.sortReceiptName{display:block;color:var(--amber);font-size:11px;margin-top:3px}
+.sortReceiptName[hidden]{display:none}
 .roomSearch{background:var(--bg2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:6px 10px;font-family:var(--mono);font-size:13.5px;width:110px}
 .roomSearch:focus{outline:none;border-color:var(--amber-dim)}
 .rsHint{color:var(--faint);font-size:11.5px}
@@ -1997,7 +2002,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.89";
+const APP_VERSION = "1.17.90";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -2261,6 +2266,7 @@ en: {
   "tag.leavingTitle": "This guest is on the departure list for the report's day and the receipt is under the same name — the charge was made before check-out and settled with it. Once confirmed, this paper is no longer needed.",
   "search.void": "VOID — consolidated by {by}, not counted",
   "room.ph": "room…", "room.hint": "room № · Enter = OK · ↑↓ rows · ←→ OK/⚠ · Esc",
+  "receipt.order": "Order", "receipt.byRoom": "Room", "receipt.byName": "Name A–Z", "receipt.printed": "Receipt name", "receipt.sortHint": "Sort by the name printed on the receipt",
   "acc.extra": " · incl. {n} added by hand", "acc.void": " · {n} void",
   "acc.other": "▸ {n} folio posting(s) excluded — ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ / CREDIT CARDS — informational",
   "tag.ok": "OK", "tag.missing": "MISSING", "tag.corr": "CORRECTED — verify", "tag.corr2": "CORRECTED",
@@ -2521,6 +2527,7 @@ gr: {
   "tag.leavingTitle": "Ο ένοικος είναι στη λίστα αναχωρήσεων της ημέρας της αναφοράς και η απόδειξη είναι στο ίδιο όνομα — η χρέωση έγινε πριν το check-out και τακτοποιήθηκε μαζί του. Μετά την επιβεβαίωση, το χαρτί δεν χρειάζεται πια.",
   "search.void": "ΑΚΥΡΗ — ενοποιήθηκε από {by}, δεν μετράει",
   "room.ph": "δωμ…", "room.hint": "№ δωματίου · Enter = OK · ↑↓ γραμμές · ←→ OK/⚠ · Esc",
+  "receipt.order": "Σειρά", "receipt.byRoom": "Δωμάτιο", "receipt.byName": "Όνομα Α–Ω", "receipt.printed": "Όνομα απόδειξης", "receipt.sortHint": "Ταξινόμηση με το όνομα της απόδειξης",
   "acc.extra": " · μαζί με {n} χειροκίνητες", "acc.void": " · {n} άκυρες",
   "acc.other": "▸ {n} καταχωρήσεις folio εκτός — ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ / CREDIT CARDS — ενημερωτικά",
   "tag.ok": "OK", "tag.missing": "ΛΕΙΠΕΙ", "tag.corr": "ΔΙΟΡΘΩΘΗΚΕ — επιβεβαίωση", "tag.corr2": "ΔΙΟΡΘΩΘΗΚΕ",
@@ -5157,6 +5164,22 @@ function tagFor(status){
   }
 }
 
+const RECEIPT_SORT = {};                 // view order only; receipt data is never reordered
+function applyReceiptOrder(acc, dept){
+  const body=acc.querySelector(":scope > .body"), byName=RECEIPT_SORT[dept]==="name";
+  const rows=[...body.querySelectorAll(":scope > .rrow")];
+  rows.forEach((row,i)=>{
+    if(!("originalOrder" in row.dataset))row.dataset.originalOrder=String(i);
+    const printed=row.querySelector(".sortReceiptName");if(printed)printed.hidden=!byName;
+  });
+  const names=new Intl.Collator(undefined,{sensitivity:"base",numeric:true});
+  rows.sort((a,b)=>{
+    const x=(a.dataset.receiptName||"").trim(),y=(b.dataset.receiptName||"").trim();
+    return (byName?((!x)-(!y)||names.compare(x,y)):0)||(+a.dataset.originalOrder)-(+b.dataset.originalOrder);
+  });
+  const fragment=document.createDocumentFragment();rows.forEach(row=>fragment.append(row));
+  body.insertBefore(fragment,body.querySelector(":scope > .otherPost"));
+}
 function renderAccordions(){
   const wrap = $("#accordions");
   const openSet = new Set([...wrap.querySelectorAll(".acc.open")].map(a => a.dataset.dept));
@@ -5215,8 +5238,8 @@ function buildAcc(name, list, extras, other, open, isExtraAcc){
   acc.append(head);
 
   const body = el("div","body");
+  const sw = el("div","roomSearchWrap");
   if(!isExtraAcc && checkable.length){
-    const sw = el("div","roomSearchWrap");
     const rs = document.createElement("input");
     rs.className = "roomSearch"; rs.placeholder = t("room.ph");
     rs.autocomplete = "off"; rs.inputMode = "numeric";
@@ -5225,8 +5248,15 @@ function buildAcc(name, list, extras, other, open, isExtraAcc){
     rs.oninput = () => { rs.value = rs.value.replace(/\D/g,""); ROOMF[name] = rs.value; applyRoomFilter(acc, name); };
     rs.onkeydown = e => roomSearchKeys(e, acc, name, rs);
     sw.append(rs, el("span","rsHint", t("room.hint")));
-    body.append(sw);
   }
+  const sortLabel=el("label","receiptSortLabel",t("receipt.order"));
+  const sort=el("select","receiptSort");sort.title=t("receipt.sortHint");
+  for(const [value,key] of [["room","receipt.byRoom"],["name","receipt.byName"]]){
+    const option=el("option","",t(key));option.value=value;sort.append(option);
+  }
+  sort.value=RECEIPT_SORT[name]||"room";
+  sort.onchange=()=>{RECEIPT_SORT[name]=sort.value;applyReceiptOrder(acc,name);knavPaint();};
+  sortLabel.append(sort);sw.append(sortLabel);body.append(sw);
   for(const r of list){
     if(r.cancelled) continue;              // voided at the POS — hidden from lists
     body.append(receiptRow(r));
@@ -5249,6 +5279,7 @@ function buildAcc(name, list, extras, other, open, isExtraAcc){
     body.append(det);
   }
   acc.append(body);
+  applyReceiptOrder(acc,name);
   return acc;
 }
 
@@ -5258,6 +5289,7 @@ function receiptRow(r){
   const row = el("div","rrow st-" + status);
   row.dataset.key = rKey(r);
   row.dataset.room = effRoom(r);
+  row.dataset.receiptName = r.guest || "";
   if(st.sourceChanged)row.title="The source receipt changed or predates source verification. Review this receipt again; saved corrections are retained.";
   row.onclick = () => { KNAV.key = rKey(r); KNAV.act = "ok"; knavPaint(); };
 
@@ -5297,6 +5329,11 @@ function receiptRow(r){
   nm.title = (nick ? gname + t("n.nickedTitle") : gname) +
              (r.guest && gname !== r.guest ? "  ·  ⌫ " + r.guest : "");
   row.append(nm);
+
+  if(r.guest && r.guest.trim() !== (nick || gname).trim()){
+    const printed=el("span","sortReceiptName",t("receipt.printed")+": "+r.guest);
+    printed.hidden=true;nm.append(printed);
+  }
 
   const split = el("div","split");
   if(corrHasValues(st)){
@@ -5361,12 +5398,20 @@ function receiptRow(r){
 
 function extraRow(x){
   const row = el("div","rrow st-extra");
+  row.dataset.receiptName = x.guest || "";
   if(x.room) row.dataset.room = String(x.room);
   row.append(el("div","room", x.room || "—"));
   row.append(el("div","sn", x.sn));
   /* Entries added before 1.16.6 carry no guest, so fall back to a live lookup. */
   const xg = x.room ? (nickFor(x.room) || x.guest || guestFor(x.room)) : null;
-  if(xg) row.append(el("div","name", xg));
+  if(xg || x.guest){
+    const nm=el("div","name",xg || x.guest);
+    if(x.guest && x.guest.trim() !== (xg || x.guest).trim()){
+      const printed=el("span","sortReceiptName",t("receipt.printed")+": "+x.guest);
+      printed.hidden=true;nm.append(printed);
+    }
+    row.append(nm);
+  }
   row.append(el("div","split", rateSplitStr({"24%": x.v24, "13%": x.v13})));
   const xw = x.room ? watchFor(x.room) : [];
   if(xw.length){
