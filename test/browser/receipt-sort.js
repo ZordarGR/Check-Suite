@@ -14,7 +14,7 @@ const {chromium}=require('playwright-core'),assert=require('assert'),path=requir
    for(const d of ['RESTAURANT','CAFETERIA','TAVERNAKI','KAFENIO','BAR'])depts[d]={list:d==='RESTAURANT'?list:d==='BAR'?bar:[],other:[],stillOpen:false};
    depts.RESTAURANT.other=[{room:'900',guest:'OTHER POSTING',time:'21:00',rate:'base',amount:4}];
    window.__t.setModel({reportDate:'24/9/2026',receipts:[...list,...bar],depts,validation:[]});
-   window.__t.setState({date:'24/9/2026',receipts:{},extras:[{dept:'RESTAURANT',sn:'manual',room:'100',guest:'Adam',v24:5,v13:0},{dept:'UNKNOWN',sn:'extra',guest:'No room guest',v24:2,v13:0}]});
+   window.__t.setState({date:'24/9/2026',receipts:{},extras:[{dept:'RESTAURANT',sn:'manual',room:'100',guest:'Adam',v24:5,v13:0},{dept:'UNKNOWN',sn:'extra',room:'',guest:'No room guest',v24:2,v13:0}]});
    window.__t.setStateKey('reccheck_24/9/2026');window.__t.showScreen('app');window.__t.renderAccordions();
    document.querySelectorAll('.acc').forEach(a=>a.classList.add('open'));
   });
@@ -33,7 +33,7 @@ const {chromium}=require('playwright-core'),assert=require('assert'),path=requir
   assert.equal(await root.locator('.khl').getAttribute('data-room'),'30','keyboard follows alphabetical order');await p.keyboard.press('Enter');
   assert.equal(await sort.inputValue(),'name','checking retains the chosen order');
   assert(await root.locator('.rrow[data-room="30"] .rowck').isChecked());assert(!await root.locator('.rrow[data-room="40"] .rowck').isChecked(),'duplicate serial in another room stays untouched');
-  const state=await p.evaluate(()=>window.__t.getState());assert.equal(state.receipts['RESTAURANT|30|30'].status,'ok');assert.equal(state.extras.length,2);
+  const state=await p.evaluate(()=>window.__t.getState());assert.equal(state.receipts['30|30'].status,'ok');assert.equal(state.extras.length,2);
   await root.locator('.head').click();await root.locator('.head').click();assert.equal(await sort.inputValue(),'name');
   await p.locator('.extraAcc .receiptSort').selectOption('name');assert.match(await p.locator('.extraAcc .name').last().innerText(),/No room guest/);
   await p.screenshot({path:path.resolve(__dirname,'receipt-sort.png')});
