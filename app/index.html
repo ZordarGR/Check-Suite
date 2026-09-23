@@ -520,6 +520,17 @@ body.hasMoves main{max-width:1330px}
 .receiptSort:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 .sortReceiptName{display:block;color:var(--amber);font-size:11px;margin-top:3px}
 .sortReceiptName[hidden]{display:none}
+.roomLookupBtn{display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;margin-left:6px;width:26px;height:26px;padding:4px;border:1px solid var(--line);border-radius:6px;background:var(--bg2);color:var(--dim);cursor:pointer}
+.roomLookupBtn:hover{color:var(--amber);border-color:var(--amber)}
+.roomLookupBtn:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.roomLookupBtn:disabled{opacity:.4;cursor:default}
+.roomLookupBtn svg{width:16px;height:16px;flex:none}
+.roomLookupIntro{font-size:12px;color:var(--dim);line-height:1.6;overflow-wrap:anywhere;margin-bottom:12px}
+#roomLookupResults{display:flex;flex-direction:column;gap:8px}
+#roomLookupResults .match{flex-wrap:wrap;animation:none}
+#roomLookupResults .name{flex-basis:100%;order:2}
+#roomLookupResults .split{flex-basis:100%;order:3}
+#roomLookupResults .msn{overflow-wrap:anywhere;min-width:0}
 .roomSearch{background:var(--bg2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:6px 10px;font-family:var(--mono);font-size:13.5px;width:110px}
 .roomSearch:focus{outline:none;border-color:var(--amber-dim)}
 .rsHint{color:var(--faint);font-size:11.5px}
@@ -2002,7 +2013,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.90";
+const APP_VERSION = "1.17.91";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -2267,6 +2278,8 @@ en: {
   "search.void": "VOID — consolidated by {by}, not counted",
   "room.ph": "room…", "room.hint": "room № · Enter = OK · ↑↓ rows · ←→ OK/⚠ · Esc",
   "receipt.order": "Order", "receipt.byRoom": "Room", "receipt.byName": "Name A–Z", "receipt.printed": "Receipt name", "receipt.sortHint": "Sort by the name printed on the receipt",
+  "lookup.action": "Find room {room} in other departments", "lookup.title": "Room {room} · other departments", "lookup.source": "Current report: {date} · From {dept} · Receipt {sn}",
+  "lookup.count": "Matches: {n}", "lookup.empty": "No receipts for this room in other departments in the current report.", "lookup.close": "Close",
   "acc.extra": " · incl. {n} added by hand", "acc.void": " · {n} void",
   "acc.other": "▸ {n} folio posting(s) excluded — ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ / CREDIT CARDS — informational",
   "tag.ok": "OK", "tag.missing": "MISSING", "tag.corr": "CORRECTED — verify", "tag.corr2": "CORRECTED",
@@ -2528,6 +2541,8 @@ gr: {
   "search.void": "ΑΚΥΡΗ — ενοποιήθηκε από {by}, δεν μετράει",
   "room.ph": "δωμ…", "room.hint": "№ δωματίου · Enter = OK · ↑↓ γραμμές · ←→ OK/⚠ · Esc",
   "receipt.order": "Σειρά", "receipt.byRoom": "Δωμάτιο", "receipt.byName": "Όνομα Α–Ω", "receipt.printed": "Όνομα απόδειξης", "receipt.sortHint": "Ταξινόμηση με το όνομα της απόδειξης",
+  "lookup.action": "Εύρεση δωματίου {room} σε άλλα τμήματα", "lookup.title": "Δωμάτιο {room} · άλλα τμήματα", "lookup.source": "Τρέχουσα αναφορά: {date} · Από {dept} · Απόδειξη {sn}",
+  "lookup.count": "Αποτελέσματα: {n}", "lookup.empty": "Δεν υπάρχουν αποδείξεις για αυτό το δωμάτιο σε άλλα τμήματα της τρέχουσας αναφοράς.", "lookup.close": "Κλείσιμο",
   "acc.extra": " · μαζί με {n} χειροκίνητες", "acc.void": " · {n} άκυρες",
   "acc.other": "▸ {n} καταχωρήσεις folio εκτός — ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ / CREDIT CARDS — ενημερωτικά",
   "tag.ok": "OK", "tag.missing": "ΛΕΙΠΕΙ", "tag.corr": "ΔΙΟΡΘΩΘΗΚΕ — επιβεβαίωση", "tag.corr2": "ΔΙΟΡΘΩΘΗΚΕ",
@@ -5283,6 +5298,36 @@ function buildAcc(name, list, extras, other, open, isExtraAcc){
   return acc;
 }
 
+function roomLookupButton(r){
+  const room=String(effRoom(r)||"").trim(),button=el("button","roomLookupBtn");
+  button.type="button";button.title=t("lookup.action",{room:room||"—"});
+  button.setAttribute("aria-label",button.title);button.disabled=!room;
+  button.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></svg>';
+  button.onclick=e=>{e.stopPropagation();openRoomLookup(r);};
+  return button;
+}
+function openRoomLookup(source){
+  if(!MODEL)return;
+  const room=String(effRoom(source)||"").trim();if(!room)return;
+  const matches=MODEL.receipts.filter(r=>r!==source&&r.dept!==source.dept&&!r.cancelled&&String(effRoom(r)||"").trim()===room);
+  closeMenu();
+  openModal('<h3 id="roomLookupTitle"></h3><div class="roomLookupIntro" id="roomLookupSource"></div><div class="roomLookupIntro" id="roomLookupCount"></div><div id="roomLookupResults"></div><div class="actions"><button class="btn amber" id="roomLookupClose"></button></div>');
+  $("#modal").classList.remove("land","cards");$("#modal").classList.add("wide");
+  $("#roomLookupTitle").textContent=t("lookup.title",{room});
+  $("#roomLookupSource").textContent=t("lookup.source",{date:MODEL.reportDate,dept:source.dept,sn:effSN(source)});
+  $("#roomLookupCount").textContent=t("lookup.count",{n:matches.length});
+  const results=$("#roomLookupResults");
+  for(const r of matches){
+    const card=matchCard(r);card.dataset.key=rKey(r);card.dataset.dept=r.dept;
+    // Lookup is informational: reuse the receipt display without confirmation/edit actions.
+    card.querySelectorAll("button,input").forEach(node=>node.remove());
+    const name=card.querySelector(".name");
+    if(r.guest&&r.guest.trim()!==name.textContent.trim())name.append(el("span","sortReceiptName",t("receipt.printed")+": "+r.guest));
+    results.append(card);
+  }
+  if(!matches.length)results.append(el("p","",t("lookup.empty")));
+  const close=$("#roomLookupClose");close.textContent=t("lookup.close");close.onclick=closeModal;close.focus({preventScroll:true});
+}
 function receiptRow(r){
   const st = rState(r);
   const status = statusOf(r);
@@ -5301,7 +5346,7 @@ function receiptRow(r){
     room.textContent = r.roomMain;
     if(r.roomMain !== r.room) room.append(el("span","adj"," (" + r.room + ")"));
   }
-  row.append(room);
+  room.append(roomLookupButton(r));row.append(room);
 
   const sn = el("div","sn");
   if(st.corr && st.corr.sn){
@@ -5968,7 +6013,8 @@ function isLeaving(room, name){
 function matchCard(r){
   const c = el("div","match");
   c.append(el("span","dept", r.dept));
-  c.append(el("span","room", effRoom(r) + (r.roomMain !== r.room && !(rState(r).corr && rState(r).corr.room) ? " ⧉" : "")));
+  const room=el("span","room", effRoom(r) + (r.roomMain !== r.room && !(rState(r).corr && rState(r).corr.room) ? " ⧉" : ""));
+  room.append(roomLookupButton(r));c.append(room);
   c.append(el("span","msn", effSN(r)));
   /* THE SAME RESOLUTION AS THE ACCORDION ROW. 1.17.23 made every charge take its room's
      name in receiptRow and left this card on the older rule — the room's name only when
