@@ -5,7 +5,7 @@
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.89/Pro-Check-Setup.exe",
   "setupSha256": "3bb1ddb000c19b530a1f23c0d6b3c268767d3be7e4c8584903a4aea4f2b72e20",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/1d4f6afb827e4202cc58ec589152f89a1bd81661/Departments%20Check.html",
-  "sha256": "f4d4160d6d00cb785b0372f6ebe4108f242835e83561fe3671f005e5bed376b7",
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/4538d9b2644108096c4e470af6fadb2eada9bd32/Departments%20Check.html",
+  "sha256": "8801a43db450e6d2dbde4e93014eb6dad5adc54114084425ea951268da38b8c4",
   "notes": "Use the search icon beside a receipt's room to see matching receipts in other departments of the current report, in a centered results window. Matches use the displayed room, including manual corrections, and preserve filters and saved checks."
 }
