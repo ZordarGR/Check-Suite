@@ -5304,6 +5304,7 @@ function roomLookupButton(r){
   button.setAttribute("aria-label",button.title);button.disabled=!room;
   button.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></svg>';
   button.onclick=e=>{e.stopPropagation();openRoomLookup(r);};
+  button.onkeydown=e=>{if(e.key==="Enter"||e.key===" ")e.stopPropagation();}; // activate lookup, never the highlighted receipt's OK action
   return button;
 }
 function openRoomLookup(source){

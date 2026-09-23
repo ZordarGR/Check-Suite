@@ -34,7 +34,10 @@ const {chromium}=require('playwright-core'),assert=require('assert'),path=requir
   await p.setViewportSize({width:1500,height:1000});await p.screenshot({path:path.resolve(__dirname,'room-lookup.png')});
   await p.locator('#roomLookupClose').click();assert.equal(await root.locator('.receiptSort').inputValue(),'name');assert.equal(await p.locator('.acc[data-dept="BAR"] .roomSearch').inputValue(),'1010');
   await root.locator('.rrow[data-key="102|999"] .roomLookupBtn').click();assert.equal(await results.locator('.match').count(),0);assert.match(await results.innerText(),/No receipts/);await p.keyboard.press('Escape');
-  await button.focus();await p.keyboard.press('Enter');assert.equal(await results.locator('.match').count(),3);await p.locator('#roomLookupClose').click();
+  await root.locator('.rrow[data-key="100|101"] .sn').click();await button.focus();await p.keyboard.press('Enter');assert.equal(await results.locator('.match').count(),3);await p.locator('#roomLookupClose').click();
+  assert(!await root.locator('.rrow[data-key="100|101"] .rowck').isChecked(),'keyboard lookup cannot confirm a highlighted receipt');
+  await p.locator('.acc[data-dept="CAFETERIA"] .rrow[data-key="201|102"] .roomLookupBtn').click();assert.match(await p.locator('#roomLookupTitle').innerText(),/Room 101/);
+  assert.equal(await results.locator('.match').count(),4,'source lookup follows its corrected room');assert.equal(await results.locator('.match[data-dept="CAFETERIA"]').count(),0);await p.locator('#roomLookupClose').click();
   await p.evaluate(()=>{const r=window.__t.getModel().receipts[0];document.querySelector('#matches').replaceChildren(window.__t.matchCard(r));document.querySelector('#searchWrap').style.display='block';});
   await p.locator('#matches .roomLookupBtn').click();assert.equal(await results.locator('.match').count(),3);await p.locator('#roomLookupClose').click();
   assert(await p.locator('.rrow[data-key="700|"] .roomLookupBtn').isDisabled());assert.deepEqual(errors,[]);
