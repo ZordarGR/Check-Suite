@@ -1,11 +1,11 @@
 {
-  "version": "1.17.91",
+  "version": "1.17.92",
   "type": "html",
   "engine": "1.17.89",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.89/Pro-Check-Setup.exe",
   "setupSha256": "3bb1ddb000c19b530a1f23c0d6b3c268767d3be7e4c8584903a4aea4f2b72e20",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/4538d9b2644108096c4e470af6fadb2eada9bd32/Departments%20Check.html",
-  "sha256": "8801a43db450e6d2dbde4e93014eb6dad5adc54114084425ea951268da38b8c4",
-  "notes": "Use the search icon beside a receipt's room to see matching receipts in other departments of the current report, in a centered results window. Matches use the displayed room, including manual corrections, and preserve filters and saved checks."
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/b1108c8bf3ab75173f9a18874107243ebc965d73/Departments%20Check.html",
+  "sha256": "d4c6ced24e834b881b8fbf2152f0457299ac4f0bdd22bd2d15a29c7b6c28dccc",
+  "notes": "Move receipt dots now require receipts from the displayed old room. Dotted moves appear first, with each group sorted by old room number."
 }

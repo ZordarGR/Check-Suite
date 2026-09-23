@@ -222,7 +222,7 @@ ck("a receipt under the moved name on the room LEFT dots the move", P.dot("505")
 ck("an arrival is never dotted",                                    !P.dot("337"));
 ck("a turnover with the departing guest's receipt is dotted",      P.dot("120"));
 P = pillsFor(NIGHT, [rc("505", "VASSILIEV"), rc("110", "MUELLER HANS", {voided: true}), rc("120", "NEW IN 120")]);
-ck("a receipt under the moved name on the room TAKEN dots the move too", P.dot("505"));
+ck("a receipt under the moved name on the room TAKEN does not dot the move", !P.dot("505"));
 ck("a voided receipt does not dot",                                       !P.dot("110"));
 ck("a turnover with only the NEW guest's receipt is not dotted",          !P.dot("120"));
 P = pillsFor(NIGHT, [rc("111", "MUELLER HANS")]);
@@ -244,8 +244,11 @@ P = pillsFor(NIGHT, []);
 ck("a receipt on an earlier night of the stay, under the departing name, dots the departure", P.dot("110"));
 ck("a receipt the night before the stay began does not",                                   !P.dot("116"));
 ck("a receipt under another name during the stay does not",                                !P.dot("116"));
-ck("the moved reservation's receipt on an earlier night dots the move",                   P.dot("505"));
+ck("the moved reservation's earlier receipt on the destination does not dot the move",    !P.dot("505"));
 ck("an arrival is still never dotted",                                                     !P.dot("337"));
+nights["20260903"] = [knownPair("525", "VASSILIEV")];
+store["reccheck_receipts_v1"] = JSON.stringify(nights);
+ck("the moved reservation's earlier receipt on its old room dots the move", pillsFor(NIGHT, []).dot("505"));
 ck("an omitted receipt remains stored as uncertain, not erased", (JSON.parse(store["reccheck_receipts_v1"])["20260904"] || []).some(p=>p[0]==="111"&&p[2].uncertain));
 /* a night whose report was never loaded is unknown, not empty: only loaded nights are keys */
 ck("nights never loaded here are simply absent",                                           !("20260830" in JSON.parse(store["reccheck_receipts_v1"])));
@@ -328,22 +331,22 @@ store["reccheck_receipts_v1"] = JSON.stringify({"20260901": [knownPair("72", "QU
 rpt("MV", "TITLE\tPerform Move for Date 02/09/26\nMV\t72\tBGV\t56\tMVFAM\tQUINK\t\t30/08/26\t04/09/26\nDONE\t1\t1\t9\t5\tunicode\tcomplete\n", Date.UTC(2026, 8, 2, 10));
 ck("... nor through a move protel has not marked",                                        !pillsFor(NIGHT, []).dot("56"));
 /* one reservation on two lists: moved 72 → 56 on the night it departs from 56 — a departure
-   pill and a move pill under the same name, and the receipt dots BOTH (1.17.61: 1.17.60 let
+   pill and a move pill under the same name; only old-room receipts dot BOTH (1.17.61: 1.17.60 let
    the departure's own name block the move pill) */
 for(const k of Object.keys(store)) delete store[k];
 store["reccheck_legacy"] = "0";
 rpt("DP", RPT("DP", "Departure Report for 04/09/26", [["QUINK FREDERICK/ANNA", "56", "2/0/1/1/0", "30/08/26", "CI"]]), T(11));
 rpt("MV", "TITLE\tPerform Move for Date 04/09/26\nMV\t72\tBGV\t56\tMVFAM\tQUINK\tX\t30/08/26\t04/09/26\nDONE\t1\t1\t9\t5\tunicode\tcomplete\n", T(9));
 P = pillsFor(NIGHT, [rc("56", "QUINK frederick")]);
-ck("the same reservation departing and moved carries two pills, and the receipt dots both", P.kinds("56") === "dep+move" && P.pills.filter(p => p.room === "56" && p.dot).length === 2);
+ck("same reservation has two pills but destination receipts dot only departure", P.kinds("56") === "dep+move" && P.pills.filter(p => p.room === "56" && p.dot).map(p => p.kind).join("+") === "dep");
 ck("... a receipt on the room it left dots both too",                                     pillsFor(NIGHT, [rc("72", "QUINK frederick")]).pills.filter(p => p.room === "56" && p.dot).length === 2);
 /* a different guest moved in on the departing guest's room: each pill its own name */
 for(const k of Object.keys(store)) delete store[k];
 store["reccheck_legacy"] = "0";
 rpt("DP", RPT("DP", "Departure Report for 04/09/26", [["QUINK FREDERICK/ANNA", "56", "2/0/1/1/0", "30/08/26", "CI"]]), T(11));
 rpt("MV", "TITLE\tPerform Move for Date 04/09/26\nMV\t72\tBGV\t56\tMVFAM\tNEUMANN PETRA\tX\t02/09/26\t10/09/26\nDONE\t1\t1\t9\t5\tunicode\tcomplete\n", T(9));
-P = pillsFor(NIGHT, [rc("56", "QUINK frederick"), rc("56", "NEUMANN PETRA")]);
-ck("another guest moved in: the departure dots on QUINK's receipt, the move on NEUMANN's, each alone", P.pills.filter(p => p.room === "56" && p.dot).map(p => p.kind).sort().join("+") === "dep+move" && !pillsFor(NIGHT, [rc("56", "NEUMANN PETRA")]).pills.some(p => p.kind === "dep" && p.dot) && !pillsFor(NIGHT, [rc("56", "QUINK frederick")]).pills.some(p => p.kind === "move" && p.dot));
+P = pillsFor(NIGHT, [rc("56", "QUINK frederick"), rc("72", "NEUMANN PETRA")]);
+ck("another guest moved in: the departure dots on QUINK's receipt, the move on NEUMANN's, each alone", P.pills.filter(p => p.room === "56" && p.dot).map(p => p.kind).sort().join("+") === "dep+move" && !pillsFor(NIGHT, [rc("72", "NEUMANN PETRA")]).pills.some(p => p.kind === "dep" && p.dot) && !pillsFor(NIGHT, [rc("56", "QUINK frederick")]).pills.some(p => p.kind === "move" && p.dot));
 ck("the memory and the store keep fifteen nights — his word",                              /^const RECEIPTS_KEEP = 15;/m.test(src) && /^const STATUS_KEEP_DAYS = 15;/m.test(src));
 
 console.log("--- 5e. move surnames and receipt first names meet through a captured full reservation");
@@ -371,7 +374,7 @@ P = bridgePills(bridge, undefined, {"164": {guest: RECEIPT_FIRST, liveKey: 20260
 ck("a receipt on arrival day in the old room dots the move using the captured full name", P.dot("164"));
 ck("the move pill still displays protel's own move-list name", P.pills[0].title.includes(MOVE_SHORT) && !P.pills[0].title.includes(MOVE_FULL));
 ck("matching does not rewrite the captured status rows", store["reccheck_status_v1"] === JSON.stringify(bridge));
-ck("the same name on the new room also dots", bridgePills(bridge, [["164", RECEIPT_FIRST]]).dot("164"));
+ck("the same name on the new room does not dot the move", !bridgePills(bridge, [["164", RECEIPT_FIRST]]).dot("164"));
 ck("the same receipt name on an unrelated room does not dot", !bridgePills(bridge, [["165", RECEIPT_FIRST]]).dot("164"));
 ck("another guest's receipt on the old room does not dot", !bridgePills(bridge, [["163", "SOMEONE ELSE"]]).dot("164"));
 bridge = bridgeFixture();
@@ -438,7 +441,8 @@ rpt("MV", RPT("MV", "Perform Move for Date 04/09/26", [
   ["505", "SV", "9017", "ACC", "MORGAN/TAYLOR ALICE/ROBERT", "X", "02/09/26", "04/09/26"]]), T(7));
 P = pillsFor(NIGHT, [rc("9017", "ALICE/ROBERT")]);
 ck("guest-account arrival is a pill", P.kind("9008") === "arr");
-ck("guest-account departure and move both retain their dots", P.kinds("9017") === "dep+move" && P.pills.filter(p => p.room === "9017" && p.dot).length === 2);
+ck("guest-account destination receipt dots departure alone", P.kinds("9017") === "dep+move" && P.pills.filter(p => p.room === "9017" && p.dot).map(p => p.kind).join("+") === "dep");
+ck("guest-account old-room receipt dots departure and move", pillsFor(NIGHT, [rc("505", "ALICE/ROBERT")]).pills.filter(p => p.room === "9017" && p.dot).length === 2);
 ck("guest-account departure is included in the department red mark", !!P.leaving["9017"]);
 ck("house accounts never become pills or departure marks", ["9000", "9604", "9040"].every(room => !P.has(room) && !P.leaving[room]));
 
