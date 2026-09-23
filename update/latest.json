@@ -1,11 +1,11 @@
 {
-  "version": "1.17.89",
-  "type": "full",
+  "version": "1.17.90",
+  "type": "html",
   "engine": "1.17.89",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.89/Pro-Check-Setup.exe",
   "setupSha256": "3bb1ddb000c19b530a1f23c0d6b3c268767d3be7e4c8584903a4aea4f2b72e20",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/9da019d2c0db30b23a7571a35aedd1b6e5c08144/Departments%20Check.html",
-  "sha256": "7fee044e593f9631561f32a0bc67fe69300f9023b306cd36050346d867169181",
-  "notes": "Add a remembered Arrangement Check switch beside the Audit options. Pause invoice checks and the overlay while keeping list capture and history active; resume with fresh invoice data."
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/16be03d5280399d96f446f5e5ff2a560fc131747/Departments%20Check.html",
+  "sha256": "acd4557e7c0ee5ef9f53dde47db75e9603d556993a96ed45c87b5ec4ed339340",
+  "notes": "Sort each Department Check accordion by receipt name A–Z or return to room order. Original receipt names remain visible when different from the displayed guest name; room filters and saved checks are preserved."
 }
