@@ -2013,7 +2013,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.91";
+const APP_VERSION = "1.17.92";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -2265,6 +2265,7 @@ en: {
   "mv.dep": "left today", "mv.arr": "arrived today",
   "mv.move": "moved in from another room today — not a new arrival",
   "mv.rec": "has receipts during this stay (in the reports loaded here)",
+  "mv.moveRec": "has receipts from the old room during this stay (in the reports loaded here)",
   "mv.h.dep": "DEPARTURES", "mv.h.arr": "ARRIVALS", "mv.h.move": "MOVES",
   "mv.guess": "occupant changed — inferred",
   "mv.from": "from the rate list of {d}",
@@ -2528,6 +2529,7 @@ gr: {
   "mv.dep": "αναχώρησε σήμερα", "mv.arr": "άφιξη σήμερα",
   "mv.move": "μετακόμισε από άλλο δωμάτιο σήμερα — δεν είναι νέα άφιξη",
   "mv.rec": "έχει αποδείξεις στη διάρκεια της διαμονής (στις αναφορές που φορτώθηκαν εδώ)",
+  "mv.moveRec": "έχει αποδείξεις από το παλιό δωμάτιο στη διάρκεια της διαμονής (στις αναφορές που φορτώθηκαν εδώ)",
   "mv.h.dep": "ΑΝΑΧΩΡΗΣΕΙΣ", "mv.h.arr": "ΑΦΙΞΕΙΣ", "mv.h.move": "ΜΕΤΑΚΙΝΗΣΕΙΣ",
   "mv.guess": "άλλαξε ο ένοικος — εκτίμηση",
   "mv.from": "από τη λίστα δωματίων της {d}",
@@ -6498,8 +6500,8 @@ function renderMovesFor(box, night){
   box.innerHTML = "";
   if(!rooms.length) return 0;
   box.append(el("div","mvTitle", t("mv.title")));
-  /* One colour at a time, under its own heading. Sorted by room number inside each
-     group, as it always was — but interleaving the three kinds turned the panel into a
+  /* One colour at a time, under its own heading. Moves with old-room receipts come
+     first, then by old room number; the other groups keep room order. Interleaving the three kinds turned the panel into a
      chequerboard you had to decode pill by pill, which is the opposite of the point.
      The headings also retire the legend: a colour under the word for it needs no key. */
   /* Departures whose room also has receipts in tonight's department check — the paper he
@@ -6524,8 +6526,8 @@ function renderMovesFor(box, night){
      loaded into RecCheck is a night the tool knows nothing about, and says nothing.
      Departed: a receipt on that room under the departing reservation's name — a turnover
      departed too, so it takes the same dot for the same name. Moved: a receipt under the
-     moved reservation's name on either room, the one left or the one taken — its paper
-     can carry either number. Exact name, never the room alone: a room number marks the
+     moved reservation's name on the old room printed on THIS move only. Destination
+     receipts and receipts from an earlier move cannot mark it. Exact name, never the room alone: a room number marks the
      wrong stay the moment it turns over. */
   /* THE MATCH, his word 05/09: "the pills should get marked because the departing name
      has a receipt, not the arriving". The .oxps cuts the receipt's name at the column and
@@ -6540,7 +6542,7 @@ function renderMovesFor(box, night){
      case of a previous room change)". A receipt written while the guest was still in the
      room protel later moved them out of belongs to the same stay. The moves protel has
      marked (its X) in the STATUS store, any night the store holds, chained back from the
-     pill's room while the name matches the pill's; the pill's own movedFrom always. */
+     departure pill's room while the name matches. Move dots use only their own FROM room. */
   const st = legacyOn() ? null : loadStatus();
   const roomsBefore = (room, names) => {
     const out = new Set();
@@ -6565,10 +6567,10 @@ function renderMovesFor(box, night){
     return out;
   };
   const BEFORE = {};
-  for(const room of rooms) BEFORE[room] = {dep: roomsBefore(room, mv[room].names.dep.concat(mv[room].names.depFull || [])), move: roomsBefore(room, mv[room].names.move)};
+  for(const room of rooms) BEFORE[room] = {dep: roomsBefore(room, mv[room].names.dep.concat(mv[room].names.depFull || []))};
   const hit = (m, room, rm, guest) => {
     if(m.dep && (rm === room || BEFORE[room].dep.has(rm)) && m.names.dep.concat(m.names.depFull || []).some(n => nameHit(guest, n, otherNames(m, room, "dep")))) depRec.add(room);
-    if(m.movedFrom && (rm === room || BEFORE[room].move.has(rm)) && m.names.move.concat(m.names.moveFull || []).some(n => nameHit(guest, n, otherNames(m, room, "move")))) moveRec.add(room);
+    if(m.movedFrom && rm === String(m.movedFrom) && m.names.move.concat(m.names.moveFull || []).some(n => nameHit(guest, n, otherNames(m, room, "move")))) moveRec.add(room);
   };
   const found = room => (!mv[room].dep || depRec.has(room)) && (!mv[room].movedFrom || moveRec.has(room));
   if(MODEL&&dateNum(MODEL.reportDate)===night){
@@ -6618,6 +6620,7 @@ function renderMovesFor(box, night){
   const GROUPS = [["arr", r => !!mv[r].arr], ["dep", r => !!mv[r].dep], ["move", r => !!mv[r].movedFrom]];
   for(const [kind, pick] of GROUPS){
     const of = rooms.filter(pick);
+    if(kind === "move")of.sort((a,b)=>Number(moveRec.has(b))-Number(moveRec.has(a))||String(mv[a].movedFrom).localeCompare(String(mv[b].movedFrom),undefined,{numeric:true})||a.localeCompare(b,undefined,{numeric:true}));
     if(!of.length) continue;
     const head = el("div","mvGroup mv-" + kind);
     head.append(el("span","mvGroupName", t("mv.h." + kind)));
@@ -6633,7 +6636,7 @@ function renderMovesFor(box, night){
                 : kind === "arr"  ? m.names.arr.filter(Boolean).map(n => "→ " + n)
                 :                   m.names.move.filter(Boolean).map(n => "↳ " + n + "  (" + m.movedFrom + " → " + room + ")");
       pill.title = t("mv." + kind) + (m.sure ? "" : " · " + t("mv.guess"))
-                 + (rec ? " · " + t("mv.rec") : "")
+                 + (rec ? " · " + t(kind === "move" ? "mv.moveRec" : "mv.rec") : "")
                  + (who.length ? "\n" + who.join("\n") : "")
                  + (m.from ? "\n" + t("mv.from", {d: dShort(m.from)}) : "");
       grid.append(pill);
