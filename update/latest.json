@@ -1,11 +1,11 @@
 {
-  "version": "1.17.90",
+  "version": "1.17.91",
   "type": "html",
   "engine": "1.17.89",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.89/Pro-Check-Setup.exe",
   "setupSha256": "3bb1ddb000c19b530a1f23c0d6b3c268767d3be7e4c8584903a4aea4f2b72e20",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/16be03d5280399d96f446f5e5ff2a560fc131747/Departments%20Check.html",
-  "sha256": "acd4557e7c0ee5ef9f53dde47db75e9603d556993a96ed45c87b5ec4ed339340",
-  "notes": "Sort each Department Check accordion by receipt name A–Z or return to room order. Original receipt names remain visible when different from the displayed guest name; room filters and saved checks are preserved."
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/4538d9b2644108096c4e470af6fadb2eada9bd32/Departments%20Check.html",
+  "sha256": "8801a43db450e6d2dbde4e93014eb6dad5adc54114084425ea951268da38b8c4",
+  "notes": "Use the search icon beside a receipt's room to see matching receipts in other departments of the current report, in a centered results window. Matches use the displayed room, including manual corrections, and preserve filters and saved checks."
 }
