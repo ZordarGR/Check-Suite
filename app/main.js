@@ -543,7 +543,25 @@ function createWindow(file){
   win.on("closed", () => { win = null; destroyOverlay(); });
 }
 
-app.whenReady().then(() => {
+/* Required updates run before loading the audit renderer or starting its writers.
+   Reopening a running window never interrupts an audit; this gate is process startup only. */
+async function startupUpdate(){
+  let gate;
+  try{
+    gate = new BrowserWindow({width:440,height:170,resizable:false,closable:false,autoHideMenuBar:true,
+      backgroundColor:"#0a0e14",title:"Pro-Check · Checking for updates",
+      webPreferences:{contextIsolation:true,sandbox:true,nodeIntegration:false}});
+    await gate.loadURL("data:text/html;charset=utf-8," + encodeURIComponent('<!DOCTYPE html><html><meta charset="utf-8"><style>body{margin:30px;background:#0a0e14;color:#dbe4f0;font:15px Segoe UI,sans-serif}b{color:#f5b453}p{font-size:13px}</style><b>Starting Pro-Check…</b><p>Checking for required updates. Please wait while any required update downloads and installs.</p></html>'));
+    const info = await updater.check({forcedOnly:true});
+    if(!info || info.forced !== true) return false;
+    if(info.full) return await launchPendingInstaller(true);
+    updater.promote(); // verified HTML is loaded directly below, without a second restart
+    return false;
+  }catch(e){return false;}
+  finally{if(gate && !gate.isDestroyed()) gate.destroy();}
+}
+
+app.whenReady().then(async () => {
   updater = new Updater({
     userDataDir: app.getPath("userData"),
     packagedDir: __dirname,
@@ -555,6 +573,8 @@ app.whenReady().then(() => {
       if(!MANUAL_SHOWN && p && p.phase === "downloading"){ MANUAL_SHOWN = true; showMain(); }
     }
   });
+  MANUAL_SHOWN = true;
+  if(await startupUpdate()) return;
   hub = new FileHub({
     configPath: path.join(app.getPath("userData"), "config.json"),
     onDirEvent: (profile) => { if(win && !win.isDestroyed()) win.webContents.send("reccheck-dir-event", profile); }
@@ -685,19 +705,27 @@ function startInstallSplash(){
     child.unref();
   }catch(e){}
 }
-ipcMain.handle("reccheck-apply-update", () => {
-  if(!updater || !updater.pending) return false;
+let INSTALLING_UPDATE = false;
+async function launchPendingInstaller(automatic = false){
+  if(INSTALLING_UPDATE || !updater || !updater.installerReady()) return false;
+  if(automatic && !updater.claimForcedInstall()) return false;
+  INSTALLING_UPDATE = true;
+  const started = await new Promise(resolve => {
+    try{
+      const child = spawn(updater.pending.setupPath, ["/S"], {detached:true,stdio:"ignore",windowsHide:true});
+      child.once("error", () => resolve(false));
+      child.once("spawn", () => {child.unref();resolve(true);});
+    }catch(e){resolve(false);}
+  });
+  if(!started){INSTALLING_UPDATE = false;return false;}
+  startInstallSplash();
+  setTimeout(() => app.exit(0), 300);
+  return true;
+}
+ipcMain.handle("reccheck-apply-update", async () => {
+  if(!updater || !updater.pending || INSTALLING_UPDATE) return false;
   if(updater.pending.full){
-    if(updater.pending.downloaded && updater.pending.setupPath){
-      // run the downloaded installer silently; it relaunches the app when done
-      startInstallSplash();
-      try{
-        const child = spawn(updater.pending.setupPath, ["/S"], {detached: true, stdio: "ignore"});
-        child.unref();
-      }catch(e){ return false; }
-      setTimeout(() => app.exit(0), 300);
-      return true;
-    }
+    if(updater.pending.downloaded) return launchPendingInstaller();
     shell.openExternal(updater.pending.url);
     return true;
   }
