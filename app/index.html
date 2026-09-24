@@ -2058,7 +2058,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.96";
+const APP_VERSION = "1.17.97";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -8341,7 +8341,7 @@ function parseTax(tokens){
   for(let i=0;i<tokens.length;i++)if(tokens[i]==="Date")for(let j=i-1;j>=Math.max(i-7,0);j--){
     const c=String(tokens[j]||'').trim();if(RE_ROOM.test(c)){starts.push({room:leadRoom(c),idx:j});break;}
   }
-  const rooms={},dates=new Set();let totalArr=0,negative=false,badDate=false;
+  const rooms={},dates=new Set();let totalArr=0,badDate=false;
   for(let k=0;k<starts.length;k++){
     const room=starts[k].room,end=k+1<starts.length?starts[k+1].idx:tokens.length;
     const rec=rooms[room]||(rooms[room]={arr:0,auto:0,man:0});
@@ -8349,7 +8349,7 @@ function parseTax(tokens){
       const tk=String(tokens[i]||'').trim();
       if(tk==='__TAX_POSTING_DATE_UNREADABLE__')badDate=true;
       if(/^\d{1,2}\/\d{1,2}\/(?:\d{2}|\d{4})$/.test(tk)){const key=dkey(tk);if(key)dates.add(key);else badDate=true;}
-      if(/(?:^|\s)-\s*\d[\d.,]*[.,]\d{2}(?:$|\s)/.test(tk))negative=true;
+      if(/(?:^|\s)-\s*\d[\d.,]*[.,]\d{2}(?:$|\s)/.test(tk)){rec.reversal=true;rec.uncertain=true;}
       if(tk.includes(ARR_MARK)){rec.arr++;totalArr++;}
       if(tk.includes(TA_MARK)){if(taIsAuto(tk))rec.auto++;else rec.man++;}
     }
@@ -8357,9 +8357,8 @@ function parseTax(tokens){
   const ambiguous=dates.size!==1||badDate, key=dates.size===1?[...dates][0]:0;
   const fileDate=key?String(key%100).padStart(2,'0')+'/'+String(Math.floor(key/100)%100).padStart(2,'0')+'/'+String(Math.floor(key/10000)).slice(2):null;
   return {kind:'tax',fileDate,dateKey:key,totalRooms:Object.keys(rooms).length,totalArrangements:totalArr,rooms,
-    ambiguous,uncertain:ambiguous||negative,
-    error:negative?'This report contains signed reversals. Tax totals need verification; the saved data was retained.':
-      ambiguous?'The tax report must contain one valid posting date. No tax memory was changed.':''};
+    ambiguous,uncertain:ambiguous,
+    error:ambiguous?'The tax report must contain one valid posting date. No tax memory was changed.':''};
 }
 /* `rooms` keeps one reservation per room because the tax cross-reference is written
    against that shape. `all` keeps every row, which is the only way to see that a room
@@ -8533,7 +8532,7 @@ function crossReference(rate,tax,nightKey){
     if((span.start&&N<span.start)||(span.end&&N>=span.end)){notOwed++;continue;}
     if(rr.adjoining){adjoining.push({room,name:rr.name,partner:rr.partner});continue;}
     const tr=tax.rooms[room];
-    if(tr&&tr.uncertain){uncertain.push({room,name:rr.name,reason:'Conflicting saved tax reports'});continue;}
+    if(tr&&tr.uncertain){uncertain.push({room,name:rr.name,reason:tr.reversal?'Reversed charges — verify this room':'Conflicting saved tax reports'});continue;}
     if(!tr||tr.arr===0)totalFail.push({room,name:rr.name,covered:!!(tr&&tr.man>0)});
     else if(tr.auto===0)autoMiss.push({room,name:rr.name,covered:tr.man>0});
     else ok.push(room);
@@ -8579,12 +8578,13 @@ function ingestTax(tax){
   for(const room of Object.keys(tax.rooms)){
     const b=tax.rooms[room],rec=mem[room]||(mem[room]={}),old=rec[tax.fileDate];
     const counts=x=>[x.arr||0,x.auto||0,x.man||0];
-    const changed=old&&JSON.stringify(counts(old))!==JSON.stringify(counts(b));
+    const signature=x=>JSON.stringify([...counts(x),!!x.reversal]);
+    const changed=old&&signature(old)!==signature(b);
     const versions=old&&Array.isArray(old.versions)?old.versions.slice():[];
-    if(changed&&!versions.some(x=>JSON.stringify(counts(x))===JSON.stringify(counts(old))))versions.push({arr:old.arr,auto:old.auto,man:old.man,manual:old.manual||null});
-    const next={arr:b.arr,auto:b.auto,man:b.man,manual:changed?null:(old&&old.manual||null),versions,uncertain:!!(changed||(old&&old.uncertain))};
+    if(changed&&!versions.some(x=>signature(x)===signature(old)))versions.push({arr:old.arr,auto:old.auto,man:old.man,manual:old.manual||null,...(old.reversal?{reversal:true}:{})});
+    const next={arr:b.arr,auto:b.auto,man:b.man,manual:changed?null:(old&&old.manual||null),versions,...(b.reversal||(old&&old.reversal)?{reversal:true}:{}),uncertain:!!(changed||b.uncertain||b.reversal||(old&&old.uncertain))};
     rec[tax.fileDate]=next;
-    b.uncertain=next.uncertain;
+    b.uncertain=next.uncertain;b.reversal=!!next.reversal;
     // Zero counts and earlier versions remain evidence, never implicit deletion.
   }
   return saveMem(mem);
@@ -8828,7 +8828,10 @@ function taxUncertainties(mem){
   const out=[];
   for(const room of taxRoomKeys(mem)){
     const dates=Object.keys(mem[room]||{}).filter(d=>mem[room][d].uncertain).sort((a,b)=>dkey(a)-dkey(b));
-    if(dates.length)out.push({room,name:'',reason:'Conflicting saved tax reports: '+dates.join(', ')});
+    if(dates.length){
+      const reversed=dates.filter(d=>mem[room][d].reversal),other=dates.filter(d=>!mem[room][d].reversal);
+      out.push({room,name:'',reason:[reversed.length?'Reversed charges — verify this room: '+reversed.join(', '):'',other.length?'Conflicting saved tax reports: '+other.join(', '):''].filter(Boolean).join('; ')});
+    }
   }
   return out;
 }
@@ -8919,7 +8922,7 @@ function buildPrintReport(){
     rooms.sort((a,b)=>(parseInt(a.room)||0)-(parseInt(b.room)||0));
   }
   else if(TAX){night=TAX.fileDate;const mem=loadMem();const man=r=>((mem[r]||{})[TAX.fileDate]||{}).manual||null;
-    rooms=taxRoomKeys(TAX.rooms).filter(r=>{const b=TAX.rooms[r];return b.uncertain||(b.arr>0&&b.auto===0&&!man(r));}).sort((a,b)=>(parseInt(a)||0)-(parseInt(b)||0)).map(r=>({room:r,name:'',term:'',agent:'',arr:'',dep:'',covered:TAX.rooms[r].man>0,adj:false,reason:TAX.rooms[r].uncertain?'Conflicting saved tax reports':''}));
+    rooms=taxRoomKeys(TAX.rooms).filter(r=>{const b=TAX.rooms[r];return b.uncertain||(b.arr>0&&b.auto===0&&!man(r));}).sort((a,b)=>(parseInt(a)||0)-(parseInt(b)||0)).map(r=>({room:r,name:'',term:'',agent:'',arr:'',dep:'',covered:TAX.rooms[r].man>0,adj:false,reason:TAX.rooms[r].uncertain?(TAX.rooms[r].reversal?'Reversed charges — verify this room':'Conflicting saved tax reports'):''}));
     for(const row of taxUncertainties(taxMemory()))if(!rooms.some(x=>x.room===row.room&&x.reason))rooms.push(row);
   }
   const _n=new Date(),_p=x=>String(x).padStart(2,'0');const now=_p(_n.getDate())+'/'+_p(_n.getMonth()+1)+'/'+_n.getFullYear()+' '+_p(_n.getHours())+':'+_p(_n.getMinutes());
@@ -8988,7 +8991,7 @@ function renderRosterInto(container,append){
 function renderTaxStandalone(){
   const r=TAX; const mem=loadMem();
   const uncertain=taxUncertainties(taxMemory());
-  for(const room of taxRoomKeys(r.rooms))if(r.rooms[room].uncertain&&!uncertain.some(x=>x.room===room))uncertain.push({room,reason:'Conflicting saved tax reports'});
+  for(const room of taxRoomKeys(r.rooms))if(r.rooms[room].uncertain&&!uncertain.some(x=>x.room===room))uncertain.push({room,reason:r.rooms[room].reversal?'Reversed charges — verify this room':'Conflicting saved tax reports'});
   const manualOf=room=>((mem[room]||{})[r.fileDate]||{}).manual||null;
   const autoMiss=[]; for(const room of taxRoomKeys(r.rooms)){const b=r.rooms[room];if(!b.uncertain&&b.arr>0&&b.auto===0&&!manualOf(room))autoMiss.push({room,covered:b.man>0});}
   autoMiss.sort((a,b)=>(parseInt(a.room)||0)-(parseInt(b.room)||0));
@@ -9017,8 +9020,8 @@ function noArrRow(room){const mem=loadMem();const cur=((mem[room]||{})[TAX.fileD
   return `<div class="row"><span class="rm">${room}</span><span class="tag grey">${t('tag_noarr')}</span><span class="meta">${t('meta_noarr')}</span><span class="btns"><button class="mini ${cur==='arrival'?'on-arr':''}" data-room="${room}" data-set="arrival">${t('btn_arrival')}</button><button class="mini ${cur==='checkout'?'on-out':''}" data-room="${room}" data-set="checkout">${t('btn_checkout')}</button></span></div>`;}
 
 /* memory accordion (tax) */
-function deriveStatus(e){if(e.uncertain)return['amber','Conflicting saved tax reports',false];const man=e.manual||null;if(man==='arrival')return['blue',t('tag_arrival'),true];if(man==='checkout')return['blue',t('tag_checkout'),true];if((e.arr||0)===0)return['grey',t('tag_noarr'),true];if((e.auto||0)===0&&(e.man||0)===0)return['red',t('tag_auto_none'),false];if((e.auto||0)===0&&(e.man||0)>0)return['red',t('tag_auto_cov'),false];if(((e.auto||0)+(e.man||0))>=2)return['amber',t('tag_double'),false];return['ok',t('tag_ok'),false];}
-function renderMemory(){const mem=taxMemory();const dates=recentDates(mem,7);const acc=el('acc');if(!dates.length){acc.innerHTML=`<div class="empty" style="background:var(--panel);border:1px solid var(--line);border-radius:10px">${t('mem_empty')}</div>`;return;}let html='';for(const d of dates){const items=[];let total=0,autox=0,dbl=0,noarr=0,arr=0,out=0;for(const room of Object.keys(mem)){const e=mem[room][d];if(!e)continue;total++;const [cls,label,click]=deriveStatus(e);const man=e.manual||null;if(man==='arrival')arr++;else if(man==='checkout')out++;else if((e.arr||0)===0)noarr++;else if((e.auto||0)===0)autox++;else if(((e.auto||0)+(e.man||0))>=2)dbl++;if(cls!=='ok')items.push([room,cls,label,click]);}items.sort((a,b)=>(parseInt(a[0])||0)-(parseInt(b[0])||0));let chips=`<span class="chip">${total} ${t('chip_rooms')}</span>`;if(autox)chips+=`<span class="chip red">${autox} ${t('chip_auto')}</span>`;if(dbl)chips+=`<span class="chip amber">${dbl} ${t('chip_double')}</span>`;if(noarr)chips+=`<span class="chip grey">${noarr} ${t('chip_noarr')}</span>`;if(arr)chips+=`<span class="chip blue">${arr} ${t('chip_arr')}</span>`;if(out)chips+=`<span class="chip blue">${out} ${t('chip_out')}</span>`;let body;if(!items.length)body=`<div class="empty">${t('date_allok')}</div>`;else body=items.map(function(it){const room=it[0],cls=it[1],label=it[2],click=it[3];const tc=click?(cls+' click cyc'):cls;const da=click?('data-room="'+room+'" data-date="'+d+'"'):'';return '<div class="row"><span class="rm">'+room+'</span><span class="tag '+tc+'" '+da+'>'+label+'</span></div>';}).join('');const open=EXPANDED.has(d)?' open':'';html+='<div class="dgroup'+open+'"><div class="dhead" data-toggle="'+d+'"><span class="caret">▶</span><span class="ddate">'+d+'</span><span class="chips">'+chips+'</span></div><div class="dbody">'+body+'</div></div>';}acc.innerHTML=html;}
+function deriveStatus(e){if(e.uncertain)return['amber',e.reversal?'Reversed charges — verify this room':'Conflicting saved tax reports',false];const man=e.manual||null;if(man==='arrival')return['blue',t('tag_arrival'),true];if(man==='checkout')return['blue',t('tag_checkout'),true];if((e.arr||0)===0)return['grey',t('tag_noarr'),true];if((e.auto||0)===0&&(e.man||0)===0)return['red',t('tag_auto_none'),false];if((e.auto||0)===0&&(e.man||0)>0)return['red',t('tag_auto_cov'),false];if(((e.auto||0)+(e.man||0))>=2)return['amber',t('tag_double'),false];return['ok',t('tag_ok'),false];}
+function renderMemory(){const mem=taxMemory();const dates=recentDates(mem,7);const acc=el('acc');if(!dates.length){acc.innerHTML=`<div class="empty" style="background:var(--panel);border:1px solid var(--line);border-radius:10px">${t('mem_empty')}</div>`;return;}let html='';for(const d of dates){const items=[];let total=0,autox=0,dbl=0,noarr=0,arr=0,out=0;for(const room of Object.keys(mem)){const e=mem[room][d];if(!e)continue;total++;const [cls,label,click]=deriveStatus(e);const man=e.manual||null;if(e.uncertain){}else if(man==='arrival')arr++;else if(man==='checkout')out++;else if((e.arr||0)===0)noarr++;else if((e.auto||0)===0)autox++;else if(((e.auto||0)+(e.man||0))>=2)dbl++;if(cls!=='ok')items.push([room,cls,label,click]);}items.sort((a,b)=>(parseInt(a[0])||0)-(parseInt(b[0])||0));let chips=`<span class="chip">${total} ${t('chip_rooms')}</span>`;if(autox)chips+=`<span class="chip red">${autox} ${t('chip_auto')}</span>`;if(dbl)chips+=`<span class="chip amber">${dbl} ${t('chip_double')}</span>`;if(noarr)chips+=`<span class="chip grey">${noarr} ${t('chip_noarr')}</span>`;if(arr)chips+=`<span class="chip blue">${arr} ${t('chip_arr')}</span>`;if(out)chips+=`<span class="chip blue">${out} ${t('chip_out')}</span>`;let body;if(!items.length)body=`<div class="empty">${t('date_allok')}</div>`;else body=items.map(function(it){const room=it[0],cls=it[1],label=it[2],click=it[3];const tc=click?(cls+' click cyc'):cls;const da=click?('data-room="'+room+'" data-date="'+d+'"'):'';return '<div class="row"><span class="rm">'+room+'</span><span class="tag '+tc+'" '+da+'>'+label+'</span></div>';}).join('');const open=EXPANDED.has(d)?' open':'';html+='<div class="dgroup'+open+'"><div class="dhead" data-toggle="'+d+'"><span class="caret">▶</span><span class="ddate">'+d+'</span><span class="chips">'+chips+'</span></div><div class="dbody">'+body+'</div></div>';}acc.innerHTML=html;}
 
 /* manual tagging */
 function setManual(room,date,val){const mem=loadMem();const rec=mem[room]||(mem[room]={});const e=rec[date]||(rec[date]={arr:0,auto:0,man:0,manual:null});e.manual=val;saveMem(mem);}

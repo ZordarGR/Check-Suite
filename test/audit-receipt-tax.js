@@ -205,7 +205,29 @@ function deferred() { let resolve; const promise = new Promise(r=>resolve=r); re
   });
   await check('tax-signed-reversal','Negative automatic-tax reversal cannot count as another positive posting',()=>{
     const c=taxParser(),t=c.parseTax(['205','Date','18/09/26','Arrangement','100,00','* ΤΕΛΟΣ ΑΝΘΕΚΤΙΚΟΤΗΤΑΣ','10,00','* ΤΕΛΟΣ ΑΝΘΕΚΤΙΚΟΤΗΤΑΣ','-10,00']);
-    assert.ok(t.uncertain || t.rooms['205'].auto!==2,'reversal counted as second positive tax');
+    assert(!t.uncertain,'a reversal must not block unrelated rooms');assert(t.rooms['205'].uncertain&&t.rooms['205'].reversal,'reversal must not become a verified positive tax total');
+  });
+  await check('tax-room-reversal-history','Reversal warning survives reload, retains previous evidence and excludes 9xxx accounts',()=>{
+    const p=taxParser(),m=memContext();
+    const first=charges({'205':{arr:1,auto:1,man:0},'206':{arr:1,auto:1,man:0}});
+    assert(m.ingestTax(first));
+    const parsed=p.parseTax(['205','Date','18/09/26','Arrangement','100,00','* ΤΕΛΟΣ ΑΝΘΕΚΤΙΚΟΤΗΤΑΣ','-10,00',
+      '206','Date','18/09/26','Arrangement','100,00','* ΤΕΛΟΣ ΑΝΘΕΚΤΙΚΟΤΗΤΑΣ','10,00',
+      '9010','Date','18/09/26','Arrangement','-100,00']);
+    assert(m.ingestTax(parsed));const saved=m.loadMem();
+    assert(saved['205']['18/09/26'].reversal&&saved['205']['18/09/26'].uncertain);
+    assert(saved['205']['18/09/26'].versions.some(v=>v.arr===1&&v.auto===1&&!v.reversal),'earlier verified snapshot retained even when counts match');
+    assert(!saved['206']['18/09/26'].uncertain);assert(saved['9010']['18/09/26'].reversal,'account evidence retained');
+    assert(m.roomBalance(saved,'205').uncertain);assert.match(m.deriveStatus(saved['205']['18/09/26'])[1],/Reversed charges/);
+    const c=taxContext();c.applyInhouse(capture([ihRow('205','ALPHA TEST'),ihRow('206','BETA TEST'),ihRow('9010','ACCOUNT')]),true);
+    const result=c.crossReference(c.RATE,parsed);
+    assert.equal(result.okCount,1);assert.deepEqual(Array.from(result.uncertain,x=>x.room),['205']);
+    assert.match(result.uncertain[0].reason,/Reversed charges/);assert.equal(result.overcharge.length,0);
+    vm.runInContext(lift('taxUncertainties'),c);
+    const warnings=c.taxUncertainties(saved);assert.deepEqual(Array.from(warnings,x=>x.room),['205']);assert.match(warnings[0].reason,/Reversed charges/);
+    const before=JSON.stringify(saved);m.ingestTax(parsed);assert.equal(JSON.stringify(m.loadMem()),before,'same import does not grow versions');
+    const clean=charges({'205':{arr:1,auto:1,man:0}});m.ingestTax(clean);
+    assert(m.loadMem()['205']['18/09/26'].reversal,'a later filtered clean report cannot silently erase reversal evidence');
   });
   await check('tax-load-latest-selection','Slow earlier file load cannot overwrite latest chosen tax file',async()=>{
     const one=deferred(),two=deferred(),els={};const a=charges({'205':{arr:1,auto:0,man:0}}),b=charges({'206':{arr:1,auto:1,man:0}});
