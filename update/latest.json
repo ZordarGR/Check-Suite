@@ -5,7 +5,7 @@
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.95/Pro-Check-Setup.exe",
   "setupSha256": "7cf32e0db5275f7590d329fd23bda54d4e1e1726353848f3691b61caed738188",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/b36114f283ed2dc4d3a0648d365d443c132edda6/Departments%20Check.html",
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/17f8ac59d06fe232b02d244133604ab852deeb04/Departments%20Check.html",
   "sha256": "9a16e15da0bb008e3130c826bd6fb13c5a5585ab0555cf638ee08d644a600c53",
   "notes": "Open Tax Check reports containing reversals and flag the affected normal rooms for verification, instead of blocking the whole report. 9xxx accounts remain excluded from tax warnings. Preserve earlier tax evidence and keep mixed/missing/invalid posting dates blocked.",
   "force": true
