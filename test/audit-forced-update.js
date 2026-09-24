@@ -113,7 +113,7 @@ async function scenario(label,fn){
    let ready;const events=[];const ctx={app:{whenReady:()=>({then:fn=>{ready=fn;}}),getPath:()=>"/synthetic"},Updater:class{effective(){return {file:"verified.html"};}check(){return Promise.resolve(null);}},
     FileHub:class{constructor(){events.push("hub");}startWatch(){}readConfig(){return {};}},path,process:{env:{},platform:"linux"},__dirname:"/synthetic",PKG_VERSION:"1.0.0",REPO_RAW:"https://fixture",win:null,
     startupUpdate:async()=>{events.push("gate");await Promise.resolve();events.push("settled");return stop;},createWindow:file=>{events.push("audit");assert.equal(file,"verified.html");},
-    buildTray(){},applyHotkeys(){},tauKillStrays(){events.push("helper");},setInterval(){},showMain(){}};
+    buildTray(){},applyHotkeys(){},tauKillStrays(){events.push("helper");},setInterval(fn,ms){assert.equal(ms,1800000,"background checks every 30 minutes");},showMain(){}};
    vm.createContext(ctx);vm.runInContext(boot,ctx);await ready();
    assert.deepEqual(events,stop?["gate","settled"]:["gate","settled","hub","audit","helper"]);
   }

@@ -22,6 +22,18 @@ test('quota failure on receipt save is observable instead of silent success',()=
 test('backup export contains Tax Check memory and decisions',()=>{const x=ctx({'reccheck_rooms':'{}','ta_check_memory_v2':'{"101":{"18/9/2026":{"auto":1}}}','ta_check_verify_v1':'{"20260918":{"101":true}}','ta_check_ack_v1':'{"101":1}'});x.c.exportData();for(const k of ['ta_check_memory_v2','ta_check_verify_v1','ta_check_ack_v1'])assert(k in x.exported.data,k+' was omitted');});
 test('backup import restores Tax Check keys',()=>{const x=ctx();x.c.importData(JSON.stringify({app:'reccheck',data:{reccheck_rooms:'{}',ta_check_memory_v2:'{"101":{}}'}}));assert.equal(x.localStorage.getItem('ta_check_memory_v2'),'{"101":{}}');});
 test('export/import preserves non-JSON string preferences it exports',()=>{const x=ctx({reccheck_lang:'gr'});x.c.exportData();const y=ctx();y.c.importData(JSON.stringify(x.exported));assert.equal(y.localStorage.getItem('reccheck_lang'),'gr');});
+test('theme preference survives export/import without changing audit stores',()=>{
+ for(const theme of ['dark','light']){
+  const original={reccheck_theme:theme,reccheck_rooms:'{"101":{"guest":"SYNTHETIC"}}'};
+  const source=ctx(original);source.c.exportData();const dest=ctx();dest.c.importData(JSON.stringify(source.exported));
+  for(const [key,value]of Object.entries(original))assert.equal(dest.localStorage.getItem(key),value);
+ }
+});
+test('invalid theme in a backup rejects before changing any store',()=>{
+ const original={reccheck_theme:'dark',reccheck_rooms:'{"101":{"guest":"SYNTHETIC"}}'},dest=ctx(original);
+ dest.c.importData(JSON.stringify({app:'reccheck',data:{reccheck_theme:'invalid',reccheck_rooms:'{}'}}));
+ assert.deepEqual(dest.localStorage.data,original);
+});
 test('failed multi-key import leaves existing database consistent',()=>{const initial={reccheck_rooms:'{"101":{"guest":"CURRENT"}}',reccheck_watchlist:'[{"room":"101","name":"CURRENT"}]'};const x=ctx(initial);x.localStorage.failKey='reccheck_watchlist';x.c.importData(JSON.stringify({app:'reccheck',data:{reccheck_rooms:'{"101":{"guest":"OLD"}}',reccheck_watchlist:'[]'}}));assert.deepEqual(x.localStorage.data,initial,'rooms were replaced before failure; watchlist retained another generation');});
 test('committed import retires every cached writer before reloading',()=>{
  const oldChecklist=JSON.stringify([{id:'old',text:'OLD TASK',done:false}]),freshChecklist=JSON.stringify([{id:'new',text:'NEW TASK',done:true}]);

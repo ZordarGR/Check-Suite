@@ -1,12 +1,12 @@
 {
-  "version": "1.17.94",
+  "version": "1.17.95",
   "type": "full",
-  "engine": "1.17.94",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.94/Pro-Check-Setup.exe",
-  "setupSha256": "297a125b6ecac2b00d1aab4b6f793db4200fa2b9b4e272912a042a9fd90278e7",
+  "engine": "1.17.95",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.95/Pro-Check-Setup.exe",
+  "setupSha256": "7cf32e0db5275f7590d329fd23bda54d4e1e1726353848f3691b61caed738188",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/279551cb4236e65da13d7953439f384034742d5c/Departments%20Check.html",
-  "sha256": "ea9aaf6782bf0e2b41ca6fb135581b31d51158afba75f44b2596dce74ad1b1cd",
-  "notes": "Support required updates marked force:true. On a fresh launch, verify and install required updates before opening the audit, without an approval click. Optional updates keep the existing button. Install this release normally once to enable support.",
-  "force": false
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/d0e15502ae1d6ac0352e57525d45eda7ae995798/Departments%20Check.html",
+  "sha256": "4fc30c147beaee0b0a00cb374b0862d1c4a0e36c5fcf7aa65bc20ae026245dbb",
+  "notes": "Add an optional Light theme with white backgrounds, yellow accents and black text; Dark remains the default, and completed Audit sections remain green. Check for updates every 30 minutes. This release is required and installs automatically on a fresh launch from engine 1.17.94.",
+  "force": true
 }
