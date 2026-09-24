@@ -1,11 +1,12 @@
 {
-  "version": "1.17.93",
-  "type": "html",
-  "engine": "1.17.89",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.89/Pro-Check-Setup.exe",
-  "setupSha256": "3bb1ddb000c19b530a1f23c0d6b3c268767d3be7e4c8584903a4aea4f2b72e20",
+  "version": "1.17.94",
+  "type": "full",
+  "engine": "1.17.94",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.94/Pro-Check-Setup.exe",
+  "setupSha256": "297a125b6ecac2b00d1aab4b6f793db4200fa2b9b4e272912a042a9fd90278e7",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/f85ceb0c9a4538ca017086517c1e146116381371/Departments%20Check.html",
-  "sha256": "f2e75e8db19a0b8a4cef12634191508026c9071642417585b070e0193e671fbe",
-  "notes": "Same-room lookup now includes other receipts in the same department. Sticky search follows the header height and hides the green accordion behind it."
+  "sha256": "ea9aaf6782bf0e2b41ca6fb135581b31d51158afba75f44b2596dce74ad1b1cd",
+  "notes": "Support required updates marked force:true. On a fresh launch, verify and install required updates before opening the audit, without an approval click. Optional updates keep the existing button. Install this release normally once to enable support.",
+  "force": false
 }
