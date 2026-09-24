@@ -1,12 +1,12 @@
 {
-  "version": "1.17.96",
+  "version": "1.17.97",
   "type": "html",
   "engine": "1.17.95",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.95/Pro-Check-Setup.exe",
   "setupSha256": "7cf32e0db5275f7590d329fd23bda54d4e1e1726353848f3691b61caed738188",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/b36114f283ed2dc4d3a0648d365d443c132edda6/Departments%20Check.html",
-  "sha256": "f9352a7b912a78ab28bfa0d232e07a17397a04eef4fa4d97e5fef2199d4698bc",
-  "notes": "Fix Tax Check rejecting next-day print headers and joined XPS date/time/amount text. Use the posting-date column while retaining mixed-date, unreadable-date and reversal safeguards. Existing saved tax history is preserved. Includes optional light theme and 30-minute update checks.",
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/17f8ac59d06fe232b02d244133604ab852deeb04/Departments%20Check.html",
+  "sha256": "9a16e15da0bb008e3130c826bd6fb13c5a5585ab0555cf638ee08d644a600c53",
+  "notes": "Open Tax Check reports containing reversals and flag the affected normal rooms for verification, instead of blocking the whole report. 9xxx accounts remain excluded from tax warnings. Preserve earlier tax evidence and keep mixed/missing/invalid posting dates blocked.",
   "force": true
 }

@@ -30,7 +30,7 @@ assert(parse([page('101'),page('102','??',true)]).uncertain,'unreadable tax row 
 assert(parse([page('101').filter(g=>g.x!==42.56)]).uncertain,'missing posting date cannot fall back to print date');
 for(const joined of [false,true]){
  r=parse([[...head('101'),...charge(181.6,'24/09/26','*Arrangement',joined),...charge(196.64,'24/09/26','*ΤΕΛΟΣ ΑΝΘΕΚΤΙΚΟΤΗΤΑΣ',joined,'-10,00')]]);
- assert(r.uncertain);assert.match(r.error,/signed reversals/);
+ assert(!r.uncertain,'reversals must not reject the whole report');assert(r.rooms['101'].reversal&&r.rooms['101'].uncertain);
 }
 r=parse([page('101','24/09/2026',true)]);assert.equal(r.dateKey,20260924);assert(!r.uncertain,'four-digit year before joined time');
 r=parse([page('101','24/9/26',true)]);assert.equal(r.dateKey,20260924);assert(!r.uncertain,'single digit month inside report');
@@ -39,4 +39,9 @@ assert(!r.uncertain);assert.equal(r.rooms['101'].auto,2,'continuation pages pres
 r=parse([page('101').map(g=>g.x===412&&g.y>170?{...g,t:'23/09/26'}:g)]);assert(!r.uncertain,'a date in the guest column is not a posting date');
 r=parse([page('101'),page('101','24/09/26',true)]);assert.equal(r.rooms['101'].arr,2);assert.equal(r.rooms['101'].auto,2);
 assert.equal(c.pagesToTokens([[glyph(1,1,'25/9/2026')]])[0],'25/9/2026','non-tax flattening unchanged');
-console.log('PASS tax posting columns: next-day page headers, joined date/time/amount, all rooms and counts, mixed/invalid/missing dates, reversal protection, continuation pages, guest-column dates and default flattening');
+for(const room of ['9000','9010','9999','8999','999']){
+ r=parse([[...head(room),...charge(181.6,'24/09/26','*Arrangement',true,'-100,00')],page('102')]);
+ assert(!r.uncertain);assert(r.rooms[room].reversal&&r.rooms[room].uncertain);
+ assert(!r.rooms['102'].uncertain,'another room is unaffected by a reversal');
+}
+console.log('PASS tax posting columns: next-day page headers, joined date/time/amount, all rooms and counts, mixed/invalid/missing dates, room-specific reversal flags, continuation pages, guest-column dates and default flattening');
