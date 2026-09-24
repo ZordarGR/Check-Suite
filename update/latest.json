@@ -5,7 +5,7 @@
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.94/Pro-Check-Setup.exe",
   "setupSha256": "297a125b6ecac2b00d1aab4b6f793db4200fa2b9b4e272912a042a9fd90278e7",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/f85ceb0c9a4538ca017086517c1e146116381371/Departments%20Check.html",
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/279551cb4236e65da13d7953439f384034742d5c/Departments%20Check.html",
   "sha256": "ea9aaf6782bf0e2b41ca6fb135581b31d51158afba75f44b2596dce74ad1b1cd",
   "notes": "Support required updates marked force:true. On a fresh launch, verify and install required updates before opening the audit, without an approval click. Optional updates keep the existing button. Install this release normally once to enable support.",
   "force": false
