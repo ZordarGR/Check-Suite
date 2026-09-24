@@ -2058,7 +2058,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.95";
+const APP_VERSION = "1.17.96";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -8293,13 +8293,49 @@ function t(k){var s=(I18N[LANG]&&I18N[LANG][k])||I18N.en[k]||k;for(var i=1;i<arg
 function decodeEntities(s){return s.replace(/&#x([0-9a-fA-F]+);/g,(_,h)=>String.fromCodePoint(parseInt(h,16))).replace(/&#(\d+);/g,(_,d)=>String.fromCodePoint(parseInt(d,10))).replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,"&");}
 function attrOf(el,n){const m=el.match(new RegExp(n+'\\s*=\\s*"([^"]*)"'));return m?m[1]:null;}
 async function oxpsPages(zip){const names=Object.keys(zip.files).filter(n=>/Pages\/\d+\.fpage$/i.test(n)).sort((a,b)=>parseInt((a.match(/(\d+)\.fpage$/i)||[])[1]||0)-parseInt((b.match(/(\d+)\.fpage$/i)||[])[1]||0));const pages=[];for(const n of names){const xml=await zip.files[n].async('string');const els=xml.match(/<Glyphs\b[^>]*\/?>/g)||[];const g=[];for(const el of els){const u=attrOf(el,'UnicodeString');if(u===null)continue;g.push({x:parseFloat(attrOf(el,'OriginX')||0),y:parseFloat(attrOf(el,'OriginY')||0),t:decodeEntities(u)});}pages.push(g);}return pages;}
-function pagesToTokens(pages){let out=[];for(const g of pages){const gg=g.slice().sort((a,b)=>(Math.round(a.y)-Math.round(b.y))||(a.x-b.x));out=out.concat(gg.map(z=>z.t));}return out;}
+function pagesToTokens(pages,postingOnly=false){if(postingOnly)return taxPageTokens(pages);let out=[];for(const g of pages){const gg=g.slice().sort((a,b)=>(Math.round(a.y)-Math.round(b.y))||(a.x-b.x));out=out.concat(gg.map(z=>z.t));}return out;}
 function toRows(g){g=g.slice().sort((a,b)=>a.y-b.y||a.x-b.x);const rows=[];let cur=[],ly=null;for(const gl of g){if(ly===null||Math.abs(gl.y-ly)<6)cur.push(gl);else{rows.push(cur);cur=[gl];}ly=gl.y;}if(cur.length)rows.push(cur);return rows;}
 function dkey(s){const m=String(s||'').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);if(!m)return 0;let y=parseInt(m[3],10);if(y<100)y+=2000;const mo=+m[2],d=+m[1],dt=new Date(Date.UTC(y,mo-1,d));if(dt.getUTCFullYear()!==y||dt.getUTCMonth()!==mo-1||dt.getUTCDate()!==d)return 0;return y*10000+mo*100+d;}
 function dfmt(key){if(!key)return '';const y=Math.floor(key/10000),m=Math.floor(key/100)%100,d=key%100;return String(d).padStart(2,'0')+'/'+String(m).padStart(2,'0')+'/'+String(y).slice(2);}
 function leadRoom(s){const m=(s||'').trim().match(/^(\d{2,4})/);return m?m[1]:'';}
 const RE_ROOM=/^\d{2,4}(-\d{1,4})?$/;const TA_MARK="ΑΝΘΕΚΤΙΚ";const ARR_MARK="Arrangement";
 function taIsAuto(tk){const di=tk.indexOf("ΤΕΛΟΣ")>=0?tk.indexOf("ΤΕΛΟΣ"):tk.indexOf(TA_MARK);return /\*\s*$/.test(tk.slice(0,di));}
+/* Preserve posting-column identity before flattening XPS glyphs. Page print dates
+   and dates inside guest/comment text are not posting dates. Some XPS pages join
+   date, time, amount and user into one glyph, so split that supported form here. */
+function taxPageTokens(pages){
+  const out=[];let dateX=null,dateRight=null;
+  for(const page of pages)for(const row of toRows(page)){
+    const sorted=row.slice().sort((a,b)=>a.x-b.x);
+    const header=sorted.find(g=>String(g.t).trim()==='Date');
+    if(header){
+      const time=sorted.find(g=>g.x>header.x&&String(g.t).trim()==='Time');
+      dateX=header.x;dateRight=time?(header.x+time.x)/2:header.x+30;
+    }
+    let posting=false;
+    for(const g of sorted){
+      const tk=String(g.t||'').trim(),inDate=dateX!==null&&g.x>=dateX-40&&g.x<dateRight;
+      if(inDate&&!header){
+        const m=tk.match(/^(\d{1,2}\/\d{1,2}\/(?:\d{4}|\d{2}))(?=\s|$|\d{2}:\d{2})/);
+        if(m){
+          posting=true;out.push(m[1]);
+          // Joined time/amount has no word boundary before the user text.
+          const tail=tk.slice(m[1].length),signed=tail.match(/^\s*\d{2}:\d{2}\s*(-\s*\d[\d.,]*[.,]\d{2})/);
+          if(tail)out.push(tail);
+          if(signed)out.push(signed[1]);
+          continue;
+        }
+      }
+      // Keep counts/room headings in their original order, but prevent standalone
+      // dates outside the posting column (including next-page headers) being used.
+      if(/^\d{1,2}\/\d{1,2}\/(?:\d{2}|\d{4})$/.test(tk))continue;
+      out.push(tk);
+    }
+    if(!header&&sorted.some(g=>String(g.t).includes(ARR_MARK)||String(g.t).includes(TA_MARK))&&!posting)
+      out.push('__TAX_POSTING_DATE_UNREADABLE__');
+  }
+  return out;
+}
 function parseTax(tokens){
   const starts=[];
   for(let i=0;i<tokens.length;i++)if(tokens[i]==="Date")for(let j=i-1;j>=Math.max(i-7,0);j--){
@@ -8311,6 +8347,7 @@ function parseTax(tokens){
     const rec=rooms[room]||(rooms[room]={arr:0,auto:0,man:0});
     for(let i=starts[k].idx;i<end;i++){
       const tk=String(tokens[i]||'').trim();
+      if(tk==='__TAX_POSTING_DATE_UNREADABLE__')badDate=true;
       if(/^\d{1,2}\/\d{1,2}\/(?:\d{2}|\d{4})$/.test(tk)){const key=dkey(tk);if(key)dates.add(key);else badDate=true;}
       if(/(?:^|\s)-\s*\d[\d.,]*[.,]\d{2}(?:$|\s)/.test(tk))negative=true;
       if(tk.includes(ARR_MARK)){rec.arr++;totalArr++;}
@@ -10190,7 +10227,7 @@ async function loadTax(file){
   const epoch=++TAX_LOAD_EPOCH;clearErr();if(!file)return;
   try{
     const pages=await readOxps(file);if(epoch!==TAX_LOAD_EPOCH)return;
-    const r=parseTax(pagesToTokens(pages));
+    const r=parseTax(pagesToTokens(pages,true));
     if(!r.totalRooms){showErr(t('err_norooms'));return;}
     if(r.uncertain||!r.dateKey){showErr(r.error||'The tax date could not be verified. Previous data retained.');return;}
     if(!ingestTax(r)){showErr('Tax data could not be saved. Previous data retained.');return;}

@@ -1,12 +1,12 @@
 {
-  "version": "1.17.95",
-  "type": "full",
+  "version": "1.17.96",
+  "type": "html",
   "engine": "1.17.95",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.95/Pro-Check-Setup.exe",
   "setupSha256": "7cf32e0db5275f7590d329fd23bda54d4e1e1726353848f3691b61caed738188",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/d0e15502ae1d6ac0352e57525d45eda7ae995798/Departments%20Check.html",
-  "sha256": "4fc30c147beaee0b0a00cb374b0862d1c4a0e36c5fcf7aa65bc20ae026245dbb",
-  "notes": "Add an optional Light theme with white backgrounds, yellow accents and black text; Dark remains the default, and completed Audit sections remain green. Check for updates every 30 minutes. This release is required and installs automatically on a fresh launch from engine 1.17.94.",
+  "sha256": "f9352a7b912a78ab28bfa0d232e07a17397a04eef4fa4d97e5fef2199d4698bc",
+  "notes": "Fix Tax Check rejecting next-day print headers and joined XPS date/time/amount text. Use the posting-date column while retaining mixed-date, unreadable-date and reversal safeguards. Existing saved tax history is preserved. Includes optional light theme and 30-minute update checks.",
   "force": true
 }
