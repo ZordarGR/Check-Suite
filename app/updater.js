@@ -87,8 +87,9 @@ class Updater {
   }
 
   /* background check + download; resolves to pending info or null; never throws */
-  async check(){
+  async check(options = {}){
     this.lastCheckCurrent = false;
+    const request = (url, init, timeout) => fetch(url, {...init, ...(options.forcedOnly ? {signal: AbortSignal.timeout(timeout)} : {})});
     try{
       this.cleanupSetup();
       const eff = this.effective();
@@ -97,10 +98,12 @@ class Updater {
          another. cache:"no-store" only bypasses the local cache, not theirs — a unique
          query string is what actually forces a fresh read. */
       const bust = this.o.updateUrl + (this.o.updateUrl.indexOf("?") < 0 ? "?" : "&") + "_=" + Date.now();
-      const r = await fetch(bust, {cache: "no-store"});
+      const r = await request(bust, {cache: "no-store"}, 10000);
       if(!r.ok) return null;
       const latest = await r.json();
       if(!latest || !latest.version) return null;
+      const forced = latest.force === true, forceInfo = forced ? {forced: true} : {};
+      if(options.forcedOnly && (!forced || !["html", "full"].includes(latest.type))) return null;
       if(!vNewer(latest.version, eff.version)){ this.lastCheckCurrent = true; return null; }
 
       /* safeguard: any manifest may declare the minimum engine it needs ("engine").
@@ -108,11 +111,13 @@ class Updater {
          light (html) update — a stale engine can never again swallow a tool update
          and strand itself behind a higher version number. */
       const needEngine = latest.engine && vNewer(latest.engine, this.o.pkgVersion);
+      if(forced && !/^[a-f0-9]{64}$/i.test(String((latest.type === "full" || needEngine) ? latest.setupSha256 || "" : latest.sha256 || ""))) return null;
       if(latest.type === "full" || needEngine){
         const tv = (latest.type === "full") ? latest.version : latest.engine;
         // with a "setup" url we self-download the installer and the arrow click
         // runs it silently; without one we fall back to opening the release page
         if(!latest.setup){
+          if(options.forcedOnly) return null;
           this.pending = {version: tv, full: true,
                           url: latest.url || this.o.fallbackReleaseUrl};
           return this.pending;
@@ -128,11 +133,12 @@ class Updater {
              download so a crash mid-transfer still counts. */
           const tries = (have && have.version === tv && +have.tries) || 0;
           if(tries >= MAX_SETUP_TRIES){
+            if(options.forcedOnly) return null;
             this.pending = {version: tv, full: true, url: latest.url || this.o.fallbackReleaseUrl};
             return this.pending;
           }
           try{ fs.writeFileSync(P.setupMeta, JSON.stringify({version: tv, tries: tries + 1})); }catch(e){}
-          const sr = await fetch(latest.setup, {cache: "no-store", redirect: "follow"});
+          const sr = await request(latest.setup, {cache: "no-store", redirect: "follow"}, 180000);
           if(!sr.ok){ this.emit({phase: "failed", version: tv}); return null; }
           let sbuf;
           const total = parseInt(sr.headers.get("content-length") || "0", 10);
@@ -163,14 +169,15 @@ class Updater {
           fs.renameSync(P.setupExe + ".tmp", P.setupExe);
           fs.writeFileSync(P.setupMeta, JSON.stringify({version: tv, sha256: ssha, tries: tries + 1}));
         }
-        this.pending = {version: tv, full: true, downloaded: true, setupPath: P.setupExe};
+        this.pending = {version: tv, full: true, downloaded: true, setupPath: P.setupExe, sha256: this.readJson(P.setupMeta).sha256, ...forceInfo};
         return this.pending;
       }
       const P = this.paths();
       const have = this.readJson(P.pendMeta);
       if(!(have && have.version === latest.version && this.validPayload(P.pendHtml, have, false)
            && (!latest.sha256 || have.sha256.toLowerCase() === String(latest.sha256).toLowerCase()))){
-        const hr = await fetch(latest.html, {cache: "no-store"});
+        if(options.forcedOnly) this.emit({phase: "downloading", version: latest.version, pct: null});
+        const hr = await request(latest.html, {cache: "no-store"}, 180000);
         if(!hr.ok) return null;
         const buf = Buffer.from(await hr.arrayBuffer());
         const sha = crypto.createHash("sha256").update(buf).digest("hex");
@@ -180,9 +187,31 @@ class Updater {
         fs.renameSync(P.pendHtml + ".tmp", P.pendHtml);
         fs.writeFileSync(P.pendMeta, JSON.stringify({version: latest.version, sha256: sha, notes: latest.notes || ""}));
       }
-      this.pending = {version: latest.version};
+      this.pending = {version: latest.version, ...forceInfo};
       return this.pending;
     }catch(e){ return null; }   // offline / bad JSON / fs error — stay silent
+  }
+
+  /* Recheck the exact staged installer immediately before launch. */
+  installerReady(){
+    const p = this.pending;
+    if(!p || !p.full || !p.downloaded) return false;
+    const P = this.paths(), meta = this.readJson(P.setupMeta);
+    return p.setupPath === P.setupExe && !!meta && meta.version === p.version &&
+      meta.sha256 === p.sha256 && this.validPayload(P.setupExe, meta, true);
+  }
+
+  /* Bound automatic installer attempts across failed relaunches. Manual retry stays available. */
+  claimForcedInstall(){
+    if(!this.installerReady()) return false;
+    const P = this.paths(), meta = this.readJson(P.setupMeta);
+    const tries = Number(meta.forceTries) || 0;
+    if(tries >= MAX_SETUP_TRIES) return false;
+    try{
+      fs.writeFileSync(P.setupMeta + ".tmp", JSON.stringify({...meta, forceTries:tries + 1}));
+      fs.renameSync(P.setupMeta + ".tmp", P.setupMeta);
+      return true;
+    }catch(e){return false;}
   }
 
   /* apply a downloaded html update; returns true on success */
