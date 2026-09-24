@@ -10,6 +10,11 @@ const {chromium}=require("playwright-core"),assert=require("assert"),path=requir
   await page.locator("#themeSelect").selectOption("light");assert.equal(await theme(),"light");
   assert.equal(await page.evaluate(()=>localStorage.getItem("reccheck_theme")),"light");
   assert.equal(await page.locator("body").evaluate(n=>getComputedStyle(n).backgroundColor),"rgb(255, 255, 255)");
+  // Existing controls animate colours for 150ms: wait for their settled light palette.
+  await page.waitForFunction(()=>[...document.querySelectorAll("#menuScreen > .mItem")].every(n=>getComputedStyle(n).backgroundColor==="rgb(255, 206, 50)") && ["mcOptionsBtn","mcEditBtn"].every(id=>getComputedStyle(document.getElementById(id)).color==="rgb(17, 17, 17)"));
+  for(const s of ["#auditBtn .mLabel","#auditBtn .mSub","#mcOptionsBtn","#mcEditBtn"]){
+   assert.equal(await page.locator(s).evaluate(n=>getComputedStyle(n).color),"rgb(17, 17, 17)",s);
+  }
   await page.screenshot({path:path.resolve(__dirname,"theme-home.png")});
   await page.reload();await page.waitForFunction(()=>window.__t);assert.equal(await theme(),"light");
   await page.evaluate(()=>{
