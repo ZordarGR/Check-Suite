@@ -610,7 +610,7 @@ app.whenReady().then(async () => {
     if(info && win && !win.isDestroyed())
       win.webContents.send("reccheck-update-ready", info);
   });
-  setInterval(() => runCheck(false), 6 * 3600e3);
+  setInterval(() => runCheck(false), 30 * 60e3);
 });
 
 /* ---- the room database on disk ----

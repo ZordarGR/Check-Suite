@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pro-Check</title>
+<script>try{document.documentElement.dataset.theme=localStorage.getItem("reccheck_theme")==="light"?"light":"dark";}catch(e){document.documentElement.dataset.theme="dark";}</script>
 <style>
 :root{
   --bg:#0a0e14;
@@ -939,6 +940,49 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
   body.taxPrint #printSheet{display:none !important}
 }
 </style>
+<style id="themeStyles">
+/* Optional screen theme. Printing keeps its existing black-and-white rules. */
+.themeControl{display:flex;align-items:center;gap:6px;flex:0 0 auto;font-size:12px}
+#themeSelect{font:inherit;color:var(--txt);background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:5px 7px}
+#themeSelect:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+@media(max-width:600px){.themeControl>span{display:none}}
+@media screen{
+ html[data-theme="light"]{color-scheme:light;--bg:#fff;--bg2:#f7f7f5;--panel:#fff;--panel2:#f3f3ee;
+  --line:#cccfc5;--txt:#111;--dim:#333;--faint:#555;--amber:#ffce32;--amber-dim:#9a7900;
+  --green:#4ade80;--green-dim:#d4f7df;--red:#b42318;--red-dim:#ffd9d5}
+ html[data-theme="light"] body{background:#fff}
+ html[data-theme="light"] #taxScreen{--bg:#fff;--panel:#fff;--panel2:#f7f7f5;--line:#cccfc5;--txt:#111;--muted:#333;--dim:#555;
+  --accent:#ffce32;--ok:#16723a;--okbg:#d4f7df;--red:#b42318;--redbg:#ffe2de;--amber:#795d00;--amberbg:#fff0b0;
+  --blue2:#155d81;--bluebg:#e1f3fc;--violet:#653b88;--violetbg:#f1e6fa;--grey:#555;--greybg:#eee}
+ /* Keep labels black; statuses retain their distinct fills, borders and symbols. */
+ html[data-theme="light"] :is(body>header,#landing,main,#taxScreen,#modal,#drawer,#rail,#helpPanel,#helpTab,#toast,#userTip,.rowMenu,#updBox,#updateBtn),
+ html[data-theme="light"] :is(body>header,#landing,main,#taxScreen,#modal,#drawer,#rail,#helpPanel,#helpTab,#toast,#userTip,.rowMenu,#updBox,#updateBtn) *{color:#111 !important;text-shadow:none}
+ html[data-theme="light"] :is(input,textarea)::placeholder{color:#555;opacity:1}
+ html[data-theme="light"] :is(.btn:hover,.btn.amber,.mItem.primary,.railBtn.active,.vbtn.active,#themeSelect,#taxScreen .modal button.primary){background:#ffce32;border-color:#9a7900}
+ html[data-theme="light"] :is(.mcat:hover .mcatBtn,.mcat.open .mcatBtn,.mItem:hover,.fbItem.open,.fbItem:hover,.rowMenu button:hover,.rrow:hover,#taxScreen .slot:hover,#taxScreen .slot.over,#taxScreen .dhead:hover){background:#fff4bf}
+ html[data-theme="light"] :is(#scDiag,.scFocus,.alRow,#drop,#clHelp){background:#f7f7f5}
+ html[data-theme="light"] #drop.over{background:#fff4bf}
+ html[data-theme="light"] :is(.acc>.head:hover,.acc.part>.head){background:#fff4bf}
+ html[data-theme="light"] .acc.done>.head,html[data-theme="light"] .acc.done>.head:hover{background:#4ade80}
+ html[data-theme="light"] .card.done{background:#d4f7df}
+ html[data-theme="light"] :is(#staleChip,.openPill,.rrow .tag.corr,.match .state.corr,.rrow .tag.watch,.match .state.watch){background:#fff0b0}
+ html[data-theme="light"] :is(.rrow .tag.cancelled,.rrow .tag.void,.match .state.cancelled,.match .state.void){background:#eee}
+ html[data-theme="light"] .rrow .tag.merged{background:#e1f3fc}
+ html[data-theme="light"] .mvPill.mv-move{background:#dff7fc}
+ html[data-theme="light"] .mvPill.mv-arr{background:#d4f7df}
+ html[data-theme="light"] .mvPill.mv-dep{background:#ffe2de}
+ html[data-theme="light"] :is(.match.watch,.rrow.watch){background:#fff0b0}
+ html[data-theme="light"] :is(.match.left,.match.left.watch){background:#ffe2de}
+ html[data-theme="light"] :is(.rrow,.clRow,.rowMenu button,.wRow){border-bottom-color:var(--line)}
+ html[data-theme="light"] #clSevMenu button:hover,html[data-theme="light"] #clSevMenu button.sel{background:#fff0b0}
+ html[data-theme="light"] #taxScreen .seg .dhead:hover{background:#e8d9f4}
+ html[data-theme="light"] #taxScreen .modal button.primary:hover{background:#f3c022}
+ html[data-theme="light"] :is(#updateBtn,#updBox){background:#ffce32;border-color:#9a7900;box-shadow:0 6px 22px #0002}
+ html[data-theme="light"] #updateBtn svg [stroke]{stroke:#111}
+ html[data-theme="light"] :is(#modalBg,#taxScreen .backdrop){background:rgba(20,24,18,.38)}
+ html[data-theme="light"] :is(#modal,.rowMenu,#helpPanel,#taxScreen .modal){box-shadow:0 12px 30px #0003}
+}
+</style>
 </head>
 <body>
 
@@ -947,6 +991,7 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
   <div id="reportMeta"></div>
   <button id="staleChip"></button>
   <div class="spacer"></div>
+  <label class="themeControl"><span id="themeLabel">Theme</span><select id="themeSelect" aria-label="Theme"><option value="dark">Dark</option><option value="light">Light</option></select></label>
   <button class="btn small" id="printBtn" style="display:none">🖨 Διορθώσεις</button>
   <button class="btn small" id="openAnother" style="display:none">Open file…</button>
   <div class="kebab" id="kebab" style="display:none">
@@ -2623,7 +2668,23 @@ function setLang(l){
   if(MODEL) renderAll(LASTFNAME || "");   // re-render app strings (forces app screen)
   showScreen(cur);                        // …then return to wherever we were
 }
+function paintTheme(){
+  const light=document.documentElement.dataset.theme==="light",select=$("#themeSelect");
+  select.value=light?"light":"dark";
+  $("#themeLabel").textContent=LANG==="gr"?"Θέμα":"Theme";
+  select.setAttribute("aria-label",LANG==="gr"?"Χρωματικό θέμα":"Colour theme");
+  select.options[0].textContent=LANG==="gr"?"Σκούρο":"Dark";
+  select.options[1].textContent=LANG==="gr"?"Φωτεινό":"Light";
+}
+function setTheme(value){
+  if(window.__rcImportBlocked){paintTheme();return false;}
+  if(value!=="dark"&&value!=="light"){paintTheme();return false;}
+  try{localStorage.setItem("reccheck_theme",value);}
+  catch(e){paintTheme();toast(LANG==="gr"?"Δεν αποθηκεύτηκε το θέμα. Δοκιμάστε ξανά.":"Theme could not be saved. Please try again.",true);return false;}
+  document.documentElement.dataset.theme=value;paintTheme();return true;
+}
 function applyLang(){
+  paintTheme();
   $("#homeLogo").title = t("menu.title");
   paintProfileName();
   paintUserBtn();
@@ -6943,7 +7004,8 @@ function importData(file){
         if(!/^(reccheck|ta_check_|ta_lang$)/.test(k) || k === importJournalKey()) continue;
         if(typeof v!=="string")throw new Error("Invalid saved value for "+k+"; nothing imported");
         // Export contains both JSON stores and ordinary string preferences.
-        const plain = /^(reccheck_lang|ta_lang|reccheck_fbview|reccheck_fbrel(?:_dept|_tax|_rep)?|reccheckLastFault)$/.test(k);
+        if(k==="reccheck_theme" && v!=="light" && v!=="dark")throw new Error("Invalid saved theme; nothing imported");
+        const plain = /^(reccheck_theme|reccheck_lang|ta_lang|reccheck_fbview|reccheck_fbrel(?:_dept|_tax|_rep)?|reccheckLastFault)$/.test(k);
         if(!plain){
           let value;
           try{ value = JSON.parse(v); }catch(e){ throw new Error("Invalid saved data for "+k+"; nothing imported"); }
@@ -7159,6 +7221,7 @@ $("#aDept").onclick = async () => {
   if(FB.p.dept.dir) showScreen("files");
 };
 $("#aTax").onclick = () => showScreen("tax");
+$("#themeSelect").onchange = e => setTheme(e.target.value);
 $("#mLang").onclick = () => setLang(LANG === "en" ? "gr" : "en");
 $("#mLegacy").onclick = () => { setLegacy(!legacyOn()); paintLegacy(); };
 $("#mLedger").onclick = ledgerClick;
