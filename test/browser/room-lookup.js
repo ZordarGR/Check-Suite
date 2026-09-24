@@ -23,7 +23,9 @@ const {chromium}=require('playwright-core'),assert=require('assert'),path=requir
   const snapshot=()=>p.evaluate(()=>JSON.stringify({model:window.__t.getModel(),state:window.__t.getState(),storage:Object.fromEntries(Object.entries(localStorage))}));
   const before=await snapshot();await button.click();
   assert(await p.locator('#modalBg').evaluate(n=>n.classList.contains('open')));assert.match(await p.locator('#roomLookupTitle').innerText(),/101/);
-  const results=p.locator('#roomLookupResults');assert.deepEqual((await results.locator('.match').evaluateAll(rs=>rs.map(r=>r.dataset.key))).sort(),['200|101','201|102','300|101']);
+  const results=p.locator('#roomLookupResults');assert.deepEqual((await results.locator('.match').evaluateAll(rs=>rs.map(r=>r.dataset.key))).sort(),['101|101','200|101','201|102','300|101']);
+  assert.equal(await results.locator('.match[data-key="100|101"]').count(),0,'source receipt is excluded');
+  assert.equal(await results.locator('.match[data-dept="RESTAURANT"]').count(),1,'another receipt in the source department is included');
   assert.equal(await results.locator('button,input').count(),0,'lookup does not offer edits or recursive searches');
   assert.equal(await results.locator('img').count(),0,'guest names remain text');assert((await results.innerText()).includes('<img src=x onerror=alert(1)> DIFFERENT GUEST'));
   assert.match(await results.innerText(),/VOID|ΑΚΥΡΗ/);assert.equal(await snapshot(),before,'lookup leaves source and stored audit data unchanged');
@@ -33,14 +35,34 @@ const {chromium}=require('playwright-core'),assert=require('assert'),path=requir
   }
   await p.setViewportSize({width:1500,height:1000});await p.screenshot({path:path.resolve(__dirname,'room-lookup.png')});
   await p.locator('#roomLookupClose').click();assert.equal(await root.locator('.receiptSort').inputValue(),'name');assert.equal(await p.locator('.acc[data-dept="BAR"] .roomSearch').inputValue(),'1010');
-  await root.locator('.rrow[data-key="102|999"] .roomLookupBtn').click();assert.equal(await results.locator('.match').count(),0);assert.match(await results.innerText(),/No receipts/);await p.keyboard.press('Escape');
-  await root.locator('.rrow[data-key="100|101"] .sn').click();await button.focus();await p.keyboard.press('Enter');assert.equal(await results.locator('.match').count(),3);await p.locator('#roomLookupClose').click();
+  await root.locator('.rrow[data-key="102|999"] .roomLookupBtn').click();assert.equal(await results.locator('.match').count(),0);assert.match(await results.innerText(),/No other receipts/);await p.keyboard.press('Escape');
+  await root.locator('.rrow[data-key="100|101"] .sn').click();await button.focus();await p.keyboard.press('Enter');assert.equal(await results.locator('.match').count(),4);await p.locator('#roomLookupClose').click();
   assert(!await root.locator('.rrow[data-key="100|101"] .rowck').isChecked(),'keyboard lookup cannot confirm a highlighted receipt');
+  await root.locator('.rrow[data-key="101|101"] .roomLookupBtn').click();
+  assert.deepEqual((await results.locator('.match').evaluateAll(rs=>rs.map(r=>r.dataset.key))).sort(),['100|101','200|101','201|102','300|101'],'lookup from the other receipt includes its same-department peer and excludes itself');await p.locator('#roomLookupClose').click();
   await p.locator('.acc[data-dept="CAFETERIA"] .rrow[data-key="201|102"] .roomLookupBtn').click();assert.match(await p.locator('#roomLookupTitle').innerText(),/Room 101/);
   assert.equal(await results.locator('.match').count(),4,'source lookup follows its corrected room');assert.equal(await results.locator('.match[data-dept="CAFETERIA"]').count(),0);await p.locator('#roomLookupClose').click();
   await p.evaluate(()=>{const r=window.__t.getModel().receipts[0];document.querySelector('#matches').replaceChildren(window.__t.matchCard(r));document.querySelector('#searchWrap').style.display='block';});
-  await p.locator('#matches .roomLookupBtn').click();assert.equal(await results.locator('.match').count(),3);await p.locator('#roomLookupClose').click();
+  await p.locator('#matches .roomLookupBtn').click();assert.equal(await results.locator('.match').count(),4);await p.locator('#roomLookupClose').click();
   assert(await p.locator('.rrow[data-key="700|"] .roomLookupBtn').isDisabled());assert.deepEqual(errors,[]);
-  console.log('PASS Same-room lookup: current report, other departments, exact/effective room, different names, filters, void/cancel/manual handling, escaped names, no writes, empty state, keyboard, search cards and centred responsive modal');
+  await p.evaluate(()=>{document.querySelector('main').style.minHeight='3000px';document.querySelector('.acc').classList.add('done');});
+  for(const width of [1500,960,560]){
+   await p.setViewportSize({width,height:800});
+   for(const padding of ['10px 18px','19px 18px']){
+    await p.evaluate(padding=>{document.querySelector('body > header').style.padding=padding;window.scrollTo(0,650);},padding);
+    await p.waitForFunction(()=>Math.abs(document.querySelector('#searchWrap').getBoundingClientRect().top-document.querySelector('body > header').getBoundingClientRect().bottom)<0.5);
+    const geometry=await p.evaluate(()=>{
+     const header=document.querySelector('body > header'),search=document.querySelector('#searchWrap'),acc=document.querySelector('.acc');
+     const h=header.getBoundingClientRect(),s=search.getBoundingClientRect(),a=acc.getBoundingClientRect();
+     return {gap:s.top-h.bottom,header:getComputedStyle(header).backgroundColor,search:getComputedStyle(search).backgroundColor,searchLeft:s.left,searchRight:s.right,accLeft:a.left,accRight:a.right};
+    });
+    assert(Math.abs(geometry.gap)<0.5,'no strip between header and sticky search');
+    assert.equal(geometry.header,'rgb(10, 14, 20)');assert.equal(geometry.search,'rgb(10, 14, 20)','completed green header cannot bleed through');
+    assert(geometry.searchLeft<=geometry.accLeft+0.5&&geometry.searchRight>=geometry.accRight-0.5,'search covers the accordion width');
+   }
+  }
+  await p.screenshot({path:path.resolve(__dirname,'sticky-search.png')});assert.deepEqual(errors,[]);
+  console.log('PASS sticky search: no header gap, opaque coverage, responsive widths and changing header height');
+  console.log('PASS Same-room lookup: current report, same and other departments, source exclusion, exact/effective room, different names, filters, void/cancel/manual handling, escaped names, no writes, empty state, keyboard, search cards and centred responsive modal');
  }finally{await b.close();}
 })().catch(e=>{console.error(e);process.exit(1);});

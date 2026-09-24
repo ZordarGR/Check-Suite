@@ -32,7 +32,7 @@ body{min-height:100vh;background:
 ::selection{background:var(--amber);color:#000}
 
 /* ---------- header ---------- */
-header{position:sticky;top:0;z-index:80;background:rgba(10,14,20,.92);backdrop-filter:blur(6px);
+header{position:sticky;top:0;z-index:80;background:var(--bg);
   border-bottom:1px solid var(--line);padding:10px 18px;display:flex;align-items:center;gap:14px}
 header h1{font-size:16px;letter-spacing:.18em;font-weight:600;color:var(--amber);font-family:var(--mono);white-space:nowrap;cursor:pointer}
 #reportMeta.clickable{cursor:pointer}
@@ -411,7 +411,7 @@ main{max-width:1060px;margin:0 auto;padding:16px 18px 90px}
 #parseNote{display:none;color:var(--amber-dim);font-size:12px;font-family:var(--mono);margin:-6px 0 12px 2px}
 
 /* ---------- search ---------- */
-#searchWrap{display:none;position:sticky;top:52px;z-index:40;background:rgba(10,14,20,.95);backdrop-filter:blur(6px);
+#searchWrap{display:none;position:sticky;top:var(--appHeaderHeight,52px);z-index:40;background:var(--bg);
   padding:10px 0 12px;margin-bottom:6px;border-bottom:1px solid var(--line)}
 #searchRow{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 #snInput{flex:0 0 220px;background:var(--panel);border:1.5px solid var(--line);border-radius:10px;color:var(--txt);
@@ -2013,9 +2013,20 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.92";
+const APP_VERSION = "1.17.93";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
+
+// Keep sticky search flush with the actual header, including font/zoom/button changes.
+{
+  const header = $("body > header");
+  if(header){
+    const syncHeaderHeight = () => document.documentElement.style.setProperty("--appHeaderHeight", header.getBoundingClientRect().height + "px");
+    syncHeaderHeight();
+    if(window.ResizeObserver) new ResizeObserver(syncHeaderHeight).observe(header, {box:"border-box"});
+    else window.addEventListener("resize", syncHeaderHeight);
+  }
+}
 
 /* Storage failures must remain visible, including failures in the independent tax
    scope. No saved fact is described as durable merely because its UI changed. */
@@ -2279,8 +2290,8 @@ en: {
   "search.void": "VOID — consolidated by {by}, not counted",
   "room.ph": "room…", "room.hint": "room № · Enter = OK · ↑↓ rows · ←→ OK/⚠ · Esc",
   "receipt.order": "Order", "receipt.byRoom": "Room", "receipt.byName": "Name A–Z", "receipt.printed": "Receipt name", "receipt.sortHint": "Sort by the name printed on the receipt",
-  "lookup.action": "Find room {room} in other departments", "lookup.title": "Room {room} · other departments", "lookup.source": "Current report: {date} · From {dept} · Receipt {sn}",
-  "lookup.count": "Matches: {n}", "lookup.empty": "No receipts for this room in other departments in the current report.", "lookup.close": "Close",
+  "lookup.action": "Find other receipts for room {room}", "lookup.title": "Room {room} · all departments", "lookup.source": "Current report: {date} · From {dept} · Receipt {sn}",
+  "lookup.count": "Matches: {n}", "lookup.empty": "No other receipts for this room in the current report.", "lookup.close": "Close",
   "acc.extra": " · incl. {n} added by hand", "acc.void": " · {n} void",
   "acc.other": "▸ {n} folio posting(s) excluded — ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ / CREDIT CARDS — informational",
   "tag.ok": "OK", "tag.missing": "MISSING", "tag.corr": "CORRECTED — verify", "tag.corr2": "CORRECTED",
@@ -2543,8 +2554,8 @@ gr: {
   "search.void": "ΑΚΥΡΗ — ενοποιήθηκε από {by}, δεν μετράει",
   "room.ph": "δωμ…", "room.hint": "№ δωματίου · Enter = OK · ↑↓ γραμμές · ←→ OK/⚠ · Esc",
   "receipt.order": "Σειρά", "receipt.byRoom": "Δωμάτιο", "receipt.byName": "Όνομα Α–Ω", "receipt.printed": "Όνομα απόδειξης", "receipt.sortHint": "Ταξινόμηση με το όνομα της απόδειξης",
-  "lookup.action": "Εύρεση δωματίου {room} σε άλλα τμήματα", "lookup.title": "Δωμάτιο {room} · άλλα τμήματα", "lookup.source": "Τρέχουσα αναφορά: {date} · Από {dept} · Απόδειξη {sn}",
-  "lookup.count": "Αποτελέσματα: {n}", "lookup.empty": "Δεν υπάρχουν αποδείξεις για αυτό το δωμάτιο σε άλλα τμήματα της τρέχουσας αναφοράς.", "lookup.close": "Κλείσιμο",
+  "lookup.action": "Εύρεση άλλων αποδείξεων για το δωμάτιο {room}", "lookup.title": "Δωμάτιο {room} · όλα τα τμήματα", "lookup.source": "Τρέχουσα αναφορά: {date} · Από {dept} · Απόδειξη {sn}",
+  "lookup.count": "Αποτελέσματα: {n}", "lookup.empty": "Δεν υπάρχουν άλλες αποδείξεις για αυτό το δωμάτιο στην τρέχουσα αναφορά.", "lookup.close": "Κλείσιμο",
   "acc.extra": " · μαζί με {n} χειροκίνητες", "acc.void": " · {n} άκυρες",
   "acc.other": "▸ {n} καταχωρήσεις folio εκτός — ΜΕΤΡΗΤΑ ΤΜΗΜΑΤΩΝ / CREDIT CARDS — ενημερωτικά",
   "tag.ok": "OK", "tag.missing": "ΛΕΙΠΕΙ", "tag.corr": "ΔΙΟΡΘΩΘΗΚΕ — επιβεβαίωση", "tag.corr2": "ΔΙΟΡΘΩΘΗΚΕ",
@@ -5312,7 +5323,7 @@ function roomLookupButton(r){
 function openRoomLookup(source){
   if(!MODEL)return;
   const room=String(effRoom(source)||"").trim();if(!room)return;
-  const matches=MODEL.receipts.filter(r=>r!==source&&r.dept!==source.dept&&!r.cancelled&&String(effRoom(r)||"").trim()===room);
+  const matches=MODEL.receipts.filter(r=>r!==source&&!r.cancelled&&String(effRoom(r)||"").trim()===room);
   closeMenu();
   openModal('<h3 id="roomLookupTitle"></h3><div class="roomLookupIntro" id="roomLookupSource"></div><div class="roomLookupIntro" id="roomLookupCount"></div><div id="roomLookupResults"></div><div class="actions"><button class="btn amber" id="roomLookupClose"></button></div>');
   $("#modal").classList.remove("land","cards");$("#modal").classList.add("wide");

@@ -1,11 +1,11 @@
 {
-  "version": "1.17.92",
+  "version": "1.17.93",
   "type": "html",
   "engine": "1.17.89",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.89/Pro-Check-Setup.exe",
   "setupSha256": "3bb1ddb000c19b530a1f23c0d6b3c268767d3be7e4c8584903a4aea4f2b72e20",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/b1108c8bf3ab75173f9a18874107243ebc965d73/Departments%20Check.html",
-  "sha256": "d4c6ced24e834b881b8fbf2152f0457299ac4f0bdd22bd2d15a29c7b6c28dccc",
-  "notes": "Move receipt dots now require receipts from the displayed old room. Dotted moves appear first, with each group sorted by old room number."
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/f85ceb0c9a4538ca017086517c1e146116381371/Departments%20Check.html",
+  "sha256": "f2e75e8db19a0b8a4cef12634191508026c9071642417585b070e0193e671fbe",
+  "notes": "Same-room lookup now includes other receipts in the same department. Sticky search follows the header height and hides the green accordion behind it."
 }
