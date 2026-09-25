@@ -1,0 +1,38 @@
+name: Verify repeated receipt cancellation
+on:
+  push:
+    branches: [fix/repeated-receipt-void]
+permissions:
+  contents: read
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: sudo apt-get update -qq && sudo apt-get install -y mono-devel
+      - run: sh app/build-helper.sh
+      - run: sh test/run.sh
+      - run: node test/departure-report.js
+      - run: |
+          for t in test/audit-*.js; do node "$t" || exit 1; done
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: |
+          npm install --no-save playwright-core@1.56.1 playwright@1.56.1
+          npx playwright install --with-deps chromium
+          actual=$(find "$HOME/.cache/ms-playwright" -path '*/chrome-linux/chrome' -type f | head -1)
+          sudo mkdir -p /opt/pw-browsers/chromium-1194/chrome-linux
+          sudo ln -s "$actual" /opt/pw-browsers/chromium-1194/chrome-linux/chrome
+      - run: |
+          node test/harness.js
+          node test/browser/repeated-void.js
+          node test/browser/receipt-sort.js
+          node test/browser/move-receipts.js
