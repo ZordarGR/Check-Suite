@@ -15,6 +15,11 @@ const {chromium}=require("playwright-core"),assert=require("assert"),path=requir
   assert.match(await p.locator("#results").innerText(),/TAX package missing/,"roster warns before Tax report");
   await p.evaluate(()=>window.__tx.setTax({dateKey:20260925,fileDate:"25/09/26",rooms:{"101":{arr:1,auto:1,man:0}}},20260925));
   assert.match(await p.locator("#results").innerText(),/TAX package missing/,"posting does not conceal package problem");
+  assert.match(await p.locator("#results .legend").innerText(),/1 occupied rooms posted correctly/,"package warning does not erase actual posted tax");
+  await p.evaluate(()=>window.__tx.setTax({dateKey:20260925,fileDate:"25/09/26",rooms:{}},20260925));
+  assert.match(await p.locator("#results").innerText(),/TAX package missing/);
+  assert(await p.locator('#results .row').count()>=2,"both missing actual charge and package warning must remain visible");
+  await p.evaluate(()=>window.__tx.setTax({dateKey:20260925,fileDate:"25/09/26",rooms:{"101":{arr:1,auto:1,man:0}}},20260925));
   await p.screenshot({path:"test/browser/rate-grid-missing-tax.png",fullPage:true});
   await p.evaluate(()=>{window.__rcRateGrids[0].nights[1].tax=true;window.__tx.setRate(window.__fixtureRate);window.__tx.render();});
   assert.match(await p.locator("#results .legend").innerText(),/1 occupied rooms posted correctly/);

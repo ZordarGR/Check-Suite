@@ -8563,7 +8563,8 @@ function crossReference(rate,tax,nightKey){
     const span=bounds[room]||{};
     if((span.start&&N<span.start)||(span.end&&N>=span.end)){notOwed++;continue;}
     const packageWarning=occupied.map(r=>rateGridTaxWarning(room,r,N)).filter(Boolean).join("; ");
-    if(packageWarning){uncertain.push({room,name:rr.name,reason:packageWarning});continue;}
+    // Package configuration is additional evidence; never hide a missing/posted charge.
+    if(packageWarning)uncertain.push({room,name:rr.name,reason:packageWarning});
     if(rr.adjoining){adjoining.push({room,name:rr.name,partner:rr.partner});continue;}
     const tr=tax.rooms[room];
     if(tr&&tr.uncertain){uncertain.push({room,name:rr.name,reason:tr.reversal?'Reversed charges — verify this room':'Conflicting saved tax reports'});continue;}
