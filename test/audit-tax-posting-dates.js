@@ -23,7 +23,7 @@ const pages=[page('101'),page('102','24/09/26',true)];
 assert(c.parseTax(c.pagesToTokens(pages)).ambiguous,'original flattening reproduces next-page print-date rejection');
 let r=parse(pages);
 assert(!r.uncertain);assert.equal(r.dateKey,20260924);assert.equal(r.totalRooms,2);assert.equal(r.totalArrangements,2);
-for(const room of ['101','102'])assert.deepEqual(JSON.parse(JSON.stringify(r.rooms[room])),{arr:1,auto:1,man:0});
+for(const room of ['101','102'])assert.deepEqual(JSON.parse(JSON.stringify(r.rooms[room])),{arr:1,auto:1,man:0,reversalScope:'tax'});
 assert(parse([page('101'),page('102','23/09/26',true)]).uncertain,'joined rows on another posting night still reject');
 assert(parse([page('101','31/09/26')]).uncertain,'invalid calendar date rejects');
 assert(parse([page('101'),page('102','??',true)]).uncertain,'unreadable tax row date cannot borrow another room date');
@@ -43,5 +43,12 @@ for(const room of ['9000','9010','9999','8999','999']){
  r=parse([[...head(room),...charge(181.6,'24/09/26','*Arrangement',true,'-100,00')],page('102')]);
  assert(!r.uncertain);assert(r.rooms[room].reversal&&r.rooms[room].uncertain);
  assert(!r.rooms['102'].uncertain,'another room is unaffected by a reversal');
+}
+for(const joined of [false,true])for(const text of ['RESTAURANT 24%','CAFETERIA','TAVERNAKI','KAFENIO','BAR 13%','Deposit']){
+ r=parse([[...page('101'),...charge(211.6,'24/09/26',text,joined,'-10,00')],page('102')]);
+ assert(!r.uncertain&&!r.rooms['101'].uncertain&&!r.rooms['101'].reversal,text);
+ assert(r.rooms['101'].otherReversal);assert.equal(r.rooms['101'].arr,1);assert.equal(r.rooms['101'].auto,1);
+ r=parse([[...page('101'),...charge(211.6,'24/09/26',text,joined,'-10,00'),...charge(226.6,'24/09/26','*Arrangement',joined,'-100,00')]]);
+ assert(r.rooms['101'].uncertain&&r.rooms['101'].reversal,'adjacent tax charge remains protected');
 }
 console.log('PASS tax posting columns: next-day page headers, joined date/time/amount, all rooms and counts, mixed/invalid/missing dates, room-specific reversal flags, continuation pages, guest-column dates and default flattening');

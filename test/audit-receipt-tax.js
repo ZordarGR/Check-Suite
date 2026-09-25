@@ -229,6 +229,23 @@ function deferred() { let resolve; const promise = new Promise(r=>resolve=r); re
     const clean=charges({'205':{arr:1,auto:1,man:0}});m.ingestTax(clean);
     assert(m.loadMem()['205']['18/09/26'].reversal,'a later filtered clean report cannot silently erase reversal evidence');
   });
+  await check('tax-reversal-scope-repair','Scoped department-only reread repairs old broad warnings without deleting evidence or real conflicts',()=>{
+    const m=memContext(),day='18/09/26',old={arr:1,auto:1,man:0,manual:'arrival',uncertain:true,reversal:true,versions:[]};
+    const initial={};for(const room of ['205','206','207','208','209','210'])initial[room]={[day]:JSON.parse(JSON.stringify(old))};
+    initial['206'][day].reversalScope='tax';
+    initial['207'][day].versions=[{arr:2,auto:1,man:0}];
+    initial['210'][day].versions=[{arr:1,auto:1,man:0,reversal:true,reversalScope:'tax'}];
+    m.saveMem(initial);
+    const rooms={};for(const room of Object.keys(initial))rooms[room]={arr:1,auto:1,man:0,reversalScope:'tax',otherReversal:true};
+    rooms['208'].arr=2;delete rooms['209'].otherReversal;
+    assert(m.ingestTax(charges(rooms)));let saved=m.loadMem();
+    assert(!saved['205'][day].uncertain&&!saved['205'][day].reversal);
+    assert.equal(saved['205'][day].manual,'arrival');
+    assert(saved['205'][day].versions.some(v=>v.reversal&&!v.reversalScope),'original warning evidence retained');
+    for(const room of ['206','207','208','209','210'])assert(saved[room][day].uncertain&&saved[room][day].reversal,room+' must retain genuine or unverified uncertainty');
+    assert.equal(saved['206'][day].reversalScope,'tax');
+    const before=JSON.stringify(saved);m.ingestTax(charges(rooms));assert.equal(JSON.stringify(m.loadMem()),before);
+  });
   await check('tax-load-latest-selection','Slow earlier file load cannot overwrite latest chosen tax file',async()=>{
     const one=deferred(),two=deferred(),els={};const a=charges({'205':{arr:1,auto:0,man:0}}),b=charges({'206':{arr:1,auto:1,man:0}});
     const c=context(['loadTax'],{TAX_LOAD_EPOCH:0,TAX:null,PAIR_OVERRIDE:null,ADJ_OPEN_OVERRIDE:null,EXPANDED:new Set(),clearErr:()=>{},

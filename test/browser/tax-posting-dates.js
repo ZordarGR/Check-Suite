@@ -6,19 +6,20 @@ const {chromium}=require("playwright-core"),assert=require("assert"),path=requir
   const p=await browser.newPage(),errors=[];p.on("pageerror",e=>errors.push(e.message));
   await p.goto("file://"+path.resolve(__dirname,"h-sweep.html"));await p.waitForFunction(()=>window.__tx);
   await p.evaluate(()=>window.__t.showScreen("tax"));
-  const upload=(name,mixed=false,reversals=0)=>p.evaluate(async({name,mixed,reversals})=>{
+  const upload=(name,mixed=false,reversals=0,departments=false)=>p.evaluate(async({name,mixed,reversals,departments})=>{
    const zip=new JSZip(),g=(x,y,t)=>'<Glyphs OriginX="'+x+'" OriginY="'+y+'" UnicodeString="'+t+'" />';
    for(let n=1;n<=(reversals?3:2);n++){
     const day=mixed&&n===2?'23/09/26':'24/09/26';
     const room=n===3?'9010':String(100+n),negative=n===3||(reversals===2&&n===2),amount=negative?'-10,00':'10,00';
     const content=g(184,97.6,'25/9/2026')+g(40,145.6,room)+g(52.8,164,'Date')+g(104,164,'Time')+
      g(42.56,181.6,day+(n>=2?'02:04100,00SYNTHETIC':''))+g(178.08,181,'*Arrangement')+
-     g(42.56,196.64,day+(n>=2?'02:04'+amount+'SYNTHETIC':''))+g(178.08,196,'*ΤΕΛΟΣ ΑΝΘΕΚΤΙΚΟΤΗΤΑΣ');
+     g(42.56,196.64,day+(n>=2?'02:04'+amount+'SYNTHETIC':''))+g(178.08,196,'*ΤΕΛΟΣ ΑΝΘΕΚΤΙΚΟΤΗΤΑΣ')+
+     (departments&&n===2?g(42.56,211.6,day+'02:04-10,00SYNTHETIC')+g(178.08,211,'RESTAURANT 24%'):'');
     zip.file('Documents/1/Pages/'+n+'.fpage','<FixedPage>'+content+'</FixedPage>');
    }
    const file=new File([await zip.generateAsync({type:'uint8array'})],name),dt=new DataTransfer();dt.items.add(file);
    const input=document.getElementById('file-tax');input.files=dt.files;input.dispatchEvent(new Event('change',{bubbles:true}));
-  },{name,mixed,reversals});
+  },{name,mixed,reversals,departments});
   const mem=()=>p.evaluate(()=>localStorage.getItem('ta_check_memory_v2'));
   await upload("25-9.oxps");await p.waitForFunction(()=>document.getElementById('fn-tax').textContent==='25-9.oxps');
   const before=await mem(),m=JSON.parse(before);assert(m['101']['24/09/26']);assert(m['102']['24/09/26']);
@@ -42,6 +43,20 @@ const {chromium}=require("playwright-core"),assert=require("assert"),path=requir
   assert(!await p.locator('#taxScreen').innerText().then(s=>/9010/.test(s)),'9xxx account remains outside tax views');
   await p.reload();await p.waitForFunction(()=>window.__tx);await p.evaluate(()=>window.__t.showScreen('tax'));
   assert.equal(await mem(),after);assert.match(await p.locator('#acc').innerText(),/Reversed charges/,'room warning survives reload');
+  await upload('department-after-real-reversal.oxps',false,0,true);
+  await p.waitForFunction(()=>document.getElementById('fn-tax').textContent==='department-after-real-reversal.oxps');
+  assert(JSON.parse(await mem())['102']['24/09/26'].reversal,'real scoped tax reversal cannot be erased by a department report');
+  // Simulate a warning saved by 1.17.97, which did not know its charge category.
+  await p.evaluate(()=>{const m=JSON.parse(localStorage.getItem('ta_check_memory_v2'));delete m['102']['24/09/26'].reversalScope;
+   m['102']['24/09/26'].versions=[];localStorage.setItem('ta_check_memory_v2',JSON.stringify(m));});
+  await upload('department-only.oxps',false,0,true);
+  await p.waitForFunction(()=>document.getElementById('fn-tax').textContent==='department-only.oxps');
+  const corrected=JSON.parse(await mem())['102']['24/09/26'];
+  assert(!corrected.reversal&&!corrected.uncertain,'department-only reversal cannot warn in Tax Check');
+  assert(corrected.versions.some(v=>v.reversal),'old snapshot remains available');
+  assert(!/Reversed charges/.test(await p.locator('#taxScreen').innerText()));
+  await p.reload();await p.waitForFunction(()=>window.__tx);await p.evaluate(()=>window.__t.showScreen('tax'));
+  assert(!/Reversed charges/.test(await p.locator('#taxScreen').innerText()),'false warning stays corrected after reopening');
   assert.deepEqual(errors,[]);
   console.log('PASS actual OXPS upload: print vs posting date, joined glyphs, both filename formats, exact room counts, invalid import preserves prior tax memory and loaded report; normal-room reversal warning persists without blocking, account reversals excluded');
  }finally{await browser.close();}
