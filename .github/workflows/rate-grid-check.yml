@@ -82,3 +82,39 @@ jobs:
           path: |
             audit-results/
             app/rc-tbind.exe
+  windows-grid:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86, x64]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/dist-win64/parts/RecCheck-Setup.exe.*
+      - name: Compile synthetic target and native reader
+        shell: pwsh
+        run: |
+          $compiler = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+          & $compiler /nologo /target:exe /platform:anycpu /out:app/rc-tbind.exe app/tbind.cs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $compiler /nologo /target:exe /platform:x64 /r:System.Windows.Forms.dll /out:probe.exe test/rate-grid-window.cs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $compiler /nologo /target:exe /platform:${{ matrix.arch }} /r:System.Windows.Forms.dll /out:fixture.exe test/rate-grid-window.cs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Capture every offscreen row in month and year-long stays
+        shell: pwsh
+        run: |
+          & .\fixture.exe fixture "$PWD\probe.exe" 62 "$PWD\app\rc-tbind.exe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\fixture.exe fixture "$PWD\probe.exe" 401 "$PWD\app\rc-tbind.exe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-rate-grid-${{ matrix.arch }}
+          path: native-rate-grid-*.tsv
