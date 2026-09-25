@@ -117,6 +117,14 @@ So a half-answered list is not a decision on the unanswered half. Re-ask the ope
 its own and short, until it has an answer — and never fill it with an assumption because the
 rest was answered.
 
+**9. Bug-fix releases are forced updates by default.**
+
+His instruction, 26/09/2026: *"bug fixes are a forced update by default from now on"*.
+Set `force: true` in `update/latest.json` for any release containing bug fixes,
+including HTML-only and full-engine releases, unless he explicitly requests otherwise.
+This is standing authorization; no repeat confirmation is needed. Existing cloud tests
+and introduced-change review still apply.
+
 ## The hard constraint
 
 **protel is not his.** It is vendor-managed software on the hotel's PC, which is also not
