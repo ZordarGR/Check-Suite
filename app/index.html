@@ -1913,6 +1913,7 @@ function parseReport(xmls){
         const recM = textStr.match(/Rec:\s*(\d+)/);
         if(!reportDate && dateTok) reportDate = dateTok.t.trim();
         S.rows.push({
+          date: dateTok ? dateTok.t.trim() : "",
           time: timeTok.t.trim(),
           user: userTok ? userTok.t.trim() : "",
           room: roomTok ? roomTok.t.trim() : "",
@@ -1942,6 +1943,38 @@ function isCheckcharge(parsed){
 }
 
 /* ---- receipt model ---- */
+/* A POS can repeat the same receipt while cancelling it: identical complete
+   positive postings, with full opposite postings at cancellation times. Netting
+   every repetition can leave a phantom balance. Recognise only a complete,
+   latest reversal of the same dated POS/department/VAT profile. Names are display
+   text, never cancellation identity. Keep all original entries and money intact. */
+function repeatedInterfaceCancellation(entries){
+  const events = new Map(), days = new Set(), rooms = new Set();
+  for(const e of entries){
+    if(e.amount === 0) continue;
+    if(e.user !== INTERFACE_USER || !Number.isFinite(e.amount)) return false;
+    const d = String(e.date || "").match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if(!d || !/^([01]\d|2[0-3]):[0-5]\d$/.test(e.time || "")) return false;
+    days.add([+d[3],+d[2],+d[1]].join("-")); rooms.add(e.room);
+    const pm = String(e.text || "").match(/\bPos:\s*(\d+(?:\s*,\s*\d+)*)/i);
+    if(!pm) return false;
+    const key = JSON.stringify([e.section,e.rate,pm[1].replace(/\s/g,"")]);
+    let event = events.get(e.time);
+    if(!event){ event={positive:new Map(),negative:new Map()}; events.set(e.time,event); }
+    const side = e.amount > 0 ? event.positive : event.negative;
+    side.set(key,(side.get(key)||0)+Math.round(Math.abs(e.amount)*100));
+  }
+  if(days.size !== 1 || rooms.size !== 1) return false;
+  const signature = m => JSON.stringify([...m].sort((a,b)=>a[0].localeCompare(b[0])));
+  const positives = [...events.values()].filter(e=>e.positive.size);
+  if(positives.length < 2) return false;
+  const profile = signature(positives[0].positive);
+  if(positives.some(e=>signature(e.positive)!==profile)) return false;
+  if([...events.values()].some(e=>e.negative.size && signature(e.negative)!==profile)) return false;
+  const last = events.get([...events.keys()].sort().pop());
+  return !!last.negative.size;
+}
+
 function buildModel(parsed){
   const {sections, reportDate} = parsed;
   for(const S of Object.values(sections)) for(const r of S.rows)
@@ -2029,7 +2062,7 @@ function buildModel(parsed){
       r.paidBy = [...paidBy];
       const net0 = Math.abs(r.total) < 0.005;
       r.voided = net0 && r.paidBy.length > 0;      // consolidated by a person — VOID, excluded from totals
-      r.cancelled = net0 && r.paidBy.length === 0; // voided by the interface — hide it
+      r.cancelled = !r.voided && (net0 || repeatedInterfaceCancellation(r.entries)); // POS cancellation — hide it
       receipts.push(r);
     }
     depts[b].list = list;
@@ -2058,7 +2091,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.100";
+const APP_VERSION = "1.17.101";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -3418,9 +3451,10 @@ function receiptStorageFault(e){
 }
 function rKey(r){ return r.sn + "|" + r.roomMain; }
 function receiptFingerprint(r){
+  const reversal = (r.entries || []).some(e=>e.amount < 0 && e.user === "IFC");
   return JSON.stringify([r.guest || "", r.room || "", r.total,
     Object.entries(r.rates || {}).sort((a,b)=>a[0].localeCompare(b[0])),
-    (r.entries || []).map(e=>[e.user,e.guest,e.amount,e.rate,e.section]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)))]);
+    (r.entries || []).map(e=>[e.user,e.guest,e.amount,e.rate,e.section,...(reversal?[e.date,e.time,e.text]:[])]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)))]);
 }
 function rState(r){
   let st = STATE.receipts[rKey(r)];
