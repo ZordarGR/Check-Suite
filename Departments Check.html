@@ -2058,7 +2058,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.98";
+const APP_VERSION = "1.17.99";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -8526,10 +8526,15 @@ function crossReference(rate,tax,nightKey){
     const incomplete=rows.some(r=>!dkey(r.arr)||!dkey(r.dep)||dkey(r.dep)<dkey(r.arr));
     const occupied=rows.filter(r=>dkey(r.arr)&&dkey(r.dep)&&dkey(r.arr)<=N&&N<dkey(r.dep));
     const rr=occupied[0]||rate.rooms[room]||(rate.incompleteRooms||{})[room];
-    if(incomplete||(rate.incompleteRooms||{})[room]||(rate.coverageMissing||[]).includes(room)){
-      uncertain.push({room,name:rr.name,reason:(incomplete||(rate.incompleteRooms||{})[room])?'Incomplete captured reservation fields':'Not present in the latest list; saved evidence retained'});continue;
+    if(incomplete||(rate.incompleteRooms||{})[room]){
+      uncertain.push({room,name:rr.name,reason:'Incomplete captured reservation fields'});continue;
     }
+    // Charge eligibility is arrival-inclusive and departure-exclusive for the audited night.
+    // Absence from a later day's list cannot invalidate an earlier occupied night.
     if(!occupied.length){notOwed++;continue;}
+    if((rate.coverageMissing||[]).includes(room)&&!(rate.dateKey>N)){
+      uncertain.push({room,name:rr.name,reason:'Not present in the latest list; saved evidence retained'});continue;
+    }
     const dates=new Set(occupied.map(r=>r.arr+'|'+r.dep));
     if(dates.size>1){uncertain.push({room,name:rr.name,reason:'Conflicting occupied reservation dates'});continue;}
     const bounds=rate.live?taxAccountBounds(Object.assign({},rate,{rooms:{[room]:rr}}),statusLoad(true).MV||{}):{};

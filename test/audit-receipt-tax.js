@@ -246,6 +246,27 @@ function deferred() { let resolve; const promise = new Promise(r=>resolve=r); re
     assert.equal(saved['206'][day].reversalScope,'tax');
     const before=JSON.stringify(saved);m.ingestTax(charges(rooms));assert.equal(JSON.stringify(m.loadMem()),before);
   });
+  await check('tax-departure-coverage-order','Departure-day and historical-night checks precede missing-current-list warnings',()=>{
+    const c=taxContext(),rooms={},taxRooms={};
+    for(const room of ['101','102','103','104']){
+      rooms[room]={room,name:'SYNTHETIC '+room,arr:'18/09/26',dep:'25/09/26',adjoining:false};
+      taxRooms[room]={arr:1,auto:1,man:0};
+    }
+    const rate={dateKey:20260925,rooms,coverageMissing:Object.keys(rooms)},tax={dateKey:20260924,rooms:taxRooms};
+    const before=JSON.stringify({rate,tax});
+    let x=c.crossReference(rate,tax);assert.equal(x.okCount,4);assert.equal(x.uncertain.length,0);assert.equal(x.notOwed,0,'departure morning still owes the preceding night');
+    x=c.crossReference(rate,{dateKey:20260925,rooms:{}});assert.equal(x.notOwed,4);assert.equal(x.uncertain.length,0);assert.equal(x.totalFail.length,0,'no charge on departure night');
+    x=c.crossReference({...rate,dateKey:20260924},tax);assert.equal(x.uncertain.length,4,'same-night filtered list stays uncertain');
+    x=c.crossReference({...rate,dateKey:20260923},tax);assert.equal(x.uncertain.length,4,'older missing evidence cannot certify a later night');
+    x=c.crossReference(rate,{dateKey:20260924,rooms:{}});assert.equal(x.totalFail.length,4,'missing real charges on the preceding night still flagged');
+    x=c.crossReference(rate,{dateKey:20260917,rooms:{}});assert.equal(x.notOwed,4,'not-yet-arrived night excluded');
+    assert.equal(JSON.stringify({rate,tax}),before,'no stay/history facts changed');
+    const incoming={room:'101',name:'NEXT SYNTHETIC',arr:'25/09/26',dep:'28/09/26'};
+    x=c.crossReference({...rate,all:{'101':[rooms['101'],incoming]}},{dateKey:20260925,rooms:{}});
+    assert.equal(x.notOwed,3);assert(x.uncertain.some(r=>r.room==='101'),'turnover incoming guest cannot inherit outgoing departure exemption');
+    x=c.crossReference({...rate,rooms:{'101':{...rooms['101'],dep:''}}},{dateKey:20260925,rooms:{}});
+    assert.equal(x.notOwed,0);assert.match(x.uncertain[0].reason,/Incomplete/,'unreadable stay dates still require verification');
+  });
   await check('tax-load-latest-selection','Slow earlier file load cannot overwrite latest chosen tax file',async()=>{
     const one=deferred(),two=deferred(),els={};const a=charges({'205':{arr:1,auto:0,man:0}}),b=charges({'206':{arr:1,auto:1,man:0}});
     const c=context(['loadTax'],{TAX_LOAD_EPOCH:0,TAX:null,PAIR_OVERRIDE:null,ADJ_OPEN_OVERRIDE:null,EXPANDED:new Set(),clearErr:()=>{},
