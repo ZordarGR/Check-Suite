@@ -36,3 +36,18 @@ jobs:
           node test/browser/repeated-void.js
           node test/browser/receipt-sort.js
           node test/browser/move-receipts.js
+  delivery:
+    needs: [core, browser]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify normal and forced HTML update delivery
+        env:
+          RELEASE_VERSION: 1.17.101
+          MANIFEST_URL: https://raw.githubusercontent.com/ZordarGR/Check-Suite/${{ github.sha }}/update/latest.json
+        run: |
+          node test/html-update-delivery.js
+          node test/required-html-delivery.js
