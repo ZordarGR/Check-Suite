@@ -1,4 +1,4 @@
-name: Tax reversal category checks
+name: Tax reversal category and delivery checks
 on:
   push:
     branches: ["codex/tax-reversal-categories-20260925"]
