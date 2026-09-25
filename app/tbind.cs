@@ -2190,7 +2190,6 @@ static class TBind {
     IntPtr h=GetForegroundWindow();
     if(!RateGridTarget(h)){rateGridScan=null;rateGridSeen="";rateGridSaved="";rateGridNext=0;return;}
     int now=Environment.TickCount;
-    if(rateGridScan==null&&rateGridNext!=0&&now-rateGridNext<0)return;
     string guest=InvoiceText(GetDlgItem(h,113)),currency=InvoiceText(GetDlgItem(h,110));
     DateTime a,d;
     if(!RateGridHeader(guest,out a,out d)||String.IsNullOrEmpty(currency))return;
@@ -2205,6 +2204,8 @@ static class TBind {
       rateGridScan=null;rateGridNext=now+1000;return;
     }
     string key=h.ToInt64()+"|"+lv.ToInt64()+"|"+prefix+"|"+count;
+    // A reused dialog may now show another reservation. Check identity before cooling.
+    if(rateGridScan==null&&rateGridSeen==key&&rateGridNext!=0&&now-rateGridNext<0)return;
     if(rateGridScan==null||rateGridScan.key!=key){
       rateGridScan=new RateGridScan(key,prefix,count);
       if(rateGridSeen!=key){rateGridSeen=key;rateGridSaved="";}

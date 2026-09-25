@@ -8,6 +8,7 @@ class RateGridWindow {
  [DllImport("user32.dll")]static extern bool ShowWindow(IntPtr h,int cmd);
  [DllImport("user32.dll")]static extern bool SetForegroundWindow(IntPtr h);
  [DllImport("user32.dll")]static extern bool DestroyWindow(IntPtr h);
+ [DllImport("user32.dll",CharSet=CharSet.Unicode)]static extern bool SetWindowText(IntPtr h,string text);
  [DllImport("user32.dll")]static extern uint MsgWaitForMultipleObjectsEx(uint count,IntPtr handles,uint milliseconds,uint mask,uint flags);
  [StructLayout(LayoutKind.Sequential)]struct Col{public uint mask;public int fmt,width;public IntPtr text;public int len,sub,image,order,min,def,ideal;}
  [StructLayout(LayoutKind.Sequential)]struct Item{public uint mask;public int row,sub;public uint state,stateMask;public IntPtr text;public int len,image;public IntPtr param;public int indent,group;public uint columns;public IntPtr cols,fmt;public int groupIndex;}
@@ -46,7 +47,7 @@ class RateGridWindow {
    IntPtr win=CreateWindowEx(0,"#32770","Rate by Day Grid",unchecked((int)0x10CF0000),30,30,760,360,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero);
    if(win==IntPtr.Zero)throw new Exception("Fixture dialog not created");
    string identity="SYNTHETIC LONG STAY , room 507, "+Date(0)+" - "+Date(nights);
-   Control(win,"Edit",113,identity,10,10,650,25);Control(win,"Edit",110,"EUR",670,10,45,25);
+   IntPtr guestControl=Control(win,"Edit",113,identity,10,10,650,25);Control(win,"Edit",110,"EUR",670,10,45,25);
    IntPtr lv=CreateWindowEx(0,"SysListView32","",unchecked((int)0x50000001),10,50,710,170,win,(IntPtr)24444,IntPtr.Zero,IntPtr.Zero);
    for(int c=0;c<16;c++)Column(lv,c);
    for(int r=0;r<=nights;r++)for(int c=0;c<16;c++)Cell(lv,r,c,c==2?Date(r):c==3?"507":c==14?(r<5?"240,00":"220,00"):c==13?"TAX,*HB":c==15?"Individuals":"");
@@ -69,6 +70,15 @@ class RateGridWindow {
     if(spy.writes!=0)throw new Exception("Reader modified native list");
     File.WriteAllText("native-rate-grid-"+nights+".tsv",body);
     Console.WriteLine("PASS native "+(IntPtr.Size*8)+"-bit target, 64-bit reader, "+rows+" rows, "+spy.reads+" getters, zero setters, small scrollable window");
+    if(nights==62){
+     string other=identity.Replace("SYNTHETIC LONG STAY","SYNTHETIC NEXT GUEST");
+     SetWindowText(guestControl,other);DateTime switched=DateTime.UtcNow,until=switched.AddSeconds(7);
+     string replacement="";
+     while(DateTime.UtcNow<until){Pump(50);try{replacement=File.ReadAllText(file);}catch(IOException){}if(replacement.Contains(other)&&replacement.Contains("\tcomplete\n"))break;}
+     if(!replacement.Contains(other)||!replacement.Contains("\tcomplete\n"))throw new Exception("Reused dialog was delayed by the previous guest's cooldown");
+     if(spy.writes!=0)throw new Exception("Reader modified the reused grid");
+     Console.WriteLine("PASS reused dialog captures the next guest before the old 10-second cooldown, "+(DateTime.UtcNow-switched).TotalSeconds.ToString("F1")+" seconds");
+    }
     DestroyWindow(win);Pump(350);
     // Only the test reflection driver; completed capture means no getter remains in flight.
     p.Kill();p.WaitForExit();
