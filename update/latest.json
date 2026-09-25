@@ -5,8 +5,8 @@
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.100/Pro-Check-Setup.exe",
   "setupSha256": "5254add297f02d4503a569282eca02f449188b31e58a6da84d64d8a3fb738553",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/36f47347bba142c97a298146821df533bd465a90/Departments%20Check.html",
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/4ea4f894e0a7d3b05dfe98f86669c1ceead39089/Departments%20Check.html",
   "sha256": "bac8214d74d73b57cff6012c258c0ffdfa8ea5b1b3926d45f18e708d025433b7",
-  "notes": "Read every Rate by Day Grid row, including long stays, and retain it while Pro-Check is closed. Complete matching grids supply the full-stay arrangement total; unopened grids keep the current formula. Incomplete or conflicting captures require verification. Check exact TAX packages without inventing posted tax charges.",
+  "notes": "Capture every Rate by Day Grid row, including long stays, with the always-running helper. Complete matching grids supply the total of all occupied nightly rates; reservations without a grid keep the current formula. Interrupted or conflicting reads require verification. Tax Check shows dates missing TAX packages while independently checking actual postings. Captures are retained when Pro-Check is closed.",
   "force": true
 }
