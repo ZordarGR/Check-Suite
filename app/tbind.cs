@@ -2101,6 +2101,146 @@ static class TBind {
      The column count is not decoration: each tag's column map assumes a shape, and a list
      answering to the same caption with a different one must not be read with the wrong
      map. The page refuses on the shape before it asks for a single cell. */
+
+  // Full Rate by Day Grid capture. Read-only getters, paced across pump ticks.
+  // Two matching whole-list passes are required; no visible-row or debug sample cap.
+  sealed class RateGridScan {
+    public string key, prefix;
+    public int count, row, pass;
+    public bool pendingSaved;
+    public System.Collections.Generic.List<string[]> rows = new System.Collections.Generic.List<string[]>();
+    public RateGridScan(string k,string p,int n){key=k;prefix=p;count=n;}
+    public bool Step(Func<int,int,string> cell,Func<bool> healthy){
+      int stop=Math.Min(count,row+8);
+      for(;row<stop;row++){
+        string[] data=new string[16];
+        for(int c=0;c<16;c++){data[c]=cell(row,c);if(!healthy())throw new Exception("Incomplete rate grid");}
+        if(pass==0)rows.Add(data);
+        else for(int c=0;c<16;c++)if(data[c]!=rows[row][c])throw new Exception("Rate grid changed while reading");
+      }
+      if(row<count)return false;
+      if(pass==0){pass=1;row=0;return false;}
+      return true;
+    }
+  }
+  static RateGridScan rateGridScan;
+  static string rateGridSeen="",rateGridSaved="";
+  static int rateGridNext=0;
+  static bool RateGridHeader(string header,out DateTime arrival,out DateTime departure){
+    arrival=departure=DateTime.MinValue;
+    var m=System.Text.RegularExpressions.Regex.Match(header??"",
+      @"^(.+?)\s*,\s*room\s+(\d{1,4}(?:-\d{1,4})?)\s*,\s*(\d{2}/\d{2}/(?:\d{4}|\d{2}))\s*-\s*(\d{2}/\d{2}/(?:\d{4}|\d{2}))\s*$",
+      System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    if(!m.Success)return false;
+    return RateGridDate(m.Groups[3].Value,out arrival)&&RateGridDate(m.Groups[4].Value,out departure)
+      &&departure>arrival&&(departure-arrival).TotalDays<=20000;
+  }
+  static bool RateGridDate(string value,out DateTime date){
+    // Explicit 2000-based two-digit years, matching the page's date interpretation.
+    if(value!=null&&value.Length==8)value=value.Substring(0,6)+"20"+value.Substring(6);
+    return DateTime.TryParseExact(value,"dd/MM/yyyy",System.Globalization.CultureInfo.InvariantCulture,
+      System.Globalization.DateTimeStyles.None,out date);
+  }
+  static bool RateGridValid(RateGridScan scan,string header){
+    DateTime a,d;if(!RateGridHeader(header,out a,out d))return false;
+    int nights=(int)(d-a).TotalDays;
+    if(scan.rows.Count!=nights&&scan.rows.Count!=nights+1)return false;
+    var dates=new System.Collections.Generic.HashSet<DateTime>();
+    foreach(string[] cells in scan.rows){
+      DateTime date;
+      if(!RateGridDate(cells[2],out date)||date<a||date>d||!dates.Add(date))return false;
+      if(!System.Text.RegularExpressions.Regex.IsMatch(cells[3],@"^\d{1,4}(?:-\d{1,4})?$"))return false;
+      if(!System.Text.RegularExpressions.Regex.IsMatch(cells[14].Trim(),@"^(?:\d+|\d{1,3}(?:\.\d{3})+),\d{2}$"))return false;
+      decimal price;
+      if(!decimal.TryParse(cells[14].Trim().Replace(".","").Replace(",",""),
+        System.Globalization.NumberStyles.None,System.Globalization.CultureInfo.InvariantCulture,out price)||price>1000000000)return false;
+    }
+    for(DateTime n=a;n<d;n=n.AddDays(1))if(!dates.Contains(n))return false;
+    return true;
+  }
+  static string RateGridPending(RateGridScan scan){
+    return scan.prefix+"DONE\t0\t"+scan.count+"\t0\t0\tunicode\tpending\n";
+  }
+  static string RateGridBody(RateGridScan scan){
+    StringBuilder b=new StringBuilder(scan.prefix);
+    foreach(string[] cells in scan.rows){b.Append("RG");foreach(string c in cells)b.Append("\t").Append(c);b.Append("\n");}
+    b.Append("DONE\t").Append(scan.count).Append("\t").Append(scan.count).Append("\t0\t0\tunicode\tcomplete\n");
+    return b.ToString();
+  }
+  static bool RateGridTarget(IntPtr h){
+    if(h==IntPtr.Zero||!IsWindowVisible(h)||IsIconic(h))return false;
+    uint pid;GetWindowThreadProcessId(h,out pid);
+    if(!InArray(watchWantPids,pid))return false;
+    StringBuilder title=new StringBuilder(100),cls=new StringBuilder(80);
+    GetWindowText(h,title,title.Capacity);GetClassName(h,cls,cls.Capacity);
+    return title.ToString()=="Rate by Day Grid"&&cls.ToString()=="#32770";
+  }
+  static bool RateGridShape(IntPtr h,IntPtr lv,out int count){
+    count=0;IntPtr res,header;
+    StringBuilder cls=new StringBuilder(80);GetClassName(lv,cls,cls.Capacity);
+    if(lv==IntPtr.Zero||!IsWindowVisible(lv)||cls.ToString()!="SysListView32")return false;
+    if(SendMessageTimeout(lv,LVM_GETITEMCOUNT,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,250,out res)==IntPtr.Zero)return false;
+    count=res.ToInt32();
+    if(count<1||count>20001)return false;
+    return SendMessageTimeout(lv,LVM_GETHEADER,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,250,out header)!=IntPtr.Zero
+      &&header!=IntPtr.Zero&&SendMessageTimeout(header,HDM_GETITEMCOUNT,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,250,out res)!=IntPtr.Zero
+      &&res.ToInt32()==16;
+  }
+  static void ServiceRateGrid(){
+    IntPtr h=GetForegroundWindow();
+    if(!RateGridTarget(h)){rateGridScan=null;rateGridSeen="";rateGridSaved="";rateGridNext=0;return;}
+    int now=Environment.TickCount;
+    if(rateGridScan==null&&rateGridNext!=0&&now-rateGridNext<0)return;
+    string guest=InvoiceText(GetDlgItem(h,113)),currency=InvoiceText(GetDlgItem(h,110));
+    DateTime a,d;
+    if(!RateGridHeader(guest,out a,out d)||String.IsNullOrEmpty(currency))return;
+    IntPtr lv=GetDlgItem(h,24444);int count;
+    string prefix="TITLE\tRate by Day Grid\nGRID\t"+guest+"\t"+currency+"\n";
+    if(!RateGridShape(h,lv,out count)){
+      string unavailable=h.ToInt64()+"|"+prefix+"|unavailable";
+      if(rateGridSeen!=unavailable){
+        var pending=new RateGridScan(unavailable,prefix,(int)(d-a).TotalDays);
+        if(WriteList("RG",RateGridPending(pending))){rateGridSeen=unavailable;rateGridSaved="";}
+      }
+      rateGridScan=null;rateGridNext=now+1000;return;
+    }
+    string key=h.ToInt64()+"|"+lv.ToInt64()+"|"+prefix+"|"+count;
+    if(rateGridScan==null||rateGridScan.key!=key){
+      rateGridScan=new RateGridScan(key,prefix,count);
+      if(rateGridSeen!=key){rateGridSeen=key;rateGridSaved="";}
+      // Publish the reservation identity first. Incomplete reads must not silently
+      // reuse an older payment verdict or fall back as if this grid was never opened.
+      if(rateGridSaved.Length==0){
+        if(!WriteList("RG",RateGridPending(rateGridScan))){rateGridScan=null;rateGridNext=now+1000;return;}
+        rateGridScan.pendingSaved=true;
+      }
+    }
+    RateGridScan scan=rateGridScan;
+    try{
+      bool done;
+      using(SafeListRead read=new SafeListRead(lv,true)){
+        done=scan.Step((r,c)=>read.Get(r,c,false),()=>read.ok);
+      }
+      int after;
+      if(!RateGridTarget(h)||GetForegroundWindow()!=h||GetDlgItem(h,24444)!=lv
+        ||guest!=InvoiceText(GetDlgItem(h,113))||currency!=InvoiceText(GetDlgItem(h,110))
+        ||!RateGridShape(h,lv,out after)||after!=count)throw new Exception("Rate grid identity changed");
+      if(done){
+        if(!RateGridValid(scan,guest))throw new Exception("Rate grid has missing, duplicate or unreadable nights");
+        string body=RateGridBody(scan);
+        if(body!=rateGridSaved||scan.pendingSaved){
+          if(!WriteList("RG",body))throw new Exception("Rate grid could not be saved");
+          rateGridSaved=body;
+        }
+        rateGridScan=null;rateGridNext=now+10000;
+      }
+    }catch(Exception e){
+      if(!scan.pendingSaved)WriteList("RG",RateGridPending(scan));
+      rateGridSaved="";rateGridScan=null;rateGridNext=now+1000;
+      WriteCrash("rate-grid",e);
+    }
+  }
+
   static void PeekTagged(string tag){
     string cap;
     IntPtr lv = FindTaggedList(NeedleFor(tag), out cap);
@@ -2692,6 +2832,7 @@ static class TBind {
         /* AFTER the pump, so the queue is drained before a read that takes tens of
            milliseconds, and outside the callback for the reason given at EvServiceReads. */
         EvServiceReads();
+        ServiceRateGrid();
       }catch(Exception e){ WriteCrash("watch", e); }
       Thread.Sleep(100);
     }
@@ -2773,7 +2914,7 @@ static class TBind {
     }catch(Exception){}
   }
 
-  const string VER = "v35";
+  const string VER = "v36";
 
 
   /* Live accommodation reader. Separate child mode: no keyboard hooks, no protel writes.
@@ -3169,7 +3310,7 @@ static class TBind {
     }
     /* What protel opened tonight. Nothing was read from protel to produce it — see the
        note by the WinEvent constants. */
-    /* Read a few rows out of the list in front. Not free — it says so itself. */
+    /* Diagnostic sample only. The resident Rate by Day Grid reader always reads every row. */
     if(args.Length >= 2 && args[0] == "readlist"){
       int rpid;
       if(!int.TryParse(args[1], out rpid)) return 2;
@@ -3183,7 +3324,7 @@ static class TBind {
       LoadBinds();                       // so focus= is known and the gate can refuse
       Thread.Sleep(rwait);
       READ = new StringBuilder();
-      READ.Append("rc-tbind " + VER + " list read  " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "\n");
+      READ.Append("rc-tbind " + VER + " diagnostic sample (not the full automatic capture)  " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "\n");
       try{ ReadForeground(rmax); }catch(Exception e){ READ.Append("EXCEPTION: " + e.Message + "\n"); }
       Say(READ.ToString());
       return 0;

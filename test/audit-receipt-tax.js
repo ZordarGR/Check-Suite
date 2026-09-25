@@ -45,7 +45,7 @@ function receiptContext(m, state) {
 const ihRow = (room,name,arr='17/09/26',dep='21/09/26',status='CI') => [name,'',room,'','2',arr,dep,'','','','',status];
 function taxContext() {
   const els = {};
-  return context(['dkey','pillRoom','inhouseToRate','isInhouseTitle','inhouseDate','applyInhouse','taxRoomKeys','taxCaptureRate','setLiveRate','taxAccountBounds','crossReference','decidePairing','deriveStatus'],
+  return context(['dkey','pillRoom','inhouseToRate','isInhouseTitle','inhouseDate','applyInhouse','taxRoomKeys','taxCaptureRate','setLiveRate','taxAccountBounds','rateGridTaxWarning','crossReference','decidePairing','deriveStatus'],
     {IH:{NAME:0,ROOM:2,OCC:4,ARR:5,DEP:6,STATUS:11},RATE:null,TAX:null,PAIR_OVERRIDE:null,ADJ_OPEN_OVERRIDE:null,
       LIVE_SIG:'',LEDGER_TICK:0,MOVES_ROWS:null, window:{},
       t:x=>x,el:id=>(els[id] || (els[id]={})),saveMoves:()=>({res:0}),showMoveSave:()=>{},render:()=>{},statusLoad:()=>({})});

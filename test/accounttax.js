@@ -15,7 +15,7 @@ const lift = n => {
 let stored = "{}", writes = 0, count = 0;
 const storage = {getItem: () => stored, setItem: () => { writes++; }};
 const compare = new Function("localStorage", 'const STATUS_KEY="reccheck_status_v1";\n' +
-  ["dkey", "pillRoom", "statusLoad", "taxAccountBounds", "taxRoomKeys", "crossReference"].map(lift).join("\n") +
+  ["dkey", "pillRoom", "statusLoad", "taxAccountBounds", "taxRoomKeys", "rateGridTaxWarning", "crossReference"].map(lift).join("\n") +
   "\nreturn crossReference;")(storage);
 const stay = () => ({name:"MORGAN/TAYLOR ALICE/ROBERT",arr:"02/09/26",dep:"10/09/26"});
 const rate = room => ({live:true,rooms:{[room || "205"]:stay()}});

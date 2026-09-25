@@ -6,7 +6,7 @@
   "setupSha256": "7cf32e0db5275f7590d329fd23bda54d4e1e1726353848f3691b61caed738188",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
   "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/36f47347bba142c97a298146821df533bd465a90/Departments%20Check.html",
-  "sha256": "2b8a1b981c4744c339262317642ab55f2cefd54d592d741515317142d679989d",
+  "sha256": "b846a2968774a93cb42ea60e2f0b03c483e29483f2e7d93fac75334201364c30",
   "notes": "Tax Check now applies stay-date eligibility before missing-list warnings. The last night before departure is checked; the departure night is not charged. Absence from a later day's in-house list does not make an earlier night's check uncertain. Same-night filtered lists, incomplete dates and incoming guests on turnover remain protected.",
   "force": true
 }

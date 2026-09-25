@@ -90,9 +90,9 @@ function start({electron,helperPath,captureDir,userData,spawnHelper=spawn,enable
     try{raw=fs.readFileSync(file,"utf8");}catch(e){if(e.code==="ENOENT")return [];throw e;}
     const r=JSON.parse(raw);
     if(!Array.isArray(r)||r.some(x=>!x||typeof x!=="object"||Array.isArray(x)||
-      !["IH","AR","DP"].includes(x.tag)||!Number.isFinite(x.at)||x.at<0||
+      (x.tag==="RG"?!calc.validGrid(x):(!["IH","AR","DP"].includes(x.tag)||!Number.isFinite(x.at)||x.at<0||
       !["name","room","arr","dep","price","agency","currency"].every(k=>typeof x[k]==="string")||
-      calc.day(x.arr)===null||calc.day(x.dep)===null))throw new Error("Saved daily-price history is unreadable");
+      calc.day(x.arr)===null||calc.day(x.dep)===null))))throw new Error("Saved daily-price history is unreadable");
     return r;
   }
   function referenceFault(message,error){
@@ -179,7 +179,7 @@ function start({electron,helperPath,captureDir,userData,spawnHelper=spawn,enable
       catch(e){referenceFault("Saved daily-price history could not be read; original data retained",e);return;}
     }
     let changed=false;
-    for(const tag of ["IH","AR","DP"]){
+    for(const tag of ["IH","AR","DP","RG"]){
       try{
         const p=path.join(captureDir,"rc-list-"+tag+".tsv"), st=fs.statSync(p);
         const stamp=st.mtimeMs+":"+st.size;
@@ -215,13 +215,13 @@ function start({electron,helperPath,captureDir,userData,spawnHelper=spawn,enable
   function ingestCapture(tag,text,at){
     if(closed)return false;
     if(tag==="MV")return true; // Moves contain no Arrangement price reference.
-    if(!["IH","AR","DP"].includes(tag)||typeof text!=="string"||!Number.isFinite(at)||at<0)return false;
+    if(!["IH","AR","DP","RG"].includes(tag)||typeof text!=="string"||!Number.isFinite(at)||at<0)return false;
     const lines=text.split(/\r?\n/).map(s=>s.split("\t")),done=lines.find(c=>c[0]==="DONE");
     const title=lines.find(c=>c[0]==="TITLE")?.[1]||"";
     const titleOK=tag==="IH"?/in\s*-?\s*house/i.test(title):tag==="AR"?/arrival\s*report/i.test(title):/departure\s*report/i.test(title);
     const date=(title.match(/\b\d{2}\/\d{2}\/(?:\d{4}|\d{2})\b/)||[])[0];
-    if(!done||done[6]!=="complete"||!Number.isInteger(+done[1])||+done[1]<0||+done[1]!==+done[2]||
-      lines.some(c=>c[0]==="ERR")||!titleOK||calc.day(date)===null)return false;
+    if(tag==="RG"?!calc.captureGrid(text,at).length:(!done||done[6]!=="complete"||!Number.isInteger(+done[1])||+done[1]<0||+done[1]!==+done[2]||
+      lines.some(c=>c[0]==="ERR")||!titleOK||calc.day(date)===null))return false;
     try{
       // Archive replay is independent of the latest-file timestamps. Load/validate
       // the durable store before accepting even a duplicate queued capture.
@@ -297,6 +297,6 @@ function start({electron,helperPath,captureDir,userData,spawnHelper=spawn,enable
     // It notices the parent’s exit and closes itself after returning from the read.
     if(overlay&&!overlay.isDestroyed())overlay.destroy();
   });
-  return {state,scanRefs,ingestCapture,setEnabled};
+  return {state,scanRefs,ingestCapture,setEnabled,getRateGrids:()=>{if(refFault||!refsLoaded)throw new Error(refFault||"Rate grid history is loading");return calc.gridTaxRecords(refs);}};
 }
 module.exports={layout,InvoiceState,start};
