@@ -100,11 +100,11 @@ jobs:
         shell: pwsh
         run: |
           $compiler = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
-          & $compiler /nologo /target:exe /platform:anycpu /out:app/rc-tbind.exe app/tbind.cs
+          & $compiler /nologo /target:exe /platform:anycpu /out:app\rc-tbind.exe app\tbind.cs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & $compiler /nologo /target:exe /platform:x64 /r:System.Windows.Forms.dll /out:probe.exe test/rate-grid-window.cs
+          & $compiler /nologo /target:exe /platform:x64 /r:System.Windows.Forms.dll /out:probe.exe test\rate-grid-window.cs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & $compiler /nologo /target:exe /platform:${{ matrix.arch }} /r:System.Windows.Forms.dll /out:fixture.exe test/rate-grid-window.cs
+          & $compiler /nologo /target:exe /platform:${{ matrix.arch }} /r:System.Windows.Forms.dll /out:fixture.exe test\rate-grid-window.cs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Capture every offscreen row in month and year-long stays
         shell: pwsh

@@ -988,7 +988,6 @@ wakeMask
 flags
 
 # v36 complete rate grids; framework compilation and execution verified by Windows CI.
-build-check: 52 name(s) in rc-tbind.exe are not in bcl-allow.txt:
 <>m__1
 <Run>c__AnonStorey3
 <ServiceRateGrid>c__AnonStorey2
