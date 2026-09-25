@@ -14,8 +14,8 @@ function fixture(fn){
 }
 test("missing archive is an empty queue",()=>fixture(({read})=>assert.equal(read("").captures.length,0)));
 test("all tags and older-than-20-hour captures survive in acquisition order",()=>fixture(({read,id,put})=>{
- for(const [i,t]of["IH","MV","AR","DP"].entries())put(id(i+1,4-i,t),t);
- const r=read("");assert.deepEqual(Array.from(r.captures,x=>x.tag),["IH","MV","AR","DP"]);assert.deepEqual(Array.from(r.captures,x=>x.at),[4,3,2,1]);assert(!r.more);
+ for(const [i,t]of["IH","MV","AR","DP","RG"].entries())put(id(i+1,4-i,t),t);
+ const r=read("");assert.deepEqual(Array.from(r.captures,x=>x.tag),["IH","MV","AR","DP","RG"]);assert.deepEqual(Array.from(r.captures,x=>x.at),[4,3,2,1,0]);assert(!r.more);
 }));
 test("successive filtered snapshots are separate and replay resumes after cursor",()=>fixture(({read,id,put,archive})=>{
  put(id(1),"rooms 54 76");put(id(2),"room 76");assert.equal(read("").captures.length,2);assert.equal(read(id(1)).captures[0].text,"room 76");assert.equal(fs.readdirSync(archive).length,2);

@@ -49,6 +49,20 @@ const mv=(from,to,name='ALPHA GUEST',x='X')=>[from,'STD',to,'STD',name,x,'10/09/
 async function drain(e){for(let i=0;i<30;i++){if(await e.replay())return;}throw Error('Queue did not drain: '+JSON.stringify(e.faults));}
 const cases=[];function test(name,fn){cases.push([name,fn]);}
 
+
+test('rate grids are acknowledged through durable desktop history without changing room ledgers',async()=>{
+ const capture=cap(1,'IH',[ih('101')]);capture.tag='RG';capture.id=capture.id.replace('-IH-','-RG-');capture.text='desktop-validated rate grid';
+ const e=env([capture]),rateGrids=[{name:'SYNTHETIC FULL GUEST',room:'507',arr:'01/09/26',dep:'01/11/26',at:BASE,complete:true,nights:[]}];
+ const list=e.bridge.listCaptures;e.bridge.listCaptures=async after=>({...await list(after),rateGrids});
+ await drain(e);assert.equal(JSON.parse(e.store[CURSOR]),capture.id);assert.deepEqual(e.window.__rcRateGrids,rateGrids);
+ assert.equal(e.store[LEDGER],undefined);assert.equal(e.store[STATUS],undefined);
+ rateGrids[0].complete=false;await drain(e);assert.equal(e.window.__rcRateGrids[0].complete,false);
+});
+test('a rate grid without backend durability acknowledgement cannot advance the capture cursor',async()=>{
+ const capture=cap(1,'IH',[ih('101')]);capture.tag='RG';capture.id=capture.id.replace('-IH-','-RG-');
+ const e=env([capture]);assert.equal(await e.replay(),false);assert.equal(e.store[CURSOR],undefined);assert.equal(e.store[LEDGER],undefined);
+});
+
 test('recovered replay clears only its own banner and preserves other save failures',async()=>{
  let box=null;const window={},document={getElementById:()=>box,createElement:()=>({setAttribute(){},style:{},remove(){box=null;}}),body:{appendChild:b=>{box=b;}}};
  const start=source.indexOf('window.__rcStorageFaults ='),end=source.indexOf('function importJournalKey()',start);

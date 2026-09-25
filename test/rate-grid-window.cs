@@ -16,7 +16,7 @@ class RateGridWindow {
  }
  static void Cell(IntPtr lv,int r,int c,string value){
   var it=new Item{mask=1,row=r,sub=c,text=Marshal.StringToHGlobalUni(value),len=value.Length};
-  IntPtr p=Marshal.AllocHGlobal(Marshal.SizeOf(it));try{Marshal.StructureToPtr(it,p,false);SendMessage(lv,c==0?0x104D:0x1074,(IntPtr)r,p);}finally{Marshal.FreeHGlobal(it.text);Marshal.FreeHGlobal(p);}
+  IntPtr p=Marshal.AllocHGlobal(Marshal.SizeOf(it));try{Marshal.StructureToPtr(it,p,false);SendMessage(lv,c==0?0x104Du:0x1074u,(IntPtr)r,p);}finally{Marshal.FreeHGlobal(it.text);Marshal.FreeHGlobal(p);}
  }
  sealed class Spy:NativeWindow {
   public int reads,writes;
