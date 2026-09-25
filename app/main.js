@@ -960,7 +960,7 @@ ipcMain.handle("sc-diag", (_e, delayMs) => new Promise(res => {
    such file"; everything else says what it is. */
 function readCapturedLists(after){
   const fs=require("fs"), pth=require("path");
-  const valid=/^(\d{19})-(\d{13})-(IH|MV|AR|DP)-[a-f0-9]{32}\.tsv$/;
+  const valid=/^(\d{19})-(\d{13})-(IH|MV|AR|DP|RG)-[a-f0-9]{32}\.tsv$/;
   if(after!=null && (typeof after!=="string" || (after && !valid.test(after))))return {error:"Invalid saved capture cursor"};
   const base=process.env.LOCALAPPDATA;
   if(!base)return {error:"Capture folder is unavailable"};
@@ -987,6 +987,10 @@ ipcMain.handle("sc-listcaptures", (_e, after) => {
     if(!arrangementService)return {error:"Saved captures are waiting for accommodation history to start"};
     for(const c of result.captures)if(!arrangementService.ingestCapture(c.tag,c.text,c.at))
       return {error:"Saved capture retained: accommodation history could not be saved"};
+  }
+  if(!result.error&&arrangementService){
+    try{result.rateGrids=arrangementService.getRateGrids();}
+    catch(e){return {error:String(e.message||e)};}
   }
   return result;
 });

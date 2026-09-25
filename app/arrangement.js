@@ -21,10 +21,60 @@ const unsure = reason => ({state:"unknown",icon:"🤔",text:reason,tint:false});
 function allocation(s){
   return norm(s).replace(/\/R\.NR\.\d+\(\d+\)$/,"").trim();
 }
+
+// RG records contain the complete native grid, kept apart from guest-list agencies.
+function gridIdentity(header){
+  const m=/^(.+?)\s*,\s*room\s+(\d{1,4}(?:-\d{1,4})?)\s*,\s*(\d{2}\/\d{2}\/(?:\d{4}|\d{2}))\s*-\s*(\d{2}\/\d{2}\/(?:\d{4}|\d{2}))\s*$/i.exec(header||"");
+  return m?{name:m[1].trim(),room:m[2],arr:m[3],dep:m[4]}:null;
+}
+function validGrid(g){
+  if(!g||g.tag!=="RG"||!["name","room","arr","dep","currency"].every(k=>typeof g[k]==="string")||
+     !guest(g.name)||!/^\d{1,4}(?:-\d{1,4})?$/.test(g.room)||!g.currency.trim()||
+     !Number.isFinite(g.at)||g.at<0||typeof g.complete!=="boolean"||!Array.isArray(g.rows))return false;
+  const a=day(g.arr),d=day(g.dep);
+  if(a===null||d===null||d<=a||d-a>20000)return false;
+  if(!g.complete)return g.rows.length===0;
+  if(g.rows.length!==d-a&&g.rows.length!==d-a+1)return false;
+  const dates=new Set();
+  for(const row of g.rows){
+    if(!Array.isArray(row)||row.length!==16||!row.every(c=>typeof c==="string"))return false;
+    const date=day(row[2]),price=cents(row[14]);
+    if(date===null||date<a||date>d||dates.has(date)||price===null||price<0||!/^\d{1,4}(?:-\d{1,4})?$/.test(row[3]))return false;
+    dates.add(date);
+  }
+  for(let n=a;n<d;n++)if(!dates.has(n))return false;
+  return true;
+}
+function captureGrid(txt,at){
+  const lines=String(txt).trimEnd().split(/\r?\n/).map(s=>s.split("\t"));
+  if(lines.some(c=>!["TITLE","GRID","RG","DONE"].includes(c[0])))return [];
+  const titles=lines.filter(c=>c[0]==="TITLE"),meta=lines.filter(c=>c[0]==="GRID"),ends=lines.filter(c=>c[0]==="DONE");
+  if(titles.length!==1||titles[0].length!==2||titles[0][1]!=="Rate by Day Grid"||meta.length!==1||meta[0].length!==3||ends.length!==1)return [];
+  const id=gridIdentity(meta[0][1]),done=ends[0],rows=lines.filter(c=>c[0]==="RG").map(c=>c.slice(1));
+  if(!id||done.length!==7||!["pending","complete"].includes(done[6])||!Number.isSafeInteger(+done[1])||!Number.isSafeInteger(+done[2])||+done[1]!==rows.length||+done[2]<1||+done[2]>20001)return [];
+  const complete=done[6]==="complete";
+  if(complete&&+done[1]!==+done[2])return [];
+  const g={tag:"RG",...id,currency:meta[0][2],at,complete,rows};
+  return validGrid(g)?[g]:[];
+}
+function gridReference(inv,refs){
+  const found=(refs||[]).filter(r=>r.tag==="RG"&&r.room===inv.room&&guest(r.name)===guest(inv.name)&&day(r.arr)===day(inv.arr)&&day(r.dep)===day(inv.dep));
+  if(!found.length)return null;
+  const at=Math.max(...found.map(r=>r.at)),top=found.filter(r=>r.at===at);
+  if(top.some(r=>!validGrid(r)||!r.complete))return {complete:false};
+  const signature=r=>JSON.stringify([norm(r.currency),r.rows.slice().sort((a,b)=>day(a[2])-day(b[2]))]);
+  if(new Set(top.map(signature)).size!==1)return {complete:false};
+  return top[0];
+}
+function gridTaxRecords(refs){
+  return refs.filter(r=>r.tag==="RG").map(r=>({name:r.name,room:r.room,arr:r.arr,dep:r.dep,at:r.at,complete:r.complete,
+    nights:r.complete?r.rows.filter(row=>day(row[2])<day(r.dep)).map(row=>({date:row[2],room:row[3],tax:row[13].split(/[,;\s]+/).some(p=>norm(p)==="TAX")})):[]}));
+}
+
 function reference(inv, refs){
   const a=day(inv.arr), d=day(inv.dep), n=guest(inv.name);
   if(a===null || d===null || !n) return null;
-  const found = refs.filter(r=>r.room===inv.room && guest(r.name)===n && day(r.arr)===a && day(r.dep)===d);
+  const found = refs.filter(r=>r.tag!=="RG" && r.room===inv.room && guest(r.name)===n && day(r.arr)===a && day(r.dep)===d);
   if(!found.length) return null;
   const latest=Math.max(...found.map(r=>r.at));
   const same=found.filter(r=>r.at===latest);
@@ -55,7 +105,10 @@ function evaluate(inv, refs){
   if(!inv.complete) return unsure("Reading accommodation entries");
   if(norm(inv.currency)!=="EUR") return unsure("Currency could not be verified");
   const a=day(inv.arr), d=day(inv.dep);
-  if(a===null || d===null || d<=a || d-a>366) return unsure("Stay dates could not be verified");
+  if(a===null || d===null || d<=a || d-a>20000) return unsure("Stay dates could not be verified");
+  const grid=gridReference(inv,refs);
+  if(grid&&!grid.complete)return unsure("Reopen Rate by Day Grid to finish reading every night");
+  if(grid&&norm(grid.currency)!=="EUR")return unsure("Grid currency could not be verified");
   let paid=0, payments=0;
   const charges=[];
   for(const row of inv.rows || []){
@@ -80,8 +133,8 @@ function evaluate(inv, refs){
   // price of an unposted night from the invoice's first/last/lowest charge.
   if(rate===0 && r.priorRate>0) rate=r.priorRate;
   const dates=new Set(charges.map(c=>c.date)), missing=d-a-dates.size;
-  if(norm(r.currency)!=="EUR") reason="List currency could not be verified";
-  else if(missing>0 && !(rate>0)) reason="List price needed for "+missing+" unposted nights";
+  if(!grid&&norm(r.currency)!=="EUR") reason="List currency could not be verified";
+  else if(!grid&&missing>0 && !(rate>0)) reason="List price needed for "+missing+" unposted nights";
   if(dates.size!==charges.length) reason="Multiple Arrangement entries on one date";
   if(charges.some(c=>c.date<a || c.date>=d)) reason="Arrangement dates differ from the stay";
   const noPayment=payments===0 && paid===0;
@@ -90,14 +143,15 @@ function evaluate(inv, refs){
     return noPayment ? {state:"unpaid",icon:"✕",text:"No accommodation payment · "+reason,tint:true} : unsure(reason);
   }
   const posted=charges.reduce((sum,c)=>sum+c.amount,0);
-  const expected=posted+(missing?missing*rate:0), diff=paid-expected;
+  const expected=grid?grid.rows.filter(row=>day(row[2])<d).reduce((sum,row)=>sum+cents(row[14]),0):posted+(missing?missing*rate:0), diff=paid-expected;
   if(!Number.isSafeInteger(expected))return unsure("Accommodation total could not be verified");
-  const nights=d-a, amounts={paid,expected,nights,rate,diff,posted,missing};
-  if(noPayment) return {state:"unpaid",icon:"✕",text:"No accommodation payment · under €"+money(expected),tint:true,...amounts};
-  if(diff===0) return {state:"paid",icon:"✓",text:"€"+money(paid)+" paid · "+nights+" nights",tint:false,...amounts};
-  return {state:"difference",icon:"✕",text:(diff>0?"Over":"Under")+" €"+money(diff),tint:false,...amounts};
+  const nights=d-a, amounts={paid,expected,nights,rate,diff,posted,missing,source:grid?"grid":"formula"};
+  if(noPayment&&expected>0) return {state:"unpaid",icon:"✕",text:"No accommodation payment · under €"+money(expected)+(grid?" · Rate by Day Grid":""),tint:true,...amounts};
+  if(diff===0) return {state:"paid",icon:"✓",text:"€"+money(paid)+" paid · "+nights+" nights"+(grid?" · Rate by Day Grid":""),tint:false,...amounts};
+  return {state:"difference",icon:"✕",text:(diff>0?"Over":"Under")+" €"+money(diff)+(grid?" · Rate by Day Grid":""),tint:false,...amounts};
 }
 function capture(txt, tag, at){
+  if(tag==="RG")return captureGrid(txt,at);
   const lines=String(txt).split(/\r?\n/).map(s=>s.split("\t"));
   const title=lines.find(c=>c[0]==="TITLE")?.[1] || "";
   const d=lines.find(c=>c[0]==="DONE");
@@ -120,7 +174,7 @@ function mergeRefs(old, fresh, now=Date.now()){
   const key=r=>JSON.stringify([r.tag,r.room,guest(r.name),day(r.arr),day(r.dep)]);
   const m=new Map();
   for(const r of old.concat(fresh)){
-    if(!r || !["IH","AR","DP"].includes(r.tag) || !Number.isFinite(r.at) || day(r.dep)===null || day(r.dep)<now/86400000-60) continue;
+    if(!r || !["IH","AR","DP","RG"].includes(r.tag) || !Number.isFinite(r.at) || day(r.dep)===null || day(r.dep)<now/86400000-60) continue;
     const k=key(r), prev=m.get(k)||[];
     if(!prev.some(x=>JSON.stringify(x)===JSON.stringify(r)))prev.push(r);
     m.set(k,prev);
@@ -129,12 +183,17 @@ function mergeRefs(old, fresh, now=Date.now()){
   for(const records of m.values()){
     const latest=Math.max(...records.map(r=>r.at)),top=records.filter(r=>r.at===latest);
     kept.push(...top);
+    if(top[0].tag==="RG"){
+      const prior=records.filter(r=>r.at<latest&&r.complete);
+      const at=Math.max(...prior.map(r=>r.at));
+      kept.push(...prior.filter(r=>r.at===at));
+    }
     if(top.some(r=>cents(r.price)===0)){
       const prior=records.filter(r=>r.at<latest&&norm(r.currency)==="EUR"&&cents(r.price)>0);
       const at=Math.max(...prior.map(r=>r.at));
       kept.push(...prior.filter(r=>r.at===at));
     }
   }
-  return kept.sort((a,b)=>b.at-a.at).slice(0,10000);
+  return kept.sort((a,b)=>b.at-a.at);
 }
-module.exports={norm,guest,cents,day,allocation,reference,eligible,evaluate,capture,mergeRefs};
+module.exports={gridIdentity,validGrid,captureGrid,gridReference,gridTaxRecords,norm,guest,cents,day,allocation,reference,eligible,evaluate,capture,mergeRefs};

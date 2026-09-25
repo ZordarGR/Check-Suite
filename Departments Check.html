@@ -2058,7 +2058,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.99";
+const APP_VERSION = "1.17.100";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -8518,6 +8518,28 @@ function taxCaptureRate(rate){
   return Object.assign({},rate,{all,rooms,count:Object.keys(rooms).length,coverageMissing:missing,
     incompleteRooms:Object.assign({},RATE.incompleteRooms||{},rate.incompleteRooms||{})});
 }
+
+function rateGridTaxWarning(room,rr,night){
+  const records=(typeof window!=="undefined"&&window.__rcRateGrids)||[],key=s=>String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase().replace(/[^\p{L}\p{N}]+/gu," ").trim().split(/\s+/).sort().join(" ");
+  const identityRoom=rr.adjoining&&rr.partner?room+"-"+rr.partner:room;
+  const found=records.filter(g=>g.room===identityRoom&&key(g.name)===key(rr.name)&&dkey(g.arr)===dkey(rr.arr)&&dkey(g.dep)===dkey(rr.dep));
+  if(!found.length)return "";
+  const at=Math.max(...found.map(g=>g.at)),top=found.filter(g=>g.at===at);
+  if(top.some(g=>!g.complete))return "Rate by Day Grid incomplete — reopen it to read every night";
+  const signature=g=>JSON.stringify((g.nights||[]).slice().sort((a,b)=>dkey(a.date)-dkey(b.date)));
+  if(new Set(top.map(signature)).size!==1)return "Conflicting Rate by Day Grid evidence — reopen it";
+  const nights=top[0].nights||[],current=nights.find(n=>dkey(n.date)===night);
+  if(!current)return "Conflicting Rate by Day Grid evidence — reopen it";
+  if(current.room!==identityRoom)return "Rate by Day Grid shows a different room for this night";
+  const missing=nights.filter(n=>!n.tax&&!/^9\d{3}$/.test(n.room)).map(n=>dkey(n.date)).sort((a,b)=>a-b);
+  if(!missing.length)return "";
+  const next=k=>{const d=new Date(Date.UTC(Math.floor(k/10000),Math.floor(k/100)%100-1,k%100+1));return d.getUTCFullYear()*10000+(d.getUTCMonth()+1)*100+d.getUTCDate();};
+  const spans=[];let first=missing[0],last=first;
+  for(const k of missing.slice(1)){if(k===next(last))last=k;else{spans.push(dfmt(first)+(last===first?"":" – "+dfmt(last)));first=last=k;}}
+  spans.push(dfmt(first)+(last===first?"":" – "+dfmt(last)));
+  return "TAX package missing in Rate by Day Grid · "+spans.join(", ");
+}
+
 function crossReference(rate,tax,nightKey){
   const N=nightKey||tax.dateKey, totalFail=[],autoMiss=[],adjoining=[],ok=[],uncertain=[];
   let notOwed=0;
@@ -8540,6 +8562,9 @@ function crossReference(rate,tax,nightKey){
     const bounds=rate.live?taxAccountBounds(Object.assign({},rate,{rooms:{[room]:rr}}),statusLoad(true).MV||{}):{};
     const span=bounds[room]||{};
     if((span.start&&N<span.start)||(span.end&&N>=span.end)){notOwed++;continue;}
+    const packageWarning=occupied.map(r=>rateGridTaxWarning(room,r,N)).filter(Boolean).join("; ");
+    // Package configuration is additional evidence; never hide a missing/posted charge.
+    if(packageWarning)uncertain.push({room,name:rr.name,reason:packageWarning});
     if(rr.adjoining){adjoining.push({room,name:rr.name,partner:rr.partner});continue;}
     const tr=tax.rooms[room];
     if(tr&&tr.uncertain){uncertain.push({room,name:rr.name,reason:tr.reversal?'Reversed charges — verify this room':'Conflicting saved tax reports'});continue;}
@@ -8999,7 +9024,7 @@ function adjSection(list,night,pending,okN,probN){
 function renderRosterInto(container,append){
   const adj=Object.keys(RATE.rooms).filter(r=>RATE.rooms[r].adjoining);
   const list=sk(Object.keys(RATE.rooms));
-  let rowsHtml=list.map(r=>{const rr=RATE.rooms[r];return `<div class="row"><span class="rm">${r}${rr.adjoining?('-'+rr.partner):''}</span><span class="nm">${rr.name}</span><span class="meta">${rr.arr} → ${rr.dep}</span>${rr.adjoining?`<span class="tag violet">${t('tag_adj','')}</span>`:''}</div>`;}).join('');
+  let rowsHtml=list.map(r=>{const rr=RATE.rooms[r],warning=dkey(rr.arr)<=RATE.dateKey&&RATE.dateKey<dkey(rr.dep)?rateGridTaxWarning(r,rr,RATE.dateKey):"";return `<div class="row"><span class="rm">${r}${rr.adjoining?('-'+rr.partner):''}</span><span class="nm">${rr.name}</span><span class="meta">${rr.arr} → ${rr.dep}</span>${warning?`<span class="tag amber">${stEsc(warning)}</span>`:""}${rr.adjoining?`<span class="tag violet">${t('tag_adj','')}</span>`:''}</div>`;}).join('');
   const html=`<section><h2><span>${t('roster_head')}</span> <span class="count">${list.length}</span></h2>`+
     `<div class="legend" style="margin-top:0;margin-bottom:8px">${t('roster_sub',list.length,adj.length,RATE.bizDate)}</div>`+
     `<div class="card">${rowsHtml}</div></section>`;
@@ -9265,7 +9290,7 @@ function paintHeld(){
 let TAX_MOVES_STALE = false;
 const CAPTURE_CURSOR_KEY = "reccheck_capture_cursor";
 function captureIdParts(id){
-  return typeof id === "string" && id.match(/^(\d{19})-(\d{13})-(IH|MV|AR|DP)-[a-f0-9]{32}\.tsv$/);
+  return typeof id === "string" && id.match(/^(\d{19})-(\d{13})-(IH|MV|AR|DP|RG)-[a-f0-9]{32}\.tsv$/);
 }
 async function replayCapturedBatch(){
   if(window.__rcImportBlocked) return false;
@@ -9287,6 +9312,11 @@ async function replayCapturedBatch(){
     for(const capture of batch.captures){
       if(window.__rcImportBlocked) return false;
       const {tag,at,text} = capture;
+      if(tag==="RG"){
+        // The main process acknowledged this only after validating and durably saving it.
+        if(!Array.isArray(batch.rateGrids))throw new Error("Rate grid history was not acknowledged");
+        localStorage.setItem(CAPTURE_CURSOR_KEY,JSON.stringify(capture.id));cursor=capture.id;continue;
+      }
       const p = tag === "IH" ? parseInhouse(text) : parseTagged(text,tag);
       const key = p && dkey(inhouseDate(p.title));
       const titleOK = p && (tag === "IH" ? isInhouseTitle(p.title) : (tag === "MV" ? /perform\s*move/i : tag === "AR" ? /arrival\s*report/i : /departure\s*report/i).test(p.title));
@@ -9315,7 +9345,9 @@ async function replayCapturedBatch(){
       }
       LEDGER_TICK++;
     }
-    if(batch.captures.length){
+    const gridsChanged=Array.isArray(batch.rateGrids)&&JSON.stringify(window.__rcRateGrids||[])!==JSON.stringify(batch.rateGrids);
+    if(Array.isArray(batch.rateGrids))window.__rcRateGrids=batch.rateGrids;
+    if(batch.captures.length||gridsChanged){
       if(RATE && RATE.live){const held=statusLoad();if(held.IH && held.IH.key===RATE.dateKey)setLiveRate(consolidatedInhouseRate(held));}
       if(window.__rcMovesChanged) window.__rcMovesChanged();
       render();paintHeld();

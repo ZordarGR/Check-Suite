@@ -43,7 +43,7 @@ Object.assign(m,{version:v,engine:v,type:'full',sha256:sha('app/index.html'),set
 setup:'https://github.com/ZordarGR/Check-Suite/releases/download/v'+v+'/Pro-Check-Setup.exe',
 notes:'Preserve room and stay evidence across filtered lists, moves and incomplete captures. Keep changed receipts and conflicting tax snapshots under review. Harden backup reports, imports, saved data, configuration and update recovery.'});
 fs.writeFileSync('update/latest.json',JSON.stringify(m,null,2)+'\n');
-console.log('PACKAGE_EVIDENCE '+JSON.stringify({version:v,sha256:m.setupSha256,size:fs.statSync(process.argv[2]).size,appFiles:14,helper:'v35'}));
+console.log('PACKAGE_EVIDENCE '+JSON.stringify({version:v,sha256:m.setupSha256,size:fs.statSync(process.argv[2]).size,appFiles:14,helper:'v36'}));
 NODE
 node test/release.js
 cp "$scratch/Pro-Check-Setup.exe" Pro-Check-Setup.exe
