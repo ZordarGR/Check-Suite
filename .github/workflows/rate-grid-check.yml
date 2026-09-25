@@ -118,3 +118,37 @@ jobs:
         with:
           name: native-rate-grid-${{ matrix.arch }}
           path: native-rate-grid-*.tsv
+  package-verified:
+    needs: [core-audit, node-browser, windows-grid]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    env:
+      RELEASE_VERSION: 1.17.100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build and verify the complete installer in the cloud
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y mono-devel nsis p7zip-full
+          npm install --no-save asar@3.2.0
+          bash test/package-integrity.sh
+          node -e 'const fs=require("fs"),p="update/latest.json",m=JSON.parse(fs.readFileSync(p));m.force=true;m.notes="Read every Rate by Day Grid row, including long stays, and retain it while Pro-Check is closed. Complete matching grids supply the full-stay arrangement total; unopened grids keep the current formula. Incomplete or conflicting captures require verification. Check exact TAX packages without inventing posted tax charges.";fs.writeFileSync(p,JSON.stringify(m,null,2)+"\n")'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-integrity-installer
+          path: |
+            Pro-Check-Setup.exe
+            update/latest.json
+            app/rc-tbind.exe
+      - name: Save verified package on the audit branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/package.json app/index.html 'Departments Check.html' app/rc-tbind.exe dist-win64/nsi/reccheck.nsi dist-win64/parts update/latest.json
+          git commit -m "Build verified integrity release $RELEASE_VERSION"
+          git push origin HEAD:codex/full-rate-grid-20260925

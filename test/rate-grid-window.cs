@@ -8,6 +8,7 @@ class RateGridWindow {
  [DllImport("user32.dll")]static extern bool ShowWindow(IntPtr h,int cmd);
  [DllImport("user32.dll")]static extern bool SetForegroundWindow(IntPtr h);
  [DllImport("user32.dll")]static extern bool DestroyWindow(IntPtr h);
+ [DllImport("user32.dll")]static extern uint MsgWaitForMultipleObjectsEx(uint count,IntPtr handles,uint milliseconds,uint mask,uint flags);
  [StructLayout(LayoutKind.Sequential)]struct Col{public uint mask;public int fmt,width;public IntPtr text;public int len,sub,image,order,min,def,ideal;}
  [StructLayout(LayoutKind.Sequential)]struct Item{public uint mask;public int row,sub;public uint state,stateMask;public IntPtr text;public int len,image;public IntPtr param;public int indent,group;public uint columns;public IntPtr cols,fmt;public int groupIndex;}
  static void Column(IntPtr lv,int i){
@@ -36,7 +37,7 @@ class RateGridWindow {
   while(DateTime.UtcNow<deadline){Application.DoEvents();service.Invoke(null,null);Thread.Sleep(100);}
   return 0;
  }
- static void Pump(int ms){var end=DateTime.UtcNow.AddMilliseconds(ms);while(DateTime.UtcNow<end){Application.DoEvents();Thread.Sleep(5);}}
+ static void Pump(int ms){var end=DateTime.UtcNow.AddMilliseconds(ms);while(DateTime.UtcNow<end){Application.DoEvents();MsgWaitForMultipleObjectsEx(0,IntPtr.Zero,10,0x04FF,0x0004);}}
  [STAThread]static int Main(string[] args){
   try{
    if(args[0]=="probe")return Probe(args);

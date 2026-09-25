@@ -74,7 +74,10 @@ test("tax warning uses exact stay identity/night and preserves 9xxx and departur
  const warning=new Function("window","dkey","dfmt",html.slice(a,b)+"return rateGridTaxWarning;")(window,dkey,String);
  const g=grid(),night=dkey(g.rows[4][2]);assert.equal(warning(g.room,g,night),"");
  window.__rcRateGrids[0].nights[4].tax=false;assert.match(warning(g.room,g,night),/TAX package missing/);
+ assert.match(warning(g.room,g,dkey(g.rows[0][2])),/TAX package missing/,"a later missing package is visible now");
  assert.equal(warning("508",g,night),"");assert.equal(warning(g.room,{...g,name:"OTHER GUEST"},night),"");
+ window.__rcRateGrids[0].room="507-08";window.__rcRateGrids[0].nights[4].room="507-08";assert.match(warning("507",{...g,adjoining:true,partner:"08"},night),/TAX package missing/);
+ window.__rcRateGrids[0].room="507";window.__rcRateGrids[0].nights[4].room="507";
  window.__rcRateGrids[0].complete=false;assert.match(warning(g.room,g,night),/incomplete/);
 });
 console.log(JSON.stringify({suite:"rate-grid",passed:tests}));

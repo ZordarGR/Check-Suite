@@ -8521,14 +8521,23 @@ function taxCaptureRate(rate){
 
 function rateGridTaxWarning(room,rr,night){
   const records=(typeof window!=="undefined"&&window.__rcRateGrids)||[],key=s=>String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase().replace(/[^\p{L}\p{N}]+/gu," ").trim().split(/\s+/).sort().join(" ");
-  const found=records.filter(g=>g.room===room&&key(g.name)===key(rr.name)&&dkey(g.arr)===dkey(rr.arr)&&dkey(g.dep)===dkey(rr.dep));
+  const identityRoom=rr.adjoining&&rr.partner?room+"-"+rr.partner:room;
+  const found=records.filter(g=>g.room===identityRoom&&key(g.name)===key(rr.name)&&dkey(g.arr)===dkey(rr.arr)&&dkey(g.dep)===dkey(rr.dep));
   if(!found.length)return "";
   const at=Math.max(...found.map(g=>g.at)),top=found.filter(g=>g.at===at);
   if(top.some(g=>!g.complete))return "Rate by Day Grid incomplete — reopen it to read every night";
-  const values=top.map(g=>(g.nights||[]).find(n=>dkey(n.date)===night));
-  if(values.some(v=>!v)||new Set(values.map(v=>JSON.stringify([v.room,v.tax]))).size!==1)return "Conflicting Rate by Day Grid evidence — reopen it";
-  if(values[0].room!==room)return "Rate by Day Grid shows a different room for this night";
-  return values[0].tax?"":"TAX package missing in Rate by Day Grid · "+dfmt(night);
+  const signature=g=>JSON.stringify((g.nights||[]).slice().sort((a,b)=>dkey(a.date)-dkey(b.date)));
+  if(new Set(top.map(signature)).size!==1)return "Conflicting Rate by Day Grid evidence — reopen it";
+  const nights=top[0].nights||[],current=nights.find(n=>dkey(n.date)===night);
+  if(!current)return "Conflicting Rate by Day Grid evidence — reopen it";
+  if(current.room!==identityRoom)return "Rate by Day Grid shows a different room for this night";
+  const missing=nights.filter(n=>!n.tax&&!/^9\d{3}$/.test(n.room)).map(n=>dkey(n.date)).sort((a,b)=>a-b);
+  if(!missing.length)return "";
+  const next=k=>{const d=new Date(Date.UTC(Math.floor(k/10000),Math.floor(k/100)%100-1,k%100+1));return d.getUTCFullYear()*10000+(d.getUTCMonth()+1)*100+d.getUTCDate();};
+  const spans=[];let first=missing[0],last=first;
+  for(const k of missing.slice(1)){if(k===next(last))last=k;else{spans.push(dfmt(first)+(last===first?"":" – "+dfmt(last)));first=last=k;}}
+  spans.push(dfmt(first)+(last===first?"":" – "+dfmt(last)));
+  return "TAX package missing in Rate by Day Grid · "+spans.join(", ");
 }
 
 function crossReference(rate,tax,nightKey){
