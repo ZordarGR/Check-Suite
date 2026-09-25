@@ -33,6 +33,7 @@ test("month, multi-month, year and longer stays read entirely without five/50/36
 test("zero-priced nights are explicit grid facts, while the departure package is irrelevant",()=>{
  const g=grid();g.rows[3][14]="0,00";g.rows.at(-1)[13]="";assert(c.validGrid(g));assert.equal(c.evaluate(inv(g),[list(g),g]).expected,206000);assert(c.gridTaxRecords([g])[0].nights.every(n=>n.tax));
 });
+test("an explicitly free grid is fully paid without requiring a fictitious deposit",()=>{const g=grid();g.rows.forEach(r=>r[14]="0,00");assert.equal(c.evaluate({...inv(g),rows:[]},[list(g),g]).state,"paid");});
 test("full exact identity prevents stale/moved/reused room and changed-date matches",()=>{
  const g=grid();for(const delta of [{name:"SYNTHETIC OTHER GUEST"},{room:"508"},{arr:fmt(base-3)},{dep:fmt(base+9)}])assert.equal(c.gridReference({...inv(g),...delta},[g]),null);
  const moved=grid();moved.rows[5][3]="508";assert(c.validGrid(moved));assert.equal(c.gridTaxRecords([moved])[0].nights[5].room,"508");

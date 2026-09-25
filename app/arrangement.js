@@ -146,7 +146,7 @@ function evaluate(inv, refs){
   const expected=grid?grid.rows.filter(row=>day(row[2])<d).reduce((sum,row)=>sum+cents(row[14]),0):posted+(missing?missing*rate:0), diff=paid-expected;
   if(!Number.isSafeInteger(expected))return unsure("Accommodation total could not be verified");
   const nights=d-a, amounts={paid,expected,nights,rate,diff,posted,missing,source:grid?"grid":"formula"};
-  if(noPayment) return {state:"unpaid",icon:"✕",text:"No accommodation payment · under €"+money(expected)+(grid?" · Rate by Day Grid":""),tint:true,...amounts};
+  if(noPayment&&expected>0) return {state:"unpaid",icon:"✕",text:"No accommodation payment · under €"+money(expected)+(grid?" · Rate by Day Grid":""),tint:true,...amounts};
   if(diff===0) return {state:"paid",icon:"✓",text:"€"+money(paid)+" paid · "+nights+" nights"+(grid?" · Rate by Day Grid":""),tint:false,...amounts};
   return {state:"difference",icon:"✕",text:(diff>0?"Over":"Under")+" €"+money(diff)+(grid?" · Rate by Day Grid":""),tint:false,...amounts};
 }
