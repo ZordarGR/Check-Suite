@@ -1,12 +1,12 @@
 {
-  "version": "1.17.97",
+  "version": "1.17.98",
   "type": "html",
   "engine": "1.17.95",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.95/Pro-Check-Setup.exe",
   "setupSha256": "7cf32e0db5275f7590d329fd23bda54d4e1e1726353848f3691b61caed738188",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/17f8ac59d06fe232b02d244133604ab852deeb04/Departments%20Check.html",
-  "sha256": "9a16e15da0bb008e3130c826bd6fb13c5a5585ab0555cf638ee08d644a600c53",
-  "notes": "Open Tax Check reports containing reversals and flag the affected normal rooms for verification, instead of blocking the whole report. 9xxx accounts remain excluded from tax warnings. Preserve earlier tax evidence and keep mixed/missing/invalid posting dates blocked.",
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/d025e205a49ae5d746d6c6289860a737a4ac22d1/Departments%20Check.html",
+  "sha256": "b8d322ad3fba240459a32f2a6908c75b7ee4367e408b31739aeb14ba3d980551",
+  "notes": "Tax Check now considers reversals only on arrangement or accommodation-tax charge rows. Restaurant, bar and other unrelated charge reversals no longer flag the room. Reloading the same tax counts can reclassify an older department-only false warning while retaining its earlier snapshot. Genuine tax reversals and conflicting history remain protected.",
   "force": true
 }

@@ -2058,7 +2058,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.97";
+const APP_VERSION = "1.17.98";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -8304,7 +8304,7 @@ function taIsAuto(tk){const di=tk.indexOf("ΤΕΛΟΣ")>=0?tk.indexOf("ΤΕΛΟ�
    and dates inside guest/comment text are not posting dates. Some XPS pages join
    date, time, amount and user into one glyph, so split that supported form here. */
 function taxPageTokens(pages){
-  const out=[];let dateX=null,dateRight=null;
+  const out=['__TAX_SCOPED_REVERSALS__'];let dateX=null,dateRight=null;
   for(const page of pages)for(const row of toRows(page)){
     const sorted=row.slice().sort((a,b)=>a.x-b.x);
     const header=sorted.find(g=>String(g.t).trim()==='Date');
@@ -8312,7 +8312,8 @@ function taxPageTokens(pages){
       const time=sorted.find(g=>g.x>header.x&&String(g.t).trim()==='Time');
       dateX=header.x;dateRight=time?(header.x+time.x)/2:header.x+30;
     }
-    let posting=false;
+    let posting=false;const rowStart=out.length;
+    const relevant=sorted.some(g=>String(g.t).includes(ARR_MARK)||String(g.t).includes(TA_MARK));
     for(const g of sorted){
       const tk=String(g.t||'').trim(),inDate=dateX!==null&&g.x>=dateX-40&&g.x<dateRight;
       if(inDate&&!header){
@@ -8331,8 +8332,10 @@ function taxPageTokens(pages){
       if(/^\d{1,2}\/\d{1,2}\/(?:\d{2}|\d{4})$/.test(tk))continue;
       out.push(tk);
     }
-    if(!header&&sorted.some(g=>String(g.t).includes(ARR_MARK)||String(g.t).includes(TA_MARK))&&!posting)
-      out.push('__TAX_POSTING_DATE_UNREADABLE__');
+    if(!header&&relevant&&!posting)out.push('__TAX_POSTING_DATE_UNREADABLE__');
+    // Keep each signed amount attached to its own charge category before flattening.
+    if(!header&&out.slice(rowStart).some(t=>/(?:^|\s)-\s*\d[\d.,]*[.,]\d{2}(?:$|\s)/.test(t)))
+      out.push(relevant?'__TAX_RELEVANT_REVERSAL__':'__TAX_OTHER_REVERSAL__');
   }
   return out;
 }
@@ -8341,15 +8344,17 @@ function parseTax(tokens){
   for(let i=0;i<tokens.length;i++)if(tokens[i]==="Date")for(let j=i-1;j>=Math.max(i-7,0);j--){
     const c=String(tokens[j]||'').trim();if(RE_ROOM.test(c)){starts.push({room:leadRoom(c),idx:j});break;}
   }
-  const rooms={},dates=new Set();let totalArr=0,badDate=false;
+  const rooms={},dates=new Set(),scoped=tokens[0]==='__TAX_SCOPED_REVERSALS__';let totalArr=0,badDate=false;
   for(let k=0;k<starts.length;k++){
     const room=starts[k].room,end=k+1<starts.length?starts[k+1].idx:tokens.length;
     const rec=rooms[room]||(rooms[room]={arr:0,auto:0,man:0});
+    if(scoped)rec.reversalScope='tax';
     for(let i=starts[k].idx;i<end;i++){
       const tk=String(tokens[i]||'').trim();
       if(tk==='__TAX_POSTING_DATE_UNREADABLE__')badDate=true;
       if(/^\d{1,2}\/\d{1,2}\/(?:\d{2}|\d{4})$/.test(tk)){const key=dkey(tk);if(key)dates.add(key);else badDate=true;}
-      if(/(?:^|\s)-\s*\d[\d.,]*[.,]\d{2}(?:$|\s)/.test(tk)){rec.reversal=true;rec.uncertain=true;}
+      if(tk==='__TAX_OTHER_REVERSAL__')rec.otherReversal=true;
+      if(tk==='__TAX_RELEVANT_REVERSAL__'||(!scoped&&/(?:^|\s)-\s*\d[\d.,]*[.,]\d{2}(?:$|\s)/.test(tk))){rec.reversal=true;rec.uncertain=true;}
       if(tk.includes(ARR_MARK)){rec.arr++;totalArr++;}
       if(tk.includes(TA_MARK)){if(taIsAuto(tk))rec.auto++;else rec.man++;}
     }
@@ -8578,13 +8583,22 @@ function ingestTax(tax){
   for(const room of Object.keys(tax.rooms)){
     const b=tax.rooms[room],rec=mem[room]||(mem[room]={}),old=rec[tax.fileDate];
     const counts=x=>[x.arr||0,x.auto||0,x.man||0];
-    const signature=x=>JSON.stringify([...counts(x),!!x.reversal]);
+    const signature=x=>JSON.stringify([...counts(x),!!x.reversal,x.reversal?(x.reversalScope||'legacy'):'']);
     const changed=old&&signature(old)!==signature(b);
     const versions=old&&Array.isArray(old.versions)?old.versions.slice():[];
-    if(changed&&!versions.some(x=>signature(x)===signature(old)))versions.push({arr:old.arr,auto:old.auto,man:old.man,manual:old.manual||null,...(old.reversal?{reversal:true}:{})});
-    const next={arr:b.arr,auto:b.auto,man:b.man,manual:changed?null:(old&&old.manual||null),versions,...(b.reversal||(old&&old.reversal)?{reversal:true}:{}),uncertain:!!(changed||b.uncertain||b.reversal||(old&&old.uncertain))};
+    // Reclassify the old broad warning only when this scoped reread finds an unrelated
+    // reversal, identical tax counts, and no conflicting count history. Keep its snapshot.
+    const reclassified=!!(old&&old.reversal&&!old.reversalScope&&b.reversalScope==='tax'&&b.otherReversal&&!b.reversal&&
+      JSON.stringify(counts(old))===JSON.stringify(counts(b))&&versions.every(v=>JSON.stringify(counts(v))===JSON.stringify(counts(old))&&!(v.reversal&&v.reversalScope==='tax')));
+    if(changed&&!versions.some(x=>signature(x)===signature(old)))versions.push({arr:old.arr,auto:old.auto,man:old.man,manual:old.manual||null,...(old.reversal?{reversal:true}:{}),...(old.reversalScope?{reversalScope:old.reversalScope}:{})});
+    const reversal=!!(b.reversal||(old&&old.reversal&&!reclassified));
+    const scope=b.reversal?b.reversalScope:old&&old.reversalScope;
+    const next={arr:b.arr,auto:b.auto,man:b.man,manual:changed&&!reclassified?null:(old&&old.manual||null),versions,
+      ...(reversal?{reversal:true,...(scope?{reversalScope:scope}:{})}:{}),
+      uncertain:!!((changed&&!reclassified)||b.uncertain||b.reversal||(old&&old.uncertain&&!reclassified))};
     rec[tax.fileDate]=next;
     b.uncertain=next.uncertain;b.reversal=!!next.reversal;
+    if(next.reversal){if(next.reversalScope)b.reversalScope=next.reversalScope;else delete b.reversalScope;}
     // Zero counts and earlier versions remain evidence, never implicit deletion.
   }
   return saveMem(mem);
