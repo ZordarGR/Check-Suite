@@ -17,13 +17,16 @@ const localStorage = {getItem:k=>(k in store?store[k]:null), setItem:(k,v)=>stor
 const body = [lift("dateNum"), src.match(/^const MOVES_KEY = .*$/m)[0], lift("loadMoves"),
   "const STATUS_KEY = \"reccheck_status_v1\";", lift("loadStatus"), lift("statusRows"), lift("pillRoom"),
   "const LEGACY_KEY = \"reccheck_legacy\";", lift("legacyOn"),
-  lift("dateNum2"), lift("sameName"), lift("nameWordSet"), lift("departureRows"), lift("capturedGuestName"), lift("sameGuestLabel"), lift("nameTextIn"), lift("roomMoves"), lift("ledgerMoves"), lift("movesReport"), "return movesReport();"].join("\n");
+  lift("dateNum2"), lift("sameName"), lift("nameWordSet"), lift("departureRows"), lift("capturedGuestName"), lift("sameGuestLabel"), lift("nameTextIn"), lift("roomMoves"), lift("ledgerMoves"), src.match(/^const PILL_AUDIT_KEY = .*$/m)[0], src.match(/^const APP_VERSION = .*$/m)[0],
+  "const document = {querySelectorAll:()=>[]};", lift("readPillAudit"), lift("pillAuditReport"),
+  lift("movesReport"), "return movesReport();"].join("\n");
 const fn = new Function("localStorage","MODEL","ROOMS","Number","String","Object","JSON","Math", body);
 const out = fn(localStorage, {reportDate:"2/9/2026", receipts:[]}, {}, Number, String, Object, JSON, Math);
 console.log(out);
 console.log("\n--- checks ---");
 let bad = 0;
 const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok?"ok  ":"FAIL") + "  " + l); };
+ck("manual observation report is readable and starts empty", /"enabled": false/.test(out) && !/Could not read manual observations/.test(out));
 ck("the pills' own source comes first, and says nothing was captured for the night",
    /status store .*NOTHING CAPTURED FOR THIS NIGHT/.test(out) && out.indexOf("status store") < out.indexOf("ledger"));
 ck("so the panel draws nothing, whatever the ledger says", /^tonight +: no pills/m.test(out));

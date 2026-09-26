@@ -48,7 +48,8 @@ function stripComments(js){
    renderMovesFor joins the list: it is where the receipts index and the dot are written. */
 let scopeBad = 0;
 for (const fn of ["renderMoves","roomMoves","movesReport","renderMovesFor"]) {
-  const body = stripComments(bodyOf(fn));
+  // Quoted report prose such as "OBSERVATIONS (saved...)" is not a call.
+  const body = stripComments(bodyOf(fn)).replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, " ");
   const missing = new Set();
   for (const m of body.matchAll(/\b([A-Za-z_$][\w$]*)\s*\(/g)) {
     const id = m[1];
