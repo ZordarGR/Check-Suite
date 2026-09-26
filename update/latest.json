@@ -1,12 +1,12 @@
 {
-  "version": "1.17.102",
+  "version": "1.17.103",
   "type": "html",
   "engine": "1.17.100",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.100/Pro-Check-Setup.exe",
   "setupSha256": "5254add297f02d4503a569282eca02f449188b31e58a6da84d64d8a3fb738553",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/9124dfb7b0d6509b56efbc7717ede8603af66ee4/Departments%20Check.html",
-  "sha256": "f510b9d9276a4cceb17d2543fa205668f96395979c57c720a52d4bf2dd72cb50",
-  "notes": "Optional Debug switch makes departure and move pills tickable when you found receipts to move or discard. Marks are saved by audit date and guest/move identity across restarts. The room-pill diagnostic report includes saved clicks, dots at the time of each click and the current visible dots. Manual marks do not change receipt, room or automatic-dot evidence.",
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/c06024cf63c5ec4c9bf6329abc74b479210b6d93/Departments%20Check.html",
+  "sha256": "55f8acf78b2ce20925e16615e42e3c8edd4e643d128e9392f18bb2538145ddfb",
+  "notes": "Fix the stretched Debug pill switch. It now stays compact with its label alongside it in dark and light themes. Saved pill observations and automatic dots are unchanged.",
   "force": true
 }
