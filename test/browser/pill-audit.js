@@ -21,6 +21,22 @@ const {chromium}=require('playwright-core'),assert=require('assert'),path=requir
   await setup();assert.equal(await dep().getAttribute('role'),null);
   await dep().click();assert.equal(await p.evaluate(()=>localStorage.getItem('reccheck_pill_audit_v1')),null);
   await p.evaluate(()=>window.__t.openDebug());assert.equal(await p.locator('#dbgPillAudit').isChecked(),false);
+
+  for(const theme of ['dark','light'])for(const width of [1500,760]){
+   await p.setViewportSize({width,height:1000});
+   await p.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+   const sw=p.locator('#dbgPillAudit'),label=p.locator('#modal .pillAuditSwitch span');
+   const sb=await sw.boundingBox(),lb=await label.boundingBox();
+   assert.equal(sb.width,36,'switch must not inherit full-width modal input style');
+   assert.equal(sb.height,20);assert(lb.x>=sb.x+sb.width,'label stays alongside switch');
+   assert(sb.x>=0&&lb.x+lb.width<=width,'switch row fits dialog');
+   const off=await sw.evaluate(e=>getComputedStyle(e).backgroundColor);
+   await sw.check();assert.notEqual(await sw.evaluate(e=>getComputedStyle(e).backgroundColor),off,'on/off track colours differ');
+   await p.locator('#modal').screenshot({path:'pill-audit-debug-'+theme+'-'+width+'.png'});
+   await sw.uncheck();
+  }
+  await p.setViewportSize({width:1500,height:1000});await p.evaluate(()=>document.documentElement.dataset.theme='dark');
+
   await p.locator('#dbgPillAudit').check();await p.locator('#dbgOk').click();
   assert.equal(await p.locator('#moves .mvPill.mv-arr').getAttribute('role'),null);
   assert.equal(await dep().getAttribute('aria-checked'),'false');

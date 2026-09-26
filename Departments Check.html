@@ -453,13 +453,13 @@ body.hasMoves main{max-width:1330px}
 .mvPill.rec::after{content:"";position:absolute;top:3px;right:4px;width:5px;height:5px;
   border-radius:50%;background:currentColor;opacity:.95}
 
-.pillAuditSwitch{display:flex;align-items:center;gap:10px;margin:14px 0 6px;cursor:pointer}
-.pillAuditSwitch input{appearance:none;position:relative;width:36px;height:20px;padding:0;flex:none;
+#modal .pillAuditSwitch{display:flex;align-items:center;gap:10px;margin:14px 0 6px;cursor:pointer}
+#modal .pillAuditSwitch input{appearance:none;position:relative;width:36px;min-width:36px;max-width:36px;height:20px;padding:0;margin:0;flex:0 0 36px;box-sizing:border-box;
   border:1px solid var(--faint);border-radius:12px;background:var(--panel);cursor:pointer}
-.pillAuditSwitch input::before{content:"";position:absolute;left:3px;top:3px;width:12px;height:12px;border-radius:50%;background:var(--dim)}
-.pillAuditSwitch input:checked{background:var(--green);border-color:var(--green)}
-.pillAuditSwitch input:checked::before{left:19px;background:#07100a}
-.pillAuditSwitch input:focus-visible,.mvPill.audit-enabled:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+#modal .pillAuditSwitch input::before{content:"";position:absolute;left:3px;top:3px;width:12px;height:12px;border-radius:50%;background:var(--dim)}
+#modal .pillAuditSwitch input:checked{background:var(--green);border-color:var(--green)}
+#modal .pillAuditSwitch input:checked::before{left:19px;background:#07100a}
+#modal .pillAuditSwitch input:focus-visible,.mvPill.audit-enabled:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 .mvPill.audit-enabled{cursor:pointer;position:relative}
 .mvPill.audit-ticked{padding-left:9px;box-shadow:inset 0 0 0 1px currentColor}
 .mvPill.audit-ticked::before{content:"✓";position:absolute;left:2px;top:50%;transform:translateY(-50%);font-size:11px;line-height:1}
@@ -2103,7 +2103,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.102";
+const APP_VERSION = "1.17.103";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
