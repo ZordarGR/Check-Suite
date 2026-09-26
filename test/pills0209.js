@@ -24,7 +24,7 @@ const line = re => { const m = src.match(re); if(!m) throw new Error("missing " 
 const elDecl = line(/^const el = \(tag, cls, txt\) =>.*$/m);
 const effRoomLine = line(/^function effRoom\(r\)\{.*$/m);
 
-function Node(tag){ this.tag=tag; this.className=""; this.textContent=""; this.title=""; this.children=[]; this.style={}; }
+function Node(tag){ this.dataset = {}; this.tag=tag; this.className=""; this.textContent=""; this.title=""; this.children=[]; this.style={}; }
 Node.prototype.append = function(...k){ for(const c of k) this.children.push(c); };
 Object.defineProperty(Node.prototype, "innerHTML", {set(v){ if(v==="") this.children=[]; }});
 
@@ -55,7 +55,7 @@ function run(localStorage, ROOMS, receipts, reportDate){
     "const STATUS_KEY = \"reccheck_status_v1\";", lift("loadStatus"), lift("statusRows"), lift("pillRoom"),
     "const LEGACY_KEY = \"reccheck_legacy\";", lift("legacyOn"), line(/^const MOVES_KEY = .*$/m), lift("loadMoves"), lift("ledgerMoves"), 
     lift("dateNum2"), lift("prevNightKey"), "const RECEIPTS_KEY = \"reccheck_receipts_v1\"; const RECEIPTS_KEEP = 60;", lift("loadNightReceipts"), lift("saveNightReceipts"), lift("leavingIndex"), "let LEAVING = {};", lift("isLeaving"),
-    lift("departureRows"), lift("capturedGuestName"), lift("sameGuestLabel"), lift("nameTextIn"), lift("roomMoves"), lift("renderMovesFor"), lift("renderMoves"),
+    lift("departureRows"), lift("capturedGuestName"), lift("sameGuestLabel"), lift("nameTextIn"), lift("roomMoves"), line(/^const PILL_AUDIT_KEY = .*$/m), lift("readPillAudit"), lift("pillAuditIdentity"), lift("bindPillAudit"), lift("paintPillAudit"), lift("renderMovesFor"), lift("renderMoves"),
     "renderMoves(); return {classes:[...classes], root:moves};"].join("\n");
   const fn = new Function("document","$","localStorage","MODEL","ROOMS","STATE","t","classes","moves", body);
   const out = fn(document,$,localStorage,MODEL,ROOMS,STATE,t,classes,moves);

@@ -5,7 +5,7 @@ const fs = require("fs"), path = require("path");
 const src = fs.readFileSync(path.join(__dirname, "..", "app", "index.html"), "utf8");
 const probe = `
 try{ window.__t = { openModal:openModal, closeModal:closeModal,
-  openDebug:openDebug, openShortcuts:openShortcuts, openProfiles:openProfiles,
+  openDebug:openDebug, renderMovesFor:renderMovesFor, openShortcuts:openShortcuts, openProfiles:openProfiles,
   openOverlaySettings:openOverlaySettings, showLivePrompt:showLivePrompt,
   openCorrectionModal:openCorrectionModal, openRoomModal:openRoomModal,
   openExtraModal:openExtraModal, printCorrections:printCorrections,

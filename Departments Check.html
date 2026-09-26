@@ -452,6 +452,18 @@ body.hasMoves main{max-width:1330px}
 .mvPill.rec{position:relative}
 .mvPill.rec::after{content:"";position:absolute;top:3px;right:4px;width:5px;height:5px;
   border-radius:50%;background:currentColor;opacity:.95}
+
+.pillAuditSwitch{display:flex;align-items:center;gap:10px;margin:14px 0 6px;cursor:pointer}
+.pillAuditSwitch input{appearance:none;position:relative;width:36px;height:20px;padding:0;flex:none;
+  border:1px solid var(--faint);border-radius:12px;background:var(--panel);cursor:pointer}
+.pillAuditSwitch input::before{content:"";position:absolute;left:3px;top:3px;width:12px;height:12px;border-radius:50%;background:var(--dim)}
+.pillAuditSwitch input:checked{background:var(--green);border-color:var(--green)}
+.pillAuditSwitch input:checked::before{left:19px;background:#07100a}
+.pillAuditSwitch input:focus-visible,.mvPill.audit-enabled:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.mvPill.audit-enabled{cursor:pointer;position:relative}
+.mvPill.audit-ticked{padding-left:9px;box-shadow:inset 0 0 0 1px currentColor}
+.mvPill.audit-ticked::before{content:"✓";position:absolute;left:2px;top:50%;transform:translateY(-50%);font-size:11px;line-height:1}
+
 .mvPill.guess{border-style:dashed;opacity:.72}
 /* a heading per colour, so the eye reads three short blocks instead of a chequerboard */
 .mvGroup{display:flex;align-items:baseline;gap:7px;margin:12px 0 6px;font-family:var(--mono);
@@ -2091,7 +2103,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.101";
+const APP_VERSION = "1.17.102";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -2282,7 +2294,13 @@ en: {
   "sc.scanWait": "Bring the protel window you want forward\u2026 {n}",
   "sc.scanNone": "Nothing came back \u2014 the helper could not run the scan.",
   "dbg.menu": "DEBUG", "dbg.title": "DEBUG",
-  "dbg.intro": "Diagnostics for the \u03c4 shortcut and the helper behind it. Nothing here changes anything \u2014 it only reports.",
+  "dbg.pillSwitch": "Mark receipts found on departure / move pills",
+  "dbg.pillHelp": "Click a pill to tick or untick it. A tick means receipts were found to move or discard. Saved by audit date; automatic dots stay independent. The room-pill report below includes both.",
+  "dbg.pillTicked": "Receipts found to move/discard — click to untick",
+  "dbg.pillUnmarked": "Not marked — click if receipts were found to move/discard",
+  "dbg.pillUnreadable": "Saved pill observations could not be read. The original data was retained.",
+  "dbg.pillSaveFail": "Pill observation was not saved.",
+  "dbg.intro": "Diagnostics for the helper and room pills. Manual pill observations are saved separately from hotel data.",
   "dbg.lock": "Hide this menu again",
   "dbg.on": "Debug menu unlocked.", "dbg.off": "Debug menu hidden.",
   "sc.logNone": "No \u03c4 press recorded yet. Use the shortcut, then come back here.",
@@ -2542,7 +2560,13 @@ gr: {
   "sc.scanWait": "Φέρε μπροστά το παράθυρο του protel που θέλεις… {n}",
   "sc.scanNone": "Δεν επέστρεψε τίποτα — ο βοηθός δεν μπόρεσε να τρέξει τη σάρωση.",
   "dbg.menu": "DEBUG", "dbg.title": "DEBUG",
-  "dbg.intro": "Διαγνωστικά για τη συντόμευση τ και τον βοηθό πίσω της. Τίποτα εδώ δεν αλλάζει κάτι — μόνο αναφέρει.",
+  "dbg.pillSwitch": "Σήμανση αποδείξεων σε αναχωρήσεις / μετακινήσεις",
+  "dbg.pillHelp": "Πατήστε ένα πλακίδιο για επιλογή ή αποεπιλογή. Το ✓ σημαίνει αποδείξεις για μεταφορά ή απόρριψη. Αποθηκεύεται ανά ημερομηνία ελέγχου, ανεξάρτητα από τις αυτόματες τελείες. Η αναφορά πλακιδίων παρακάτω περιλαμβάνει και τα δύο.",
+  "dbg.pillTicked": "Βρέθηκαν αποδείξεις — πατήστε για αποεπιλογή",
+  "dbg.pillUnmarked": "Χωρίς σήμανση — πατήστε αν βρέθηκαν αποδείξεις",
+  "dbg.pillUnreadable": "Δεν ήταν δυνατή η ανάγνωση των σημάνσεων. Τα αρχικά δεδομένα διατηρήθηκαν.",
+  "dbg.pillSaveFail": "Η σήμανση δεν αποθηκεύτηκε.",
+  "dbg.intro": "Διαγνωστικά βοηθού και πλακιδίων. Οι χειροκίνητες σημάνσεις αποθηκεύονται ξεχωριστά από τα δεδομένα του ξενοδοχείου.",
   "dbg.lock": "Απόκρυψη ξανά",
   "dbg.on": "Το μενού debug ξεκλειδώθηκε.", "dbg.off": "Το μενού debug κρύφτηκε.",
   "sc.logNone": "Δεν έχει καταγραφεί ακόμη πάτημα τ. Χρησιμοποίησε τη συντόμευση και ξαναέλα εδώ.",
@@ -4468,11 +4492,104 @@ function refreshHelperStatus(sel, raw){
 /* Everything that only makes sense to someone debugging the tool lives here, behind a
    menu that does not exist until it is unlocked. Nobody covering the desk should meet a
    diagnostic. */
+/* Manual diagnostic observations are separate from receipt/room evidence.
+   Unticked means unmarked, never proof that no receipts existed. */
+const PILL_AUDIT_KEY = "reccheck_pill_audit_v1";
+function readPillAudit(){
+  const raw = localStorage.getItem(PILL_AUDIT_KEY);
+  if(raw === null) return {version:1,enabled:false,days:{}};
+  const o = JSON.parse(raw);
+  const obj = x => x && typeof x === "object" && !Array.isArray(x);
+  if(!obj(o) || o.version !== 1 || typeof o.enabled !== "boolean" || !obj(o.days))
+    throw new Error(t("dbg.pillUnreadable"));
+  for(const [day,rows] of Object.entries(o.days)){
+    if(!/^\d{8}$/.test(day) || !obj(rows)) throw new Error(t("dbg.pillUnreadable"));
+    for(const [key,r] of Object.entries(rows)){
+      if(!obj(r) || r.key !== key || r.night !== +day || !["dep","move"].includes(r.kind) ||
+         typeof r.room !== "string" || typeof r.from !== "string" || !Array.isArray(r.names) ||
+         r.names.some(n=>typeof n!=="string") || !Number.isFinite(r.since) ||
+         typeof r.checked !== "boolean" || !Array.isArray(r.events) ||
+         r.events.some(e=>!obj(e)||typeof e.checked!=="boolean"||typeof e.dot!=="boolean"||
+           !Number.isFinite(e.at)||typeof e.version!=="string"))
+        throw new Error(t("dbg.pillUnreadable"));
+    }
+  }
+  return o;
+}
+function pillAuditIdentity(night,kind,room,m){
+  const names=[...new Set((m.names[kind]||[]).map(n=>String(n).trim().replace(/\s+/g," ").toUpperCase()))].sort();
+  const from=kind==="move"?String(m.movedFrom):"";
+  const since=Number(m.since)||0;
+  const key=JSON.stringify([kind,String(room),from,since,names]);
+  return {night,kind,room:String(room),from,since,names,key};
+}
+function paintPillAudit(){
+  let state;
+  try{state=readPillAudit();}catch(e){state={enabled:false,days:{}};}
+  for(const pill of document.querySelectorAll(".mvPill[data-pill-audit]")){
+    const p=JSON.parse(pill.dataset.pillAudit),row=(state.days[p.night]||{})[p.key];
+    const checked=!!(row&&row.checked),enabled=state.enabled;
+    pill.classList.toggle("audit-enabled",enabled);
+    pill.classList.toggle("audit-ticked",enabled&&checked);
+    pill.title=pill.dataset.pillTitle+(enabled?"\n"+t(checked?"dbg.pillTicked":"dbg.pillUnmarked"):"");
+    if(enabled){
+      pill.setAttribute("role","checkbox");pill.setAttribute("aria-checked",String(checked));pill.tabIndex=0;
+      pill.setAttribute("aria-label",pill.title);
+    }else{
+      for(const attr of ["role","aria-checked","aria-label","tabindex"])pill.removeAttribute(attr);
+    }
+  }
+}
+function setPillAuditEnabled(enabled){
+  try{
+    const state=readPillAudit();state.enabled=!!enabled;
+    localStorage.setItem(PILL_AUDIT_KEY,JSON.stringify(state));
+    paintPillAudit();return true;
+  }catch(e){toast(t("dbg.pillSaveFail")+" "+e.message,true);return false;}
+}
+function bindPillAudit(pill,night,kind,room,m,dot){
+  if(!["dep","move"].includes(kind) || !/^\d{8}$/.test(String(night)))return;
+  const identity=pillAuditIdentity(night,kind,room,m);
+  pill.dataset.pillAudit=JSON.stringify({...identity,dot:!!dot});
+  pill.dataset.pillTitle=pill.title;
+  const toggle=()=>{
+    try{
+      const state=readPillAudit();if(!state.enabled)return;
+      const day=state.days[night]||(state.days[night]={}),old=day[identity.key];
+      const checked=!(old&&old.checked);
+      const event={checked,dot:!!dot,at:Date.now(),version:APP_VERSION,
+        receiptDays:Object.keys(loadNightReceipts()).sort()};
+      day[identity.key]={...identity,checked,events:[...(old?old.events:[]),event]};
+      localStorage.setItem(PILL_AUDIT_KEY,JSON.stringify(state));
+      paintPillAudit();
+    }catch(e){toast(t("dbg.pillSaveFail")+" "+e.message,true);}
+  };
+  pill.onclick=toggle;
+  pill.onkeydown=e=>{if(e.key===" "||e.key==="Enter"){
+    if(!pill.classList.contains("audit-enabled"))return;
+    e.preventDefault();e.stopPropagation();if(!e.repeat)toggle();
+  }};
+}
+function pillAuditReport(){
+  const state=readPillAudit();
+  const visible=[...document.querySelectorAll(".mvPill[data-pill-audit]")].map(p=>{
+    const row=JSON.parse(p.dataset.pillAudit),saved=(state.days[row.night]||{})[row.key];
+    return {...row,checked:!!(saved&&saved.checked),panel:p.closest("#moves")?"audit":"status"};
+  });
+  return {generatedAt:new Date().toISOString(),version:APP_VERSION,
+    meaning:"checked = receipts were found to move/discard; unmarked is not a negative finding",
+    ...state,visible};
+}
+window.reccheckPillAudit = pillAuditReport; // on-demand read only, no network or protel calls
+window.addEventListener("storage",e=>{if(e.key===PILL_AUDIT_KEY||e.key===null)paintPillAudit();});
+
 function openDebug(){
   const sc = window.reccheckShortcuts;
   openModal(
     '<h3>' + t("dbg.title") + '</h3>' +
     '<p class="scIntro">' + t("dbg.intro") + '</p>' +
+    '<label class="pillAuditSwitch"><input id="dbgPillAudit" type="checkbox" role="switch"><span>' + t("dbg.pillSwitch") + '</span></label>' +
+    '<p class="scIntro" id="dbgPillAuditHelp">' + t("dbg.pillHelp") + '</p>' +
     '<div id="dbgHelp" style="margin-top:2px;font-size:12px;line-height:1.5"></div>' +
     '<div class="dbgGrid">' +
       '<button class="btn" id="scTest">' + t("sc.test") + '</button>' +
@@ -4496,6 +4613,10 @@ function openDebug(){
     '</div>');
   $("#modal").classList.add("wide");   // the reports are wide monospace; 420 px strangled them
   refreshHelperStatus("#dbgHelp", true);
+  const pillSwitch=$("#dbgPillAudit");
+  try{pillSwitch.checked=readPillAudit().enabled;}
+  catch(e){pillSwitch.disabled=true;$("#dbgPillAuditHelp").textContent=e.message;}
+  pillSwitch.onchange=()=>{if(!setPillAuditEnabled(pillSwitch.checked))pillSwitch.checked=!pillSwitch.checked;};
   $("#scTest").onclick = async () => {
     const b = $("#scTest"), pre = $("#scDiag"), copy = $("#scCopy");
     if(!sc || b.dataset.busy) return;
@@ -6745,10 +6866,12 @@ function renderMovesFor(box, night){
                  + (rec ? " · " + t(kind === "move" ? "mv.moveRec" : "mv.rec") : "")
                  + (who.length ? "\n" + who.join("\n") : "")
                  + (m.from ? "\n" + t("mv.from", {d: dShort(m.from)}) : "");
+      bindPillAudit(pill,night,kind,room,m,rec);
       grid.append(pill);
     }
     box.append(grid);
   }
+  paintPillAudit();
   if(rooms.some(r => !mv[r].sure)) box.append(el("div","mvNote", t("mv.guessNote")));
   return rooms.length;
 }
@@ -6839,6 +6962,9 @@ function movesReport(){
                        : "  none — every stay in the ledger is more than three days from this night");
     if(near.length > 120) L.push("  … " + (near.length - 120) + " more not shown");
   }
+  L.push("", "MANUAL PILL OBSERVATIONS (saved by audit date)");
+  try{L.push(JSON.stringify(pillAuditReport(),null,2));}
+  catch(e){L.push("Could not read manual observations: "+e.message);}
   return L.join("\n");
 }
 
