@@ -50,7 +50,7 @@ const taxBody = [
 const TAX = new Function("localStorage", "t", "I18N", taxBody)(localStorage, tT, I18N);
 
 /* ---- the app half: the pills ---- */
-function Node(tag){ this.tag = tag; this.className = ""; this.textContent = ""; this.title = ""; this.children = []; this.style = {}; }
+function Node(tag){ this.dataset = {}; this.tag = tag; this.className = ""; this.textContent = ""; this.title = ""; this.children = []; this.style = {}; }
 Node.prototype.append = function(...k){ for(const c of k) this.children.push(c); };
 Object.defineProperty(Node.prototype, "innerHTML", {set(v){ if(v === "") this.children = []; }});
 function pillsFor(reportDate, receipts, rooms){
@@ -67,7 +67,7 @@ function pillsFor(reportDate, receipts, rooms){
     "const LEGACY_KEY = \"reccheck_legacy\";", lift("legacyOn"), line(/^const MOVES_KEY = .*$/m), lift("loadMoves"), lift("ledgerMoves"), 
     lift("dateNum2"), lift("prevNightKey"), "const RECEIPTS_KEY = \"reccheck_receipts_v1\"; const RECEIPTS_KEEP = 15;", lift("loadNightReceipts"), lift("saveNightReceipts"),
     "let ARRIVING = {};", lift("leavingIndex"), "let LEAVING = {};", lift("nameHit"), lift("censusNameOf"), lift("nameWordSet"), lift("nameLike"), lift("otherNames"), lift("isLeaving"),
-    lift("departureRows"), lift("capturedGuestName"), lift("sameGuestLabel"), lift("nameTextIn"), lift("roomMoves"), lift("renderMovesFor"), lift("renderMoves"),
+    lift("departureRows"), lift("capturedGuestName"), lift("sameGuestLabel"), lift("nameTextIn"), lift("roomMoves"), line(/^const PILL_AUDIT_KEY = .*$/m), lift("readPillAudit"), lift("pillAuditIdentity"), lift("bindPillAudit"), lift("paintPillAudit"), lift("renderMovesFor"), lift("renderMoves"),
     "renderMoves(); return {classes: [...classes], root: moves, leaving: leavingIndex(), isLeaving: isLeaving, LEAVING: LEAVING, receiptName: receiptName};"].join("\n");
   const fn = new Function("document", "$", "localStorage", "MODEL", "STATE", "ROOMS", "t", "classes", "moves", body);
   const out = fn(document, $, localStorage, MODEL, STATE, rooms || {}, t, classes, moves);
