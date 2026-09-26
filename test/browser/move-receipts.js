@@ -11,13 +11,15 @@ const {chromium}=require("playwright-core"),path=require("path"),assert=require(
  const move=(from,to,name="ALPHA GUEST")=>({from,to,name,arr:"20/09/26",dep:"24/09/26",x:"X"});
  const receipt=(room,guest="ALPHA GUEST",extra={})=>({room,roomMain:room,guest,sn:"80001",dept:"RESTAURANT",total:10,rates:{"24%":10},entries:[],time:"21:00",cancelled:false,voided:false,...extra});
  const hist=(room,guest="ALPHA GUEST",meta={id:"old|"+room,live:true,uncertain:false})=>[room,guest,meta];
- async function render({moves=[move("9010","82")],receipts=[],history={},previous=[],departures=[],arrivals=[],legacy=false}={}){
-  return page.evaluate(({moves,receipts,history,previous,departures,arrivals,legacy})=>{
+ async function render({moves=[move("9010","82")],receipts=[],history={},previous=[],departures=[],arrivals=[],pastArrivals={},pastDepartures={},legacy=false}={}){
+  return page.evaluate(({moves,receipts,history,previous,departures,arrivals,pastArrivals,pastDepartures,legacy})=>{
    localStorage.setItem("reccheck_legacy",legacy?"1":"0");
    localStorage.setItem("reccheck_rooms","{}");
    localStorage.setItem("reccheck_receipts_v1",JSON.stringify(history));
    const rows=a=>Object.fromEntries(a.map((r,i)=>[i,r]));
    const status={MV:{"20260924":{rows:rows(moves)},"20260923":{rows:rows(previous)}},DP:{"20260924":{rows:rows(departures)}},AR:{"20260924":{rows:rows(arrivals)}}};
+   for(const [day,list] of Object.entries(pastArrivals))status.AR[day]={rows:rows(list)};
+   for(const [day,list] of Object.entries(pastDepartures))status.DP[day]={rows:rows(list)};
    localStorage.setItem("reccheck_status_v1",JSON.stringify(status));
    const ledger={};for(const m of moves)ledger[m.to]={"20260924":{d:20260930,n:m.name,from:m.from,seen:20260924}};
    localStorage.setItem("reccheck_moves_v2",JSON.stringify(ledger));
@@ -25,7 +27,7 @@ const {chromium}=require("playwright-core"),path=require("path"),assert=require(
    window.__t.setModel({reportDate:"24/9/2026",receipts,depts,validation:[]});window.__t.setState({date:"24/9/2026",receipts:{},extras:[]});window.__t.setStateKey("reccheck_24/9/2026");window.__t.showScreen("app");window.__rcMovesChanged();
    const pills=kind=>[...document.querySelectorAll("#moves .mv-"+kind+".mvPill")].map(n=>({text:n.textContent,dot:n.classList.contains("rec"),title:n.title}));
    return {moves:pills("move"),departures:pills("dep"),arrivals:pills("arr"),history:JSON.parse(localStorage.getItem("reccheck_receipts_v1")),status:JSON.parse(localStorage.getItem("reccheck_status_v1")),model:window.__t.getModel().receipts};
-  },{moves,receipts,history,previous,departures,arrivals,legacy});
+  },{moves,receipts,history,previous,departures,arrivals,pastArrivals,pastDepartures,legacy});
  }
  for(const [from,to] of [["9010","82"],["53","91"],["117","102"]]){
   const moves=[move(from,to)];
@@ -66,5 +68,35 @@ const {chromium}=require("playwright-core"),path=require("path"),assert=require(
   r=await render({moves,legacy});assert.deepEqual(r.moves.map(p=>p.text),["53 → 90","53 → 91","94 → 254","117 → 102","325 → 147","9010 → 82","9020 → 146"],"without dots all old rooms sort numerically");
  }
  console.log("PASS dotted-first numeric old-room order, numeric destination ties, rerender and legacy mode");
+
+ // A revised arrival on the departure list must not discard earlier exact stay evidence.
+ const dep={room:"82",name:"ALPHA GUEST",arr:"22/09/26",status:"CI",last:500};
+ const prior={room:"82",name:"ALPHA GUEST",dep:"24/09/26",status:"CI"};
+ const revised={moves:[],departures:[dep],history:{"20260920":[hist("82")]},pastArrivals:{"20260918":[prior]}};
+ let revisedResult=await render(revised);
+ assert.equal(revisedResult.departures[0].dot,true,"earlier confirmed same room/name/departure covers saved receipt");
+ assert.equal(revisedResult.status.DP["20260924"].rows[0].arr,"22/09/26","departure capture remains unchanged");
+ for(const change of [{room:"83"},{name:"ALPHA GUEST/TWO"},{dep:"23/09/26"},{status:"Confirmed"},{status:"CO"}]){
+  assert.equal((await render({...revised,pastArrivals:{"20260918":[{...prior,...change}]}})).departures[0].dot,false,"no guessed identity/occupancy bridge "+JSON.stringify(change));
+ }
+ assert.equal((await render({...revised,pastArrivals:{}})).departures[0].dot,false,"no source evidence, no widened lookback");
+ assert.equal((await render({...revised,history:{"20260917":[hist("82")]}})).departures[0].dot,false,"receipt before earliest confirmed arrival");
+ for(const meta of [{id:"old|82",live:false},{id:"old|82",live:true,uncertain:true}]){
+  assert.equal((await render({...revised,history:{"20260920":[hist("82","ALPHA GUEST",meta)]}})).departures[0].dot,false,"void/conflict rules still apply");
+ }
+ assert.equal((await render({...revised,pastDepartures:{"20260921":[{...dep,arr:"18/09/26",status:"CO"}]}})).departures[0].dot,false,"explicit earlier checkout prevents prior stay borrowing");
+ assert.equal((await render({...revised,pastArrivals:{"20260918":[prior],"20260921":[{...prior,name:"OTHER GUEST"}]}})).departures[0].dot,false,"intervening checked-in guest prevents prior stay borrowing");
+ assert.equal((await render({...revised,arrivals:[{...prior,name:"NEW ARRIVAL"}]})).departures[0].dot,true,"same-day turnover does not erase outgoing guest history");
+ const independent=await render({...revised,moves:[{...move("82","91"),arr:"22/09/26"}]});
+ assert.equal(independent.departures[0].dot,true);assert.equal(independent.moves[0].dot,false,"departure extension cannot dot a move");
+ await page.evaluate(()=>{
+  localStorage.setItem("reccheck_pill_audit_v1",JSON.stringify({version:1,enabled:true,days:{}}));
+ });
+ await render({...revised,pastArrivals:{}});await page.locator("#moves .mvPill.mv-dep").click();
+ const manualBefore=await page.evaluate(()=>localStorage.getItem("reccheck_pill_audit_v1"));
+ await render(revised);assert.equal(await page.locator("#moves .mvPill.mv-dep").getAttribute("aria-checked"),"true");
+ assert.equal(await page.evaluate(()=>localStorage.getItem("reccheck_pill_audit_v1")),manualBefore,"fix preserves manual tick and original missing-dot event");
+ console.log("PASS earlier explicit arrival evidence restores departure dot without changing dates, move scope, manual observations or safety boundaries");
+
  assert.deepEqual(errors,[]);await browser.close();
 })().catch(e=>{console.error(e);process.exit(1);});

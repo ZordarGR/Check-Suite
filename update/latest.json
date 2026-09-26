@@ -1,12 +1,12 @@
 {
-  "version": "1.17.103",
+  "version": "1.17.104",
   "type": "html",
   "engine": "1.17.100",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.100/Pro-Check-Setup.exe",
   "setupSha256": "5254add297f02d4503a569282eca02f449188b31e58a6da84d64d8a3fb738553",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/c06024cf63c5ec4c9bf6329abc74b479210b6d93/Departments%20Check.html",
-  "sha256": "55f8acf78b2ce20925e16615e42e3c8edd4e643d128e9392f18bb2538145ddfb",
-  "notes": "Fix the stretched Debug pill switch. It now stays compact with its label alongside it in dark and light themes. Saved pill observations and automatic dots are unchanged.",
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/1c727f0becd7e7cba91cba6b50e378263aaeb3d0/Departments%20Check.html",
+  "sha256": "dbf6cc4b0a823378afecb95f53cf25c2080841c5632d381028ffa281cbf1973c",
+  "notes": "Fix missing departure receipt dots when later lists revise the arrival date. Earlier checked-in arrivals for the exact guest, room and departure date can establish receipt-history coverage. Prior checkouts, intervening guests, cancelled receipts and move-pill boundaries remain protected. Saved manual ticks and source dates stay intact.",
   "force": true
 }

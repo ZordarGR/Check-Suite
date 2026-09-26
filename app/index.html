@@ -2103,7 +2103,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.103";
+const APP_VERSION = "1.17.104";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -6710,6 +6710,35 @@ function renderMoves(){
 /* The panel for a given night into a given box; how many rooms it drew. The department
    check's #moves and the STATUS screen both come through here, so there is one drawing of
    a pill and not two. */
+/* A later departure capture can carry a revised arrival. For receipt presence
+   only, an earlier checked-in arrival with the same exact guest, room and printed
+   departure is still evidence. Never rewrite the stay or widen move-pill scope. */
+function earlierDepartureReceipt(st, night, room, m, receiptNight, receiptRoom, guest){
+  if(!st || !m.dep || receiptRoom !== room || !m.names.dep.some(n=>sameName(n,guest)))return false;
+  const arrivals=[];
+  for(const k of Object.keys(st.AR||{})){
+    const day=+k;if(!day || day>=night)continue;
+    for(const r of statusRows(st,"AR",day)){
+      if(pillRoom(r.room,r.name)===room && /^CI$/i.test(String(r.status||"").trim()))
+        arrivals.push({day,row:r});
+    }
+  }
+  for(const a of arrivals){
+    if(a.day>receiptNight || dateNum2(a.row.dep)!==night || !sameName(a.row.name,guest))continue;
+    // A recorded different checked-in stay or an explicit earlier checkout is a
+    // boundary, not something a matching surname may cross.
+    if(arrivals.some(b=>b.day>=a.day && (!sameName(b.row.name,guest)||dateNum2(b.row.dep)!==night)))continue;
+    let ended=false;
+    for(const k of Object.keys(st.DP||{})){
+      const day=+k;if(day<a.day || day>=night)continue;
+      if(statusRows(st,"DP",day).some(r=>pillRoom(r.room,r.name)===room &&
+         sameName(r.name,guest) && /^CO$/i.test(String(r.status||"").trim()))){ended=true;break;}
+    }
+    if(!ended)return true;
+  }
+  return false;
+}
+
 function renderMovesFor(box, night){
   // Saving cannot depend on a movement pill existing, or on the STATUS panel's date.
   // All source rows are included so a known void/re-room can update its own identity.
@@ -6838,8 +6867,13 @@ function renderMovesFor(box, night){
     const evidence=past[k].filter(p=>dotEvidence(p,past[k]));
     for(const room of rooms){
       const m = mv[room];
-      if(!m.since || K < m.since || found(room)) continue;
-      for(const pr of evidence)hit(m, room, String(pr[0] || ""), pr[1] || "");
+      if(!m.since || found(room)) continue;
+      for(const pr of evidence){
+        const receiptRoom=String(pr[0]||""),guest=pr[1]||"";
+        if(K>=m.since)hit(m,room,receiptRoom,guest);
+        else if(earlierDepartureReceipt(st,night,room,m,K,receiptRoom,guest))
+          hit({...m,movedFrom:null},room,receiptRoom,guest);
+      }
     }
   }
   /* ARRIVALS, DEPARTURES, MOVES — his order and his words. A move pill reads "old room →
