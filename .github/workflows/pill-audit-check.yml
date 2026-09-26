@@ -54,4 +54,6 @@ jobs:
         env:
           RELEASE_VERSION: 1.17.102
           MANIFEST_URL: https://raw.githubusercontent.com/ZordarGR/Check-Suite/${{ github.sha }}/update/latest.json
-        run: node test/html-update-delivery.js
+        run: |
+          node test/html-update-delivery.js
+          node test/required-html-delivery.js
