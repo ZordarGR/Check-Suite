@@ -7,10 +7,12 @@ class Probe {
 __NATIVE__
 static int bad=0;
 static string date(int n){return new DateTime(2026,9,1).AddDays(n).ToString("dd/MM/yy");}
-static string cell(int r,int c){return c==2?date(r):c==3?"507":c==14?(r<5?"240,00":"220,00"):c==13?"TAX,*HB":"";}
+static int footerAt=-1;
+static string cell(int r,int c){if(r==footerAt)return c==2?"Total":c==3?"--":c==14?((Math.Min(footerAt,5)*24000+Math.Max(0,footerAt-5)*22000)/100m).ToString("F2",System.Globalization.CultureInfo.InvariantCulture).Replace(".",","):"";return c==2?date(r):c==3?"507":c==14?(r<5?"240,00":"220,00"):c==13?"TAX,*HB":"";}
 static void check(bool good,string name){Console.WriteLine((good?"PASS ":"FAIL ")+name);if(!good)bad++;}
 static int Main(){
 foreach(int nights in new int[]{10,31,62,120,366,401,1000}){
+ footerAt=nights;
  var scan=new RateGridScan("key","TITLE\tRate by Day Grid\n",nights+1);int calls=0,ticks=0;
  bool complete=false;while(!complete&&ticks++<10000)complete=scan.Step((r,c)=>{calls++;return cell(r,c);},()=>true);
  check(complete&&scan.rows.Count==nights+1&&calls==(nights+1)*16*2,"every cell twice for "+nights+" nights");
@@ -27,6 +29,7 @@ try{failed.Step(cell,()=>false);}catch(Exception){threw=true;}
 check(threw&&failed.rows.Count==0,"failed getter cannot advance a row");
 
 foreach(int width in new int[]{17,18,32,128}){
+ footerAt=62;
  var extra=new RateGridScan("k","",63,width);bool done=false;int ticks=0,calls=0;
  while(!done&&ticks++<10000)done=extra.Step((r,c)=>{calls++;return c<16?cell(r,c):"extra "+r+" "+c;},()=>true);
  check(done&&extra.rows[62].Length==width&&calls==63*width*2,"all rows and additional columns twice: "+width);
@@ -34,6 +37,21 @@ foreach(int width in new int[]{17,18,32,128}){
  var change=new RateGridScan("k","",11,width);bool changed=false;
  try{while(true)change.Step((r,c)=>c<16?cell(r,c):(change.pass==1&&r==10&&c==width-1?"changed":"original"),()=>true);}catch(Exception){changed=true;}
  check(changed,"mutation in last additional cell rejected");
+}
+
+foreach(int nights in new int[]{7,31,401}){
+ footerAt=-1;
+ var sum=new RateGridScan("k","",nights+1,18);
+ for(int r=0;r<nights;r++){var row=new string[18];for(int c=0;c<18;c++)row[c]=cell(r,c);sum.rows.Add(row);}
+ var footer=new string[18];for(int c=0;c<18;c++)footer[c]="--";footer[0]="";footer[1]="";footer[2]="Total";
+ footer[14]=((Math.Min(nights,5)*24000+(nights-5)*22000)/100m).ToString("F2",System.Globalization.CultureInfo.InvariantCulture).Replace(".",",");
+ sum.rows.Add(footer);
+ string h="SYNTHETIC , room 507, "+date(0)+" - "+date(nights);
+ check(RateGridValid(sum,h),"verified final Total marker "+nights);
+ sum.rows.RemoveAt(sum.rows.Count-1);check(!RateGridValid(sum,h),"all nights without Total remain pending");sum.rows.Add(footer);
+ footer[14]="0,00";check(!RateGridValid(sum,h),"inconsistent footer total rejected");
+ footer[14]="invalid";check(!RateGridValid(sum,h),"unreadable footer rejected");
+ footer[2]="Subtotal";check(!RateGridValid(sum,h),"unknown footer rejected");
 }
 return bad==0?0:1;
 }

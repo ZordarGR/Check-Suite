@@ -1,12 +1,12 @@
 {
-  "version": "1.17.105",
+  "version": "1.17.106",
   "type": "full",
-  "engine": "1.17.105",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.105/Pro-Check-Setup.exe",
-  "setupSha256": "23bcde09a61c4526f967ca494f50ace1beedae4fdd1fa40636fb5581e30bc042",
+  "engine": "1.17.106",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.106/Pro-Check-Setup.exe",
+  "setupSha256": "c99c97c422d02760de73632e6082af88809d33f70c721b893316c48e8f12f217",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/c7fef7649ec81f821a589762834b9447e0f919d0/Departments%20Check.html",
-  "sha256": "d398e57b672973ef2a00136139daf79763e5d5d4d5ecc425a86bd00e8d43da48",
-  "notes": "Fix incomplete Rate by Day Grid captures when Protel provides extra columns. Read and verify all rows and columns, including long stays. Preserve saved evidence and report the actual grid shape in diagnostics.",
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/1a974df5dedea98c97be2f0d87e2ccf00b93c3d1/Departments%20Check.html",
+  "sha256": "6b87eff095af1857912274ecb8f038aa69de3e7a556b332c76917c024f28fac0",
+  "notes": "Read Rate by Day Grid through its final Total row. Verify every occupied night and compare the printed total with the nightly sum; exclude the footer from accommodation and TAX calculations. Preserve saved data and report precise validation failures.",
   "force": true
 }
