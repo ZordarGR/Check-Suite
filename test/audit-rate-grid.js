@@ -57,7 +57,7 @@ test("TAX is an exact package token for every occupied night, never NOTAX or *TA
 });
 test("native-grid archive replay, restart and failed replacement preserve evidence",()=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),"rate-grid-")),file=path.join(dir,"arrangement-rates-v1.json"),g=grid();
- g.rows.forEach(r=>r.push("extra configuration","extra value"));
+ g.rows.forEach(r=>r.push("extra configuration","extra value"));withTotal(g);
  const service=()=>{const app=new EventEmitter(),ipcMain=new EventEmitter();return {app,c:start({electron:{app,ipcMain,screen:{},BrowserWindow:class{}},helperPath:"unused",captureDir:dir,userData:dir,enabled:false})};};
  try{
   let {app,c:svc}=service();assert(svc.ingestCapture("RG",txt(g),now));assert.equal(svc.getRateGrids()[0].nights.length,10);
@@ -93,6 +93,30 @@ test("additional columns retained, complete nightly sums unchanged and ragged ro
  }
  const tooWide=grid();tooWide.rows.forEach(r=>{while(r.length<129)r.push("");});assert(!c.validGrid(tooWide));
  const malformed=grid();malformed.rows[0]=null;assert(!c.validGrid(malformed));
+});
+
+
+function withTotal(g){
+ const row=Array(g.rows[0].length).fill("--");row[0]="";row[1]="";row[2]="Total";
+ const total=g.rows.filter(r=>c.day(r[2])!==null&&c.day(r[2])<c.day(g.dep)).reduce((s,r)=>s+c.cents(r[14]),0);
+ row[14]=(total/100).toFixed(2).replace(".",",");g.rows.push(row);return g;
+}
+test("Total is the final footer, preserved and verified without charging or TAX checks",()=>{
+ const g=grid(7);g.rows.pop();g.rows.forEach((r,i)=>r[14]=i===6?"169,00":"179,33");withTotal(g);
+ g.rows.at(-1)[14]="1.244,98";
+ assert(c.validGrid(g));const read=c.captureGrid(txt(g),now)[0];assert.deepEqual(read.rows,g.rows);
+ const result=c.evaluate({...inv(g),rows:[{label:"Deposit",amount:"-1.244,98",date:g.arr,currency:"EUR"}]},[list(g),read]);
+ assert.equal(result.expected,124498);assert.equal(result.nights,7);assert.equal(result.state,"paid");
+ const tax=c.gridTaxRecords([read])[0].nights;assert.equal(tax.length,7);assert(tax.every(r=>r.tax));
+ for(const change of [
+  x=>x.rows.at(-1)[14]="1.244,99",x=>x.rows.at(-1)[14]="",x=>x.rows.at(-1)[2]="Subtotal",
+  x=>x.rows.push([...x.rows[0]]),x=>x.rows.splice(3,1),x=>x.rows[3][2]=x.rows[2][2],
+  x=>x.rows.push([...x.rows.at(-1)]),x=>x.rows.at(-1)[3]="507",x=>x.rows.at(-1)[1]="Mo",
+  x=>{x.rows[1]=[...x.rows.at(-1)];}
+ ]){const bad=structuredClone(g);change(bad);assert(!c.validGrid(bad));assert.equal(c.captureGrid(txt(bad),now).length,0);}
+ const both=withTotal(grid());assert(c.validGrid(both));assert.equal(c.gridTaxRecords([both])[0].nights.length,10);
+ assert.equal(c.evaluate(inv(both),[list(both),both]).expected,230000);
+ const zero=grid();zero.rows.forEach(r=>r[14]="0,00");withTotal(zero);assert(c.validGrid(zero));
 });
 
 console.log(JSON.stringify({suite:"rate-grid",passed:tests}));

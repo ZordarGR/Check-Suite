@@ -1044,3 +1044,17 @@ value
 columns
 
 afterColumns
+
+RateGridMoney
+
+RateGridDash
+
+RateGridProblem
+
+nightlyTotal
+
+printedTotal
+
+hasTotal
+
+problem

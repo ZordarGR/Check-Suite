@@ -50,7 +50,13 @@ class RateGridWindow {
    IntPtr guestControl=Control(win,"Edit",113,identity,10,10,650,25);Control(win,"Edit",110,"EUR",670,10,45,25);
    IntPtr lv=CreateWindowEx(0,"SysListView32","",unchecked((int)0x50000001),10,50,710,170,win,(IntPtr)24444,IntPtr.Zero,IntPtr.Zero);
    for(int c=0;c<columns;c++)Column(lv,c);
-   for(int r=0;r<=nights;r++)for(int c=0;c<columns;c++)Cell(lv,r,c,c==2?Date(r):c==3?"507":c==14?(r<5?"240,00":"220,00"):c==13?"TAX,*HB":c==15?"Individuals":c>15?"Extra "+r+" "+c:"");
+   decimal nightlyTotal=0;
+   for(int r=0;r<nights;r++){
+    string rate=nights==7?(r<6?"179,33":"169,00"):(r<5?"240,00":"220,00");
+    nightlyTotal+=decimal.Parse(rate.Replace(",","."),System.Globalization.CultureInfo.InvariantCulture);
+    for(int c=0;c<columns;c++)Cell(lv,r,c,c==2?Date(r):c==3?"507":c==14?rate:c==13?"TAX,*HB":c==15?"Individuals":c>15?"Extra "+r+" "+c:"");
+   }
+   for(int c=0;c<columns;c++)Cell(lv,nights,c,c==2?"Total":c==14?nightlyTotal.ToString("F2",System.Globalization.CultureInfo.InvariantCulture).Replace(".",","):c==0||c==1?"":"--");
    var spy=new Spy(lv);ShowWindow(win,5);SetForegroundWindow(win);
    string file=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"RecCheck","rc-list-RG.tsv");
    string probe=Path.GetFullPath(args[1]),helper=Path.GetFullPath(args[3]);
@@ -64,13 +70,14 @@ class RateGridWindow {
      if(p.HasExited)throw new Exception("Probe exited "+p.ExitCode);
     }
     if(reject){
-     if(!body.Contains(identity)||!body.Contains("\tpending\n")||body.Contains("\tcomplete\n")||spy.reads!=0||spy.writes!=0)throw new Exception("Expected shape refusal before any cell reads: "+body);
-     Console.WriteLine("PASS rejected "+columns+" columns before cell reads");
+     if(!body.Contains(identity)||!body.Contains("\tpending\n")||body.Contains("\tcomplete\n")||spy.writes!=0)throw new Exception("Expected shape refusal before any cell reads: "+body);
+     Console.WriteLine("PASS incomplete total-grid rejected; "+columns+" columns, "+spy.reads+" getters");
      DestroyWindow(win);Pump(350);p.Kill();p.WaitForExit();return 0;
     }
     if(!body.Contains(identity)||!body.Contains("\tcomplete\n"))throw new Exception("Full native capture missing: "+body.Substring(0,Math.Min(250,body.Length)));
     int rows=0;foreach(string line in body.Split('\n'))if(line.StartsWith("RG\t"))rows++;
     if(rows!=nights+1||!body.Contains("DONE\t"+(nights+1)+"\t"+(nights+1)))throw new Exception("Truncated grid "+rows);
+    if(!body.Contains("\tTotal\t"))throw new Exception("Final marker was not preserved");
     if(spy.reads<(nights+1)*columns*2)throw new Exception("Not every cell verified");
     if(spy.writes!=0)throw new Exception("Reader modified native list");
     foreach(string line in body.Split('\n'))if(line.StartsWith("RG\t")&&line.Split('\t').Length!=columns+1)throw new Exception("Dropped additional columns");

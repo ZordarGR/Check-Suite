@@ -2142,24 +2142,42 @@ static class TBind {
     return DateTime.TryParseExact(value,"dd/MM/yyyy",System.Globalization.CultureInfo.InvariantCulture,
       System.Globalization.DateTimeStyles.None,out date);
   }
-  static bool RateGridValid(RateGridScan scan,string header){
-    DateTime a,d;if(!RateGridHeader(header,out a,out d))return false;
-    int nights=(int)(d-a).TotalDays;
-    if(scan.rows.Count!=nights&&scan.rows.Count!=nights+1)return false;
-    var dates=new System.Collections.Generic.HashSet<DateTime>();
-    foreach(string[] cells in scan.rows){
-      if(cells.Length!=scan.columns||scan.columns<16||scan.columns>128)return false;
-      DateTime date;
-      if(!RateGridDate(cells[2],out date)||date<a||date>d||!dates.Add(date))return false;
-      if(!System.Text.RegularExpressions.Regex.IsMatch(cells[3],@"^\d{1,4}(?:-\d{1,4})?$"))return false;
-      if(!System.Text.RegularExpressions.Regex.IsMatch(cells[14].Trim(),@"^(?:\d+|\d{1,3}(?:\.\d{3})+),\d{2}$"))return false;
-      decimal price;
-      if(!decimal.TryParse(cells[14].Trim().Replace(".","").Replace(",",""),
-        System.Globalization.NumberStyles.None,System.Globalization.CultureInfo.InvariantCulture,out price)||price>1000000000)return false;
-    }
-    for(DateTime n=a;n<d;n=n.AddDays(1))if(!dates.Contains(n))return false;
-    return true;
+  static bool RateGridMoney(string value,out decimal amount){
+    amount=0;value=(value??"").Trim();
+    return System.Text.RegularExpressions.Regex.IsMatch(value,@"^(?:\d+|\d{1,3}(?:\.\d{3})+),\d{2}$")
+      &&decimal.TryParse(value.Replace(".","").Replace(",",""),System.Globalization.NumberStyles.None,
+        System.Globalization.CultureInfo.InvariantCulture,out amount)&&amount<=1000000000;
   }
+  static bool RateGridDash(string value){
+    value=(value??"").Trim();return value==""||value=="-"||value=="--";
+  }
+  static string RateGridProblem(RateGridScan scan,string header){
+    DateTime a,d;if(!RateGridHeader(header,out a,out d))return "Stay identity could not be read";
+    int nights=(int)(d-a).TotalDays;
+    if(scan.rows.Count<nights||scan.rows.Count>nights+2)return "Row count does not match the stay";
+    var dates=new System.Collections.Generic.HashSet<DateTime>();
+    decimal nightlyTotal=0,printedTotal=0;bool hasTotal=false;
+    for(int i=0;i<scan.rows.Count;i++){
+      string[] cells=scan.rows[i];decimal price;
+      if(cells.Length!=scan.columns||scan.columns<16||scan.columns>128)return "Column count changed";
+      if(cells[2].Trim().ToUpperInvariant()=="TOTAL"){
+        if(hasTotal||i!=scan.rows.Count-1||!RateGridDash(cells[1])||!RateGridDash(cells[3]))
+          return "Total row has an unexpected position or date/room";
+        if(!RateGridMoney(cells[14],out printedTotal))return "Printed grid total could not be read";
+        hasTotal=true;continue;
+      }
+      DateTime date;
+      if(!RateGridDate(cells[2],out date)||date<a||date>d||!dates.Add(date))return "Missing, duplicate or invalid date at row "+(i+1);
+      if(!System.Text.RegularExpressions.Regex.IsMatch(cells[3],@"^\d{1,4}(?:-\d{1,4})?$"))return "Invalid room at row "+(i+1);
+      if(!RateGridMoney(cells[14],out price))return "Unreadable rate at row "+(i+1);
+      if(date<d)nightlyTotal+=price;
+    }
+    for(DateTime n=a;n<d;n=n.AddDays(1))if(!dates.Contains(n))return "An occupied night is missing";
+    if(!hasTotal)return "Waiting for the final Total row";
+    if(printedTotal!=nightlyTotal)return "Printed grid total does not match the nightly rates";
+    return null;
+  }
+  static bool RateGridValid(RateGridScan scan,string header){return RateGridProblem(scan,header)==null;}
   static string RateGridPending(RateGridScan scan){
     return scan.prefix+"DONE\t0\t"+scan.count+"\t0\t0\tunicode\tpending\n";
   }
@@ -2183,7 +2201,7 @@ static class TBind {
     if(lv==IntPtr.Zero||!IsWindowVisible(lv)||cls.ToString()!="SysListView32")return false;
     if(SendMessageTimeout(lv,LVM_GETITEMCOUNT,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,250,out res)==IntPtr.Zero)return false;
     count=res.ToInt32();
-    if(count<1||count>20001)return false;
+    if(count<1||count>20002)return false;
     if(SendMessageTimeout(lv,LVM_GETHEADER,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,250,out header)==IntPtr.Zero
       ||header==IntPtr.Zero||SendMessageTimeout(header,HDM_GETITEMCOUNT,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,250,out res)==IntPtr.Zero)return false;
     columns=res.ToInt32();
@@ -2206,7 +2224,7 @@ static class TBind {
         var pending=new RateGridScan(unavailable,prefix,(int)(d-a).TotalDays);
         if(WriteList("RG",RateGridPending(pending))){
           rateGridSeen=unavailable;rateGridSaved="";
-          AppendWatch(DateTime.Now.ToString("HH:mm:ss")+"  RATE GRID unavailable: list="+Hex(lv)+" rows="+count+" columns="+columns+" (requires visible list 24444, 1..20001 rows and 16..128 columns)\r\n");
+          AppendWatch(DateTime.Now.ToString("HH:mm:ss")+"  RATE GRID unavailable: list="+Hex(lv)+" rows="+count+" columns="+columns+" (requires visible list 24444, 1..20002 rows and 16..128 columns)\r\n");
         }
       }
       rateGridScan=null;rateGridNext=now+1000;return;
@@ -2235,7 +2253,8 @@ static class TBind {
         ||guest!=InvoiceText(GetDlgItem(h,113))||currency!=InvoiceText(GetDlgItem(h,110))
         ||!RateGridShape(h,lv,out after,out afterColumns)||after!=count||afterColumns!=columns)throw new Exception("Rate grid identity changed");
       if(done){
-        if(!RateGridValid(scan,guest))throw new Exception("Rate grid has missing, duplicate or unreadable nights");
+        string problem=RateGridProblem(scan,guest);
+        if(problem!=null)throw new Exception("Rate grid: "+problem);
         string body=RateGridBody(scan);
         if(body!=rateGridSaved||scan.pendingSaved){
           if(!WriteList("RG",body))throw new Exception("Rate grid could not be saved");
@@ -2924,7 +2943,7 @@ static class TBind {
     }catch(Exception){}
   }
 
-  const string VER = "v37";
+  const string VER = "v38";
 
 
   /* Live accommodation reader. Separate child mode: no keyboard hooks, no protel writes.

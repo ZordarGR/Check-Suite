@@ -34,15 +34,23 @@ function validGrid(g){
   const a=day(g.arr),d=day(g.dep);
   if(a===null||d===null||d<=a||d-a>20000)return false;
   if(!g.complete)return g.rows.length===0;
-  if(g.rows.length!==d-a&&g.rows.length!==d-a+1)return false;
+  if(g.rows.length<d-a||g.rows.length>d-a+2)return false;
   const dates=new Set(),width=Array.isArray(g.rows[0])?g.rows[0].length:0;
-  for(const row of g.rows){
+  let nightlyTotal=0,printedTotal=null;
+  for(let i=0;i<g.rows.length;i++){
+    const row=g.rows[i];
     if(!Array.isArray(row)||row.length<16||row.length>128||row.length!==width||!row.every(c=>typeof c==="string"))return false;
+    if(norm(row[2])==="TOTAL"){
+      if(printedTotal!==null||i!==g.rows.length-1||![row[1],row[3]].every(s=>["","-","--"].includes(s.trim())))return false;
+      printedTotal=cents(row[14]);if(printedTotal===null||printedTotal<0)return false;
+      continue;
+    }
     const date=day(row[2]),price=cents(row[14]);
     if(date===null||date<a||date>d||dates.has(date)||price===null||price<0||!/^\d{1,4}(?:-\d{1,4})?$/.test(row[3]))return false;
-    dates.add(date);
+    dates.add(date);if(date<d)nightlyTotal+=price;
   }
   for(let n=a;n<d;n++)if(!dates.has(n))return false;
+  if(printedTotal!==null&&printedTotal!==nightlyTotal)return false;
   return true;
 }
 function captureGrid(txt,at){
@@ -51,7 +59,7 @@ function captureGrid(txt,at){
   const titles=lines.filter(c=>c[0]==="TITLE"),meta=lines.filter(c=>c[0]==="GRID"),ends=lines.filter(c=>c[0]==="DONE");
   if(titles.length!==1||titles[0].length!==2||titles[0][1]!=="Rate by Day Grid"||meta.length!==1||meta[0].length!==3||ends.length!==1)return [];
   const id=gridIdentity(meta[0][1]),done=ends[0],rows=lines.filter(c=>c[0]==="RG").map(c=>c.slice(1));
-  if(!id||done.length!==7||!["pending","complete"].includes(done[6])||!Number.isSafeInteger(+done[1])||!Number.isSafeInteger(+done[2])||+done[1]!==rows.length||+done[2]<1||+done[2]>20001)return [];
+  if(!id||done.length!==7||!["pending","complete"].includes(done[6])||!Number.isSafeInteger(+done[1])||!Number.isSafeInteger(+done[2])||+done[1]!==rows.length||+done[2]<1||+done[2]>20002)return [];
   const complete=done[6]==="complete";
   if(complete&&+done[1]!==+done[2])return [];
   const g={tag:"RG",...id,currency:meta[0][2],at,complete,rows};
@@ -68,7 +76,7 @@ function gridReference(inv,refs){
 }
 function gridTaxRecords(refs){
   return refs.filter(r=>r.tag==="RG").map(r=>({name:r.name,room:r.room,arr:r.arr,dep:r.dep,at:r.at,complete:r.complete,
-    nights:r.complete?r.rows.filter(row=>day(row[2])<day(r.dep)).map(row=>({date:row[2],room:row[3],tax:row[13].split(/[,;\s]+/).some(p=>norm(p)==="TAX")})):[]}));
+    nights:r.complete?r.rows.filter(row=>day(row[2])!==null&&day(row[2])<day(r.dep)).map(row=>({date:row[2],room:row[3],tax:row[13].split(/[,;\s]+/).some(p=>norm(p)==="TAX")})):[]}));
 }
 
 function reference(inv, refs){
@@ -143,7 +151,7 @@ function evaluate(inv, refs){
     return noPayment ? {state:"unpaid",icon:"✕",text:"No accommodation payment · "+reason,tint:true} : unsure(reason);
   }
   const posted=charges.reduce((sum,c)=>sum+c.amount,0);
-  const expected=grid?grid.rows.filter(row=>day(row[2])<d).reduce((sum,row)=>sum+cents(row[14]),0):posted+(missing?missing*rate:0), diff=paid-expected;
+  const expected=grid?grid.rows.filter(row=>day(row[2])!==null&&day(row[2])<d).reduce((sum,row)=>sum+cents(row[14]),0):posted+(missing?missing*rate:0), diff=paid-expected;
   if(!Number.isSafeInteger(expected))return unsure("Accommodation total could not be verified");
   const nights=d-a, amounts={paid,expected,nights,rate,diff,posted,missing,source:grid?"grid":"formula"};
   if(noPayment&&expected>0) return {state:"unpaid",icon:"✕",text:"No accommodation payment · under €"+money(expected)+(grid?" · Rate by Day Grid":""),tint:true,...amounts};
