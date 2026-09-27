@@ -57,6 +57,7 @@ test("TAX is an exact package token for every occupied night, never NOTAX or *TA
 });
 test("native-grid archive replay, restart and failed replacement preserve evidence",()=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),"rate-grid-")),file=path.join(dir,"arrangement-rates-v1.json"),g=grid();
+ g.rows.forEach(r=>r.push("extra configuration","extra value"));
  const service=()=>{const app=new EventEmitter(),ipcMain=new EventEmitter();return {app,c:start({electron:{app,ipcMain,screen:{},BrowserWindow:class{}},helperPath:"unused",captureDir:dir,userData:dir,enabled:false})};};
  try{
   let {app,c:svc}=service();assert(svc.ingestCapture("RG",txt(g),now));assert.equal(svc.getRateGrids()[0].nights.length,10);
@@ -81,7 +82,6 @@ test("tax warning uses exact stay identity/night and preserves 9xxx and departur
  window.__rcRateGrids[0].room="507";window.__rcRateGrids[0].nights[4].room="507";
  window.__rcRateGrids[0].complete=false;assert.match(warning(g.room,g,night),/incomplete/);
 });
-console.log(JSON.stringify({suite:"rate-grid",passed:tests}));
 
 test("additional columns retained, complete nightly sums unchanged and ragged rows rejected",()=>{
  for(const width of [17,18,32,128]){
@@ -94,3 +94,5 @@ test("additional columns retained, complete nightly sums unchanged and ragged ro
  const tooWide=grid();tooWide.rows.forEach(r=>{while(r.length<129)r.push("");});assert(!c.validGrid(tooWide));
  const malformed=grid();malformed.rows[0]=null;assert(!c.validGrid(malformed));
 });
+
+console.log(JSON.stringify({suite:"rate-grid",passed:tests}));
