@@ -1040,3 +1040,7 @@ rateGridScan
 rateGridSeen
 rows
 value
+
+columns
+
+afterColumns
