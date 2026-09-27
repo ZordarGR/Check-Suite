@@ -35,9 +35,9 @@ function validGrid(g){
   if(a===null||d===null||d<=a||d-a>20000)return false;
   if(!g.complete)return g.rows.length===0;
   if(g.rows.length!==d-a&&g.rows.length!==d-a+1)return false;
-  const dates=new Set();
+  const dates=new Set(),width=Array.isArray(g.rows[0])?g.rows[0].length:0;
   for(const row of g.rows){
-    if(!Array.isArray(row)||row.length!==16||!row.every(c=>typeof c==="string"))return false;
+    if(!Array.isArray(row)||row.length<16||row.length>128||row.length!==width||!row.every(c=>typeof c==="string"))return false;
     const date=day(row[2]),price=cents(row[14]);
     if(date===null||date<a||date>d||dates.has(date)||price===null||price<0||!/^\d{1,4}(?:-\d{1,4})?$/.test(row[3]))return false;
     dates.add(date);

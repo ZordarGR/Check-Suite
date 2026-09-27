@@ -42,34 +42,40 @@ class RateGridWindow {
  [STAThread]static int Main(string[] args){
   try{
    if(args[0]=="probe")return Probe(args);
-   int nights=int.Parse(args[2]);
+   int nights=int.Parse(args[2]),columns=args.Length>4?int.Parse(args[4]):16;bool reject=args.Length>5&&args[5]=="reject";
    var init=new Init{size=8,classes=1};if(!InitCommonControlsEx(ref init))throw new Exception("Common controls unavailable");
    IntPtr win=CreateWindowEx(0,"#32770","Rate by Day Grid",unchecked((int)0x10CF0000),30,30,760,360,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero);
    if(win==IntPtr.Zero)throw new Exception("Fixture dialog not created");
    string identity="SYNTHETIC LONG STAY , room 507, "+Date(0)+" - "+Date(nights);
    IntPtr guestControl=Control(win,"Edit",113,identity,10,10,650,25);Control(win,"Edit",110,"EUR",670,10,45,25);
    IntPtr lv=CreateWindowEx(0,"SysListView32","",unchecked((int)0x50000001),10,50,710,170,win,(IntPtr)24444,IntPtr.Zero,IntPtr.Zero);
-   for(int c=0;c<16;c++)Column(lv,c);
-   for(int r=0;r<=nights;r++)for(int c=0;c<16;c++)Cell(lv,r,c,c==2?Date(r):c==3?"507":c==14?(r<5?"240,00":"220,00"):c==13?"TAX,*HB":c==15?"Individuals":"");
+   for(int c=0;c<columns;c++)Column(lv,c);
+   for(int r=0;r<=nights;r++)for(int c=0;c<columns;c++)Cell(lv,r,c,c==2?Date(r):c==3?"507":c==14?(r<5?"240,00":"220,00"):c==13?"TAX,*HB":c==15?"Individuals":c>15?"Extra "+r+" "+c:"");
    var spy=new Spy(lv);ShowWindow(win,5);SetForegroundWindow(win);
    string file=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"RecCheck","rc-list-RG.tsv");
    string probe=Path.GetFullPath(args[1]),helper=Path.GetFullPath(args[3]);
    var pi=new ProcessStartInfo(probe,"probe \""+helper+"\" "+Process.GetCurrentProcess().Id){UseShellExecute=false,CreateNoWindow=true};
    using(var p=Process.Start(pi)){
-    DateTime end=DateTime.UtcNow.AddSeconds(80);string body="";
+    DateTime end=DateTime.UtcNow.AddSeconds(reject?4:80);string body="";
     while(DateTime.UtcNow<end){
      Pump(100);SetForegroundWindow(win);
      if(File.Exists(file)){try{body=File.ReadAllText(file);}catch(IOException){}}
      if(body.Contains(identity)&&body.Contains("\tcomplete\n"))break;
      if(p.HasExited)throw new Exception("Probe exited "+p.ExitCode);
     }
+    if(reject){
+     if(!body.Contains(identity)||!body.Contains("\tpending\n")||body.Contains("\tcomplete\n")||spy.reads!=0||spy.writes!=0)throw new Exception("Expected shape refusal before any cell reads: "+body);
+     Console.WriteLine("PASS rejected "+columns+" columns before cell reads");
+     DestroyWindow(win);Pump(350);p.Kill();p.WaitForExit();return 0;
+    }
     if(!body.Contains(identity)||!body.Contains("\tcomplete\n"))throw new Exception("Full native capture missing: "+body.Substring(0,Math.Min(250,body.Length)));
     int rows=0;foreach(string line in body.Split('\n'))if(line.StartsWith("RG\t"))rows++;
     if(rows!=nights+1||!body.Contains("DONE\t"+(nights+1)+"\t"+(nights+1)))throw new Exception("Truncated grid "+rows);
-    if(spy.reads<(nights+1)*16*2)throw new Exception("Not every cell verified");
+    if(spy.reads<(nights+1)*columns*2)throw new Exception("Not every cell verified");
     if(spy.writes!=0)throw new Exception("Reader modified native list");
-    File.WriteAllText("native-rate-grid-"+nights+".tsv",body);
-    Console.WriteLine("PASS native "+(IntPtr.Size*8)+"-bit target, 64-bit reader, "+rows+" rows, "+spy.reads+" getters, zero setters, small scrollable window");
+    foreach(string line in body.Split('\n'))if(line.StartsWith("RG\t")&&line.Split('\t').Length!=columns+1)throw new Exception("Dropped additional columns");
+    File.WriteAllText("native-rate-grid-"+nights+"-"+columns+".tsv",body);
+    Console.WriteLine("PASS native "+(IntPtr.Size*8)+"-bit target, 64-bit reader, "+rows+" rows, "+columns+" columns, "+spy.reads+" getters, zero setters, small scrollable window");
     if(nights==62){
      string other=identity.Replace("SYNTHETIC LONG STAY","SYNTHETIC NEXT GUEST");
      SetWindowText(guestControl,other);DateTime switched=DateTime.UtcNow,until=switched.AddSeconds(7);

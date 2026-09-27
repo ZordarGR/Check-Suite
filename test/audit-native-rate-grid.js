@@ -25,6 +25,16 @@ check(threw,"last row changing between whole-list passes is rejected");
 var failed=new RateGridScan("k","",401);threw=false;
 try{failed.Step(cell,()=>false);}catch(Exception){threw=true;}
 check(threw&&failed.rows.Count==0,"failed getter cannot advance a row");
+
+foreach(int width in new int[]{17,18,32,128}){
+ var extra=new RateGridScan("k","",63,width);bool done=false;int ticks=0,calls=0;
+ while(!done&&ticks++<10000)done=extra.Step((r,c)=>{calls++;return c<16?cell(r,c):"extra "+r+" "+c;},()=>true);
+ check(done&&extra.rows[62].Length==width&&calls==63*width*2,"all rows and additional columns twice: "+width);
+ check(RateGridValid(extra,"SYNTHETIC , room 507, "+date(0)+" - "+date(62)),"additional-column schema accepted");
+ var change=new RateGridScan("k","",11,width);bool changed=false;
+ try{while(true)change.Step((r,c)=>c<16?cell(r,c):(change.pass==1&&r==10&&c==width-1?"changed":"original"),()=>true);}catch(Exception){changed=true;}
+ check(changed,"mutation in last additional cell rejected");
+}
 return bad==0?0:1;
 }
 }`.replace("__NATIVE__",s.slice(a,b));

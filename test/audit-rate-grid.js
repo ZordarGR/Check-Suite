@@ -82,3 +82,15 @@ test("tax warning uses exact stay identity/night and preserves 9xxx and departur
  window.__rcRateGrids[0].complete=false;assert.match(warning(g.room,g,night),/incomplete/);
 });
 console.log(JSON.stringify({suite:"rate-grid",passed:tests}));
+
+test("additional columns retained, complete nightly sums unchanged and ragged rows rejected",()=>{
+ for(const width of [17,18,32,128]){
+  const g=grid(62);g.rows.forEach((r,i)=>{while(r.length<width)r.push("extra "+i+" "+r.length);});
+  const read=c.captureGrid(txt(g),now)[0];assert.deepEqual(read.rows,g.rows);
+  assert.equal(c.evaluate(inv(g),[list(g),read]).expected,5*24000+57*22000);
+  assert(c.gridTaxRecords([read])[0].nights.every(n=>n.tax));
+  const bad=structuredClone(g);bad.rows[1].pop();assert(!c.validGrid(bad));
+ }
+ const tooWide=grid();tooWide.rows.forEach(r=>{while(r.length<129)r.push("");});assert(!c.validGrid(tooWide));
+ const malformed=grid();malformed.rows[0]=null;assert(!c.validGrid(malformed));
+});

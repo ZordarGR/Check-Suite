@@ -1810,9 +1810,10 @@ static class TBind {
       if(SendMessageTimeout(res, HDM_GETITEMCOUNT, IntPtr.Zero, IntPtr.Zero, SMTO_ABORTIFHUNG, 250, out hres) != IntPtr.Zero)
         cols = hres.ToInt32();
     }
+    READ.Append("list " + Hex(lv) + "   " + rows + " row(s), " + cols + " column(s)\n");
     if(cols <= 0) cols = 8;
-    if(cols > 16) cols = 16;
-    READ.Append("list " + Hex(lv) + "   " + rows + " row(s), " + cols + " column(s)\n\n");
+    if(cols > 16){ cols = 16; READ.Append("Diagnostic sample shows the first 16 columns only.\n"); }
+    READ.Append("\n");
     if(rows <= 0){ READ.Append("Empty list. Nothing further was read.\n"); return; }
 
     uint pid;
@@ -2106,17 +2107,17 @@ static class TBind {
   // Two matching whole-list passes are required; no visible-row or debug sample cap.
   sealed class RateGridScan {
     public string key, prefix;
-    public int count, row, pass;
+    public int count, row, pass, columns;
     public bool pendingSaved;
     public System.Collections.Generic.List<string[]> rows = new System.Collections.Generic.List<string[]>();
-    public RateGridScan(string k,string p,int n){key=k;prefix=p;count=n;}
+    public RateGridScan(string k,string p,int n,int width=16){key=k;prefix=p;count=n;columns=width;}
     public bool Step(Func<int,int,string> cell,Func<bool> healthy){
-      int stop=Math.Min(count,row+8);
+      int stop=Math.Min(count,row+Math.Max(1,128/columns));
       for(;row<stop;row++){
-        string[] data=new string[16];
-        for(int c=0;c<16;c++){data[c]=cell(row,c);if(!healthy())throw new Exception("Incomplete rate grid");}
+        string[] data=new string[columns];
+        for(int c=0;c<columns;c++){data[c]=cell(row,c);if(!healthy())throw new Exception("Incomplete rate grid");}
         if(pass==0)rows.Add(data);
-        else for(int c=0;c<16;c++)if(data[c]!=rows[row][c])throw new Exception("Rate grid changed while reading");
+        else for(int c=0;c<columns;c++)if(data[c]!=rows[row][c])throw new Exception("Rate grid changed while reading");
       }
       if(row<count)return false;
       if(pass==0){pass=1;row=0;return false;}
@@ -2147,6 +2148,7 @@ static class TBind {
     if(scan.rows.Count!=nights&&scan.rows.Count!=nights+1)return false;
     var dates=new System.Collections.Generic.HashSet<DateTime>();
     foreach(string[] cells in scan.rows){
+      if(cells.Length!=scan.columns||scan.columns<16||scan.columns>128)return false;
       DateTime date;
       if(!RateGridDate(cells[2],out date)||date<a||date>d||!dates.Add(date))return false;
       if(!System.Text.RegularExpressions.Regex.IsMatch(cells[3],@"^\d{1,4}(?:-\d{1,4})?$"))return false;
@@ -2175,16 +2177,19 @@ static class TBind {
     GetWindowText(h,title,title.Capacity);GetClassName(h,cls,cls.Capacity);
     return title.ToString()=="Rate by Day Grid"&&cls.ToString()=="#32770";
   }
-  static bool RateGridShape(IntPtr h,IntPtr lv,out int count){
-    count=0;IntPtr res,header;
+  static bool RateGridShape(IntPtr h,IntPtr lv,out int count,out int columns){
+    count=0;columns=0;IntPtr res,header;
     StringBuilder cls=new StringBuilder(80);GetClassName(lv,cls,cls.Capacity);
     if(lv==IntPtr.Zero||!IsWindowVisible(lv)||cls.ToString()!="SysListView32")return false;
     if(SendMessageTimeout(lv,LVM_GETITEMCOUNT,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,250,out res)==IntPtr.Zero)return false;
     count=res.ToInt32();
     if(count<1||count>20001)return false;
-    return SendMessageTimeout(lv,LVM_GETHEADER,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,250,out header)!=IntPtr.Zero
-      &&header!=IntPtr.Zero&&SendMessageTimeout(header,HDM_GETITEMCOUNT,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,250,out res)!=IntPtr.Zero
-      &&res.ToInt32()==16;
+    if(SendMessageTimeout(lv,LVM_GETHEADER,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,250,out header)==IntPtr.Zero
+      ||header==IntPtr.Zero||SendMessageTimeout(header,HDM_GETITEMCOUNT,IntPtr.Zero,IntPtr.Zero,SMTO_ABORTIFHUNG,250,out res)==IntPtr.Zero)return false;
+    columns=res.ToInt32();
+    // The known fields occupy the first 16 columns. Protel may append others.
+    // Retain and compare those too; never mistake a diagnostic sample width for the schema.
+    return columns>=16&&columns<=128;
   }
   static void ServiceRateGrid(){
     IntPtr h=GetForegroundWindow();
@@ -2193,21 +2198,24 @@ static class TBind {
     string guest=InvoiceText(GetDlgItem(h,113)),currency=InvoiceText(GetDlgItem(h,110));
     DateTime a,d;
     if(!RateGridHeader(guest,out a,out d)||String.IsNullOrEmpty(currency))return;
-    IntPtr lv=GetDlgItem(h,24444);int count;
+    IntPtr lv=GetDlgItem(h,24444);int count,columns;
     string prefix="TITLE\tRate by Day Grid\nGRID\t"+guest+"\t"+currency+"\n";
-    if(!RateGridShape(h,lv,out count)){
-      string unavailable=h.ToInt64()+"|"+prefix+"|unavailable";
+    if(!RateGridShape(h,lv,out count,out columns)){
+      string unavailable=h.ToInt64()+"|"+prefix+"|unavailable|"+lv.ToInt64()+"|"+count+"|"+columns;
       if(rateGridSeen!=unavailable){
         var pending=new RateGridScan(unavailable,prefix,(int)(d-a).TotalDays);
-        if(WriteList("RG",RateGridPending(pending))){rateGridSeen=unavailable;rateGridSaved="";}
+        if(WriteList("RG",RateGridPending(pending))){
+          rateGridSeen=unavailable;rateGridSaved="";
+          AppendWatch(DateTime.Now.ToString("HH:mm:ss")+"  RATE GRID unavailable: list="+Hex(lv)+" rows="+count+" columns="+columns+" (requires visible list 24444, 1..20001 rows and 16..128 columns)\r\n");
+        }
       }
       rateGridScan=null;rateGridNext=now+1000;return;
     }
-    string key=h.ToInt64()+"|"+lv.ToInt64()+"|"+prefix+"|"+count;
+    string key=h.ToInt64()+"|"+lv.ToInt64()+"|"+prefix+"|"+count+"|"+columns;
     // A reused dialog may now show another reservation. Check identity before cooling.
     if(rateGridScan==null&&rateGridSeen==key&&rateGridNext!=0&&now-rateGridNext<0)return;
     if(rateGridScan==null||rateGridScan.key!=key){
-      rateGridScan=new RateGridScan(key,prefix,count);
+      rateGridScan=new RateGridScan(key,prefix,count,columns);
       if(rateGridSeen!=key){rateGridSeen=key;rateGridSaved="";}
       // Publish the reservation identity first. Incomplete reads must not silently
       // reuse an older payment verdict or fall back as if this grid was never opened.
@@ -2222,16 +2230,17 @@ static class TBind {
       using(SafeListRead read=new SafeListRead(lv,true)){
         done=scan.Step((r,c)=>read.Get(r,c,false),()=>read.ok);
       }
-      int after;
+      int after,afterColumns;
       if(!RateGridTarget(h)||GetForegroundWindow()!=h||GetDlgItem(h,24444)!=lv
         ||guest!=InvoiceText(GetDlgItem(h,113))||currency!=InvoiceText(GetDlgItem(h,110))
-        ||!RateGridShape(h,lv,out after)||after!=count)throw new Exception("Rate grid identity changed");
+        ||!RateGridShape(h,lv,out after,out afterColumns)||after!=count||afterColumns!=columns)throw new Exception("Rate grid identity changed");
       if(done){
         if(!RateGridValid(scan,guest))throw new Exception("Rate grid has missing, duplicate or unreadable nights");
         string body=RateGridBody(scan);
         if(body!=rateGridSaved||scan.pendingSaved){
           if(!WriteList("RG",body))throw new Exception("Rate grid could not be saved");
           rateGridSaved=body;
+          AppendWatch(DateTime.Now.ToString("HH:mm:ss")+"  RATE GRID complete: "+count+" rows, "+columns+" columns, two matching passes\r\n");
         }
         rateGridScan=null;rateGridNext=now+10000;
       }
@@ -2915,7 +2924,7 @@ static class TBind {
     }catch(Exception){}
   }
 
-  const string VER = "v36";
+  const string VER = "v37";
 
 
   /* Live accommodation reader. Separate child mode: no keyboard hooks, no protel writes.
