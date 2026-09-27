@@ -1058,3 +1058,8 @@ printedTotal
 hasTotal
 
 problem
+
+# Decimal summation/comparison and the RateGridMoney out parameter; Windows Framework native fixture exercises these.
+amount
+op_Addition
+op_LessThanOrEqual
