@@ -155,7 +155,9 @@ class InvoiceWindow{
   Control(win,"Edit",206,"101",10,35,100,20);Control(win,"Edit",208,"14/09/26",120,35,100,20);
   Control(win,"Edit",209,"21/09/26",230,35,100,20);Control(win,"Edit",211,"PREPAID is only a note",10,60,900,20);
   IntPtr allocation=Control(win,"Button",214,"INDIVIDUAL",340,90,370,20), balance=Control(win,"Edit",224,"-900,00",340,510,100,20);
-  Control(win,"Edit",1700,"EUR",800,10,100,20);IntPtr status=Control(win,"Edit",566,"CI",800,35,100,20);
+  IntPtr currency=CreateWindowEx(0,"ComboBox","",unchecked((int)0x50000003),800,10,100,120,win,(IntPtr)1700,IntPtr.Zero,IntPtr.Zero);
+  foreach(string curr in new string[]{"USD","EUR","GBP","CHF"}){IntPtr cp=Marshal.StringToHGlobalUni(curr);try{SendMessage(currency,0x0143,IntPtr.Zero,cp);}finally{Marshal.FreeHGlobal(cp);}}
+  SendMessage(currency,0x014E,(IntPtr)1,IntPtr.Zero);IntPtr status=Control(win,"Edit",566,"CI",800,35,100,20);
   IntPtr b=CreateWindowEx(0,"SysListView32","",unchecked((int)0x50000001),340,120,620,350,win,(IntPtr)24445,IntPtr.Zero,IntPtr.Zero);
   string[] headers={"Date","Inv.date","Qty","Text","Price","Add. text","Curr."};
   for(int i=0;i<headers.Length;i++)Column(b,i,headers[i]);
