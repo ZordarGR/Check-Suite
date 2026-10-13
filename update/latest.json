@@ -1,12 +1,12 @@
 {
-  "version": "1.17.106",
+  "version": "1.17.107",
   "type": "full",
-  "engine": "1.17.106",
-  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.106/Pro-Check-Setup.exe",
-  "setupSha256": "c99c97c422d02760de73632e6082af88809d33f70c721b893316c48e8f12f217",
+  "engine": "1.17.107",
+  "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.107/Pro-Check-Setup.exe",
+  "setupSha256": "a50618437f9f76250e721d3dae19ce19eb02c51bad368c2c37603b39f2477791",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/1a974df5dedea98c97be2f0d87e2ccf00b93c3d1/Departments%20Check.html",
-  "sha256": "6b87eff095af1857912274ecb8f038aa69de3e7a556b332c76917c024f28fac0",
-  "notes": "Read Rate by Day Grid through its final Total row. Verify every occupied night and compare the printed total with the nightly sum; exclude the footer from accommodation and TAX calculations. Preserve saved data and report precise validation failures.",
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/ba3862457c4ba2113a8bba9c9a914bc369f773ff/Departments%20Check.html",
+  "sha256": "5a312406582c77db1ddfcc2fb4c2a1832bb820c5cf7c15dd4e4e8ec379e2540f",
+  "notes": "Complete Department Check names across surname/given-name order and refresh rows/cards from matching captured departures. Show a labeled startup progress bar and load scripts, saved data and captures before displaying the main window.",
   "force": true
 }
