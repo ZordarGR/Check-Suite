@@ -7,10 +7,10 @@ function lift(n){
  for(let j=start;j<src.length;j++){if(src[j]==="{")d++;else if(src[j]==="}"&&!--d)return src.slice(at+1,j+1);}
  throw Error(n);
 }
-const names=["sameName","nameWordSet","nameLike","isCutOf","nameTextIn","sameGuestLabel","nameHit","expandReceiptName","receiptFullName","receiptName","guestFor","dateNum","dateNum2","pillRoom","statusRows","departureRows","capturedGuestName","censusNameOf","otherNames","isLeaving"];
+const names=["sameName","nameWordSet","nameLike","isCutOf","nameTextIn","sameGuestLabel","nameHit","expandReceiptName","receiptFullName","receiptName","receiptDisplayName","guestFor","dateNum","dateNum2","pillRoom","statusRows","departureRows","capturedGuestName","censusNameOf","otherNames","isLeaving"];
 const old="MORGAN/BRIGGS DAVID/ELENA", fresh="KELLER/STONE ANNA/MORGAN";
 const run=(rooms,receipts,rivals={"120":["MORGAN/BRIGGS DAVID/ELENA"]})=>new Function("ROOMS","MODEL","STATE","LEAVING",
- names.map(lift).join("\n")+ '\nconst rState=r=>STATE[r.sn]||{}; const effRoom=r=>r.roomMain; let ARRIVING={}; return {guestFor,receiptName,nameHit,isLeaving,otherNames};'
+ names.map(lift).join("\n")+ '\nconst rState=r=>STATE[r.sn]||{}; const effRoom=r=>r.roomMain; let ARRIVING={}; return {guestFor,receiptName,nameHit,isLeaving,otherNames,capturedGuestName};'
 )(rooms,{reportDate:"4/9/2026",receipts},{},rivals);
 let bad=0;
 const check=(name,condition)=>{console.log((condition?"PASS ":"FAIL ")+name);if(!condition)bad++;};
@@ -50,5 +50,20 @@ for(const [full,printed] of [["SMITH ALEX/TAYLOR","ALEX/TAYLOR SMIT"],["SMITH AL
  check("conflicting printed fragments remain unexpanded",run(rooms,[paper,other],{}).guestFor("120",paper)===paper.guest);
  const rivalPaper={...paper,sn:"13",guest:"ALEX/TAYLOR SMITHSON"};
  check("a longer printed surname rival blocks a shorter rotated match",run(rooms,[paper,rivalPaper],{}).guestFor("120",paper)===paper.guest);
+}
+{
+ const full="KELLER/STONE ALICE/BRUNO/CLARA",label="ALICE/BRUNO/CLARA K";
+ const row={name:full,room:"55",arr:"01/09/26",dep:"04/09/26"},st={IH:{rows:[row]}};
+ const api=run({},[],{}),find=data=>api.capturedGuestName(data,label,["55"],20260901,20260904);
+ const before=JSON.stringify(st);
+ check("a reordered departure label resolves through the exact in-house room and stay",find(st)===full);
+ check("the captured in-house name remains unchanged",JSON.stringify(st)===before);
+ check("a different room cannot complete the departure label",find({IH:{rows:[{...row,room:"56"}]}})==="");
+ check("a different arrival cannot complete the departure label",find({IH:{rows:[{...row,arr:"02/09/26"}]}})==="");
+ check("a different departure cannot complete the departure label",find({IH:{rows:[{...row,dep:"05/09/26"}]}})==="");
+ check("missing stay dates cannot complete the departure label",find({IH:{rows:[{...row,arr:""}]}})==="");
+ check("two captured surnames matching the reordered label stay ambiguous",find({IH:{rows:[row,{...row,name:"KENT ALICE/BRUNO/CLARA"}]}})==="");
+ check("an arrival capture can complete the same reordered departure label",find({AR:{"20260901":{rows:{guest:row}}}})===full);
+ check("reordered completion preserves every slash-group character",api.capturedGuestName(st,"ALICE/CLARA/BRUNO K",["55"],20260901,20260904)==="");
 }
 process.exitCode=bad?1:0;

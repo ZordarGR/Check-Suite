@@ -18,6 +18,7 @@ Run the ones that need nothing but node:
 | `report.js` | the DEBUG report prints the STATUS store's view of the night first — the pills' source — then the ledger's own, labelled as such, with **every** pill the ledger would draw and the rate list that wrote it, the stale ones flagged |
 | `poison.js` | one reservation printed `31/12/99` must not delete the ledger |
 | `names.js` | a charge takes its room's name; a nickname still overrides; the printed name survives on the tooltip |
+| `startup.js` | the hidden desktop window waits for renderer/data, backend and paint; startup progress stays visible; foreign-frame readiness and early tray reveals are refused |
 | `nighttest.js` | the working night turns at 03:30, the shift at 07:00, and the upgrade never wipes a tick mid-shift |
 | `dst.js` | both boundaries across Greece's real DST transitions — fails on absolute-time arithmetic |
 | `lvitem.cs` | the LVITEM the list control reads, laid out for the **target's** bitness. Get an offset wrong and the read silently returns nothing, which looks exactly like "protel will not allow it" |
@@ -83,6 +84,13 @@ because a stale copy passed three times in one night while proving nothing.
 
 **Regenerate `h-sweep.html` after every change to `index.html`** — it is a copy, and a
 stale one tests the wrong page.
+
+`browser/receipt-names.js` checks rotated cut-name variants, live row/card updates,
+restart recovery and departure/in-house matching without editing source names.
+`browser/startup.js` delays room recovery and profile loading, drains several archive
+batches, and checks every progress stage before readiness; failed captures preserve
+the cursor/data and show the existing recovery banner. Both use a local HTTP server
+and support `PW_BROWSER` (otherwise the usual bundled Chromium or `/usr/bin/chromium`).
 
 ## Live Arrangement check
 

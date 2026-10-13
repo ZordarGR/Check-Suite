@@ -32,9 +32,10 @@ const { EventEmitter } = require("events");
 const DIR = fs.mkdtempSync(path.join(os.tmpdir(), "rchelper-"));
 const handlers = {};
 function FakeWin(){ this.webContents = {send(){}, once(){}, on(){}, openDevTools(){}}; }
-["setIgnoreMouseEvents","setAlwaysOnTop","loadURL","on","setBounds","showInactive","hide","show",
+["setIgnoreMouseEvents","setAlwaysOnTop","on","once","setBounds","showInactive","hide","show",
  "focus","destroy","setFocusable"].forEach(m => FakeWin.prototype[m] = function(){});
 FakeWin.prototype.isVisible = () => true; FakeWin.prototype.isDestroyed = () => false;
+FakeWin.prototype.loadURL = () => Promise.resolve();
 const electron = {
   /* whenReady RESOLVES here, unlike the other rigs: the config hub that focusSpec reads is
      built inside the boot, and the specs= field cannot be exercised without it */

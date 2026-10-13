@@ -20,14 +20,14 @@ const NAME = `
   return {shown: nick || gname, isNick: !!nick,
           tip: (nick ? gname + " (nick)" : gname) + (r.guest && gname !== r.guest ? "  ·  back: " + r.guest : "")};
 `;
-function resolve(receipts, rooms, r, state){
+function resolve(receipts, rooms, r, state, leaving = {}, arriving = {}){
   const MODEL = {reportDate:"3/9/2026", receipts};
   const STATE = state || {receipts:{}};
-  const body = [lift("rKey"), lift("receiptFingerprint"), lift("rState"), nickForLine, lift("dateNum"), lift("sameName"), lift("isCutOf"), lift("nameTextIn"), lift("sameGuestLabel"), lift("expandReceiptName"), lift("receiptFullName"), lift("guestFor"),
+  const body = [lift("rKey"), lift("receiptFingerprint"), lift("rState"), nickForLine, lift("dateNum"), lift("sameName"), lift("isCutOf"), lift("nameTextIn"), lift("sameGuestLabel"), lift("expandReceiptName"), lift("receiptFullName"), lift("receiptDisplayName"), lift("guestFor"),
     "const effRoom = (r) => { " + effRoomLine.replace(/^function effRoom\(r\)\{/,"").replace(/\}$/,"") + " };",
     NAME].join("\n");
-  const fn = new Function("MODEL","ROOMS","STATE","r","Object","String", body);
-  return fn(MODEL, rooms, STATE, r, Object, String);
+  const fn = new Function("MODEL","ROOMS","STATE","r","Object","String","LEAVING","ARRIVING", body);
+  return fn(MODEL, rooms, STATE, r, Object, String, leaving, arriving);
 }
 
 const R = (sn, room, guest) => ({sn, roomMain: room, guest, dept:"BAR", cancelled:false, voided:false});
@@ -84,4 +84,38 @@ const fingerprint = new Function("r", lift("receiptFingerprint") + "\nreturn rec
 st.receipts[rk(recs5[0])] = {status:"pending", corr:{room:"263"}, source:fingerprint(recs5[0])};
 let e = resolve(recs5, {}, recs5[0], st);
 ck("a charge whose room was corrected takes the new room's name", e.shown === "PFUENDL");
+// Display must not depend on receipt order or the room's latest occupant.
+const fullName = "KELLER ANNA/MORGAN", shortName = "KELLER ANNA/MORG";
+const cutReceipt = R("21", "120", shortName), fullReceipt = R("22", "120", fullName);
+for(const receipts of [[cutReceipt, fullReceipt], [fullReceipt, cutReceipt]]){
+  ck("all room receipts can supply a fuller name, in either order", resolve(receipts, {}, cutReceipt).shown === fullName);
+}
+const newRooms = {"120": {guest:"STONE DAVID/ELENA", liveKey:20260903}};
+ck("a departing guest's captured name survives a new room occupant",
+  resolve([cutReceipt], newRooms, cutReceipt, null, {"120":[fullName]}).shown === fullName);
+ck("the arrival list can supply its own guest's full name",
+  resolve([cutReceipt], newRooms, cutReceipt, null, {}, {"120":[fullName]}).shown === fullName);
+ck("another room cannot supply missing characters",
+  resolve([cutReceipt], newRooms, cutReceipt, null, {"121":[fullName]}).shown === shortName);
+ck("two matching full names stay ambiguous",
+  resolve([cutReceipt], {}, cutReceipt, null, {"120":[fullName,fullName+"/ELENA"]}, {"120":["KELLER ANNA/MORGANA"]}).shown === shortName);
+ck("a cancelled receipt cannot supply a fuller name",
+  resolve([cutReceipt, {...fullReceipt,cancelled:true}], {}, cutReceipt).shown === shortName);
+ck("a voided receipt cannot supply a fuller name",
+  resolve([cutReceipt, {...fullReceipt,voided:true}], {}, cutReceipt).shown === shortName);
+ck("source receipt names stay intact",cutReceipt.guest===shortName && fullReceipt.guest===fullName);
+const reorderedFull = "KELLER/STONE ALICE/BRUNO/CLARA";
+const rotatedShort = R("31", "55", "ALICE/BRUNO/CLARA K"), rotatedLong = R("32", "55", "ALICE/BRUNO/CLARA KE");
+const rotatedRooms = {"55": {guest:reorderedFull,liveKey:20260904}};
+for(const receipts of [[rotatedShort,rotatedLong],[rotatedLong,rotatedShort]]){
+  ck("different lengths of the same reordered receipt text expand together",
+    receipts.every(r=>resolve(receipts,rotatedRooms,r).shown===reorderedFull));
+}
+ck("a reordered list fragment of this guest is not a competing name",
+  resolve([rotatedShort],rotatedRooms,rotatedShort,null,{"55":[rotatedLong.guest]}).shown===reorderedFull);
+ck("a genuinely different captured surname still blocks the reordered fragment",
+  resolve([rotatedShort],rotatedRooms,rotatedShort,null,{"55":["KENT ALICE/BRUNO/CLARA"]}).shown===rotatedShort.guest);
+ck("reordered display does not alter source text",rotatedShort.guest==="ALICE/BRUNO/CLARA K" && rotatedLong.guest==="ALICE/BRUNO/CLARA KE");
 console.log(bad ? "\n" + bad + " FAILURES" : "\nall pass");
+
+process.exitCode = bad ? 1 : 0;

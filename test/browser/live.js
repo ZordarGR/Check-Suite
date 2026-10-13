@@ -30,7 +30,9 @@ const ROWS = [
 
    window.__files is the captured set and window.__at its timestamps, both writable from a
    test so a capture can appear or change mid-run the way protel makes them. */
-const bridgeFor = (payload, legacy, capture) => `
+const bridgeFor = (payload, legacy, capture, clockDay = 5) => `
+const NativeDate=Date,fixtureClock=new NativeDate(2026,8,${clockDay},1).getTime();
+window.Date=class extends NativeDate{constructor(...args){super(...(args.length?args:[fixtureClock]));}static now(){return fixtureClock;}};
 window.__files = {IH: ${capture === undefined ? (payload === null ? "null" : JSON.stringify(payload)) : (capture === null ? "null" : JSON.stringify(capture))}, MV: null, AR: null, DP: null};
 window.__at = {IH: 1, MV: 1, AR: 1, DP: 1};
 window.reccheckShortcuts={
@@ -528,10 +530,10 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
   await p.close();
 
   /* 19. WHICH CLOCK STAMPS A REPORT (7a, decided 1.17.41): the census's date when a census
-         is held, the tool's night at capture time before one is. The fixtures are dated 04/09/26, which is
-         not tonight in this container, so the two are told apart. */
+         is held, the tool's night at capture time before one is. The census is dated 04/09/26 and this case pins
+         the tool to the following night, so the two are told apart without ageing out. */
   p = await b.newPage();
-  await p.addInitScript(bridgeFor(null, false));
+  await p.addInitScript(bridgeFor(null, false, undefined, 6));
   await p.setViewportSize({width: 1280, height: 620});
   await p.goto("file://" + path.resolve(__dirname, "h-sweep.html"));
   await p.evaluate(() => window.__t.showScreen("tax"));
@@ -624,13 +626,13 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
     const f = document.getElementById("snInput"); f.value = "12345"; f.dispatchEvent(new Event("input"));
   });
   await p.waitForTimeout(300);
-  const c21a = await p.evaluate(() => ({row: (document.querySelector("#accordions .rrow .name") || {}).textContent || "",
+  const c21a = await p.evaluate(() => ({row: document.querySelector("#accordions .rrow .name")?.firstChild?.textContent || "",
                                         card: (document.querySelector("#matches .match .name") || {}).textContent || ""}));
   ck("before the capture the row and the card carry the cut name", /OLIVER\/NA$/.test(c21a.row) && /OLIVER\/NA$/.test(c21a.card));
   await p.evaluate((txt) => { window.__files.IH = txt; window.__at.IH = 1756944060000; },
     IH("Guests inhouse: 04/09/26", [["ABBUSHI MIRIAM/OLIVER/NAHLA/HELENA", "426", "2/0/0/2/0", "29/08/26", "05/09/26", "CI"]]));
   await p.waitForTimeout(6500);
-  const c21b = await p.evaluate(() => ({row: (document.querySelector("#accordions .rrow .name") || {}).textContent || "",
+  const c21b = await p.evaluate(() => ({row: document.querySelector("#accordions .rrow .name")?.firstChild?.textContent || "",
                                         card: (document.querySelector("#matches .match .name") || {}).textContent || "",
                                         q: document.getElementById("snInput").value,
                                         app: document.querySelector("main").style.display !== "none"}));
@@ -660,7 +662,7 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
     const f = document.getElementById("snInput"); f.value = "12345"; f.dispatchEvent(new Event("input"));
   });
   await p.waitForTimeout(300);
-  const c22a = await p.evaluate(() => ({row: (document.querySelector("#accordions .rrow .name") || {}).textContent || "",
+  const c22a = await p.evaluate(() => ({row: document.querySelector("#accordions .rrow .name")?.firstChild?.textContent || "",
                                         card: (document.querySelector("#matches .match .name") || {}).textContent || ""}));
   ck("guest account: before capture, row and card have the receipt name", /ALICE\/ROB$/.test(c22a.row) && /ALICE\/ROB$/.test(c22a.card));
   await p.evaluate((txt) => { window.__files.IH = txt; window.__at.IH = 1756944060000; },
@@ -670,7 +672,7 @@ const ck = (l, ok) => { if(!ok) bad++; console.log("  " + (ok ? "ok  " : "FAIL")
       ["IRIS", "9605", "0/0/0/0/0", "18/04/26", "10/11/26", "CI"],
       ["CREDIT CARDS", "9604", "0/0/0/0/0", "18/04/26", "10/11/26", "CI"]]));
   await p.waitForTimeout(6500);
-  const c22b = await p.evaluate(() => ({row: (document.querySelector("#accordions .rrow .name") || {}).textContent || "",
+  const c22b = await p.evaluate(() => ({row: document.querySelector("#accordions .rrow .name")?.firstChild?.textContent || "",
                                         card: (document.querySelector("#matches .match .name") || {}).textContent || "",
                                         q: document.getElementById("snInput").value,
                                         app: document.querySelector("main").style.display !== "none"}));

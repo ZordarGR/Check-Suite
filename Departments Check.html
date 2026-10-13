@@ -2103,7 +2103,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.106";
+const APP_VERSION = "1.17.107";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -3018,7 +3018,14 @@ function refreshNames(){
    which moves him or touches his data. Nothing here decides anything — it draws what is
    already recorded. */
 window.__rcMovesChanged = function(){
+  const before = JSON.stringify([LEAVING, ARRIVING]);
   try{ renderMoves(); }catch(e){ uiFault("movesChanged", e); }
+  // A departure capture can now complete a receipt's displayed name even when
+  // the current room-name cache did not change. Refresh the department rows too.
+  if(MODEL && before !== JSON.stringify([LEAVING, ARRIVING])){
+    if(SCREEN === "app") refreshNames();
+    else NAMES_STALE = true;
+  }
   try{ refreshSearchMarks(); }catch(e){ uiFault("searchMarks", e); }
 };
 /* feed tonight's report into the DB: rooms are the stable keys, guest names the
@@ -3244,12 +3251,15 @@ function isCutOf(short, full){
 function expandReceiptName(room, own, candidate, allowReorder){
   const full = String(candidate || "").trim(), live = ROOMS[String(room)];
   const matches = (part, label) => nameTextIn(part, label, allowReorder);
+  // A reordered receipt fragment must use the same rotation rule when checking
+  // competing labels; otherwise a longer cut of itself is mistaken for a rival.
+  const compatible = (a, b) => matches(a, b) || matches(b, a);
   if(!own || !matches(own, full)) return "";
   if(sameName(own, full)) return full;
   const rivals = [].concat(typeof LEAVING === "undefined" ? [] : (LEAVING[room] || []),
                            typeof ARRIVING === "undefined" ? [] : (ARRIVING[room] || []),
                            live && live.liveKey && live.guest ? [live.guest] : []);
-  if(rivals.some(n => matches(own, n) && !sameGuestLabel(n, full))) return "";
+  if(rivals.some(n => matches(own, n) && !compatible(n, full))) return "";
   if(MODEL && !MODEL._nameFragments){
     const byRoom = {};
     for(const r of MODEL.receipts || []) if(r.roomMain && r.guest && !r.cancelled && !r.voided){
@@ -3259,8 +3269,8 @@ function expandReceiptName(room, own, candidate, allowReorder){
   }
   const fragments = MODEL && MODEL._nameFragments[String(room)];
   const ambiguous = fragments && [...fragments].some(n =>
-    (matches(n, full) && !sameGuestLabel(own, n)) ||
-    (!sameName(own, n) && matches(own, n) && !sameGuestLabel(n, full)));
+    (matches(n, full) && !compatible(own, n)) ||
+    (!sameName(own, n) && matches(own, n) && !compatible(n, full)));
   return ambiguous ? "" : full;
 }
 function receiptFullName(room, own, allowReorder){
@@ -3271,6 +3281,29 @@ function receiptFullName(room, own, allowReorder){
 function receiptName(r){
   const own = String((r && r.guest) || "").trim();
   return receiptFullName(effRoom(r), own) || own;
+}
+/* Display may use a fuller name already captured on tonight's departure/arrival
+   lists or another receipt for this room. A room's current occupant and the first
+   receipt are not the only candidates on a changeover night. Matching/marks still
+   use receiptName; conflicting candidates leave the printed text visible. */
+function receiptDisplayName(room, own){
+  if(!own) return "";
+  const live = ROOMS[String(room)];
+  const candidates = [].concat(live && live.liveKey ? [live.guest] : [],
+    typeof LEAVING === "undefined" ? [] : LEAVING[room] || [],
+    typeof ARRIVING === "undefined" ? [] : ARRIVING[room] || []);
+  if(MODEL && !MODEL._nameFragments){
+    const byRoom = {};
+    for(const r of MODEL.receipts || []) if(r.roomMain && r.guest && !r.cancelled && !r.voided){
+      (byRoom[String(r.roomMain)] = byRoom[String(r.roomMain)] || new Set()).add(r.guest);
+    }
+    MODEL._nameFragments = byRoom;
+  }
+  const fragments = MODEL && MODEL._nameFragments[String(room)];
+  if(fragments) candidates.push(...fragments);
+  const names = [...new Set(candidates)].filter(n => nameTextIn(own, n, true));
+  const full = names.find(n => names.every(other => nameTextIn(other, n, true)));
+  return full ? expandReceiptName(room, own, full, true) : "";
 }
 function guestFor(room, r){
   /* Expand only the complete printed name fragment, wherever it appears continuously
@@ -3290,19 +3323,16 @@ function guestFor(room, r){
      above is its FIRST receipt's guest, and on a changeover day a room has two: his
      example, 06/09 — dimitris leaves on the 10th and filippis takes the room; a receipt
      under filippis is filippis's, whatever the room's first receipt said. So a receipt
-     whose entire printed text occurs in the census or first receipt's fuller name takes
-     that; otherwise it keeps its own. A short abbreviation is not expanded by guess. */
+     whose entire printed text identifies one compatible fuller captured/printed name
+     takes that; otherwise it keeps its own. Competing guests remain unresolved. */
   /* Not for a receipt whose ROOM he corrected by hand: it was printed under the wrong
      room, so its printed name is the wrong room's guest, and the corrected room's name
      is the one that is true of it. */
   if(r && !(rState(r).corr && rState(r).corr.room)){
     const own = String(r.guest || "").trim();
-    const full = receiptFullName(room, own, true);
+    const full = receiptDisplayName(room, own);
     if(full) return full;
-    if(own){
-      if(onReceipt) return expandReceiptName(room, own, onReceipt, true) || own;
-      return own; // a same-day room cache cannot rename this receipt after turnover
-    }
+    if(own) return own; // a same-day room cache cannot rename this receipt after turnover
   }
   if(live && live.guest && live.liveKey){
     if(!onReceipt) return live.guest;                          // nothing to disagree with
@@ -3999,7 +4029,7 @@ function paintProfileName(){
 function refreshProfileName(){
   const sc = window.reccheckShortcuts;
   if(!sc){ paintProfileName(); return; }
-  sc.get().then(st => {
+  return sc.get().then(st => {
     const list = (st && st.profiles) || [];
     const p = list.find(x => x.id === st.active);
     const n = (p && p.name) || "";
@@ -5425,6 +5455,7 @@ function applyReceiptOrder(acc, dept){
   body.insertBefore(fragment,body.querySelector(":scope > .otherPost"));
 }
 function renderAccordions(){
+  LEAVING = leavingIndex(); // resolve names from this report's captured lists before drawing rows
   const wrap = $("#accordions");
   const openSet = new Set([...wrap.querySelectorAll(".acc.open")].map(a => a.dataset.dept));
   wrap.innerHTML = "";
@@ -6564,7 +6595,7 @@ function capturedGuestName(st, label, rooms, arrival, departure){
   const names = [];
   const add = (row, knownDeparture = 0) => {
     if(!row || !rooms.includes(pillRoom(row.room, row.name)) || (knownDeparture || dateNum2(row.dep)) !== departure ||
-       !nameTextIn(label, row.name)) return;
+       !nameTextIn(label, row.name, true)) return;
     const full = String(row.name || "").trim();
     if(sameName(full, label)) return;
     if(!names.some(n => sameName(n, full))) names.push(full);
@@ -8193,7 +8224,7 @@ $("#resetDay").onclick = () => {
   };
 };
 /* ---------- auto-update (active only inside the desktop app) ---------- */
-(async function(){
+window.__rcAppReady = (async function(){
   /* BEFORE THE FIRST AWAIT. The tax half boots beside this one and its first capture
      lands after its own round trips to main; ingestLiveNames then writes ROOMS and
      saveRooms() writes localStorage. With ROOMS still {} that would save a census-only
@@ -8201,6 +8232,7 @@ $("#resetDay").onclick = () => {
      because this IIFE had one round trip fewer than that path; reading localStorage is
      synchronous and needs nothing below, so it is done first and the race is gone. */
   loadRooms();
+  if(window.reccheckApp && window.reccheckApp.progress) await window.reccheckApp.progress("folders");
   if(window.reccheckFiles){
     try{ FB.p.dept.dir = await window.reccheckFiles.getDir("dept"); }catch(e){}
     try{ FB.p.tax.dir = await window.reccheckFiles.getDir("tax"); }catch(e){}
@@ -8216,25 +8248,26 @@ $("#resetDay").onclick = () => {
         if(task){ setChecklistDone(task,!task.done); renderChecklist(); }
       });
   }
-  /* The room database the app's own folder is holding, pulled in at start so the nickname
-     panel and the names are complete before any report is opened. NOT awaited: nothing on
-     this screen needs it yet, and a boot that waits on an IPC round-trip is a boot that
-     can hang on one. Opening a report does await it, which is where it has to be right.
-     (loadRooms() itself ran at the top of this function, before the first await.) */
-  mergeRoomsFromDisk();
+  if(window.reccheckApp && window.reccheckApp.progress) await window.reccheckApp.progress("rooms");
+  /* Finish room recovery before startup capture replay can write any names and
+     before the desktop window is revealed. */
+  await mergeRoomsFromDisk();
+  if(window.reccheckApp && window.reccheckApp.progress) await window.reccheckApp.progress("preferences");
+  loadWatch();
   loadAlerts();
   paintAlertsBtn();
   paintSevSel();
   clNightCheck();
   applyLang();
-  refreshProfileName();      // applyLang only repaints the cached name; this loads it
+  if(window.reccheckApp && window.reccheckApp.progress) await window.reccheckApp.progress("profile");
+  await refreshProfileName();
   showScreen("menu");
   setInterval(paintClock, 1000);                 // live clock — repaint every second
   setInterval(clNightCheck, 30000);              // night rollover check
   const ver = $("#appVer");
   if(ver) ver.textContent = "v" + APP_VERSION;
   if(!window.reccheckUpdate) return;             // plain browser — nothing to do
-  window.reccheckUpdate.version().then(v => { if(ver && v) ver.textContent = "v" + v; }).catch(() => {});
+  await window.reccheckUpdate.version().then(v => { if(ver && v) ver.textContent = "v" + v; }).catch(() => {});
   if(window.reccheckUpdate.onProgress){
     window.reccheckUpdate.onProgress(p => {
       const box = $("#updBox");
@@ -8260,7 +8293,7 @@ $("#resetDay").onclick = () => {
     };
     document.body.append(b);
   });
-})();
+})().catch(e => { window.__rcStorageFault("startup",e); return false; });
 })();
 </script>
 <script id="jszip">
@@ -9374,6 +9407,7 @@ function inhouseDate(title){
    twenty times a minute would move the page under his hands mid-audit, and that is a
    fault rather than a faithfulness. The read still happens at his cadence. */
 let LIVE_TIMER = null;
+let LIVE_INITIALIZED = false;
 let LIVE_SIG = "";                       // the last list seen, so an unchanged one is cheap
 /* He asked for three seconds and then offered five "if you think its going to cause
    issues". Five, and the reason is the successful read rather than the failed one: at
@@ -9394,10 +9428,12 @@ function liveStop(){
 }
 /* Started at boot and whenever legacy changes. Legacy is the manual mode, so it is the
    one thing that switches this off. */
-function liveEnsure(){
+function liveEnsure(initialized = false){
+  if(initialized) LIVE_INITIALIZED = true;
+  if(!LIVE_INITIALIZED) return;
   if(legacyOn() || !LIVE_OK){ liveStop(); return; }
   if(LIVE_TIMER) return;
-  autoReadInhouse();
+  if(!initialized) autoReadInhouse();
   LIVE_TIMER = setInterval(autoReadInhouse, LIVE_RETRY_MS);
 }
 /* THE IN-HOUSE LIST EVERY TICK, THE OTHER THREE IN TURN.
@@ -10557,7 +10593,43 @@ window.__taSimulate=function(rk,tk){RATE=rk?{kind:'rate',dateKey:rk,bizDate:dfmt
 
 /* ============ boot ============ */
 function pruneZeroMem(){ /* Zero snapshots can be explicit reversals; preserve their evidence. */ }
-(function boot(){liveEnsure();el('taxBack').textContent='← '+(LANG==='el'?'ΕΛΕΓΧΟΣ':'AUDIT');applyLegacy(legacyOn());pruneZeroMem();const mem=loadMem();const ds=recentDates(mem,7);if(ds.length)EXPANDED.add(ds[0]);applyStatic();renderMemory();el('memsec').style.display=ds.length?'block':'none';})();
+async function initializeCapturedData(){
+  if(legacyOn() || !LIVE_OK || !window.reccheckShortcuts) return;
+  // Drain the saved queue before starting the timer. A failed capture remains
+  // unacknowledged, with its existing save-error banner visible for recovery.
+  while(true){
+    const faults = window.__rcStorageFaultCount || 0;
+    if(await replayCapturedBatch()) break;
+    if((window.__rcStorageFaultCount || 0) !== faults || window.__rcImportBlocked) return;
+  }
+  await autoReadInhouse();
+}
+window.__rcTaxReady = (async function boot(){
+  if(await window.__rcAppReady === false) return false;
+  if(window.reccheckApp && window.reccheckApp.progress) await window.reccheckApp.progress("records");
+  el('taxBack').textContent='← '+(LANG==='el'?'ΕΛΕΓΧΟΣ':'AUDIT');
+  applyLegacy(legacyOn());pruneZeroMem();
+  const mem=loadMem(), ds=recentDates(mem,7);
+  if(ds.length) EXPANDED.add(ds[0]);
+  applyStatic();renderMemory();el('memsec').style.display=ds.length?'block':'none';
+  if(window.reccheckApp && window.reccheckApp.progress) await window.reccheckApp.progress("captures");
+  await initializeCapturedData();
+  liveEnsure(true);
+})().catch(e => { window.__rcStorageFault("startup",e); return false; });
+})();
+</script>
+<script id="startup">
+// The desktop host keeps the main window hidden until both app scopes and the
+// first restored data/capture pass have finished. Browsers need no host handshake.
+(async function(){
+  if(!window.reccheckApp || !window.reccheckApp.ready) return;
+  try{
+    if(!window.__rcAppReady || !window.__rcTaxReady) throw new Error("Startup scripts could not initialize");
+    await Promise.all([window.__rcAppReady,window.__rcTaxReady]);
+  }catch(e){ window.__rcStorageFault("startup",e); }
+  if(window.reccheckApp.progress) await window.reccheckApp.progress("interface").catch(() => {});
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  await window.reccheckApp.ready().catch(() => {});
 })();
 </script>
 </body>

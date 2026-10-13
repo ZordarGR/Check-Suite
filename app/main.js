@@ -11,12 +11,37 @@ const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
 let win = null, updater = null, hub = null, arrangementService = null;
 let tray = null, QUITTING = false, TRAYLANG = "en";
+let startupGate = null;
+let startupChecking = false;
+const STARTUP_STAGES = {
+  shortcuts: [1,"Starting shortcuts…"], scripts: [2,"Loading application scripts…"],
+  folders: [3,"Loading file locations…"], rooms: [4,"Loading room names and nicknames…"],
+  preferences: [5,"Loading checklist and alerts…"], profile: [6,"Loading your profile…"],
+  records: [7,"Loading saved status and tax data…"], captures: [8,"Loading saved captures…"],
+  interface: [9,"Preparing the window…"]
+};
+function startupHTML(){
+  return '<!DOCTYPE html><html><meta charset="utf-8"><style>body{margin:28px;background:#0a0e14;color:#dbe4f0;font:15px Segoe UI,sans-serif}b{color:#f5b453}p{font-size:13px;min-height:34px;margin:16px 0 12px}progress{width:100%;height:10px;border:0;border-radius:5px;overflow:hidden}progress::-webkit-progress-bar{background:#1b2737}progress::-webkit-progress-value{background:#4da6ff}</style><b>Starting Pro-Check…</b><p id="startupLabel" role="status" aria-live="polite">Checking for updates…</p><progress id="startupProgress" max="10" aria-label="Startup progress"></progress></html>';
+}
+function startupProgress(label, value){
+  if(!startupGate || startupGate.isDestroyed()) return;
+  const payload = JSON.stringify({label,value});
+  try{
+    return startupGate.webContents.executeJavaScript('(()=>{const p='+payload+';document.getElementById("startupLabel").textContent=p.label;const bar=document.getElementById("startupProgress");if(p.value===null)bar.removeAttribute("value");else{bar.max=10;bar.value=p.value;}})()').catch(() => {});
+  }catch(e){ return Promise.resolve(); }
+}
+function startupStage(stage){
+  const step = STARTUP_STAGES[stage];
+  if(!step) return false;
+  startupProgress(step[1],step[0]);
+  return true;
+}
 
 /* ---- single instance: a second launch just resurfaces the running one ---- */
 if(!app.requestSingleInstanceLock()){
   app.exit(0);
 }
-app.on("second-instance", () => { if(win){ win.show(); win.focus(); } });
+app.on("second-instance", () => showMain());
 
 const TRAY_TXT = {
   en: {open: "Open Pro-Check", overlay: "Toggle checklist overlay", check: "Check for updates",
@@ -48,7 +73,34 @@ async function runCheck(manual){
   }catch(e){}
   finally{ CHECKING = false; }   // the pending early-return used to skip this and wedge every later check
 }
-function showMain(){ if(win){ win.show(); win.focus(); } }
+function showMain(){
+  if(win && !win.isDestroyed() && win.startupReady){ win.show(); win.focus(); }
+  else if(startupGate && !startupGate.isDestroyed()){ startupGate.show(); startupGate.focus(); }
+}
+function finishMainStartup(){
+  if(!win || win.isDestroyed() || win.startupReady || !win.startupPainted || !win.startupRenderer || !win.startupBackend) return;
+  win.startupReady = true;
+  const created = win, gate = startupGate;
+  return Promise.resolve(startupProgress("Ready",10)).then(() => {
+    if(win !== created || created.isDestroyed()) return;
+    if(gate && !gate.isDestroyed()) gate.destroy();
+    if(startupGate === gate) startupGate = null;
+    showMain();
+    if(updater && updater.pending) win.webContents.send("reccheck-update-ready", updater.pending);
+  });
+}
+ipcMain.handle("app-ready", e => {
+  if(!win || win.isDestroyed() || e.sender !== win.webContents ||
+     (e.senderFrame && e.senderFrame !== win.webContents.mainFrame)) return false;
+  win.startupRenderer = true;
+  finishMainStartup();
+  return true;
+});
+ipcMain.handle("app-startup-progress", (e,stage) => {
+  if(!win || win.isDestroyed() || win.startupReady || e.sender !== win.webContents ||
+     (e.senderFrame && e.senderFrame !== win.webContents.mainFrame)) return false;
+  return startupStage(stage);
+});
 
 /* ---- system-wide overlay hotkey (works unfocused / from the tray) ---- */
 /* The overlay puts itself away once the night's tasks are all ticked. It still exists,
@@ -437,7 +489,7 @@ function tauStart(){
   const exe = tauPath();
   if(!exe){ TAUINFO = {state: "no-exe"}; return; }
   const wrote = writeBinds();
-  helperVerb("status").then(st => {
+  return helperVerb("status").then(st => {
     TAUINFO = {state: st.running ? "running" : "stopped", exe: exe, boot: !!st.on,
                ver: st.ver, res: st.res, binds: wrote ? bindsPath() : "COULD NOT WRITE", err: st.err,
                specs: wrote ? LAST_SPECS.slice() : []};
@@ -522,6 +574,7 @@ function destroyOverlay(){
 
 function createWindow(file){
   win = new BrowserWindow({
+    show: false,
     width: 1180,
     height: 860,
     autoHideMenuBar: true,
@@ -532,7 +585,12 @@ function createWindow(file){
       preload: path.join(__dirname, "preload.js")
     }
   });
-  win.loadURL(pathToFileURL(file).toString());
+  const created = win;
+  win.once("ready-to-show", () => {
+    if(win !== created) return;
+    win.startupPainted = true;
+    finishMainStartup();
+  });
   win.webContents.once("did-finish-load", () => {
     if(updater && updater.pending)
       win.webContents.send("reccheck-update-ready", updater.pending);
@@ -541,6 +599,13 @@ function createWindow(file){
     if(!QUITTING){ e.preventDefault(); win.hide(); }   // X hides to tray — the overlay stays up
   });
   win.on("closed", () => { win = null; destroyOverlay(); });
+  win.loadURL(pathToFileURL(file).toString()).catch(error => {
+    console.error("Startup page could not load:",error);
+    if(created.isDestroyed() || win !== created) return;
+    return created.loadURL("data:text/html;charset=utf-8," + encodeURIComponent('<!DOCTYPE html><html><meta charset="utf-8"><body style="background:#0a0e14;color:#dbe4f0;font:16px Segoe UI,sans-serif;padding:32px"><h2>Pro-Check could not load</h2><p>Quit Pro-Check from its tray menu, then reopen it.</p></body></html>')).then(() => {
+      if(win === created){ created.startupRenderer = true; finishMainStartup(); }
+    }).catch(() => {});
+  });
 }
 
 /* Required updates run before loading the audit renderer or starting its writers.
@@ -548,17 +613,27 @@ function createWindow(file){
 async function startupUpdate(){
   let gate;
   try{
-    gate = new BrowserWindow({width:440,height:170,resizable:false,closable:false,autoHideMenuBar:true,
-      backgroundColor:"#0a0e14",title:"Pro-Check · Checking for updates",
+    gate = new BrowserWindow({width:440,height:190,resizable:false,closable:false,autoHideMenuBar:true,
+      backgroundColor:"#0a0e14",title:"Pro-Check · Starting",
       webPreferences:{contextIsolation:true,sandbox:true,nodeIntegration:false}});
-    await gate.loadURL("data:text/html;charset=utf-8," + encodeURIComponent('<!DOCTYPE html><html><meta charset="utf-8"><style>body{margin:30px;background:#0a0e14;color:#dbe4f0;font:15px Segoe UI,sans-serif}b{color:#f5b453}p{font-size:13px}</style><b>Starting Pro-Check…</b><p>Checking for required updates. Please wait while any required update downloads and installs.</p></html>'));
+    startupGate = gate;
+    startupChecking = true;
+    await gate.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(startupHTML()));
     const info = await updater.check({forcedOnly:true});
+    startupGate = gate;
     if(!info || info.forced !== true) return false;
     if(info.full) return await launchPendingInstaller(true);
     updater.promote(); // verified HTML is loaded directly below, without a second restart
     return false;
   }catch(e){return false;}
-  finally{if(gate && !gate.isDestroyed()) gate.destroy();}
+  finally{
+    startupChecking = false;
+    if(INSTALLING_UPDATE){ if(gate && !gate.isDestroyed()) gate.destroy(); startupGate = null; }
+    else if(gate && !gate.isDestroyed()){
+      startupGate = gate;
+      startupStage("shortcuts");
+    }
+  }
 }
 
 app.whenReady().then(async () => {
@@ -569,6 +644,10 @@ app.whenReady().then(async () => {
     updateUrl: (process.env.RECCHECK_UPDATE_URL || REPO_RAW + "/update/latest.json"),
     fallbackReleaseUrl: "https://github.com/ZordarGR/Check-Suite/releases/latest",
     onProgress: (p) => {
+      if(startupGate && startupChecking && p){
+        const label = p.phase === "downloading" ? "Downloading update…" : p.phase === "failed" ? "Continuing with the installed version…" : "Checking for updates…";
+        startupProgress(label,p.phase === "downloading" && Number.isFinite(p.pct) ? p.pct/10 : null);
+      }
       if(win && !win.isDestroyed()) win.webContents.send("reccheck-update-progress", p);
       if(!MANUAL_SHOWN && p && p.phase === "downloading"){ MANUAL_SHOWN = true; showMain(); }
     }
@@ -581,30 +660,35 @@ app.whenReady().then(async () => {
   });
   hub.startWatch();
   const eff = updater.effective();
-  createWindow(eff.file);
-  try{ if(hub.readConfig().overlayOn) createOverlay(); }catch(e){}
   buildTray();
   applyHotkeys();
   /* Kill anything left from an older build FIRST — a pre-1.17.11 helper does not have
      the caps window, so the new one's single-instance check cannot see it, and two
      helpers would mean two sets of hooks. Then publish the bindings and bring the
      standalone up. It is spawned detached, so it outlives us. */
-  tauKillStrays(() => {
-    tauStart();
-    if(process.platform==="win32"){
-      try{
-        const local=process.env.LOCALAPPDATA||app.getPath("userData");
-        let enabled=false;try{enabled=arrangementSetting();}catch(e){console.error(e.message);}
-        arrangementService = require("./arrangement-live").start({electron:require("electron"),helperPath:tauPath(),
-          captureDir:path.join(local,"RecCheck"),userData:app.getPath("userData"),enabled});
-      }catch(e){ console.error("Arrangement overlay unavailable:",e.message); }
-    }
-    /* 1.17.10 drew the Caps Lock icon inside this app and shipped with it ON. 1.17.11
-       moved it into the helper, which only survives RecCheck closing if it starts at
-       login. Carry that setting across exactly ONCE, so a feature he already had does
-       not go quiet the night the update lands. After this, unticking it stays unticked. */
-    setTimeout(() => migrateHelperBoot().catch(() => {}), 1500);
-  });
+  await new Promise(resolve => tauKillStrays(async () => {
+    try{
+      await tauStart();
+      if(process.platform==="win32"){
+        try{
+          const local=process.env.LOCALAPPDATA||app.getPath("userData");
+          let enabled=false;try{enabled=arrangementSetting();}catch(e){console.error(e.message);}
+          arrangementService = require("./arrangement-live").start({electron:require("electron"),helperPath:tauPath(),
+            captureDir:path.join(local,"RecCheck"),userData:app.getPath("userData"),enabled});
+        }catch(e){ console.error("Arrangement overlay unavailable:",e.message); }
+      }
+      /* 1.17.10 drew the Caps Lock icon inside this app and shipped with it ON. 1.17.11
+         moved it into the helper, which only survives RecCheck closing if it starts at
+         login. Carry that setting across exactly ONCE, so a feature he already had does
+         not go quiet the night the update lands. After this, unticking it stays unticked. */
+      setTimeout(() => migrateHelperBoot().catch(() => {}), 1500);
+    }catch(e){ console.error("Startup shortcuts unavailable:",e); }
+    finally{ resolve(); }
+  }));
+  startupStage("scripts");
+  createWindow(eff.file);
+  win.startupBackend = true;
+  try{ if(hub.readConfig().overlayOn) createOverlay(); }catch(e){}
   MANUAL_SHOWN = true;                        // startup check never pops the window
   updater.check().then(info => {
     if(info && win && !win.isDestroyed())

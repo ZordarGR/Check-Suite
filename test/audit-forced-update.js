@@ -94,15 +94,16 @@ async function scenario(label,fn){
      promote(){events.push("promoted");return true;},installerReady(){return valid;},claimForcedInstall(){events.push("claimed");return valid;}},
     spawn(file,args,opts){events.push("spawn-request");assert.equal(file,"fixture.exe");assert.deepEqual(Array.from(args),["/S"]);assert.equal(opts.windowsHide,true);
      const child=new EventEmitter();child.unref=()=>events.push("unref");queueMicrotask(()=>child.emit(spawnError?"error":"spawn",new Error("fixture")));return child;},
+    startupHTML:()=>'<html><progress></progress></html>',startupStage:()=>{events.push("initializing");},
     startInstallSplash(){events.push("splash");},setTimeout(fn){timers.push(fn);},app:{exit(){events.push("exit");}}};
    vm.createContext(c);vm.runInContext(gate+install,c);return c;
   }
   for(const pending of [null,{version:"1.0.1"}, {version:"1.0.1",forced:false}]){
-   const c=context({pending});assert.equal(await c.startupUpdate(),false);assert.deepEqual(c.events,["gate","gate-loaded","checked","gate-closed"]);
+   const c=context({pending});assert.equal(await c.startupUpdate(),false);assert.deepEqual(c.events,["gate","gate-loaded","checked","initializing"]);
   }
   let c=context({pending:{version:"1.0.1",forced:true}});assert.equal(await c.startupUpdate(),false);assert(c.events.includes("promoted"));assert(!c.events.includes("exit"));
   for(const opts of [{spawnError:true},{valid:false},{checkError:true}]){
-   c=context({pending:{forced:true,full:true,downloaded:true,setupPath:"fixture.exe"},...opts});assert.equal(await c.startupUpdate(),false);assert.equal(c.timers.length,0);assert(!c.events.includes("exit"));assert(c.events.includes("gate-closed"));
+   c=context({pending:{forced:true,full:true,downloaded:true,setupPath:"fixture.exe"},...opts});assert.equal(await c.startupUpdate(),false);assert.equal(c.timers.length,0);assert(!c.events.includes("exit"));assert(c.events.includes("initializing"));
   }
   c=context({pending:{forced:true,full:true,downloaded:true,setupPath:"fixture.exe"}});
   assert.equal(await c.startupUpdate(),true);assert(c.events.indexOf("unref")<c.events.indexOf("splash"));assert.equal(c.timers.length,1);assert(!c.events.includes("exit"));c.timers[0]();assert(c.events.includes("exit"));
@@ -112,10 +113,19 @@ async function scenario(label,fn){
   for(const stop of [false,true]){
    let ready;const events=[];const ctx={app:{whenReady:()=>({then:fn=>{ready=fn;}}),getPath:()=>"/synthetic"},Updater:class{effective(){return {file:"verified.html"};}check(){return Promise.resolve(null);}},
     FileHub:class{constructor(){events.push("hub");}startWatch(){}readConfig(){return {};}},path,process:{env:{},platform:"linux"},__dirname:"/synthetic",PKG_VERSION:"1.0.0",REPO_RAW:"https://fixture",win:null,
-    startupUpdate:async()=>{events.push("gate");await Promise.resolve();events.push("settled");return stop;},createWindow:file=>{events.push("audit");assert.equal(file,"verified.html");},
-    buildTray(){},applyHotkeys(){},tauKillStrays(){events.push("helper");},setInterval(fn,ms){assert.equal(ms,1800000,"background checks every 30 minutes");},showMain(){}};
-   vm.createContext(ctx);vm.runInContext(boot,ctx);await ready();
-   assert.deepEqual(events,stop?["gate","settled"]:["gate","settled","hub","audit","helper"]);
+    startupUpdate:async()=>{events.push("gate");await Promise.resolve();events.push("settled");return stop;},createWindow:file=>{events.push("audit");assert.equal(file,"verified.html");ctx.win={};},
+    buildTray(){},applyHotkeys(){},tauKillStrays(cb){events.push("helper");cb();},tauStart(){},startupStage(){},setTimeout(){},
+    setInterval(fn,ms){assert.equal(ms,1800000,"background checks every 30 minutes");},showMain(){}};
+   vm.createContext(ctx);vm.runInContext(boot,ctx);
+   let helperReady;
+   if(!stop)ctx.tauStart=()=>new Promise(resolve=>{helperReady=resolve;});
+   const starting=ready();
+   if(!stop){
+    for(let i=0;i<10&&!helperReady;i++)await Promise.resolve();
+    assert.equal(typeof helperReady,"function");assert(!events.includes("audit"),"main window waits for shortcut initialization");helperReady();
+   }
+   await starting;
+   assert.deepEqual(events,stop?["gate","settled"]:["gate","settled","hub","helper","audit"]);
   }
   console.log("PASS startup lifecycle: no prompt, no audit writers before gate, no relaunch for HTML, spawn errors/corruption preserve running process, successful silent installer exits only after spawn, duplicate launch blocked");
  }finally{global.fetch=nativeFetch;fs.rmSync(dir,{recursive:true,force:true});}

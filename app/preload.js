@@ -64,6 +64,8 @@ contextBridge.exposeInMainWorld("reccheckShortcuts", {
   profileSelect: (id) => ipcRenderer.invoke("sc-profile-select", id)
 });
 contextBridge.exposeInMainWorld("reccheckApp", {
+  progress: (stage) => ipcRenderer.invoke("app-startup-progress", stage),
+  ready: () => ipcRenderer.invoke("app-ready"),
   setLang: (l) => ipcRenderer.invoke("app-set-lang", l)
 });
 contextBridge.exposeInMainWorld("reccheckHelp", {
