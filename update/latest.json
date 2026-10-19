@@ -5,8 +5,8 @@
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.107/Pro-Check-Setup.exe",
   "setupSha256": "a50618437f9f76250e721d3dae19ce19eb02c51bad368c2c37603b39f2477791",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/bb5576c7a339e1e4a8d8fd2333df2d6d7958a6ea/Departments%20Check.html",
-  "sha256": "afad7dc5c0eadcdada76311f48f8aa89f8449200bfe1aa35903ad9073e090ac9",
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/55d0180f61f225a94747d81526f7cf06dec9d42e/Departments%20Check.html",
+  "sha256": "0948d78e7b4f7867eef14cc55fd5769dc5e684acc2b6503c50199f1bd78b4332",
   "notes": "Add Cashier Check to the main menu: euro denomination counts, three statement amounts, exact-cent surplus/shortage and a fixed register balance saved across sessions. Reset keeps the fixed balance; Reset All restores and saves €500.",
   "force": false
 }
