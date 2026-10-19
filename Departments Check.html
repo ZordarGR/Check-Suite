@@ -951,6 +951,32 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
   body.taxPrint #print-mount{display:block !important}
   body.taxPrint #printSheet{display:none !important}
 }
+
+/* Register Companion, within the existing navigation and palette. */
+body.onCashier #landing{max-width:1400px}
+#cashierScreen{max-width:1200px;margin:0 auto;text-align:left}
+#cashierScreen h2{margin-bottom:18px}
+#cashierScreen h3{margin:22px 0 10px}
+#cashierScreen input{box-sizing:border-box;width:100%;min-width:52px;padding:9px 5px;background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;font:inherit;text-align:right}
+#cashierScreen input:focus{outline:2px solid var(--amber)}
+#cashierScreen input[aria-invalid="true"]{border-color:var(--red)}
+.cashierBase{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+#cashierBase{max-width:160px}
+#cashierSaved{color:var(--dim);font-size:12px}
+.cashierTable{overflow-x:auto;max-width:100%}
+.cashierTable table{width:100%;min-width:1050px;table-layout:fixed;border-collapse:collapse}
+.cashierTable th,.cashierTable td{padding:6px;border:1px solid var(--line);text-align:right;white-space:nowrap}
+.cashierTable th{font-size:12px}
+.cashierAmounts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.cashierAmounts label span{display:block;margin-bottom:6px}
+.cashierTotals{margin-top:20px}
+#cashierResult{padding:16px;margin:16px 0;border:1px solid var(--line);border-radius:8px;font-weight:700}
+#cashierResult[data-verdict="ok"]{background:rgba(74,222,128,.12);color:var(--green)}
+#cashierResult[data-verdict="short"]{background:rgba(248,113,113,.12);color:var(--red)}
+#cashierResult[data-verdict="over"]{background:rgba(245,180,83,.12);color:var(--amber)}
+.cashierActions{display:flex;gap:10px;flex-wrap:wrap}
+@media(max-width:540px){.cashierAmounts{grid-template-columns:1fr}}
+
 </style>
 <style id="themeStyles">
 /* Optional screen theme. Printing keeps its existing black-and-white rules. */
@@ -1073,8 +1099,31 @@ body.helpOn #taxScreen .wrap{margin-left:300px;margin-right:12px;max-width:none}
     <button class="mItem primary" id="auditBtn"><span class="mLabel"></span><span class="mSub"></span></button>
     <button class="mItem primary" id="alertsBtn"><span class="mLabel"></span><span class="mSub"></span></button>
     <button class="mItem primary" id="statusBtn"><span class="mLabel"></span><span class="mSub"></span></button>
+    <button class="mItem primary" id="cashierBtn"><span class="mLabel">Cashier Check</span><span class="mSub"></span></button>
     <button class="mItem primary" id="reportsBtn"><span class="mLabel"></span><span class="mSub"></span></button>
   </div>
+
+  <section id="cashierScreen" style="display:none" aria-labelledby="cashierTitle">
+    <h2 id="cashierTitle">Cashier Check</h2>
+    <div class="cashierBase"><label for="cashierBase" data-cashier="base"></label>
+      <input id="cashierBase" type="number" min="0" step="0.01" value="500">
+      <span id="cashierSaved" role="status"></span></div>
+    <h3 data-cashier="cash"></h3>
+    <div class="cashierTable"><table><thead><tr id="cashierDenominations"></tr></thead>
+      <tbody><tr id="cashierCounts"></tr><tr id="cashierProducts"></tr></tbody></table></div>
+    <h3 data-cashier="statement"></h3>
+    <div class="cashierAmounts">
+      <label><span data-cashier="amount1"></span><input id="cashierAmount1" type="number" step="0.01"></label>
+      <label><span data-cashier="amount2"></span><input id="cashierAmount2" type="number" step="0.01"></label>
+      <label><span data-cashier="amount3"></span><input id="cashierAmount3" type="number" step="0.01"></label>
+    </div>
+    <div class="cashierTotals"><span data-cashier="counted"></span> <output id="cashierCounted">0.00 €</output>
+      · <span data-cashier="expected"></span> <output id="cashierExpected">—</output></div>
+    <div id="cashierResult" role="status" aria-live="polite"></div>
+    <div class="cashierActions"><button class="btn" id="cashierReset" data-cashier="reset"></button>
+      <button class="btn" id="cashierResetAll" data-cashier="resetAll"></button>
+      <button class="btn" id="cashierBack"></button></div>
+  </section>
 
   <div id="reportsScreen" style="display:none">
     <div class="mNav">
@@ -2103,7 +2152,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.107";
+const APP_VERSION = "1.17.108";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -2170,6 +2219,26 @@ if(!recoverImport()){ window.__rcImportBlocked = true; return; }
 let LANG = (function(){ try{ return localStorage.getItem("reccheck_lang") || "en"; }catch(e){ return "en"; } })();
 const T = {
 en: {
+  "cashier.title": "Cashier Check",
+  "cashier.sub": "count the register and compare it with the statement",
+  "cashier.base": "Fixed register balance (€)",
+  "cashier.saved": "Saved for future sessions",
+  "cashier.saveFailed": "Balance could not be saved. Retry before closing.",
+  "cashier.damaged": "Saved balance could not be read. Enter the correct balance to save it.",
+  "cashier.cash": "Cash in the register",
+  "cashier.statement": "Statement & cash",
+  "cashier.amount1": "Amount 1 (€)",
+  "cashier.amount2": "Amount 2 (€)",
+  "cashier.amount3": "Amount 3 (€)",
+  "cashier.counted": "Counted:",
+  "cashier.expected": "Expected (including fixed balance):",
+  "cashier.required": "Complete the three amounts and a valid fixed balance. Counts must be whole, non-negative numbers; amounts must have at most two decimals.",
+  "cashier.ok": "✓ OK — the register balances!",
+  "cashier.over": "Surplus: {amount} €",
+  "cashier.short": "Shortage: {amount} €",
+  "cashier.reset": "Reset",
+  "cashier.resetAll": "Reset all (balance → €500)",
+
   "menu.audit": "AUDIT", "menu.auditSub": "the nightly checks — receipts and accommodation tax",
   "menu.status": "STATUS", "menu.statusSub": "what protel has told the tool — arrivals, departures, in-house, moves",
   "st.arr": "ARRIVALS", "st.dep": "DEPARTURES", "st.inh": "IN-HOUSE", "st.mov": "MOVES", "st.back": "\u2190 STATUS",
@@ -2441,6 +2510,26 @@ en: {
   "imp.fail": "✗ Import failed: ", "imp.notours": "this is not a Pro-Check data file", "imp.nodata": "the file contained no usable data", "imp.noread": "✗ Could not read the file"
 },
 gr: {
+  "cashier.title": "Cashier Check",
+  "cashier.sub": "καταμέτρηση ταμείου και σύγκριση με τη δήλωση",
+  "cashier.base": "Πάγιο ταμείου (€)",
+  "cashier.saved": "Αποθηκεύτηκε για τις επόμενες συνεδρίες",
+  "cashier.saveFailed": "Το πάγιο δεν αποθηκεύτηκε. Δοκιμάστε ξανά πριν κλείσετε.",
+  "cashier.damaged": "Δεν ήταν δυνατή η ανάγνωση του παγίου. Εισάγετε το σωστό ποσό για αποθήκευση.",
+  "cashier.cash": "Χρήματα στο ταμείο",
+  "cashier.statement": "Φ.Δ & Μετρητά",
+  "cashier.amount1": "Ποσό 1 (€)",
+  "cashier.amount2": "Ποσό 2 (€)",
+  "cashier.amount3": "Ποσό 3 (€)",
+  "cashier.counted": "Καταμέτρηση:",
+  "cashier.expected": "Αναμενόμενο (με πάγιο):",
+  "cashier.required": "Συμπληρώστε τα τρία ποσά και έγκυρο πάγιο. Τα πλήθη πρέπει να είναι μη αρνητικοί ακέραιοι και τα ποσά να έχουν έως δύο δεκαδικά.",
+  "cashier.ok": "✓ OK — Το ταμείο είναι σωστό!",
+  "cashier.over": "Πλεόνασμα: {amount} €",
+  "cashier.short": "Έλλειμμα: {amount} €",
+  "cashier.reset": "Επαναφορά",
+  "cashier.resetAll": "Επαναφορά όλων (πάγιο → €500)",
+
   "menu.audit": "ΕΛΕΓΧΟΣ", "menu.auditSub": "οι νυχτερινοί έλεγχοι — αποδείξεις και τέλος διαμονής",
   "menu.status": "ΚΑΤΑΣΤΑΣΗ", "menu.statusSub": "τι έχει πάρει το εργαλείο από το protel — αφίξεις, αναχωρήσεις, παραμονές, μετακινήσεις",
   "st.arr": "ΑΦΙΞΕΙΣ", "st.dep": "ΑΝΑΧΩΡΗΣΕΙΣ", "st.inh": "ΠΑΡΑΜΟΝΕΣ", "st.mov": "ΜΕΤΑΚΙΝΗΣΕΙΣ", "st.back": "\u2190 ΚΑΤΑΣΤΑΣΗ",
@@ -2771,6 +2860,8 @@ function applyLang(){
   mi("#statusBtn", "menu.status", "menu.statusSub");
   mi("#stArr", "st.arr", null); mi("#stDep", "st.dep", null); mi("#stInh", "st.inh", null); mi("#stMov", "st.mov", null);
   $("#stListBack").textContent = t("st.back");
+  mi("#cashierBtn", "cashier.title", "cashier.sub");
+  paintCashier();
   mi("#reportsBtn", "land.reports", "land.reportsSub");
   /* REPORTS is reached from the home screen and goes back to it, so it takes HOME's label.
      It borrowed the STATUS list's — "← STATUS", and in Greek "← ΚΑΤΑΣΤΑΣΗ", word for word
@@ -5007,6 +5098,102 @@ function paintHelp(){
     $("#helpBody").innerHTML = t(tool === "dept" ? "help.deptBody" : "help.taxBody");
   }
 }
+
+/* Amounts use integer cents; only the fixed balance is persisted, not a previous
+   shift's counts. A failed/corrupt store is visible and never silently overwritten. */
+const CASHIER_KEY = "reccheck_cashier_base_v1";
+const CASHIER_DENOMINATIONS = [1,2,5,10,20,50,100,200,500,1000,2000,5000,10000,20000,50000];
+let CASHIER_READY = false, CASHIER_SAVE = "";
+function cashierCents(value){
+  if(!/^\d+(?:\.\d{1,2})?$/.test(value)) return null;
+  const [whole, fraction = ""] = value.split(".");
+  const cents = Number(whole + fraction.padEnd(2, "0"));
+  return Number.isSafeInteger(cents) ? cents : null;
+}
+function cashierBaseValid(value){ return Number.isSafeInteger(value) && value >= 0; }
+function initCashier(){
+  if(CASHIER_READY) return;
+  CASHIER_READY = true;
+  CASHIER_DENOMINATIONS.forEach((cents,i) => {
+    const th = document.createElement("th"); th.scope = "col"; th.textContent = (cents/100).toFixed(2)+" €";
+    $("#cashierDenominations").appendChild(th);
+    const td = document.createElement("td"), input = document.createElement("input");
+    input.type = "number"; input.min = "0"; input.step = "1"; input.setAttribute("aria-label", th.textContent);
+    input.addEventListener("input", calculateCashier); td.appendChild(input); $("#cashierCounts").appendChild(td);
+    const product = document.createElement("td"); product.textContent = "0.00"; $("#cashierProducts").appendChild(product);
+  });
+  try{
+    const raw = localStorage.getItem(CASHIER_KEY);
+    if(raw !== null){
+      const value = JSON.parse(raw);
+      if(!cashierBaseValid(value)) throw new Error("Invalid saved fixed balance");
+      $("#cashierBase").value = (value/100).toFixed(2); CASHIER_SAVE = "saved";
+    }
+  }catch(e){ $("#cashierBase").value = ""; CASHIER_SAVE = "damaged"; }
+  $("#cashierBase").addEventListener("input", () => { saveCashierBase(); calculateCashier(); });
+  document.querySelectorAll(".cashierAmounts input").forEach(input => input.addEventListener("input",calculateCashier));
+  for(const row of ["#cashierCounts", ".cashierAmounts"]){
+    const inputs = Array.from(document.querySelectorAll(row+" input"));
+    inputs.forEach((input,i) => input.addEventListener("keydown", e => {
+      if(e.key === "Enter"){ e.preventDefault(); if(inputs[i+1]) inputs[i+1].focus(); }
+    }));
+  }
+  $("#cashierReset").onclick = () => resetCashier(false);
+  $("#cashierResetAll").onclick = () => resetCashier(true);
+  paintCashier();
+}
+function saveCashierBase(){
+  if(window.__rcImportBlocked) return;
+  const cents = cashierCents($("#cashierBase").value);
+  if(cents === null){ CASHIER_SAVE = ""; paintCashierSaved(); return; }
+  try{ localStorage.setItem(CASHIER_KEY, JSON.stringify(cents)); CASHIER_SAVE = "saved"; }
+  catch(e){ CASHIER_SAVE = "saveFailed"; }
+  paintCashierSaved();
+}
+function paintCashierSaved(){ $("#cashierSaved").textContent = CASHIER_SAVE ? t("cashier."+CASHIER_SAVE) : ""; }
+function paintCashier(){
+  document.querySelectorAll("[data-cashier]").forEach(n => n.textContent = t("cashier."+n.dataset.cashier));
+  $("#cashierBack").textContent = t("al.back");
+  paintCashierSaved();
+  if(CASHIER_READY) calculateCashier();
+}
+function calculateCashier(){
+  let total = 0, valid = true;
+  document.querySelectorAll("#cashierCounts input").forEach((input,i) => {
+    const count = input.value === "" && !input.validity.badInput ? 0 : Number(input.value);
+    const product = count*CASHIER_DENOMINATIONS[i];
+    const ok = !input.validity.badInput && Number.isSafeInteger(count) && count >= 0 && Number.isSafeInteger(product);
+    input.setAttribute("aria-invalid", String(!ok)); valid = valid && ok;
+    $("#cashierProducts").children[i].textContent = ok ? (product/100).toFixed(2) : "—";
+    if(ok) total += product;
+  });
+  valid = valid && Number.isSafeInteger(total);
+  $("#cashierCounted").textContent = valid ? (total/100).toFixed(2)+" €" : "—";
+  let expected = 0;
+  for(const id of ["cashierBase","cashierAmount1","cashierAmount2","cashierAmount3"]){
+    const input = document.getElementById(id);
+    // Statement amounts may be negative (refunds), as in Register Companion.
+    const negative = id !== "cashierBase" && input.value.startsWith("-");
+    const cents = cashierCents(negative ? input.value.slice(1) : input.value);
+    const ok = cents !== null && !input.validity.badInput;
+    input.setAttribute("aria-invalid", String(!ok)); valid = valid && ok;
+    if(ok){ expected += negative ? -cents : cents; valid = valid && Number.isSafeInteger(expected); }
+  }
+  valid = valid && Number.isSafeInteger(expected) && Number.isSafeInteger(total-expected);
+  $("#cashierExpected").textContent = valid ? (expected/100).toFixed(2)+" €" : "—";
+  const result = $("#cashierResult"), diff = total-expected;
+  const verdict = !valid ? "required" : diff === 0 ? "ok" : diff > 0 ? "over" : "short";
+  result.dataset.verdict = verdict;
+  result.textContent = t("cashier."+verdict, {amount:(Math.abs(diff)/100).toFixed(2)});
+}
+function resetCashier(all){
+  if(window.__rcImportBlocked) return;
+  document.querySelectorAll("#cashierCounts input").forEach(input => input.value = "");
+  document.querySelectorAll(".cashierAmounts input").forEach(input => input.value = all ? "0" : "");
+  if(all){ $("#cashierBase").value = "500.00"; saveCashierBase(); }
+  calculateCashier();
+}
+
 function showScreen(which){
   /* FIRST, above every early return in here. An armed REPORTS print must not survive a
      screen change — otherwise a preview he armed and then walked away from would send a
@@ -5022,6 +5209,7 @@ function showScreen(which){
   SCREEN = which;
   /* The fit-to-window layout is the home screen's alone — see the CSS. */
   document.body.classList.toggle("onMenu", which === "menu");
+  document.body.classList.toggle("onCashier", which === "cashier");
   paintHelp();
   const mainEl = document.querySelector("main");
   const tax = document.getElementById("taxScreen");
@@ -5051,6 +5239,8 @@ function showScreen(which){
   $("#alertsScreen").style.display = which === "alerts" ? "" : "none";
   $("#statusScreen").style.display = which === "status" ? "" : "none";
   $("#statusListScreen").style.display = which === "stlist" ? "" : "none";
+  $("#cashierScreen").style.display = which === "cashier" ? "" : "none";
+  if(which === "cashier") initCashier();
   $("#reportsScreen").style.display = which === "reports" ? "" : "none";
   if(which === "reports") renderReports();
   if(which === "audit") loadArrangementToggle();
@@ -7157,6 +7347,7 @@ function backupStoreValid(key,value){
     /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(value.date)&&value.date.split('/').map(Number).join('/')===key.slice(9).split('/').map(Number).join('/');
   if(key==='reccheck_rooms')return obj(value)&&Object.values(value).every(e=>obj(e)&&
     fields(e,['guest','nick','seen'],nullableText)&&fields(e,['liveKey'],count));
+  if(key==='reccheck_cashier_base_v1')return Number.isSafeInteger(value)&&value>=0;
   if(key==='reccheck_watchlist')return Array.isArray(value)&&value.every(e=>obj(e)&&room(e.room)&&
     fields(e,['sn'],room)&&fields(e,['name'],nullableText));
   if(key==='reccheck_checklist')return Array.isArray(value)&&value.every(e=>obj(e)&&text(e.text)&&
@@ -7422,6 +7613,8 @@ $("#aBack").onclick = () => showScreen("menu");
 $("#alertsBtn").onclick = () => showScreen("alerts");
 $("#alBack").onclick = () => showScreen("menu");
 $("#statusBtn").onclick = () => showScreen("status");
+$("#cashierBtn").onclick = () => showScreen("cashier");
+$("#cashierBack").onclick = () => showScreen("menu");
 $("#reportsBtn").onclick = () => showScreen("reports");
 $("#repBack").onclick = () => showScreen("menu");
 $("#stBack").onclick = () => showScreen("menu");

@@ -99,3 +99,5 @@ and support `PW_BROWSER` (otherwise the usual bundled Chromium or `/usr/bin/chro
 `headeritem.cs` checks the target-specific HDITEM layouts alongside the LVITEM tests. `browser/arrangement.js` checks the actual overlay page at ordinary and resized bounds, including a long title and the 5% unpaid tint.
 
 The cloud-only `invoice-window.cs` fixture creates its own Windows dialog and real ListViews, pumps a normal Windows message loop, and runs the real helper. `invoice-stream.js` verifies B isolation, IH Price/agency capture, guest reuse, movement/maximise/restore and minimise. Run both x86 and AnyCPU targets. These are synthetic Windows controls, not a claim that protel's owner-drawn rows or the hotel's display/DPI layout have been exercised.
+
+`node test/browser/cashier.js` exercises the shipped Cashier Check in Chromium: exact-cent totals, negative statement adjustments, missing/invalid inputs, surplus/shortage, reset, menu navigation, fixed-balance persistence across a full browser restart, Greek/light theme, viewport fit, corrupt storage and failed writes. Uses synthetic cash and an isolated temporary profile; supports `PW_BROWSER`.
