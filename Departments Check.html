@@ -1139,6 +1139,7 @@ body.onCashier #landing{max-width:1400px}
     <div id="cashierResult" role="status" aria-live="polite"></div>
     <div class="cashierActions"><button class="btn" id="cashierReset" data-cashier="reset"></button>
       <button class="btn" id="cashierResetAll" data-cashier="resetAll"></button>
+      <button class="btn" id="cashierPrint" data-cashier="print"></button>
       <button class="btn" id="cashierBack"></button></div>
   </section>
 
@@ -2169,7 +2170,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.111";
+const APP_VERSION = "1.17.112";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -2236,6 +2237,14 @@ if(!recoverImport()){ window.__rcImportBlocked = true; return; }
 let LANG = (function(){ try{ return localStorage.getItem("reccheck_lang") || "en"; }catch(e){ return "en"; } })();
 const T = {
 en: {
+  "cashier.print": "Print income summary",
+  "cashier.summary": "Income summary",
+  "cashier.denomination": "Denomination",
+  "cashier.quantity": "Quantity",
+  "cashier.lineTotal": "Total",
+  "cashier.paymentsTotal": "Payments total",
+  "cashier.noCash": "No cash counted",
+
   "cashier.hotelDefault": "Hotel default balance (€)",
   "cashier.saveDefault": "Save default",
   "cashier.cancelDefault": "Cancel",
@@ -2532,6 +2541,14 @@ en: {
   "imp.fail": "✗ Import failed: ", "imp.notours": "this is not a Pro-Check data file", "imp.nodata": "the file contained no usable data", "imp.noread": "✗ Could not read the file"
 },
 gr: {
+  "cashier.print": "Εκτύπωση Σύνοψης Απόδοσης",
+  "cashier.summary": "Σύνοψη Εσόδων",
+  "cashier.denomination": "Αξία",
+  "cashier.quantity": "Ποσότητα",
+  "cashier.lineTotal": "Σύνολο",
+  "cashier.paymentsTotal": "Σύνολο απόδοσης",
+  "cashier.noCash": "Δεν καταμετρήθηκαν μετρητά",
+
   "cashier.hotelDefault": "Πάγιο ξενοδοχείου (€)",
   "cashier.saveDefault": "Αποθήκευση",
   "cashier.cancelDefault": "Ακύρωση",
@@ -5181,6 +5198,7 @@ function initCashier(){
       if(e.key === "Enter"){ e.preventDefault(); if(inputs[i+1]) inputs[i+1].focus(); }
     }));
   }
+  $("#cashierPrint").onclick = printCashier;
   $("#cashierReset").onclick = () => resetCashier(false);
   $("#cashierResetAll").onclick = () => resetCashier(true);
   paintCashier();
@@ -5212,6 +5230,7 @@ function paintCashier(){
   if(CASHIER_READY) calculateCashier();
 }
 function calculateCashier(){
+  if(PRINT_JOB && PRINT_JOB.kind === "cashier") clearPrintJob();
   let total = 0, valid = true;
   document.querySelectorAll("#cashierCounts input").forEach((input,i) => {
     const count = input.value === "" && !input.validity.badInput ? 0 : Number(input.value);
@@ -5239,7 +5258,51 @@ function calculateCashier(){
   const verdict = !valid ? "required" : diff === 0 ? "ok" : diff > 0 ? "over" : "short";
   result.dataset.verdict = verdict;
   result.textContent = t("cashier."+verdict, {amount:(Math.abs(diff)/100).toFixed(2)});
+  $("#cashierPrint").disabled = !valid;
+  return {valid,total,expected};
 }
+/* Restored from the released Register Companion 1.2.2 summary. Use the shared
+   print root, rather than a popup, so Electron and all existing print guards apply. */
+function cashierPrintMoney(cents){
+  const n = BigInt(cents), digits = (n < 0n ? -n : n).toString().padStart(3,"0");
+  return (n < 0n ? "-" : "") + digits.slice(0,-2) + "." + digits.slice(-2) + " €";
+}
+function cashierPrintHTML(){
+  const totals = calculateCashier();
+  if(!totals.valid) return null;
+  const rows = [];
+  document.querySelectorAll("#cashierCounts input").forEach((input,i) => {
+    const count = Number(input.value);
+    if(!count) return;
+    rows.push(`<tr><td class="num">${cashierPrintMoney(CASHIER_DENOMINATIONS[i])}</td><td class="num">${count}</td><td class="num">${cashierPrintMoney(count*CASHIER_DENOMINATIONS[i])}</td></tr>`);
+  });
+  const payments = [1,2].map(i => {
+    const value = $("#cashierAmount"+i).value, negative = value.startsWith("-");
+    return BigInt(cashierCents(negative ? value.slice(1) : value)) * (negative ? -1n : 1n);
+  });
+  const line = (label,value) => `<tr><th>${esc(t("cashier."+label))}</th><td class="num">${cashierPrintMoney(value)}</td></tr>`;
+  return `<h1>${esc(t("cashier.summary"))}</h1><div class="meta">${esc(new Date().toLocaleString(LANG === "gr" ? "el-GR" : "en-GB"))}</div>
+    <h2>${esc(t("cashier.cash"))}</h2><table><thead><tr><th>${esc(t("cashier.denomination"))}</th><th>${esc(t("cashier.quantity"))}</th><th>${esc(t("cashier.lineTotal"))}</th></tr></thead>
+    <tbody>${rows.join("") || `<tr><td colspan="3">${esc(t("cashier.noCash"))}</td></tr>`}</tbody></table>
+    <h2>${esc(t("cashier.statement"))}</h2><table><tbody>${line("amount1",payments[0])}${line("amount2",payments[1])}${line("paymentsTotal",payments[0]+payments[1])}${line("base",cashierCents($("#cashierBase").value))}${line("expected",totals.expected)}${line("counted",totals.total)}</tbody></table>
+    <h2>${esc($("#cashierResult").textContent)}</h2>`;
+}
+function printCashier(){
+  if(window.__rcImportBlocked || SCREEN !== "cashier") return;
+  clearPrintJob();
+  const html = cashierPrintHTML();
+  if(html === null){ toast(t("cashier.required"),true); return; }
+  $("#printSheet").innerHTML = html;
+  openModal(`<h3>${esc(t("cashier.summary"))}</h3><div id="pvPaper">${html}</div>
+    <div class="actions"><button class="btn" id="pvCancel">${esc(t("pv.cancel"))}</button><button class="btn amber" id="pvGo">${esc(t("pv.print"))}</button></div>`);
+  $("#modal").classList.add("wide");
+  $("#pvCancel").onclick = () => { clearPrintJob(); closeModal(); };
+  $("#pvGo").onclick = () => {
+    const job = {kind:"cashier",html}; PRINT_JOB = job; closeModal();
+    setTimeout(() => { if(PRINT_JOB === job && SCREEN === "cashier") window.print(); },80);
+  };
+}
+
 function resetCashier(all){
   if(window.__rcImportBlocked) return;
   document.querySelectorAll("#cashierCounts input").forEach(input => input.value = "");
@@ -8382,6 +8445,12 @@ $("#printBtn").onclick = printCorrections;
    on the REPORTS screen, which is the harmless direction of the two. */
 window.addEventListener("beforeprint", () => {
   if(document.body.classList.contains("taxPrint")){ setPrintLandscape(false); return; }   // the tax half prints its own mount, portrait
+  if(SCREEN === "cashier"){
+    setPrintLandscape(false);
+    const html = PRINT_JOB && PRINT_JOB.kind === "cashier" ? PRINT_JOB.html : cashierPrintHTML();
+    $("#printSheet").innerHTML = html === null ? `<p>${esc(t("cashier.required"))}</p>` : html;
+    return;
+  }
   if(PRINT_JOB && PRINT_JOB.kind === "departureDates"){ setPrintLandscape(false); depReportSheet(PRINT_JOB); return; }
   if(PRINT_JOB && PRINT_JOB.kind === "board"){ setPrintLandscape(false); buildBoardingSheet(PRINT_JOB.p, PRINT_JOB.fname); return; }
   if(PRINT_JOB && PRINT_JOB.kind === "dep"){
@@ -8392,6 +8461,7 @@ window.addEventListener("beforeprint", () => {
   }
   setPrintLandscape(false);
   if(MODEL) buildPrintSheet(true);
+  else $("#printSheet").innerHTML = ""; // never reprint a sheet left by another screen
 });
 document.addEventListener("keydown", e => {
   if((e.ctrlKey || e.metaKey) && (e.key === "p" || e.key === "P")){
@@ -8400,7 +8470,8 @@ document.addEventListener("keydown", e => {
        replaced it with the corrections preview — same amber Print button, same place — so
        his 06/09 fault was reachable by the shortcut every app has. Found by the audit. */
     if($("#modalBg").classList.contains("open")) return;
-    printCorrections();
+    if(SCREEN === "cashier") printCashier();
+    else printCorrections();
   }
 });
 $("#snInput").addEventListener("input", searchInput);
