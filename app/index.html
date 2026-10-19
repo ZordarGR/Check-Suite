@@ -967,7 +967,7 @@ body.onCashier #landing{max-width:1400px}
 .cashierTable table{width:100%;min-width:1050px;table-layout:fixed;border-collapse:collapse}
 .cashierTable th,.cashierTable td{padding:6px;border:1px solid var(--line);text-align:right;white-space:nowrap}
 .cashierTable th{font-size:12px}
-.cashierAmounts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.cashierAmounts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .cashierAmounts label span{display:block;margin-bottom:6px}
 .cashierTotals{margin-top:20px}
 #cashierResult{padding:16px;margin:16px 0;border:1px solid var(--line);border-radius:8px;font-weight:700}
@@ -1115,7 +1115,6 @@ body.onCashier #landing{max-width:1400px}
     <div class="cashierAmounts">
       <label><span data-cashier="amount1"></span><input id="cashierAmount1" type="number" step="0.01"></label>
       <label><span data-cashier="amount2"></span><input id="cashierAmount2" type="number" step="0.01"></label>
-      <label><span data-cashier="amount3"></span><input id="cashierAmount3" type="number" step="0.01"></label>
     </div>
     <div class="cashierTotals"><span data-cashier="counted"></span> <output id="cashierCounted">0.00 €</output>
       · <span data-cashier="expected"></span> <output id="cashierExpected">—</output></div>
@@ -2152,7 +2151,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.108";
+const APP_VERSION = "1.17.109";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -2227,12 +2226,11 @@ en: {
   "cashier.damaged": "Saved balance could not be read. Enter the correct balance to save it.",
   "cashier.cash": "Cash in the register",
   "cashier.statement": "Statement & cash",
-  "cashier.amount1": "Amount 1 (€)",
-  "cashier.amount2": "Amount 2 (€)",
-  "cashier.amount3": "Amount 3 (€)",
+  "cashier.amount1": "deposit cash (€)",
+  "cashier.amount2": "cash payment (€)",
   "cashier.counted": "Counted:",
   "cashier.expected": "Expected (including fixed balance):",
-  "cashier.required": "Complete the three amounts and a valid fixed balance. Counts must be whole, non-negative numbers; amounts must have at most two decimals.",
+  "cashier.required": "Complete both payment amounts and a valid fixed balance. Counts must be whole, non-negative numbers; amounts must have at most two decimals.",
   "cashier.ok": "✓ OK — the register balances!",
   "cashier.over": "Surplus: {amount} €",
   "cashier.short": "Shortage: {amount} €",
@@ -2518,12 +2516,11 @@ gr: {
   "cashier.damaged": "Δεν ήταν δυνατή η ανάγνωση του παγίου. Εισάγετε το σωστό ποσό για αποθήκευση.",
   "cashier.cash": "Χρήματα στο ταμείο",
   "cashier.statement": "Φ.Δ & Μετρητά",
-  "cashier.amount1": "Ποσό 1 (€)",
-  "cashier.amount2": "Ποσό 2 (€)",
-  "cashier.amount3": "Ποσό 3 (€)",
+  "cashier.amount1": "deposit cash (€)",
+  "cashier.amount2": "cash payment (€)",
   "cashier.counted": "Καταμέτρηση:",
   "cashier.expected": "Αναμενόμενο (με πάγιο):",
-  "cashier.required": "Συμπληρώστε τα τρία ποσά και έγκυρο πάγιο. Τα πλήθη πρέπει να είναι μη αρνητικοί ακέραιοι και τα ποσά να έχουν έως δύο δεκαδικά.",
+  "cashier.required": "Συμπληρώστε και τα δύο ποσά και έγκυρο πάγιο. Τα πλήθη πρέπει να είναι μη αρνητικοί ακέραιοι και τα ποσά να έχουν έως δύο δεκαδικά.",
   "cashier.ok": "✓ OK — Το ταμείο είναι σωστό!",
   "cashier.over": "Πλεόνασμα: {amount} €",
   "cashier.short": "Έλλειμμα: {amount} €",
@@ -5170,7 +5167,7 @@ function calculateCashier(){
   valid = valid && Number.isSafeInteger(total);
   $("#cashierCounted").textContent = valid ? (total/100).toFixed(2)+" €" : "—";
   let expected = 0;
-  for(const id of ["cashierBase","cashierAmount1","cashierAmount2","cashierAmount3"]){
+  for(const id of ["cashierBase","cashierAmount1","cashierAmount2"]){
     const input = document.getElementById(id);
     // Statement amounts may be negative (refunds), as in Register Companion.
     const negative = id !== "cashierBase" && input.value.startsWith("-");
@@ -5206,6 +5203,7 @@ function showScreen(which){
     renderAll(LASTFNAME || "");
     return;
   }
+  if(which === "menu" && CASHIER_READY) resetCashier(false);
   SCREEN = which;
   /* The fit-to-window layout is the home screen's alone — see the CSS. */
   document.body.classList.toggle("onMenu", which === "menu");

@@ -1,12 +1,12 @@
 {
-  "version": "1.17.108",
+  "version": "1.17.109",
   "type": "html",
   "engine": "1.17.107",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.107/Pro-Check-Setup.exe",
   "setupSha256": "a50618437f9f76250e721d3dae19ce19eb02c51bad368c2c37603b39f2477791",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/55d0180f61f225a94747d81526f7cf06dec9d42e/Departments%20Check.html",
-  "sha256": "0948d78e7b4f7867eef14cc55fd5769dc5e684acc2b6503c50199f1bd78b4332",
-  "notes": "Add Cashier Check to the main menu: euro denomination counts, three statement amounts, exact-cent surplus/shortage and a fixed register balance saved across sessions. Reset keeps the fixed balance; Reset All restores and saves €500.",
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/02489a5694de4d58cbc3a99df66b23ae1099bd33/Departments%20Check.html",
+  "sha256": "a5a9ffa7d79261db98668f24ecf674e9864db47209bb0b56389bda0cc3403726",
+  "notes": "Cashier Check now clears counts and payment fields automatically when returning to the main menu, while retaining the saved fixed balance. Replace the three statement inputs with two: deposit cash and cash payment.",
   "force": false
 }
