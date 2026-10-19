@@ -1,12 +1,12 @@
 {
-  "version": "1.17.109",
+  "version": "1.17.110",
   "type": "html",
   "engine": "1.17.107",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.107/Pro-Check-Setup.exe",
   "setupSha256": "a50618437f9f76250e721d3dae19ce19eb02c51bad368c2c37603b39f2477791",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/02489a5694de4d58cbc3a99df66b23ae1099bd33/Departments%20Check.html",
-  "sha256": "a5a9ffa7d79261db98668f24ecf674e9864db47209bb0b56389bda0cc3403726",
-  "notes": "Cashier Check now clears counts and payment fields automatically when returning to the main menu, while retaining the saved fixed balance. Replace the three statement inputs with two: deposit cash and cash payment.",
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/250f3d03871d4c80fddf8ab30ac052987f757819/Departments%20Check.html",
+  "sha256": "e5be4a102e4f0472565eadf20c151ef59471e77f20b55116f17e7f24645242b1",
+  "notes": "Cashier Check clears counts and payments when returning to the main menu while retaining the saved fixed balance. Two payment fields: deposit cash / cash payment; Greek labels: Προκαταβολή / Πληρωμή με μετρητά.",
   "force": false
 }
