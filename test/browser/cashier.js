@@ -17,14 +17,20 @@ const {chromium}=require('playwright-core'),assert=require('assert/strict'),fs=r
   const base=()=>page.locator('#cashierBase'),result=()=>page.locator('#cashierResult').getAttribute('data-verdict');
   const count=i=>page.locator('#cashierCounts input').nth(i);
   const amount=(i,v)=>page.locator('#cashierAmount'+i).fill(v);
+  const setDefault=async value=>{
+    if(!await page.locator('#cashierSettings').evaluate(n=>n.open))await page.locator('#cashierSettings summary').click();
+    await page.locator('#cashierDefault').fill(value);
+    await page.locator('#cashierDefaultForm button[type=submit]').click();
+  };
   assert.equal(await page.locator('.cashierAmounts input').count(),2);
+  assert.equal(await page.locator('[data-cashier=statement]').textContent(),'Deposit cash & cash payment');
   assert.equal(await page.locator('[data-cashier=amount1]').textContent(),'deposit cash (€)');
   assert.equal(await page.locator('[data-cashier=amount2]').textContent(),'cash payment (€)');
   assert.equal(await base().inputValue(),'500');assert.equal(await result(),'required');
   await page.locator('#cashierCounts input').evaluateAll(nodes=>nodes.forEach(n=>{n.value='1';n.dispatchEvent(new Event('input',{bubbles:true}));}));
   assert.equal(await page.locator('#cashierCounted').textContent(),'888.88 €');
   await page.locator('#cashierReset').click();
-  await base().fill('612.34');assert.equal(await page.evaluate(()=>localStorage.getItem('reccheck_cashier_base_v1')),'61234');
+  await setDefault('612.34');assert.equal(await page.evaluate(()=>localStorage.getItem('reccheck_cashier_base_v1')),'61234');
   await count(0).fill('4');await count(4).fill('4');await count(7).fill('6');await count(14).fill('1'); // 512.84
   await amount(1,'-100');await amount(2,'0.50');
   assert.equal(await result(),'ok');assert.equal(await page.locator('#cashierCounted').textContent(),'512.84 €');
@@ -50,6 +56,8 @@ const {chromium}=require('playwright-core'),assert=require('assert/strict'),fs=r
    assert(await page.locator('#cashierCounts input, .cashierAmounts input').evaluateAll(nodes=>nodes.every(n=>n.value==='')),'logo home navigation also resets');
    assert.equal(await base().inputValue(),'612.34');
   }
+  await base().fill('123');
+  assert.equal(await page.evaluate(()=>localStorage.getItem('reccheck_cashier_base_v1')),'61234','temporary edit never changes hotel default');
   await page.locator('#cashierReset').click();assert.equal(await base().inputValue(),'612.34');assert.equal(await result(),'required');
   await context.close();context=await launch();page=await open();assert.equal(await base().inputValue(),'612.34');
   assert.equal(await count(0).inputValue(),'');assert.equal(await page.locator('#cashierAmount1').inputValue(),'');
@@ -59,26 +67,50 @@ const {chromium}=require('playwright-core'),assert=require('assert/strict'),fs=r
   await page.locator('#themeSelect').selectOption('light');
   await page.locator('#cashierBack').click();await page.locator('#mLang').evaluate(n=>n.click());await page.locator('#cashierBtn').click();
   assert((await page.locator('#cashierSaved').textContent()).includes('Αποθηκεύτηκε'));
+  assert.equal(await page.locator('[data-cashier=statement]').textContent(),'Προκαταβολή & Πληρωμή με μετρητά');
   assert.equal(await page.locator('[data-cashier=amount1]').textContent(),'Προκαταβολή (€)');
   assert.equal(await page.locator('[data-cashier=amount2]').textContent(),'Πληρωμή με μετρητά (€)');
   for(const width of [1280,760,390]){
    await page.setViewportSize({width,height:900});
    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`no page overflow at ${width}`);
+   assert(await page.evaluate(()=>{const a=document.getElementById('cashierBase').getBoundingClientRect(),b=document.querySelector('#cashierSettings summary').getBoundingClientRect();return Math.abs((a.top+a.bottom)-(b.top+b.bottom))<4&&b.left>=a.right}),'three dots stay beside the balance');
   }
   await page.screenshot({path:path.join(__dirname,'cashier-light.png'),fullPage:true});
-  await page.locator('#cashierResetAll').click();assert.equal(await base().inputValue(),'500.00');
-  assert.equal(await page.evaluate(()=>localStorage.getItem('reccheck_cashier_base_v1')),'50000');
+  await page.locator('#cashierSettings summary').click();
+  await page.locator('#cashierDefault').fill('999');await page.locator('#cashierDefaultCancel').click();
+  assert.equal(await base().inputValue(),'612.34','cancel never applies or saves a draft');
+  await setDefault('750');await base().fill('123');
+  await page.locator('#cashierResetAll').click();assert.equal(await base().inputValue(),'750.00');
+  assert.equal(await page.evaluate(()=>localStorage.getItem('reccheck_cashier_base_v1')),'75000');
+  assert.equal(await page.locator('#cashierAmount1').inputValue(),'0');
+  await base().fill('42');await page.locator('#cashierReset').click();assert.equal(await base().inputValue(),'750.00');
+  await base().fill('43');await page.locator('#cashierBack').click();await page.locator('#cashierBtn').click();
+  assert.equal(await base().inputValue(),'750.00','home restores hotel default too');
+  await page.locator('#cashierSettings summary').click();await page.locator('#cashierDefault').fill('-1');
+  await page.locator('#cashierDefaultForm button[type=submit]').click();
+  assert.equal(await page.evaluate(()=>localStorage.getItem('reccheck_cashier_base_v1')),'75000');
+  await page.locator('#cashierDefaultCancel').click();
+  await page.locator('#cashierSettings summary').click();
+  assert(await page.locator('#cashierDefaultForm').evaluate(n=>{const b=n.getBoundingClientRect();return b.left>=0&&b.right<=innerWidth}),'settings fit the mobile viewport');
+  await page.screenshot({path:path.join(__dirname,'cashier-default-mobile.png'),fullPage:true});
+  await page.keyboard.press('Escape');assert.equal(await page.locator('#cashierSettings').evaluate(n=>n.open),false);
+  await setDefault('0');await base().fill('25');await page.locator('#cashierResetAll').click();assert.equal(await base().inputValue(),'0.00','zero is a valid hotel default');
+  await setDefault('750');
   await page.evaluate(()=>{
     const original=Storage.prototype.setItem;
     Storage.prototype.setItem=function(k,v){if(k==='reccheck_cashier_base_v1')throw Error('synthetic quota');return original.call(this,k,v)};
   });
-  await base().fill('600');assert((await page.locator('#cashierSaved').textContent()).includes('δεν αποθηκεύτηκε'));
-  assert.equal(await page.evaluate(()=>localStorage.getItem('reccheck_cashier_base_v1')),'50000');
-  await page.reload();await page.locator('#cashierBtn').click();assert.equal(await base().inputValue(),'500.00');
+  await setDefault('600');assert((await page.locator('#cashierDefaultError').textContent()).includes('δεν αποθηκεύτηκε'));
+  assert.equal(await base().inputValue(),'750.00','failed save leaves current balance unchanged');
+  assert.equal(await page.evaluate(()=>localStorage.getItem('reccheck_cashier_base_v1')),'75000');
+  await page.locator('#cashierReset').click();assert.equal(await base().inputValue(),'750.00','failed save leaves the reset target unchanged');
+  await page.reload();await page.locator('#cashierBtn').click();assert.equal(await base().inputValue(),'750.00');
   await page.evaluate(()=>localStorage.setItem('reccheck_cashier_base_v1','{"broken":true}'));
   await page.reload();await page.locator('#cashierBtn').click();assert.equal(await base().inputValue(),'');
   assert.equal(await page.evaluate(()=>localStorage.getItem('reccheck_cashier_base_v1')),'{"broken":true}');
-  await base().fill('777.77');await page.reload();await page.locator('#cashierBtn').click();assert.equal(await base().inputValue(),'777.77');
+  await page.locator('#cashierResetAll').click();assert.equal(await base().inputValue(),'','corrupt defaults cannot silently become 500');
+  assert.equal(await page.evaluate(()=>localStorage.getItem('reccheck_cashier_base_v1')),'{"broken":true}');
+  await setDefault('777.77');await page.reload();await page.locator('#cashierBtn').click();assert.equal(await base().inputValue(),'777.77');
   const backup=JSON.stringify({app:'reccheck',data:{reccheck_cashier_base_v1:'88888'}});
   await page.locator('#importFile').setInputFiles({name:'synthetic-backup.json',mimeType:'application/json',buffer:Buffer.from(backup)});
   await page.waitForFunction(()=>localStorage.getItem('reccheck_cashier_base_v1')==='88888');

@@ -960,8 +960,17 @@ body.onCashier #landing{max-width:1400px}
 #cashierScreen input{box-sizing:border-box;width:100%;min-width:52px;padding:9px 5px;background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;font:inherit;text-align:right}
 #cashierScreen input:focus{outline:2px solid var(--amber)}
 #cashierScreen input[aria-invalid="true"]{border-color:var(--red)}
-.cashierBase{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.cashierBase{position:relative;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.cashierBalanceControl{display:flex;align-items:center;gap:8px}
 #cashierBase{max-width:160px}
+#cashierSettings{position:relative}
+#cashierSettings summary{list-style:none;cursor:pointer;padding:6px 12px;border:1px solid var(--line);border-radius:8px;font-size:20px}
+#cashierSettings summary::-webkit-details-marker{display:none}
+#cashierDefaultForm{position:absolute;top:100%;left:0;z-index:10;width:260px;padding:14px;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px #0005}
+#cashierDefaultForm label{display:block;margin-bottom:8px}
+#cashierDefaultForm .cashierActions{margin-top:10px}
+#cashierDefaultError{color:var(--red);font-size:12px;margin-top:6px}
+@media(max-width:540px){#cashierSettings{position:static}#cashierDefaultForm{left:0;right:auto;width:min(260px,85vw)}}
 #cashierSaved{color:var(--dim);font-size:12px}
 .cashierTable{overflow-x:auto;max-width:100%}
 .cashierTable table{width:100%;min-width:1050px;table-layout:fixed;border-collapse:collapse}
@@ -1106,7 +1115,16 @@ body.onCashier #landing{max-width:1400px}
   <section id="cashierScreen" style="display:none" aria-labelledby="cashierTitle">
     <h2 id="cashierTitle">Cashier Check</h2>
     <div class="cashierBase"><label for="cashierBase" data-cashier="base"></label>
-      <input id="cashierBase" type="number" min="0" step="0.01" value="500">
+      <div class="cashierBalanceControl"><input id="cashierBase" type="number" min="0" step="0.01" value="500">
+      <details id="cashierSettings"><summary aria-label="Hotel default" title="Hotel default">⋮</summary>
+        <form id="cashierDefaultForm">
+          <label for="cashierDefault" data-cashier="hotelDefault"></label>
+          <input id="cashierDefault" type="number" min="0" step="0.01" required>
+          <div id="cashierDefaultError" role="alert"></div>
+          <div class="cashierActions"><button class="btn" type="submit" data-cashier="saveDefault"></button>
+            <button class="btn" type="button" id="cashierDefaultCancel" data-cashier="cancelDefault"></button></div>
+        </form>
+      </details></div>
       <span id="cashierSaved" role="status"></span></div>
     <h3 data-cashier="cash"></h3>
     <div class="cashierTable"><table><thead><tr id="cashierDenominations"></tr></thead>
@@ -2151,7 +2169,7 @@ if(typeof module !== "undefined" && module.exports){
 "use strict";
 if(typeof document === "undefined") return;   // node test guard
 
-const APP_VERSION = "1.17.110";
+const APP_VERSION = "1.17.111";
 const $ = s => document.querySelector(s);
 const ISSUES_URL = "https://github.com/ZordarGR/Check-Suite/issues";
 
@@ -2218,14 +2236,20 @@ if(!recoverImport()){ window.__rcImportBlocked = true; return; }
 let LANG = (function(){ try{ return localStorage.getItem("reccheck_lang") || "en"; }catch(e){ return "en"; } })();
 const T = {
 en: {
+  "cashier.hotelDefault": "Hotel default balance (€)",
+  "cashier.saveDefault": "Save default",
+  "cashier.cancelDefault": "Cancel",
+  "cashier.defaultInvalid": "Enter a non-negative amount with at most two decimals.",
+  "cashier.defaultFailed": "The hotel default could not be saved. Try again.",
+  "cashier.temporary": "Temporary balance — Reset restores the hotel default.",
+  "cashier.defaultDamaged": "Saved hotel default could not be read. Set it using ⋮.",
+
   "cashier.title": "Cashier Check",
   "cashier.sub": "count the register and compare it with the statement",
   "cashier.base": "Fixed register balance (€)",
   "cashier.saved": "Saved for future sessions",
-  "cashier.saveFailed": "Balance could not be saved. Retry before closing.",
-  "cashier.damaged": "Saved balance could not be read. Enter the correct balance to save it.",
   "cashier.cash": "Cash in the register",
-  "cashier.statement": "Statement & cash",
+  "cashier.statement": "Deposit cash & cash payment",
   "cashier.amount1": "deposit cash (€)",
   "cashier.amount2": "cash payment (€)",
   "cashier.counted": "Counted:",
@@ -2235,7 +2259,7 @@ en: {
   "cashier.over": "Surplus: {amount} €",
   "cashier.short": "Shortage: {amount} €",
   "cashier.reset": "Reset",
-  "cashier.resetAll": "Reset all (balance → €500)",
+  "cashier.resetAll": "Reset all (hotel default)",
 
   "menu.audit": "AUDIT", "menu.auditSub": "the nightly checks — receipts and accommodation tax",
   "menu.status": "STATUS", "menu.statusSub": "what protel has told the tool — arrivals, departures, in-house, moves",
@@ -2508,14 +2532,20 @@ en: {
   "imp.fail": "✗ Import failed: ", "imp.notours": "this is not a Pro-Check data file", "imp.nodata": "the file contained no usable data", "imp.noread": "✗ Could not read the file"
 },
 gr: {
+  "cashier.hotelDefault": "Πάγιο ξενοδοχείου (€)",
+  "cashier.saveDefault": "Αποθήκευση",
+  "cashier.cancelDefault": "Ακύρωση",
+  "cashier.defaultInvalid": "Εισάγετε μη αρνητικό ποσό με έως δύο δεκαδικά.",
+  "cashier.defaultFailed": "Το πάγιο ξενοδοχείου δεν αποθηκεύτηκε. Δοκιμάστε ξανά.",
+  "cashier.temporary": "Προσωρινό πάγιο — η Επαναφορά επαναφέρει το πάγιο ξενοδοχείου.",
+  "cashier.defaultDamaged": "Δεν ήταν δυνατή η ανάγνωση του παγίου ξενοδοχείου. Ορίστε το από το ⋮.",
+
   "cashier.title": "Cashier Check",
   "cashier.sub": "καταμέτρηση ταμείου και σύγκριση με τη δήλωση",
   "cashier.base": "Πάγιο ταμείου (€)",
   "cashier.saved": "Αποθηκεύτηκε για τις επόμενες συνεδρίες",
-  "cashier.saveFailed": "Το πάγιο δεν αποθηκεύτηκε. Δοκιμάστε ξανά πριν κλείσετε.",
-  "cashier.damaged": "Δεν ήταν δυνατή η ανάγνωση του παγίου. Εισάγετε το σωστό ποσό για αποθήκευση.",
   "cashier.cash": "Χρήματα στο ταμείο",
-  "cashier.statement": "Φ.Δ & Μετρητά",
+  "cashier.statement": "Προκαταβολή & Πληρωμή με μετρητά",
   "cashier.amount1": "Προκαταβολή (€)",
   "cashier.amount2": "Πληρωμή με μετρητά (€)",
   "cashier.counted": "Καταμέτρηση:",
@@ -2525,7 +2555,7 @@ gr: {
   "cashier.over": "Πλεόνασμα: {amount} €",
   "cashier.short": "Έλλειμμα: {amount} €",
   "cashier.reset": "Επαναφορά",
-  "cashier.resetAll": "Επαναφορά όλων (πάγιο → €500)",
+  "cashier.resetAll": "Επαναφορά όλων (πάγιο ξενοδοχείου)",
 
   "menu.audit": "ΕΛΕΓΧΟΣ", "menu.auditSub": "οι νυχτερινοί έλεγχοι — αποδείξεις και τέλος διαμονής",
   "menu.status": "ΚΑΤΑΣΤΑΣΗ", "menu.statusSub": "τι έχει πάρει το εργαλείο από το protel — αφίξεις, αναχωρήσεις, παραμονές, μετακινήσεις",
@@ -5096,11 +5126,12 @@ function paintHelp(){
   }
 }
 
-/* Amounts use integer cents; only the fixed balance is persisted, not a previous
-   shift's counts. A failed/corrupt store is visible and never silently overwritten. */
+/* Amounts use integer cents; CASHIER_KEY holds the hotel default. Existing saved
+   balances become that default; ordinary field edits are temporary. A failed/corrupt
+   store is visible and never silently overwritten. */
 const CASHIER_KEY = "reccheck_cashier_base_v1";
 const CASHIER_DENOMINATIONS = [1,2,5,10,20,50,100,200,500,1000,2000,5000,10000,20000,50000];
-let CASHIER_READY = false, CASHIER_SAVE = "";
+let CASHIER_READY = false, CASHIER_SAVE = "", CASHIER_DEFAULT = 50000;
 function cashierCents(value){
   if(!/^\d+(?:\.\d{1,2})?$/.test(value)) return null;
   const [whole, fraction = ""] = value.split(".");
@@ -5124,10 +5155,25 @@ function initCashier(){
     if(raw !== null){
       const value = JSON.parse(raw);
       if(!cashierBaseValid(value)) throw new Error("Invalid saved fixed balance");
+      CASHIER_DEFAULT = value;
       $("#cashierBase").value = (value/100).toFixed(2); CASHIER_SAVE = "saved";
     }
-  }catch(e){ $("#cashierBase").value = ""; CASHIER_SAVE = "damaged"; }
-  $("#cashierBase").addEventListener("input", () => { saveCashierBase(); calculateCashier(); });
+  }catch(e){ CASHIER_DEFAULT = null; $("#cashierBase").value = ""; CASHIER_SAVE = "defaultDamaged"; }
+  $("#cashierBase").addEventListener("input", () => { CASHIER_SAVE = "temporary"; paintCashierSaved(); calculateCashier(); });
+  $("#cashierSettings summary").addEventListener("click", e => {
+    e.preventDefault();
+    $("#cashierSettings").open = !$("#cashierSettings").open;
+    if(!$("#cashierSettings").open) return;
+    $("#cashierDefault").value = CASHIER_DEFAULT === null ? "" : (CASHIER_DEFAULT/100).toFixed(2);
+    $("#cashierDefault").removeAttribute("aria-invalid");
+    $("#cashierDefaultError").textContent = "";
+    $("#cashierDefault").focus();
+  });
+  $("#cashierDefaultForm").addEventListener("submit", e => { e.preventDefault(); saveCashierDefault(); });
+  $("#cashierDefaultCancel").onclick = () => { $("#cashierSettings").open = false; };
+  $("#cashierSettings").addEventListener("keydown", e => {
+    if(e.key === "Escape"){ $("#cashierSettings").open = false; $("#cashierSettings summary").focus(); }
+  });
   document.querySelectorAll(".cashierAmounts input").forEach(input => input.addEventListener("input",calculateCashier));
   for(const row of ["#cashierCounts", ".cashierAmounts"]){
     const inputs = Array.from(document.querySelectorAll(row+" input"));
@@ -5139,18 +5185,29 @@ function initCashier(){
   $("#cashierResetAll").onclick = () => resetCashier(true);
   paintCashier();
 }
-function saveCashierBase(){
+function saveCashierDefault(){
   if(window.__rcImportBlocked) return;
-  const cents = cashierCents($("#cashierBase").value);
-  if(cents === null){ CASHIER_SAVE = ""; paintCashierSaved(); return; }
-  try{ localStorage.setItem(CASHIER_KEY, JSON.stringify(cents)); CASHIER_SAVE = "saved"; }
-  catch(e){ CASHIER_SAVE = "saveFailed"; }
+  const input = $("#cashierDefault"), cents = cashierCents(input.value);
+  if(cents === null || input.validity.badInput){
+    input.setAttribute("aria-invalid", "true");
+    $("#cashierDefaultError").textContent = t("cashier.defaultInvalid");
+    return;
+  }
+  try{ localStorage.setItem(CASHIER_KEY, JSON.stringify(cents)); }
+  catch(e){ $("#cashierDefaultError").textContent = t("cashier.defaultFailed"); return; }
+  CASHIER_DEFAULT = cents;
+  $("#cashierBase").value = (cents/100).toFixed(2);
+  CASHIER_SAVE = "saved";
+  $("#cashierSettings").open = false;
   paintCashierSaved();
+  calculateCashier();
 }
 function paintCashierSaved(){ $("#cashierSaved").textContent = CASHIER_SAVE ? t("cashier."+CASHIER_SAVE) : ""; }
 function paintCashier(){
   document.querySelectorAll("[data-cashier]").forEach(n => n.textContent = t("cashier."+n.dataset.cashier));
   $("#cashierBack").textContent = t("al.back");
+  $("#cashierSettings summary").title = t("cashier.hotelDefault");
+  $("#cashierSettings summary").setAttribute("aria-label", t("cashier.hotelDefault"));
   paintCashierSaved();
   if(CASHIER_READY) calculateCashier();
 }
@@ -5187,7 +5244,10 @@ function resetCashier(all){
   if(window.__rcImportBlocked) return;
   document.querySelectorAll("#cashierCounts input").forEach(input => input.value = "");
   document.querySelectorAll(".cashierAmounts input").forEach(input => input.value = all ? "0" : "");
-  if(all){ $("#cashierBase").value = "500.00"; saveCashierBase(); }
+  $("#cashierBase").value = CASHIER_DEFAULT === null ? "" : (CASHIER_DEFAULT/100).toFixed(2);
+  CASHIER_SAVE = CASHIER_DEFAULT === null ? "defaultDamaged" : "saved";
+  $("#cashierSettings").open = false;
+  paintCashierSaved();
   calculateCashier();
 }
 
