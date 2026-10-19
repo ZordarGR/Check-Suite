@@ -5177,7 +5177,7 @@ function calculateCashier(){
     const cents = cashierCents(negative ? input.value.slice(1) : input.value);
     const ok = cents !== null && !input.validity.badInput;
     input.setAttribute("aria-invalid", String(!ok)); valid = valid && ok;
-    if(ok) expected += negative ? -cents : cents;
+    if(ok){ expected += negative ? -cents : cents; valid = valid && Number.isSafeInteger(expected); }
   }
   valid = valid && Number.isSafeInteger(expected) && Number.isSafeInteger(total-expected);
   $("#cashierExpected").textContent = valid ? (expected/100).toFixed(2)+" €" : "—";

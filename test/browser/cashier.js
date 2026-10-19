@@ -31,6 +31,9 @@ const {chromium}=require('playwright-core'),assert=require('assert/strict'),fs=r
   await count(0).fill('-1');assert.equal(await result(),'required');
   await count(0).fill('4');await amount(3,'0.001');assert.equal(await result(),'required');
   await amount(3,'0');await base().fill('9007199254740992');assert.equal(await result(),'required');
+  await base().fill('90071992547409.91');await amount(1,'0.01');await amount(2,'-90071992547409.91');await amount(3,'-0.01');
+  assert.equal(await result(),'required','overflowing intermediate sums cannot become a valid rounded result');
+  await amount(1,'-100');await amount(2,'0.50');await amount(3,'0');
   await base().fill('612.34');await count(0).focus();await page.keyboard.press('Enter');assert(await count(1).evaluate(n=>n===document.activeElement));
   await page.locator('#cashierBack').click();assert(await page.locator('#cashierScreen').isHidden());
   await page.locator('#auditBtn').click();assert(await page.locator('#auditScreen').isVisible());
