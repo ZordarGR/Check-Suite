@@ -59,6 +59,8 @@ const {chromium}=require('playwright-core'),assert=require('assert/strict'),fs=r
   await page.locator('#themeSelect').selectOption('light');
   await page.locator('#cashierBack').click();await page.locator('#mLang').evaluate(n=>n.click());await page.locator('#cashierBtn').click();
   assert((await page.locator('#cashierSaved').textContent()).includes('Αποθηκεύτηκε'));
+  assert.equal(await page.locator('[data-cashier=amount1]').textContent(),'Προκαταβολή (€)');
+  assert.equal(await page.locator('[data-cashier=amount2]').textContent(),'Πληρωμή με μετρητά (€)');
   for(const width of [1280,760,390]){
    await page.setViewportSize({width,height:900});
    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`no page overflow at ${width}`);
