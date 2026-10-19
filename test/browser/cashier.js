@@ -39,6 +39,7 @@ const {chromium}=require('playwright-core'),assert=require('assert/strict'),fs=r
   await amount(1,'-100');await amount(2,'0.50');
   await base().fill('612.34');await count(0).focus();await page.keyboard.press('Enter');assert(await count(1).evaluate(n=>n===document.activeElement));
   await page.locator('#cashierBack').click();assert(await page.locator('#cashierScreen').isHidden());
+  assert(await page.locator('#cashierCounts input, .cashierAmounts input').evaluateAll(nodes=>nodes.every(n=>n.value==='')),'Back resets fields immediately');
   await page.locator('#auditBtn').click();assert(await page.locator('#auditScreen').isVisible());
   await page.locator('#aBack').click();await page.locator('#cashierBtn').click();assert.equal(await base().inputValue(),'612.34');
   assert(await page.locator('#cashierCounts input, .cashierAmounts input').evaluateAll(nodes=>nodes.every(n=>n.value==='')),'returning home clears counts and both payments');
