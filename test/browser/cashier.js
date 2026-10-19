@@ -38,6 +38,9 @@ const {chromium}=require('playwright-core'),assert=require('assert/strict'),fs=r
   await page.locator('#cashierReset').click();assert.equal(await base().inputValue(),'612.34');assert.equal(await result(),'required');
   await context.close();context=await launch();page=await open();assert.equal(await base().inputValue(),'612.34');
   assert.equal(await count(0).inputValue(),'');assert.equal(await page.locator('#cashierAmount1').inputValue(),'');
+  await page.setViewportSize({width:1180,height:860});
+  assert(await page.locator('.cashierTable').evaluate(n=>n.scrollWidth<=n.clientWidth),'all denominations fit the desktop default window');
+  await page.screenshot({path:path.join(__dirname,'cashier-dark.png'),fullPage:true});
   await page.locator('#themeSelect').selectOption('light');
   await page.locator('#cashierBack').click();await page.locator('#mLang').evaluate(n=>n.click());await page.locator('#cashierBtn').click();
   assert((await page.locator('#cashierSaved').textContent()).includes('Αποθηκεύτηκε'));

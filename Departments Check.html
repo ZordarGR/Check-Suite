@@ -957,14 +957,14 @@ body.onCashier #landing{max-width:1400px}
 #cashierScreen{max-width:1200px;margin:0 auto;text-align:left}
 #cashierScreen h2{margin-bottom:18px}
 #cashierScreen h3{margin:22px 0 10px}
-#cashierScreen input{box-sizing:border-box;width:100%;min-width:64px;padding:9px;background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;font:inherit;text-align:right}
+#cashierScreen input{box-sizing:border-box;width:100%;min-width:52px;padding:9px 5px;background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;font:inherit;text-align:right}
 #cashierScreen input:focus{outline:2px solid var(--amber)}
 #cashierScreen input[aria-invalid="true"]{border-color:var(--red)}
 .cashierBase{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 #cashierBase{max-width:160px}
 #cashierSaved{color:var(--dim);font-size:12px}
 .cashierTable{overflow-x:auto;max-width:100%}
-.cashierTable table{width:100%;border-collapse:collapse}
+.cashierTable table{width:100%;min-width:1050px;table-layout:fixed;border-collapse:collapse}
 .cashierTable th,.cashierTable td{padding:6px;border:1px solid var(--line);text-align:right;white-space:nowrap}
 .cashierTable th{font-size:12px}
 .cashierAmounts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
