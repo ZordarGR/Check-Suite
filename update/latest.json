@@ -1,12 +1,12 @@
 {
-  "version": "1.17.111",
+  "version": "1.17.112",
   "type": "html",
   "engine": "1.17.107",
   "setup": "https://github.com/ZordarGR/Check-Suite/releases/download/v1.17.107/Pro-Check-Setup.exe",
   "setupSha256": "a50618437f9f76250e721d3dae19ce19eb02c51bad368c2c37603b39f2477791",
   "url": "https://github.com/ZordarGR/Check-Suite/releases/latest",
-  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/e18453dfe70b8c113aeb2077dacc4123833aad2d/Departments%20Check.html",
-  "sha256": "4fc33f5bcfb768068e15e303ee3987c09bb4389d5bad8386ea9da2410b79bfeb",
-  "notes": "Cashier Check: use the three-dot menu beside the balance to save this hotel’s default. Reset, Reset All and returning home restore that default; ordinary balance edits are temporary. Existing saved balances become the hotel default. Update the payment heading to Deposit cash & cash payment / Προκαταβολή & Πληρωμή με μετρητά.",
-  "force": false
+  "html": "https://raw.githubusercontent.com/ZordarGR/Check-Suite/5a60245e12e9ed64f33f7c2f119160255bebdf2d/Departments%20Check.html",
+  "sha256": "0f9cadde75d107f2d8feebb47e7b5af16b3be71ccea8c9caf3a37c43f7805bc5",
+  "notes": "Restore Register Companion’s income-summary printing in Cashier Check: preview or Ctrl+P, non-zero cash denominations, deposit cash, cash payment, payment total, fixed balance, expected/count totals and surplus/shortage. Invalid inputs cannot print a valid summary. Preserve the hotel-default and automatic-reset behavior.",
+  "force": true
 }
