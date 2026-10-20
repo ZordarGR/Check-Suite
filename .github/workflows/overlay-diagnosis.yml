@@ -1,0 +1,50 @@
+name: Arrangement display diagnosis
+on:
+  push:
+    branches: ["codex/overlay-display-20260928"]
+permissions:
+  contents: read
+jobs:
+  electron:
+    runs-on: windows-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-save electron@43.2.0
+      - name: Real Electron display with synthetic Invoice input
+        shell: pwsh
+        run: |
+          & .\node_modules\.bin\electron.cmd test\arrangement-electron.js
+          exit $LASTEXITCODE
+  native-invoice:
+    runs-on: windows-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86, x64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Compile and read synthetic Invoice with a currency ComboBox
+        shell: pwsh
+        run: |
+          $compiler = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+          & $compiler /nologo /target:exe /platform:anycpu /out:app\rc-tbind.exe app\tbind.cs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $compiler /nologo /target:exe /platform:${{ matrix.arch }} /r:System.Windows.Forms.dll /out:fixture.exe test\invoice-window.cs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\fixture.exe "$PWD\app\rc-tbind.exe" native-invoice.jsonl
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node test/invoice-stream.js native-invoice.jsonl
+          exit $LASTEXITCODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: invoice-diagnosis-${{ matrix.arch }}
+          path: native-invoice.jsonl*
